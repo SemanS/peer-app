@@ -407,8 +407,12 @@ const menuAsk: PeerCoreMenu.MenuAsk<Prompt.Environment> = {
       Prompt.MultiSelect({ message, choices: choices.map((title) => ({ title, value: title })) }),
     ).pipe(Effect.orElseSucceed(() => null)),
   confirm: shareAsk.confirm,
-  tree: (message, areas) =>
-    Prompt.run(PeerCoreTree.treePrompt(message, areas)).pipe(Effect.orElseSucceed(() => null)),
+  tree: (message, nodes) =>
+    Prompt.run(PeerCoreTree.treePrompt(message, nodes)).pipe(Effect.orElseSucceed(() => null)),
+  treePick: (message, nodes, expand) =>
+    Prompt.run(PeerCoreTree.treePickPrompt(message, nodes, expand)).pipe(
+      Effect.orElseSucceed(() => null),
+    ),
   folder: (message) =>
     Prompt.run(Prompt.File({ type: "directory", message, startingPath: NodeOS.homedir() })).pipe(
       Effect.orElseSucceed(() => null),
@@ -558,6 +562,7 @@ const runMenu = (stateDir: string) =>
               workspace: input.workspace,
               projectId: input.project,
               title: input.title,
+              ...(input.parent === undefined ? {} : { parent: input.parent }),
             });
             yield* Console.log(
               `Created ${task.key ?? task.id} · ${task.title} in ${input.workspace}/${input.project}.`,
@@ -575,6 +580,17 @@ const runMenu = (stateDir: string) =>
             yield* Console.log(
               "Your agents in the project see it with peer tasks, and Peer tells them who works on what.",
             );
+          }).pipe(hubFailure),
+        settleTask: (workspace, project, task, executable) =>
+          Effect.gen(function* () {
+            const work = yield* PeerWork.PeerWork;
+            yield* work.updateTask({
+              workspace,
+              projectId: project,
+              taskId: task,
+              executable,
+              unsettled: false,
+            });
           }).pipe(hubFailure),
         unshare: (workspace, project) => unshareProject(stateDir, workspace, project),
         takeTask: (workspace, project, task) =>
@@ -603,31 +619,19 @@ const runMenu = (stateDir: string) =>
                 ] ?? {},
               ).map((entry) => entry.task),
             );
-            const tasks = (work?.tasks ?? []).filter((task) => task.status !== "done");
-            const treeTask = (task: (typeof tasks)[number]) => {
-              const owner = owners?.tasks[task.id]?.owner;
-              return {
-                id: task.id,
-                title: task.title,
-                ...(owner === undefined ? {} : { owner }),
-                ...(imported.has(task.id) ? { openspec: true } : {}),
-              };
-            };
-            const named = [
-              ...(work?.areas ?? []),
-              ...tasks.flatMap((task) => (task.area === undefined ? [] : [task.area])),
-            ];
-            return [
-              ...[...new Set(named)].map((name) => {
-                const owner = owners?.map.areas[name];
-                return {
-                  name,
-                  ...(owner === undefined ? {} : { owner }),
-                  tasks: tasks.filter((task) => task.area === name).map(treeTask),
-                };
-              }),
-              { name: null, tasks: tasks.filter((task) => task.area === undefined).map(treeTask) },
-            ];
+            return PeerCoreTasks.projectTree({
+              areas: work?.areas ?? [],
+              tasks: work?.tasks ?? [],
+              ...(owners === undefined
+                ? {}
+                : {
+                    owners: Object.fromEntries(
+                      Object.entries(owners.tasks).map(([id, row]) => [id, row.owner]),
+                    ),
+                    areaOwners: owners.map.areas,
+                  }),
+              imported,
+            });
           }).pipe(hubFailure),
         openspec: (target) =>
           PeerCoreOpenSpec.sync(
@@ -966,7 +970,7 @@ const tasksCommand = Command.make("tasks", {
   ),
 }).pipe(
   Command.withDescription(
-    "Your tasks that are not done, with status, area and owner; an invitation's task first.",
+    "Your tasks that are not done, as the project's tree, with status, area and owner; an invitation's task first.",
   ),
   Command.withHandler((flags) =>
     Effect.gen(function* () {
@@ -990,18 +994,37 @@ const tasksCommand = Command.make("tasks", {
 const takeCommand = Command.make("take", {
   ...authLocationFlags,
   task: Argument.String("task").pipe(
-    Argument.withDescription("The task, as peer core tasks lists it."),
+    Argument.withDescription("The task or group, as peer core tasks lists it."),
   ),
   project: taskProjectFlag,
+  asOne: Flag.Boolean("as-one").pipe(
+    Flag.withDescription("Settle an item with items: it runs as one task."),
+    Flag.withDefault(false),
+  ),
+  asParts: Flag.Boolean("as-parts").pipe(
+    Flag.withDescription("Settle an item with items: its items are the tasks."),
+    Flag.withDefault(false),
+  ),
 }).pipe(
-  Command.withDescription("Become the owner of a task nobody owns."),
+  Command.withDescription("Become the owner of a task or group nobody owns."),
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
+      if (flags.asOne && flags.asParts)
+        return yield* outcome(
+          "usage",
+          "--as-one and --as-parts exclude each other",
+          "use one of them.",
+        );
       const owner = yield* ownerOf(config.stateDir);
       yield* PeerCoreTasks.takeTask(
         {
           task: flags.task,
+          ...(flags.asOne
+            ? { settle: "one" as const }
+            : flags.asParts
+              ? { settle: "parts" as const }
+              : {}),
           ...(Option.isSome(flags.project) ? { project: flags.project.value } : {}),
           cwd: realpathOrSelf(process.cwd()),
           canWrite: owner === null,

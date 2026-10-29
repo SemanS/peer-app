@@ -11,6 +11,7 @@ import { SignalTiles } from "./ProjectSignals";
 import { NavCount, NavRow, ProjectNav } from "./SidebarNav";
 import type { SidebarNavCounts } from "./sidebarNav.logic";
 import { TaskRow } from "./TaskRow";
+import { nestProjectTasks } from "./taskTree.logic";
 import type { PeerWebPlugin } from "./slots.types";
 import { groupTasks, type TaskGroupNode } from "./workGroups.logic";
 import {
@@ -71,10 +72,12 @@ export function ProjectSection({
   const active = groups.filter((group) => !group.done);
   const done = groups.find((group) => group.done);
   const slot = { environmentId, status, project, activeThread };
+  // An item sits under its parent's row when both are in the group, in the tree's order.
   const rows = (group: TaskGroupNode) =>
-    group.tasks.map((task) => (
+    nestProjectTasks(project, group.tasks).map(({ item: task, indent }) => (
       <TaskRow
         key={task.id}
+        indent={indent}
         environmentId={environmentId}
         projectState={state}
         project={project}

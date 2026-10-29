@@ -37,10 +37,12 @@ import type {
   ProjectIconColor,
   PeerProjectState,
   PeerTask,
+  PeerTaskKind,
   PeerWorkStatus,
   PeerWorkDelivery,
   PeerWorkspaceState,
 } from "@t3tools/contracts";
+import { isExecutable, taskKind } from "@t3tools/contracts";
 import type { EnvironmentThreadShell } from "../state/models.ts";
 import { projectVcs, type PeerVcsKind } from "./vcsWords.ts";
 import {
@@ -104,6 +106,22 @@ export interface WorkTaskNode {
   readonly removable: boolean;
   /** Its shared context, once an agent on it started one. */
   readonly context: WorkContextNode | undefined;
+  /**
+   * The task it sits under. The work tree fills this and the tree's fields below; a node without
+   * them is a root task that runs as one, as every task of an older Hub is.
+   */
+  readonly parent?: string | undefined;
+  /** 0 for a root. */
+  readonly depth?: number;
+  readonly kind?: PeerTaskKind;
+  /** May be given to an agent and run as one. */
+  readonly executable?: boolean;
+  /** Nobody decided yet whether it runs as one or by its parts: ask before starting it. */
+  readonly unsettled?: boolean;
+  /** Over its executable descendants, when it has any. */
+  readonly progress?: { readonly done: number; readonly total: number } | undefined;
+  /** How many items sit directly under it. */
+  readonly childCount?: number;
 }
 
 /**
@@ -372,6 +390,55 @@ function contextNode(
   };
 }
 
+/**
+ * A project's tasks as a tree. A task whose parent is not among them, or that sits in a cycle, is
+ * a root, so every task is listed exactly once whatever the Hub sends.
+ */
+function taskTree(tasks: ReadonlyArray<PeerTask>) {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const listed = new Map(tasks.map((task, index) => [task.id, index]));
+  // Siblings by position, then by when they were created, then as the Hub listed them, which is
+  // its own order of creation.
+  const bySiblingOrder = (a: PeerTask, b: PeerTask) =>
+    (a.position ?? 0) - (b.position ?? 0) ||
+    a.createdAt.localeCompare(b.createdAt) ||
+    listed.get(a.id)! - listed.get(b.id)!;
+  const reachesItself = (task: PeerTask) => {
+    const seen = new Set([task.id]);
+    for (let at = task.parent; at !== undefined; at = byId.get(at)?.parent) {
+      if (seen.has(at)) return true;
+      seen.add(at);
+    }
+    return false;
+  };
+  const parentOf = new Map<string, string>();
+  for (const task of tasks) {
+    if (task.parent !== undefined && byId.has(task.parent) && !reachesItself(task)) {
+      parentOf.set(task.id, task.parent);
+    }
+  }
+  const children = new Map<string, Array<PeerTask>>();
+  for (const task of tasks) {
+    const parent = parentOf.get(task.id);
+    if (parent !== undefined) children.set(parent, [...(children.get(parent) ?? []), task]);
+  }
+  for (const siblings of children.values()) siblings.sort(bySiblingOrder);
+  const roots = tasks.filter((task) => !parentOf.has(task.id)).sort(bySiblingOrder);
+  const depthOf = new Map<string, number>();
+  const order = (root: PeerTask): ReadonlyArray<PeerTask> => {
+    const out: Array<PeerTask> = [];
+    const visit = (task: PeerTask, depth: number) => {
+      depthOf.set(task.id, depth);
+      out.push(task);
+      for (const child of children.get(task.id) ?? []) visit(child, depth + 1);
+    };
+    visit(root, 0);
+    return out;
+  };
+  for (const root of roots) order(root);
+  return { roots, children, parentOf, depthOf, order };
+}
+
 function projectTree(input: {
   readonly status: PeerHubStatus;
   readonly workspace: PeerWorkspaceState;
@@ -561,6 +628,7 @@ function projectTree(input: {
     /(?:^|:)herdr:(.+)$/.exec(node.key)?.[1] === context.keeper.session
       ? { ...node, keepsContext: true }
       : node;
+  const tree = taskTree(work.tasks);
   const taskNodes = new Map<string, WorkTaskNode>();
   for (const task of work.tasks) {
     const context = contextNode(status, workspace.slug, state, `task:${task.id}`);
@@ -579,21 +647,31 @@ function projectTree(input: {
       removable:
         task.createdBy === me || state.project.role === "lead" || workspace.role !== "member",
       context,
+      parent: tree.parentOf.get(task.id),
+      depth: tree.depthOf.get(task.id) ?? 0,
+      kind: taskKind(task),
+      executable: isExecutable(task),
+      unsettled: task.unsettled === true,
+      progress: task.progress,
+      childCount: tree.children.get(task.id)?.length ?? 0,
     });
   }
   const projectContext = contextNode(status, workspace.slug, state, "project");
-  // Areas the project declares come first, in its order; then those tasks name; then no area.
+  // Areas the project declares come first, in its order; then those tasks name; then no area. An
+  // item is listed with its root, whatever its own area.
   const areaNames = [...work.areas];
-  for (const task of work.tasks) {
-    if (task.area !== undefined && !areaNames.includes(task.area)) areaNames.push(task.area);
+  for (const root of tree.roots) {
+    if (root.area !== undefined && !areaNames.includes(root.area)) areaNames.push(root.area);
   }
+  const subtreeNodes = (root: PeerTask) =>
+    tree.order(root).flatMap((task) => taskNodes.get(task.id) ?? []);
   const areas: WorkAreaNode[] = areaNames.map((name) => ({
     name,
-    tasks: work.tasks.filter((t) => t.area === name).flatMap((t) => taskNodes.get(t.id) ?? []),
+    tasks: tree.roots.filter((t) => t.area === name).flatMap(subtreeNodes),
   }));
-  const loose = work.tasks.filter((t) => t.area === undefined);
+  const loose = tree.roots.filter((t) => t.area === undefined);
   if (loose.length > 0) {
-    areas.push({ name: null, tasks: loose.flatMap((t) => taskNodes.get(t.id) ?? []) });
+    areas.push({ name: null, tasks: loose.flatMap(subtreeNodes) });
   }
   return {
     workspace: workspace.slug,
@@ -721,6 +799,107 @@ export function buildWorkTree(input: {
       }),
     ),
   );
+}
+
+/** The items directly under a task, in order. */
+export function childrenOf(area: WorkAreaNode, id: string): ReadonlyArray<WorkTaskNode> {
+  return area.tasks.filter((task) => task.parent === id);
+}
+
+/** Everything under a task, at any depth, in tree order; the task itself not among them. */
+export function subtreeOf(area: WorkAreaNode, id: string): ReadonlyArray<WorkTaskNode> {
+  const at = area.tasks.findIndex((task) => task.id === id);
+  if (at === -1) return [];
+  const depth = area.tasks[at]!.depth ?? 0;
+  const end = area.tasks.findIndex((task, index) => index > at && (task.depth ?? 0) <= depth);
+  return area.tasks.slice(at + 1, end === -1 ? undefined : end);
+}
+
+const isOpenWork = (task: WorkTaskNode) =>
+  task.executable !== false && !task.done && task.inReview !== true;
+
+/**
+ * The open executable items a scope covers, in tree order: everything open under task `id`, or,
+ * without one, every open executable task of the area or project.
+ */
+export function scopeItems(
+  scope: WorkAreaNode | WorkProjectNode,
+  id?: string,
+): ReadonlyArray<WorkTaskNode> {
+  const areas = "areas" in scope ? scope.areas : [scope];
+  if (id === undefined) return areas.flatMap((area) => area.tasks).filter(isOpenWork);
+  const area = areas.find((candidate) => candidate.tasks.some((task) => task.id === id));
+  return area === undefined ? [] : subtreeOf(area, id).filter(isOpenWork);
+}
+
+export interface WorkScopeItem {
+  readonly id: string;
+  readonly title: string;
+}
+
+/** What an agent is started on: one task, a group's open items, or an area's open tasks. */
+export type WorkScope =
+  | { readonly kind: "task"; readonly id: string; readonly title: string }
+  | {
+      readonly kind: "group";
+      readonly id: string;
+      readonly title: string;
+      readonly project: string;
+      readonly items: ReadonlyArray<WorkScopeItem>;
+    }
+  | {
+      readonly kind: "area";
+      /** Null for the tasks without an area. */
+      readonly name: string | null;
+      readonly project: string;
+      readonly items: ReadonlyArray<WorkScopeItem>;
+    };
+
+/** A task of the tree as a scope: itself when it runs as one, else its open items. */
+export function scopeOfTask(project: WorkProjectNode, task: WorkTaskNode): WorkScope {
+  return task.executable === false
+    ? {
+        kind: "group",
+        id: task.id,
+        title: task.title,
+        project: project.name,
+        items: scopeItems(project, task.id),
+      }
+    : { kind: "task", id: task.id, title: task.title };
+}
+
+export function scopeOfArea(project: WorkProjectNode, area: WorkAreaNode): WorkScope {
+  return { kind: "area", name: area.name, project: project.name, items: scopeItems(area) };
+}
+
+/** A prompt lists this many items, then says how many more there are. */
+const SCOPE_ITEMS_LISTED = 30;
+
+/**
+ * The first prompt of an agent started on a scope, the same from every launcher. An unsettled
+ * item is never given here: whoever starts it settles it first.
+ */
+export function scopePrompt(scope: WorkScope): string {
+  if (scope.kind === "task") return `Work on the Peer task "${scope.title}" (${scope.id}).`;
+  const listed = scope.items
+    .slice(0, SCOPE_ITEMS_LISTED)
+    .map((item) => `- ${item.id} ${item.title}`);
+  const more = scope.items.length - listed.length;
+  const list = [...listed, ...(more > 0 ? [`and ${more} more`] : [])];
+  if (scope.kind === "group") {
+    return [
+      `Work on the Peer group "${scope.title}" (${scope.id}) in ${scope.project}: its open items, in order:`,
+      ...list,
+      "Mark each item done with peer task set <id> --status done as you finish it; peer done on the group finishes the group itself.",
+    ].join("\n");
+  }
+  return [
+    scope.name === null
+      ? `Work on the tasks of ${scope.project} without an area: its open tasks, in order:`
+      : `Work on the area "${scope.name}" of ${scope.project}: its open tasks, in order:`,
+    ...list,
+    "Mark each task done with peer task set <id> --status done as you finish it.",
+  ].join("\n");
 }
 
 /** A context's size the way people read it: `~2.1k tokens`. */

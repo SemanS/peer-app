@@ -120,6 +120,7 @@ const reporting = (
         plugins: yield* PeerPlugins.PeerPlugins,
         state,
         report: () => reported(hub.calls),
+        calls: () => hub.calls,
       };
     }).pipe(Effect.provide(core));
   });
@@ -457,4 +458,75 @@ it.effect(
         ["other", "mine"],
       );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.effect("sends a task's place in the tree to the Hub as it was given", () =>
+  Effect.gen(function* () {
+    const created = {
+      id: "t2",
+      title: "Routes",
+      status: "open",
+      createdBy: "ana@acme.test",
+      createdAt: "now",
+      updatedAt: "now",
+      parent: "t1",
+    };
+    const { work, status, calls } = yield* reporting([], (path) =>
+      path === "/v1/workspaces/acme/projects/pay/tasks"
+        ? [201, created]
+        : path === "/v1/workspaces/acme/work"
+          ? [200, { projects: { pay: { areas: [], tasks: [created], threads: [] } } }]
+          : [200, created],
+    );
+    yield* status.coordinationFrom(() =>
+      Effect.succeed({
+        enabled: false,
+        policy: "coordinate",
+        claudeHooks: false,
+        logPath: "/tmp/test-coordination",
+        sessions: [],
+        overlaps: [],
+        findings: [],
+        contexts: [],
+        candidates: [],
+      }),
+    );
+    yield* work.createTask({
+      workspace: "acme",
+      projectId: "pay",
+      title: "Routes",
+      parent: "t1",
+      kind: "task",
+      executable: true,
+      position: 1,
+      description: "- Add the route",
+      source: { system: "openspec", ref: "add-x#1.1" },
+    });
+    yield* work.updateTask({
+      workspace: "acme",
+      projectId: "pay",
+      taskId: "t2",
+      parent: "",
+      unsettled: false,
+      source: null,
+    });
+    const bodies = calls()
+      .filter((call) => call.url?.startsWith("/v1/workspaces/acme/projects/pay/tasks") === true)
+      .map((call) => [call.method, JSON.parse(call.body)]);
+    assert.deepStrictEqual(bodies, [
+      [
+        "POST",
+        {
+          title: "Routes",
+          parent: "t1",
+          kind: "task",
+          executable: true,
+          position: 1,
+          description: "- Add the route",
+          source: { system: "openspec", ref: "add-x#1.1" },
+        },
+      ],
+      ["PATCH", { parent: "", unsettled: false, source: null }],
+    ]);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );

@@ -44,7 +44,13 @@ import { headerOf } from "./server.ts";
 import { inRepository, type LocalSession, unsupportedCheckout } from "./sessions.ts";
 import { newOp, within, TIMED_OUT } from "./sync.ts";
 import { claimSchemes, claimTargets, runClaimSchemes } from "./claimSchemes.ts";
-import { pluginTaskFacts, TASK_FLAGS, taskCommand } from "./tasks.ts";
+import {
+  pluginTaskFacts,
+  sessionTaskName,
+  TASK_FLAGS,
+  TASK_SWITCHES,
+  taskCommand,
+} from "./tasks.ts";
 import { SHARE_FLAGS, shareCommand, UNSHARED } from "./share.ts";
 import { helpText } from "./help.ts";
 import { checkpointInputs, inputCommand } from "./inputCheckpoints.ts";
@@ -140,6 +146,8 @@ const CORE_FLAGS: Readonly<Record<string, ReadonlyArray<string>>> = {
   task: TASK_FLAGS,
   share: SHARE_FLAGS,
 };
+/** Core flags that take no value. */
+const CORE_SWITCHES: Readonly<Record<string, ReadonlyArray<string>>> = { task: TASK_SWITCHES };
 
 /** Validate core flags before selecting a caller or changing its claims. Plugins decode their own. */
 function validateCoreArguments(
@@ -151,7 +159,7 @@ function validateCoreArguments(
     command === "claim" ? ["--intent", ...schemeFlags] : (CORE_FLAGS[command] ?? []);
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
-    if (!arg.startsWith("--")) continue;
+    if (!arg.startsWith("--") || CORE_SWITCHES[command]?.includes(arg)) continue;
     if (!flags.includes(arg) || args[i + 1] === undefined || args[i + 1]!.startsWith("--"))
       throw usage(
         `invalid or incomplete flag ${arg}`,
@@ -349,9 +357,8 @@ export async function runCli(
     case "status": {
       await this.syncNow(session.workspace, 3000);
       const board = this.board(session, BOARD_ALL);
-      const task = this.host
-        .tasks(session.workspace, session.project)
-        .find((task) => task.id === session.task);
+      const projectTasks = this.host.tasks(session.workspace, session.project);
+      const task = projectTasks.find((task) => task.id === session.task);
       const out = statusText({
         mine: {
           claims: session.claims,
@@ -359,7 +366,11 @@ export async function runCli(
             ? {}
             : {
                 task: {
-                  name: this.host.taskName(session.workspace, session.project, task.id),
+                  name: sessionTaskName(
+                    projectTasks,
+                    task,
+                    this.host.taskName(session.workspace, session.project, task.id),
+                  ),
                   status: task.status ?? "open",
                 },
               }),

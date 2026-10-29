@@ -17,6 +17,7 @@ import type * as CliError from "effect/cli/CliError";
 import { idFromName } from "../peerHub/names.ts";
 import * as PeerWorkspaces from "../peerHub/core/workspaces/PeerWorkspaces.ts";
 import { type OneShotIo, outcome } from "./peerCoreIo.ts";
+import { startOnTree } from "./peerCoreTasks.ts";
 import * as Tree from "./peerCoreTree.ts";
 
 /** Who may invite to a workspace: its owners and admins (a project's lead does it in the app). */
@@ -416,11 +417,17 @@ export interface MenuAsk<R = never> {
   /** A folder, browsed from the home directory. */
   readonly folder: (message: string) => Effect.Effect<string | null, never, R>;
   readonly confirm: (message: string, initial: boolean) => Effect.Effect<boolean, never, R>;
-  /** The areas and tasks to assign, picked in a tree. */
+  /** The areas, groups and tasks to assign, selected in a tree. */
   readonly tree: (
     message: string,
-    areas: ReadonlyArray<Tree.TreeArea>,
+    nodes: ReadonlyArray<Tree.TreeNode>,
   ) => Effect.Effect<Tree.Selection | null, never, R>;
+  /** One row of the tree; `expand` opens the way down to that node. */
+  readonly treePick: (
+    message: string,
+    nodes: ReadonlyArray<Tree.TreeNode>,
+    expand?: Tree.Picked,
+  ) => Effect.Effect<Tree.Picked | null, never, R>;
 }
 
 export interface TaskInput {
@@ -429,6 +436,8 @@ export interface TaskInput {
   readonly title: string;
   /** The person becomes its owner. */
   readonly take: boolean;
+  /** The task it goes under. */
+  readonly parent?: string;
 }
 
 /** What the menu's steps run: each the command of the same name. */
@@ -465,11 +474,18 @@ export interface MenuSteps<R = never> {
     project: string,
     task: string,
   ) => Effect.Effect<void, CliError.UserError, R>;
-  /** A project's areas with their tasks and owners, for the invite tree. */
+  /** Settles whether an item runs as one task (`executable`) or by its parts. */
+  readonly settleTask: (
+    workspace: string,
+    project: string,
+    task: string,
+    executable: boolean,
+  ) => Effect.Effect<void, CliError.UserError, R>;
+  /** A project's areas with their groups, tasks and owners, as a tree. */
   readonly scope: (
     workspace: string,
     project: string,
-  ) => Effect.Effect<ReadonlyArray<Tree.TreeArea>, CliError.UserError, R>;
+  ) => Effect.Effect<ReadonlyArray<Tree.TreeNode>, CliError.UserError, R>;
   /** Imports a connected checkout's OpenSpec changes, asking first; false without `openspec/`. */
   readonly openspec: (target: {
     readonly workspace: string;
@@ -672,76 +688,20 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
                   ? projects[0]!
                   : yield* chooseProject;
             if (project === null) return;
-            // The tasks that wait (nobody's) and the person's own come first; a new one last.
-            const me = status.email?.toLowerCase();
-            let open: ReadonlyArray<{ readonly task: Tree.TreeTask; readonly area: string | null }>;
-            let picked: string | null;
-            for (;;) {
-              const { workspace, project: id } = project;
-              open = (yield* steps.scope(workspace, id)).flatMap((area) =>
-                area.tasks
-                  .filter((task) => task.owner === undefined || task.owner.toLowerCase() === me)
-                  .map((task) => ({ task, area: area.name })),
-              );
-              picked = yield* ask.choose<string>(`Which task? (${workspace}/${id})`, [
-                ...open.map(({ task, area }) => ({
-                  title: task.title,
-                  description: [
-                    task.owner === undefined ? "Nobody's yet" : "Yours",
-                    ...(area === null ? [] : [area]),
-                    ...(task.openspec === true ? ["OpenSpec"] : []),
-                  ].join(" · "),
-                  value: task.id,
-                })),
-                { title: "New task…", description: "Write its title.", value: "\0new" },
-                ...(projects.length > 1
-                  ? [
-                      {
-                        title: "Tasks of another project…",
-                        description: `Not ${workspace}/${id}.`,
-                        value: "\0project",
-                      },
-                    ]
-                  : []),
-              ]);
-              if (picked !== "\0project") break;
-              const next = yield* chooseProject;
-              if (next === null) return;
-              project = next;
-            }
-            if (picked === null) return;
-            let chosen: { readonly id: string; readonly title: string } | null = null;
-            if (picked === "\0new") {
-              const title = yield* ask.text(
-                `What is the task? (in ${project.workspace}/${project.project})`,
-              );
-              if (title === null || title.trim() === "") return;
-              const take = yield* ask.confirm("Take it yourself?", true);
-              yield* steps.startTask({ ...project, title: title.trim(), take });
-              return;
-            }
-            const found = open.find(({ task }) => task.id === picked)!.task;
-            if (found.owner === undefined)
-              yield* steps.takeTask(project.workspace, project.project, found.id);
-            else yield* io.say(`${found.title} is yours already.`);
-            chosen = found;
-            // Work starts in the editor: offered when one connected here can start in this project.
-            const editor = editors.find((e) => e.connected && e.launchable);
-            if (
-              editor !== undefined &&
-              here?.state === "connected" &&
-              here.workspace === project.workspace &&
-              here.project === project.project &&
-              (yield* ask.confirm(`Open ${editor.title} on it now?`, true))
-            )
-              ended = {
-                editorsConnected,
-                launch: {
-                  editor: editor.id,
-                  folder: here.root,
-                  prompt: `Work on the Peer task "${chosen.title}" (${chosen.id}).`,
-                },
-              };
+            const launch = yield* startOnTree(ask, steps, io, {
+              project,
+              chooseProject,
+              others: projects.length > 1,
+              me: status.email?.toLowerCase(),
+              editor:
+                here?.state === "connected"
+                  ? {
+                      editor: editors.find((e) => e.connected && e.launchable),
+                      here,
+                    }
+                  : undefined,
+            });
+            if (launch !== undefined) ended = { editorsConnected, launch };
             return;
           }
           case "invite": {
@@ -772,7 +732,7 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
                     );
             if (project === null)
               return yield* steps.invite({ email, workspace: slug, projects: [] });
-            const areas = yield* steps.scope(slug, project);
+            const nodes = yield* steps.scope(slug, project);
             const how = yield* ask.choose<"all" | "pick">("What would you like to assign?", [
               {
                 title: "All areas and tasks",
@@ -785,9 +745,9 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
             const chosen: Tree.Selection | null =
               how === "all"
                 ? { all: true, areas: [], tasks: [] }
-                : yield* ask.tree("Select areas or tasks", areas);
+                : yield* ask.tree("Select areas or tasks", nodes);
             if (chosen === null) return;
-            const named = areas.flatMap((a) => (a.name === null ? [] : [a.name]));
+            const named = nodes.flatMap((a) => (a.id === "" ? [] : [a.id]));
             yield* io.say(
               [
                 "",
@@ -798,16 +758,16 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
                 "",
                 "Assignments:",
                 ...(chosen.all || chosen.areas.length > 0 || chosen.tasks.length > 0
-                  ? Tree.describe(areas, chosen).map((line) => `  ${line}`)
+                  ? Tree.describe(nodes, chosen).map((line) => `  ${line}`)
                   : ["  none: they can take any task"]),
-                ...areas
+                ...nodes
                   .filter(
                     (a) =>
-                      a.name !== null &&
+                      a.id !== "" &&
                       a.owner !== undefined &&
-                      (chosen.all || chosen.areas.includes(a.name)),
+                      (chosen.all || chosen.areas.includes(a.id)),
                   )
-                  .map((a) => `  · ${a.name} stays ${a.owner}'s`),
+                  .map((a) => `  · ${a.id} stays ${a.owner}'s`),
                 "",
               ].join("\n"),
             );

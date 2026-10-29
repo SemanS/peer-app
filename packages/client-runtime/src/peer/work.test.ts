@@ -10,7 +10,19 @@ import {
 import { describe, expect, it } from "vite-plus/test";
 
 import type { EnvironmentThreadShell } from "../state/models.ts";
-import { adviceLabel, adviceOnWork, buildWorkTree, harnessName, taskNamedIn } from "./work.ts";
+import {
+  adviceLabel,
+  adviceOnWork,
+  buildWorkTree,
+  childrenOf,
+  harnessName,
+  scopeItems,
+  scopeOfArea,
+  scopeOfTask,
+  scopePrompt,
+  subtreeOf,
+  taskNamedIn,
+} from "./work.ts";
 
 const HERE = EnvironmentId.make("env-here");
 const KIRKWOOD_T3 = ProjectId.make("t3-kirkwood");
@@ -732,5 +744,123 @@ describe("harnessName", () => {
     expect(harnessName("pi")).toBe("Pi");
     expect(harnessName(undefined)).toBeUndefined();
     expect(harnessName("  ")).toBeUndefined();
+  });
+});
+
+describe("the task tree", () => {
+  const item = (
+    id: string,
+    title: string,
+    fields: Partial<PeerTask> & { readonly area?: string } = {},
+  ): PeerTask => ({ ...task(id, title, fields.area), ...fields });
+  const project = () => {
+    const base = kirkwood();
+    return {
+      ...base,
+      work: {
+        ...base.work,
+        areas: ["Revenue"],
+        threads: [],
+        assignments: {},
+        tasks: [
+          item("str", "STR", { area: "Revenue" }),
+          // Listed before its parent, with an area of its own: it still shows under its root.
+          item("routes", "Routes", { parent: "server", position: 1, area: "Elsewhere" }),
+          item("change", "Add the tree", { area: "Revenue", kind: "group", executable: false }),
+          item("server", "Server", {
+            parent: "change",
+            position: 2,
+            executable: false,
+            unsettled: true,
+            progress: { done: 1, total: 2 },
+          }),
+          item("store", "Store", { parent: "server", position: 0, status: "done" }),
+          item("docs", "Docs", { parent: "change", position: 3 }),
+          item("api", "API", { parent: "change", position: 2, createdAt: "2026-09-30T00:00:00Z" }),
+        ],
+      },
+    };
+  };
+
+  it("lists an area's tasks in tree order with their depth and place", () => {
+    const [tree] = buildWorkTree({ status: status(project()), localThreads: [], now: NOW });
+    expect(tree?.areas.map((area) => area.name)).toEqual(["Revenue"]);
+    const revenue = tree!.areas[0]!;
+    expect(revenue.tasks.map((node) => [node.id, node.depth, node.parent ?? null])).toEqual([
+      ["str", 0, null],
+      ["change", 0, null],
+      ["api", 1, "change"],
+      ["server", 1, "change"],
+      ["store", 2, "server"],
+      ["routes", 2, "server"],
+      ["docs", 1, "change"],
+    ]);
+    const server = revenue.tasks.find((node) => node.id === "server");
+    expect(server).toMatchObject({
+      kind: "task",
+      executable: false,
+      unsettled: true,
+      progress: { done: 1, total: 2 },
+      childCount: 2,
+    });
+    expect(revenue.tasks.find((node) => node.id === "str")).toMatchObject({
+      kind: "task",
+      executable: true,
+      unsettled: false,
+      childCount: 0,
+    });
+    expect(childrenOf(revenue, "change").map((node) => node.id)).toEqual(["api", "server", "docs"]);
+    expect(subtreeOf(revenue, "server").map((node) => node.id)).toEqual(["store", "routes"]);
+    expect(scopeItems(revenue, "change").map((node) => node.id)).toEqual(["api", "routes", "docs"]);
+    expect(scopeItems(tree!).map((node) => node.id)).toEqual(["str", "api", "routes", "docs"]);
+  });
+
+  it("keeps a task whose parent is missing or in a cycle as a root", () => {
+    const base = project();
+    const tasks = [
+      item("a", "A", { parent: "b" }),
+      item("b", "B", { parent: "a" }),
+      item("orphan", "Orphan", { parent: "gone" }),
+    ];
+    const [tree] = buildWorkTree({
+      status: status({ ...base, work: { ...base.work, areas: [], tasks } }),
+      localThreads: [],
+      now: NOW,
+    });
+    expect(tree?.areas.flatMap((area) => area.tasks).map((node) => [node.id, node.depth])).toEqual([
+      ["a", 0],
+      ["b", 0],
+      ["orphan", 0],
+    ]);
+  });
+
+  it("starts an agent on a task, a group's open items or an area's open tasks", () => {
+    const [tree] = buildWorkTree({ status: status(project()), localThreads: [], now: NOW });
+    const revenue = tree!.areas[0]!;
+    const node = (id: string) => revenue.tasks.find((candidate) => candidate.id === id)!;
+    expect(scopePrompt(scopeOfTask(tree!, node("docs")))).toBe(
+      'Work on the Peer task "Docs" (docs).',
+    );
+    expect(scopePrompt(scopeOfTask(tree!, node("change")))).toBe(
+      [
+        'Work on the Peer group "Add the tree" (change) in Kirkwood: its open items, in order:',
+        "- api API",
+        "- routes Routes",
+        "- docs Docs",
+        "Mark each item done with peer task set <id> --status done as you finish it; peer done on the group finishes the group itself.",
+      ].join("\n"),
+    );
+    expect(scopePrompt(scopeOfArea(tree!, revenue)).split("\n")[0]).toBe(
+      'Work on the area "Revenue" of Kirkwood: its open tasks, in order:',
+    );
+    const many = Array.from({ length: 32 }, (_, index) => ({ id: `t${index}`, title: "T" }));
+    const lines = scopePrompt({ kind: "area", name: null, project: "Kirkwood", items: many }).split(
+      "\n",
+    );
+    expect(lines[0]).toBe(
+      "Work on the tasks of Kirkwood without an area: its open tasks, in order:",
+    );
+    expect(lines.at(-2)).toBe("and 2 more");
+    expect(lines).toHaveLength(33);
   });
 });

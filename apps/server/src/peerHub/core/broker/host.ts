@@ -200,14 +200,29 @@ export interface PeerBrokerHost {
     readonly title: string;
     readonly area?: string | undefined;
     readonly status?: string | undefined;
+    /** The task it sits under; absent: a root (or a Hub without the tree). */
+    readonly parent?: string | undefined;
+    readonly kind?: "group" | "task" | undefined;
+    readonly executable?: boolean | undefined;
+    readonly unsettled?: boolean | undefined;
+    readonly position?: number | undefined;
+    /** Over its executable descendants, as the Hub counts them. */
+    readonly progress?: { readonly done: number; readonly total: number } | undefined;
   }>;
   /** Adds a task to a project, with the person's rights. Absent: this Peer cannot. */
   readonly createTask?: (
     workspace: string,
     project: string,
-    task: { readonly title: string; readonly key?: string; readonly area?: string },
+    task: {
+      readonly title: string;
+      readonly key?: string;
+      readonly area?: string;
+      readonly parent?: string;
+      readonly kind?: "group" | "task";
+      readonly executable?: boolean;
+    },
   ) => Promise<void>;
-  /** Changes a task's title, area (empty clears it) or status. */
+  /** Changes a task's title, area (empty clears it), status or place in the tree (`parent: ""` makes it a root). */
   readonly updateTask?: (
     workspace: string,
     project: string,
@@ -216,6 +231,9 @@ export interface PeerBrokerHost {
       readonly title?: string;
       readonly area?: string;
       readonly status?: "open" | "review" | "done";
+      readonly parent?: string;
+      readonly executable?: boolean;
+      readonly position?: number;
     },
   ) => Promise<void>;
   readonly deleteTask?: (workspace: string, project: string, task: string) => Promise<void>;

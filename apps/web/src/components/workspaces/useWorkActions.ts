@@ -15,6 +15,7 @@ import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { toastManager } from "../ui/toast";
+import type { TreeChange } from "./taskTree.logic";
 import { confirmed, reportFailure } from "./workFeedback";
 import { taskLabel, type WorkOpen, type WorkTaskNode } from "./workTree.logic";
 
@@ -155,6 +156,26 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
           environmentId,
           input: { ...scope, taskId: task.id, area: area ?? "" },
         }),
+      );
+    },
+    /** Puts a task under another of its project, or (`null`) makes it a root. */
+    moveTaskUnder: async (scope: Scope, task: WorkTaskNode, parent: string | null) => {
+      if (environmentId === null || (parent ?? undefined) === task.parent) return;
+      reportFailure(
+        `Could not move ${taskLabel(task)}`,
+        // The Hub takes an empty parent as none.
+        await updateTask({
+          environmentId,
+          input: { ...scope, taskId: task.id, parent: parent ?? "" },
+        }),
+      );
+    },
+    /** Settles an item, or makes it a group or a task (`settleChange`, `kindChange`). */
+    changeTaskTree: async (scope: Scope, task: WorkTaskNode, change: TreeChange) => {
+      if (environmentId === null) return;
+      reportFailure(
+        `Could not update ${taskLabel(task)}`,
+        await updateTask({ environmentId, input: { ...scope, taskId: task.id, ...change } }),
       );
     },
     setTaskDone: async (scope: Scope, task: WorkTaskNode, done: boolean) => {

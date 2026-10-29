@@ -125,7 +125,11 @@ Each herdr agent shows the coordination its running session actually supports:
   overlaps or attribute every change to one agent.
 
 An agent can keep the project's tasks for you: ask it to add, retitle, move to review or done, or
-remove tasks, and it runs `peer task` (or the `peer_task` tool). It acts with your rights in the
+remove tasks, and it runs `peer task` (or the `peer_task` tool). `peer task list` shows the tree
+with each group's progress; `peer task add "<title>" --under <task>` puts a new item under another
+(`--kind group` for a heading-like item, `--not-executable` for one whose items are the work), and
+`peer task set <task> --under <task>|none`, `--executable yes|no` or `--position <n>` moves, settles
+or reorders one. It acts with your rights in the
 workspace, so it can change only what you could change in **Tasks**. In a project that is only on
 this computer, Peer leaves the agent out: there are no team tasks there yet. Ask the agent to share
 the project with your workspace (`peer share`, or the `peer_share` tool), or choose **Share with <workspace>…** in the project button's menu.
@@ -197,9 +201,15 @@ newer), or put `npx @webinson/peer-core` in front of each command below without 
    `peer core create "<name>"` creates a workspace you own, and
    `peer core invite <email> [--project <id>]… [--admin]` mails an invitation to one you own or
    administer. Inviting from the menu lets you pick what the teammate will be responsible for: all
-   areas, whole areas (their future tasks too) or single tasks, in a tree you open area by area.
-   With one `--project`, `--area <name>` and `--task <id>` do the same; whatever someone already owns
-   stays theirs.
+   areas, whole areas (their future tasks too), whole groups of tasks or single tasks, in a tree you
+   open area by area and group by group; a chosen group covers everything under it. With one
+   `--project`, `--area <name>` and `--task <id>` do the same (a group's id works); whatever someone
+   already owns stays theirs. **Start a task** opens the same tree: pick an area, a group, a smaller
+   group or one task, and that is the scope your agent gets. A scope nobody owns becomes yours;
+   the editor's first prompt names it and lists its open items. An item marked `?` was imported
+   with items under it and nobody has said yet whether an agent does it as one task or by its
+   parts: picking it asks, and the answer is kept. **New task…** first asks under which item the
+   task goes.
 2. `peer core share` in a project's folder shares it with a workspace (or name the folder:
    `peer core share ~/code/project`). The folder needs a git remote. On a terminal it asks which
    workspace when you belong to several and confirms before sharing. When the folder is a clone of
@@ -210,10 +220,16 @@ newer), or put `npx @webinson/peer-core` in front of each command below without 
 3. `peer core connect cursor` (or another editor) adds Peer's tools to the editor. Reload it
    afterwards. The editor starts Peer Core when it first needs it, so you do not have to.
 4. A project with OpenSpec (`openspec/changes/`) gets its active changes as tasks when you connect
-   it, or later with `peer core openspec`: each change is one task whose key is the change's id, in
-   the area one of its capabilities names. Importing again adds new changes and updates a task only
-   where OpenSpec moved and nobody changed it in Peer; when both changed, Peer's stays and the import
-   says so.
+   it, or later with `peer core openspec`. A change becomes a group whose key is the change's id, in
+   the area one of its capabilities names; the headings of its `tasks.md` become groups under it,
+   each checkbox a task (`[x]` arrives done), a plain bullet a step in the description of the item
+   above it, and a `Depends on 1.2` line a dependency where the Hub records them. A checkbox with
+   checkboxes under it is imported as not runnable as one and marked for you to decide (one task, or
+   its parts). A change without `tasks.md`, or without checkboxes, stays one task. Importing again
+   creates nothing twice: an item is found by its place in the change, then by its title under the
+   same parent; it updates only what moved in OpenSpec while nobody changed it in Peer, says when
+   both changed (Peer's stays), says which items OpenSpec no longer has (nothing is deleted), and
+   lists under **Not interpreted** the files of a custom schema it does not read.
 
 `peer core status` shows whether the app or Peer Core coordinates this computer, who is signed
 in, and which folders are shared. `peer core stop` stops Peer Core; it never stops the app.
@@ -253,10 +269,13 @@ example/webshop` (add `--repository <id>` for a project with several repositorie
 runs, `peer core bind` refuses; stop Peer Core first, or choose the folder in the app.
 
 `peer core tasks` lists the tasks of the project you are in (or `--project <workspace/project>`, or
-all of yours) that are not done, with status, area and owner, the invitation's task first.
-`--open` shows only the tasks nobody owns, `--mine` yours. `peer core take <task>` makes you the
-owner of a task nobody owns; a task someone owns is refused with their name. Both act as you,
-with the Hub, and need neither the app nor Peer Core running.
+all of yours) that are not done, as a tree: items indented under their group, `3/8` after a group
+for how many of its items are done, `?` before an item whose way of running nobody decided yet,
+with status, area and owner, the invitation's task first. `--open` shows only the tasks nobody
+owns, `--mine` yours, each with the groups above it. `peer core take <task>` makes you the owner of
+a task or a whole group nobody owns; a task someone owns, directly or through its group, is refused
+with their name. `--as-one` or `--as-parts` settles an undecided item while taking it. All act as
+you, with the Hub, and need neither the app nor Peer Core running.
 
 ### Returning to older work
 
@@ -414,6 +433,17 @@ for a task in review, **Answer in chat** or **Approve in chat** for a chat of yo
 computer, so only they can open it, and **Ask Ana** sends them a request), its task context with
 **Open task context**, what lately happened on the task, and, folded, its branch, runtime,
 handoffs, context version and pull requests. The **…** menu is the task row's.
+
+Tasks can sit under other tasks: a change imported from OpenSpec is a group with its sections and
+items under it, and you can add your own with **Add an item under…** in a row's menu or the
+**Under** chip of a new task. In the list and the sidebar, items are indented under their group,
+which folds and shows how many of its items are done; the board shows the progress on a group's
+card. A group's page lists its **Items**, each with its state and a start button on the ones that
+run as one; **Start agent** on the group gives the agent the whole group, with its open items listed
+in the first prompt. An item that arrived with items under it and no decision shows **Decide**: say
+whether an agent does it as **One task** or **Its parts** before anyone starts on it. **Move
+under…** and **Make a group** / **Make a task** are in the **…** menu. Who owns a group owns its
+items, unless an item has an owner of its own.
 
 ## Peer plugins
 

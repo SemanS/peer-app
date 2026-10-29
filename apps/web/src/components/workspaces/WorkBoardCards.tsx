@@ -29,6 +29,7 @@ import { ownerCallCard } from "./ownership/ownerDecision.logic";
 import { taskOverlap } from "./workGroups.logic";
 import { chatsLabel, taskStateTone } from "./workList.logic";
 import { personName, type WorkThreadNode } from "./workTree.logic";
+import { progressLabel } from "./taskTree.logic";
 import { workPrimaryTarget } from "./workNavigation.logic";
 
 type RequestCard = Extract<NeedCard, { readonly kind: "request" }>;
@@ -197,8 +198,13 @@ export function TaskCardView({
     ((card.state.kind === "review" || card.state.kind === "waiting") && handoff !== undefined);
   const showState = card.state.kind === "waiting" || (card.column === "needs" && !showDetail);
   const area = compact ? card.area : null;
+  // A group's items stay in their own columns; the group says how far they are.
+  const progress = progressLabel(card.task);
+  const deciding = card.task.unsettled === true && !card.task.done && action === undefined;
   const hasFooter =
     area !== null ||
+    progress !== null ||
+    deciding ||
     card.task.key !== undefined ||
     card.people.length > 0 ||
     card.chats > 1 ||
@@ -265,6 +271,9 @@ export function TaskCardView({
           {area === null ? null : (
             <span className="min-w-0 truncate text-sm text-muted-foreground">{area}</span>
           )}
+          {progress === null ? null : (
+            <span className="text-sm text-muted-foreground tabular-nums">{progress} done</span>
+          )}
           {action?.target.kind === "review" ? (
             <InlineButton onClick={() => actions.openTarget(taskTarget(card))}>
               Task details
@@ -280,6 +289,15 @@ export function TaskCardView({
               {action.label}
             </Button>
           )}
+          {deciding ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => actions.openTarget(taskTarget(card))}
+            >
+              Decide
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </CardFrame>

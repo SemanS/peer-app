@@ -8,6 +8,8 @@ import {
   PeerCurrency,
   PeerHarness,
   PeerTask,
+  PeerTaskKind,
+  PeerTaskSource,
   PeerWorkStatus,
   PeerWorkThread,
 } from "./peer/base.ts";
@@ -828,12 +830,24 @@ export const PeerHubBindCheckoutInput = Schema.Struct({
 });
 export type PeerHubBindCheckoutInput = typeof PeerHubBindCheckoutInput.Type;
 
+/** A task's place in its project's tree, as creating or changing it sets it (`PeerTask`). */
+const taskTreeFields = {
+  parent: Schema.optional(Schema.String),
+  kind: Schema.optional(PeerTaskKind),
+  executable: Schema.optional(Schema.Boolean),
+  unsettled: Schema.optional(Schema.Boolean),
+  position: Schema.optional(Schema.Number),
+  description: Schema.optional(Schema.String),
+};
+
 export const PeerHubCreateTaskInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
   projectId: TrimmedNonEmptyString,
   title: TrimmedNonEmptyString,
   key: Schema.optional(Schema.String),
   area: Schema.optional(Schema.String),
+  ...taskTreeFields,
+  source: Schema.optional(PeerTaskSource),
 });
 export type PeerHubCreateTaskInput = typeof PeerHubCreateTaskInput.Type;
 
@@ -845,6 +859,10 @@ export const PeerHubUpdateTaskInput = Schema.Struct({
   /** An empty string clears it. */
   area: Schema.optional(Schema.String),
   status: Schema.optional(Schema.Literals(["open", "review", "done"])),
+  /** The tree's fields; `parent: ""` makes it a root. */
+  ...taskTreeFields,
+  /** Null clears it. */
+  source: Schema.optional(Schema.NullOr(PeerTaskSource)),
 });
 export type PeerHubUpdateTaskInput = typeof PeerHubUpdateTaskInput.Type;
 

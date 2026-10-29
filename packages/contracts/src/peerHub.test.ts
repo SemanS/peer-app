@@ -7,7 +7,7 @@ import {
   PeerHubCreateTaskResult,
   PeerHubInviteResult,
 } from "./peerHub.ts";
-import { PeerWorkThread } from "./peer/base.ts";
+import { isExecutable, PeerTask, PeerWorkThread, taskKind } from "./peer/base.ts";
 
 const decodeStatus = Schema.decodeUnknownSync(PeerHubStatus);
 const decodeTaskReceipt = Schema.decodeUnknownSync(PeerHubCreateTaskResult);
@@ -164,5 +164,42 @@ describe("additive task creation and invitation receipts", () => {
     const inviteReceipt = { ...statusBeforeHubInfo, delivery };
     expect(decodeInviteReceipt(inviteReceipt).delivery).toEqual(delivery);
     expect(decodeStatus(inviteReceipt)).toEqual(decodeStatus(statusBeforeHubInfo));
+  });
+});
+
+describe("a task's place in the tree", () => {
+  const decodeTask = Schema.decodeUnknownSync(PeerTask);
+  const older = {
+    id: "t1",
+    title: "Feature",
+    status: "open",
+    createdBy: "ana@acme.test",
+    createdAt: "now",
+    updatedAt: "now",
+  };
+
+  it("reads an older Hub's task as a root task that runs as one", () => {
+    const task = decodeTask(older);
+    expect(task.parent).toBeUndefined();
+    expect(taskKind(task)).toBe("task");
+    expect(isExecutable(task)).toBe(true);
+  });
+
+  it("reads the tree's fields and drops what this build does not know", () => {
+    const task = decodeTask({
+      ...older,
+      parent: "t0",
+      kind: "group",
+      unsettled: true,
+      position: 2,
+      source: { system: "openspec", ref: "add-x#1" },
+      progress: { done: 1, total: 3 },
+      laterField: { anything: true },
+    });
+    expect(task).not.toHaveProperty("laterField");
+    expect(task.progress).toEqual({ done: 1, total: 3 });
+    expect(isExecutable(task)).toBe(false);
+    expect(isExecutable({ kind: "group", executable: true })).toBe(true);
+    expect(isExecutable({ kind: "task", executable: false })).toBe(false);
   });
 });

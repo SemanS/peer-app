@@ -71,7 +71,8 @@ export function threadMenuItems(input: {
 
 /**
  * A task's menu: `move-area` opens the project's areas, each `area:<name>` (an area's name is
- * whatever the project calls it), and `no-area` takes the task out of its area.
+ * whatever the project calls it), and `no-area` takes the task out of its area. `add-under` and
+ * `move-under` open the Under picker; `make-group` and `make-task` change what the item is.
  */
 export type WorkTaskMenuId =
   | "task-details"
@@ -80,6 +81,10 @@ export type WorkTaskMenuId =
   | "move-area"
   | "no-area"
   | `area:${string}`
+  | "add-under"
+  | "move-under"
+  | "make-group"
+  | "make-task"
   | "rename"
   | "toggle-done"
   | "reopen"
@@ -112,8 +117,11 @@ export function taskMenuItems(input: {
   readonly areas?: ReadonlyArray<string>;
   /** The area the task is in now; undefined when it is in none. */
   readonly area?: string | undefined;
+  /** The project's Hub keeps a task tree (`servesTree`): items go under one another. */
+  readonly tree?: boolean;
 }): ReadonlyArray<ContextMenuItem<WorkTaskMenuId>> {
   const areas = input.areas ?? [];
+  const group = input.task.kind === "group";
   return [
     ...(input.showTaskDetails
       ? [{ id: "task-details" as const, label: "Task details", icon: "file-text" }]
@@ -150,11 +158,25 @@ export function taskMenuItems(input: {
             ],
           },
         ]),
+    ...(input.tree === true
+      ? [
+          {
+            id: "add-under" as const,
+            label: "Add an item under…",
+            icon: "list-plus",
+            separatorBefore: areas.length === 0,
+          },
+          { id: "move-under" as const, label: "Move under…", icon: "folder-tree" },
+          group
+            ? { id: "make-task" as const, label: "Make a task", icon: "check" }
+            : { id: "make-group" as const, label: "Make a group", icon: "folder" },
+        ]
+      : []),
     {
       id: "rename",
       label: "Rename task",
       icon: "pencil",
-      separatorBefore: areas.length === 0,
+      separatorBefore: areas.length === 0 || input.tree === true,
     },
     {
       id: "toggle-done",

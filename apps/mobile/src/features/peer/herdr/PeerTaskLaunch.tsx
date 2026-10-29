@@ -12,6 +12,7 @@ import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { SettingsSection } from "../../settings/components/SettingsSection";
 import type { TaskLauncherProps, TaskPreparationState } from "../slotTypes";
+import { settleTaskInput, taskLaunchPrompt, type TaskSettlement } from "../work/taskTree.logic";
 import { herdrLaunchCheckoutText, herdrLaunchVcs } from "./herdrRuntime.logic";
 
 /** Starts a Claude Code or Codex agent on a task in its own checkout, or on a teammate's request. */
@@ -39,14 +40,22 @@ function ScopedPeerTaskLaunch({
   request,
   onRequestOutcome,
   taskPreparation: Preparation,
+  workProject,
 }: TaskLauncherProps) {
   const start = useAtomCommand(serverEnvironment.peerHubStartAgent, { reportFailure: false });
   const [harness, setHarness] = useState<"claude" | "codex">("claude");
   const [repositoryId, setRepositoryId] = useState<string | null>(null);
   const [editedPrompt, setPrompt] = useState<{ repositoryId: string; text: string } | null>(null);
+  const update = useAtomCommand(serverEnvironment.peerHubUpdateTask, { reportFailure: false });
+  // An unsettled item is never started: the person says first whether it runs as one task.
+  const unsettled =
+    request === undefined &&
+    workProject?.areas.some((area) =>
+      area.tasks.some((row) => row.id === task.id && row.unsettled === true),
+    ) === true;
   const defaultPrompt =
     request === undefined
-      ? [task.key, task.title].filter(Boolean).join(": ")
+      ? taskLaunchPrompt(workProject, task)
       : `${[task.key, task.title].filter(Boolean).join(": ")}.`.slice(0, 2_000);
   const [busy, setBusy] = useState(false);
   const [started, setStarted] = useState(false);
@@ -102,6 +111,34 @@ function ScopedPeerTaskLaunch({
         } else if (!isAtomCommandInterrupted(result)) {
           const error = squashAtomCommandFailure(result);
           if (request) onRequestOutcome?.("start-not-confirmed");
+          setMessage(error instanceof Error ? error.message : String(error));
+        }
+      } finally {
+        setBusy(false);
+        onBusyChange(false);
+      }
+    };
+    const settle = async (choice: TaskSettlement) => {
+      if (pending) return;
+      setBusy(true);
+      onBusyChange(true);
+      setMessage(null);
+      try {
+        const result = await update({
+          environmentId,
+          input: settleTaskInput(
+            { workspace, projectId: project.project.id, taskId: task.id },
+            choice,
+          ),
+        });
+        if (result._tag === "Success") {
+          setMessage(
+            choice === "one"
+              ? "It runs as one task now. Start an agent on it."
+              : "It runs by its parts now. Start an agent on its open items.",
+          );
+        } else if (!isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
           setMessage(error instanceof Error ? error.message : String(error));
         }
       } finally {
@@ -191,38 +228,65 @@ function ScopedPeerTaskLaunch({
               {message}
             </Text>
           )}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{
-              disabled:
+          {unsettled ? (
+            <View className="gap-2">
+              <Text className="text-foreground">
+                Run it as one task, or by its parts? Decide before an agent starts on it.
+              </Text>
+              <View className="flex-row gap-2">
+                {(
+                  [
+                    { choice: "one", label: "One task" },
+                    { choice: "parts", label: "Its parts" },
+                  ] as const
+                ).map(({ choice, label: text }) => (
+                  <Pressable
+                    key={choice}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: pending }}
+                    disabled={pending}
+                    className="flex-1 items-center rounded-xl border border-border p-3 disabled:opacity-50"
+                    onPress={() => void settle(choice)}
+                  >
+                    <Text className="font-t3-medium text-foreground">{text}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{
+                disabled:
+                  pending ||
+                  preparing ||
+                  started ||
+                  blocked !== null ||
+                  repository === undefined ||
+                  prompt.trim() === "",
+              }}
+              disabled={
                 pending ||
                 preparing ||
                 started ||
                 blocked !== null ||
                 repository === undefined ||
-                prompt.trim() === "",
-            }}
-            disabled={
-              pending ||
-              preparing ||
-              started ||
-              blocked !== null ||
-              repository === undefined ||
-              prompt.trim() === ""
-            }
-            className="items-center rounded-xl bg-primary p-3 disabled:opacity-50"
-            onPress={() => void launch()}
-          >
-            <Text className="font-t3-medium text-primary-foreground">
-              {busy
-                ? "Starting…"
-                : started
-                  ? "Started"
-                  : request === undefined
-                    ? "Start agent"
-                    : "Accept & start"}
-            </Text>
-          </Pressable>
+                prompt.trim() === ""
+              }
+              className="items-center rounded-xl bg-primary p-3 disabled:opacity-50"
+              onPress={() => void launch()}
+            >
+              <Text className="font-t3-medium text-primary-foreground">
+                {busy
+                  ? "Starting…"
+                  : started
+                    ? "Started"
+                    : request === undefined
+                      ? "Start agent"
+                      : "Accept & start"}
+              </Text>
+            </Pressable>
+          )}
         </View>
       </SettingsSection>
     );

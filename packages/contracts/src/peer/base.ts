@@ -41,6 +41,14 @@ export const PeerWorkPullRequest = Schema.Struct({
 });
 export type PeerWorkPullRequest = typeof PeerWorkPullRequest.Type;
 
+/** A group is structure (a heading, a change); a task is work. */
+export const PeerTaskKind = Schema.Literals(["group", "task"]);
+export type PeerTaskKind = typeof PeerTaskKind.Type;
+
+/** Where an imported task came from: `{ system: "openspec", ref: "add-x#1.2" }`. */
+export const PeerTaskSource = Schema.Struct({ system: Schema.String, ref: Schema.String });
+export type PeerTaskSource = typeof PeerTaskSource.Type;
+
 /** A piece of the product being built, e.g. `KRK-812 · Split Payments` under "Groups & Events". */
 export const PeerTask = Schema.Struct({
   id: Schema.String,
@@ -48,12 +56,39 @@ export const PeerTask = Schema.Struct({
   key: Schema.optional(Schema.String),
   title: Schema.String,
   area: Schema.optional(Schema.String),
+  /**
+   * As the Hub stores it, except for an item that is not executable and has executable items below
+   * it: then the aggregate of those (done when all are done).
+   */
   status: Schema.Literals(["open", "review", "done"]),
   createdBy: Schema.String,
   createdAt: Schema.String,
   updatedAt: Schema.String,
+  /**
+   * The task it sits under, of the same project. An older Hub sends none of the tree's fields: its
+   * tasks are roots that are executable tasks.
+   */
+  parent: Schema.optional(Schema.String),
+  kind: Schema.optional(PeerTaskKind),
+  /** May be given to an agent and run as one; independent of depth. */
+  executable: Schema.optional(Schema.Boolean),
+  /** An importer could not tell whether it is executable; a person decides. */
+  unsettled: Schema.optional(Schema.Boolean),
+  /** Order among its siblings; ties by `createdAt`, then id. */
+  position: Schema.optional(Schema.Number),
+  description: Schema.optional(Schema.String),
+  source: Schema.optional(PeerTaskSource),
+  /** Over its executable descendants, at any depth, when it has any. */
+  progress: Schema.optional(Schema.Struct({ done: Schema.Number, total: Schema.Number })),
 });
 export type PeerTask = typeof PeerTask.Type;
+
+/** A task without a kind is a task. */
+export const taskKind = (task: Pick<PeerTask, "kind">): PeerTaskKind => task.kind ?? "task";
+
+/** What the Hub stores when nobody said: a task is executable, a group is not. */
+export const isExecutable = (task: Pick<PeerTask, "kind" | "executable">): boolean =>
+  task.executable ?? taskKind(task) !== "group";
 
 /** A colleague's (or another computer's) agent thread; the person is metadata, not a level. */
 export const PeerWorkThread = Schema.Struct({

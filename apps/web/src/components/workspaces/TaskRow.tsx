@@ -15,10 +15,13 @@ import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { TaskChats } from "./ThreadCard";
 import { TitleInput } from "./marks";
+import { MoveUnderDialog } from "./MoveUnderDialog";
+import { NewTaskDialog } from "./NewTaskDialog";
 import type { PeerWebPlugin } from "./slots.types";
 import { TONE_TEXT } from "./signals";
 import { pullRequestsByThread, type ChatPullRequest } from "./taskChats.logic";
 import { taskRouteKey, taskRowModel, taskRowTarget, type TaskRowTarget } from "./taskRow.logic";
+import { kindChange, progressLabel, servesTree } from "./taskTree.logic";
 import {
   below,
   type MenuPosition,
@@ -42,7 +45,8 @@ const NO_PULL_REQUESTS: ReadonlyMap<string, ReadonlyArray<ChatPullRequest>> = ne
  * One task of a project, in two lines. The first is its key and title, which open it; the second
  * its state in words (the same as the board's and the task's page), the overlap it is in, and how
  * many chats it has. A chip says what to do only while the task waits on the person, and does
- * that one thing. The chevron alone shows the task's chats; a double click or F2 renames it.
+ * that one thing. The chevron alone shows the task's chats; a double click or F2 renames it. An item
+ * of a task tree is indented under the row of its parent.
  */
 export function TaskRow({
   environmentId,
@@ -58,6 +62,7 @@ export function TaskRow({
   activeThread,
   actions,
   needOf,
+  indent = 0,
 }: {
   readonly environmentId: EnvironmentId;
   readonly projectState: PeerProjectState | undefined;
@@ -75,12 +80,17 @@ export function TaskRow({
   readonly actions: WorkActions;
   /** What each of the person's waiting chats waits for, which tells an approval from an answer. */
   readonly needOf: ReadonlyMap<string, AgentNeed>;
+  /** How many of its ancestors the list shows above it. */
+  readonly indent?: number;
 }) {
   const navigate = useNavigate();
   // One two-line row per task until its chevron is opened: its chats are a click away.
   const [expanded, setExpanded] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [requesting, setRequesting] = useState(false);
+  const [treeDialog, setTreeDialog] = useState<"add-under" | "move-under" | null>(null);
+  const tree = servesTree(project);
+  const progress = progressLabel(task);
   const chatsId = useId();
   const label = taskLabel(task);
   const taskArea = tasks.find((t) => t.id === task.id)?.area;
@@ -142,6 +152,7 @@ export function TaskRow({
           showTaskDetails: target?.kind === "review",
           areas,
           area: taskArea,
+          tree,
         }),
         ...entries.map((entry) => entry.item),
       ],
@@ -159,6 +170,13 @@ export function TaskRow({
     } else if (choice === "task-details") go(taskRowTarget(task, scope));
     else if (choice === "new-thread") startThread();
     else if (choice === "request-teammate") setRequesting(true);
+    else if (choice === "add-under" || choice === "move-under") setTreeDialog(choice);
+    else if (choice === "make-group" || choice === "make-task")
+      void actions.changeTaskTree(
+        scope,
+        task,
+        kindChange(choice === "make-group" ? "group" : "task"),
+      );
     else if (choice === "rename") setRenaming(true);
     else if (choice === "reopen") void actions.setTaskDone(scope, task, false);
     else if (choice === "toggle-done") void actions.setTaskDone(scope, task, !task.done);
@@ -182,7 +200,10 @@ export function TaskRow({
   );
 
   return (
-    <li className="list-none">
+    <li
+      className="list-none"
+      style={indent === 0 ? undefined : { paddingInlineStart: `${indent * 0.75}rem` }}
+    >
       <div
         className={cn(
           "group/task relative flex min-w-0 items-start gap-0.5 rounded-lg pr-1",
@@ -252,6 +273,14 @@ export function TaskRow({
           <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-xs whitespace-nowrap">
             <StateDot tone={model.look.tone} hollow={model.look.hollow} />
             <span className={cn("shrink-0", TONE_TEXT[model.look.tone])}>{model.state.label}</span>
+            {progress === null ? null : (
+              <>
+                <span aria-hidden className="shrink-0 text-muted-foreground">
+                  ·
+                </span>
+                <span className="shrink-0 text-muted-foreground tabular-nums">{progress}</span>
+              </>
+            )}
             {overlap === undefined ? null : (
               <>
                 <span aria-hidden className="shrink-0 text-muted-foreground">
@@ -350,6 +379,22 @@ export function TaskRow({
           needOf={needOf}
           pullRequests={pullRequests}
           onOpenTask={() => go(taskRowTarget(task, scope))}
+        />
+      ) : null}
+      {treeDialog === "add-under" ? (
+        <NewTaskDialog
+          environmentId={environmentId}
+          project={project}
+          t3ProjectId={t3ProjectId}
+          parent={task.id}
+          onClose={() => setTreeDialog(null)}
+        />
+      ) : treeDialog === "move-under" ? (
+        <MoveUnderDialog
+          project={project}
+          task={task}
+          onMove={(parent) => void actions.moveTaskUnder(scope, task, parent)}
+          onClose={() => setTreeDialog(null)}
         />
       ) : null}
       {requesting && canRequest ? (

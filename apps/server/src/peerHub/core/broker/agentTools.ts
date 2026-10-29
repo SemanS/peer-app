@@ -98,6 +98,17 @@ const schemas = {
     key: optional(text),
     area: optional(Schema.String.check(Schema.isMaxLength(200))),
     status: optional(Schema.Literals(["open", "review", "done"])),
+    under: optional(text),
+    kind: optional(Schema.Literals(["group", "task"])),
+    executable: optional(Schema.Boolean),
+    position: optional(
+      Schema.Number.check(
+        Schema.isInt(),
+        Schema.isGreaterThanOrEqualTo(0),
+        Schema.isLessThanOrEqualTo(1_000_000),
+      ),
+    ),
+    flat: optional(Schema.Boolean),
   }),
   share: Schema.Struct({ workspace: optional(text), name: optional(text) }),
   review: empty,
@@ -188,7 +199,7 @@ const definitions = [
   ["knowledge", "Find decisions and conventions by words or id.", { query: string }, []],
   [
     "task",
-    "Your project's tasks, for your person: list, add, set title/area/status, remove. task: key, id or title.",
+    "Your project's task tree (groups, items), for your person: list, add, set, remove. task, under: key, id or title; under none: a root.",
     {
       action: { type: "string", enum: ["list", "add", "set", "remove"] },
       task: string,
@@ -196,6 +207,11 @@ const definitions = [
       key: string,
       area: string,
       status: { type: "string", enum: ["open", "review", "done"] },
+      under: string,
+      kind: { enum: ["group", "task"] },
+      executable: { type: "boolean" },
+      position: { type: "integer" },
+      flat: { type: "boolean" },
     },
     [],
   ],
@@ -340,9 +356,9 @@ export const CORE_AGENT_TOOLS: ReadonlyArray<PeerAgentTool> = definitions.map(
           const action = value("action") ?? "list";
           const fields =
             {
-              list: [],
-              add: ["title", "key", "area"],
-              set: ["task", "title", "area", "status"],
+              list: ["flat"],
+              add: ["title", "key", "area", "under", "kind", "executable"],
+              set: ["task", "title", "area", "status", "under", "executable", "position"],
               remove: ["task"],
             }[action] ?? [];
           const extra = Object.keys(input).find((key) => key !== "action" && !fields.includes(key));
@@ -351,10 +367,38 @@ export const CORE_AGENT_TOOLS: ReadonlyArray<PeerAgentTool> = definitions.map(
               `peer_task ${action} takes no ${extra}`,
               "check the peer_task tool schema.",
             );
-          if (action === "add") return ["add", ...plain("title"), ...flag("key"), ...flag("area")];
+          if (action === "add") {
+            // A group is added not executable; settling one as a single task is a set.
+            if (input.executable === true && input.kind === "group")
+              throw usage(
+                "peer_task add makes a group that is not run as one task",
+                "add it, then peer_task set with executable true.",
+              );
+            return [
+              "add",
+              ...plain("title"),
+              ...flag("key"),
+              ...flag("area"),
+              ...flag("under"),
+              ...flag("kind"),
+              ...(input.executable === false ? ["--not-executable"] : []),
+            ];
+          }
           if (action === "set")
-            return ["set", ...plain("task"), ...flag("title"), ...flag("area"), ...flag("status")];
-          return action === "remove" ? ["remove", ...plain("task")] : ["list"];
+            return [
+              "set",
+              ...plain("task"),
+              ...flag("title"),
+              ...flag("area"),
+              ...flag("status"),
+              ...flag("under"),
+              ...(input.executable === undefined
+                ? []
+                : ["--executable", input.executable === true ? "yes" : "no"]),
+              ...flag("position"),
+            ];
+          if (action === "remove") return ["remove", ...plain("task")];
+          return input.flat === true ? ["list", "--flat"] : ["list"];
         }
         default:
           return [];

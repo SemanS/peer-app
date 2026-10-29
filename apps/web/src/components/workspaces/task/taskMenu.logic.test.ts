@@ -34,6 +34,13 @@ describe("taskMenuAction", () => {
     expect(taskMenuAction("remove", [])).toEqual({ kind: "remove" });
   });
 
+  it("opens the Under picker and changes what an item is, as the row does", () => {
+    expect(taskMenuAction("add-under", [])).toEqual({ kind: "add-under" });
+    expect(taskMenuAction("move-under", [])).toEqual({ kind: "move-under" });
+    expect(taskMenuAction("make-group", [])).toEqual({ kind: "set-kind", to: "group" });
+    expect(taskMenuAction("make-task", [])).toEqual({ kind: "set-kind", to: "task" });
+  });
+
   it("moves between the project's areas, and out of them", () => {
     expect(taskMenuAction("area:Orders", [])).toEqual({ kind: "move-area", area: "Orders" });
     expect(taskMenuAction("no-area", [])).toEqual({ kind: "move-area", area: null });

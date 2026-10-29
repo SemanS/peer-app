@@ -42,7 +42,8 @@ describe("coordination tool contracts", () => {
       JSON.stringify(
         tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
       ).length,
-    ).toBeLessThanOrEqual(5000);
+      // 5000 before the task tree's five peer_task fields.
+    ).toBeLessThanOrEqual(5200);
     expect(instructions.length).toBeLessThanOrEqual(700);
     expect(tools.every((t) => t.command === t.name.slice(5))).toBe(true);
   });
@@ -116,6 +117,30 @@ describe("coordination tool contracts", () => {
     ]);
     expect(args("peer_task", { action: "remove", task: "STR-9" })).toEqual(["remove", "STR-9"]);
   });
+  it("maps peer_task's tree fields to peer task's flags", () => {
+    const args = (input: Record<string, unknown>) =>
+      tools.find((t) => t.name === "peer_task")!.arguments(input);
+    expect(args({ action: "list", flat: true })).toEqual(["list", "--flat"]);
+    expect(args({ action: "list", flat: false })).toEqual(["list"]);
+    expect(
+      args({ action: "add", title: "Hub", under: "STR-1", kind: "group", executable: false }),
+    ).toEqual(["add", "Hub", "--under", "STR-1", "--kind", "group", "--not-executable"]);
+    expect(args({ action: "add", title: "Step", executable: true })).toEqual(["add", "Step"]);
+    expect(
+      args({ action: "set", task: "t2", under: "none", executable: true, position: 0 }),
+    ).toEqual(["set", "t2", "--under", "none", "--executable", "yes", "--position", "0"]);
+    expect(args({ action: "set", task: "t2", executable: false })).toEqual([
+      "set",
+      "t2",
+      "--executable",
+      "no",
+    ]);
+    const schema = tools.find((t) => t.name === "peer_task")!;
+    expect(Object.keys(schema.inputSchema.properties as object)).toEqual(
+      expect.arrayContaining(["under", "kind", "executable", "position", "flat"]),
+    );
+    expect(schema.description).toContain("group");
+  });
   it("rejects flags disguised as text and invalid bounded inputs", () => {
     for (const [name, args] of [
       ["peer_note", { text: "--overlap" }],
@@ -144,6 +169,16 @@ describe("coordination tool contracts", () => {
       ["peer_task", { action: "list", title: "x" }],
       ["peer_task", { action: "set", task: "STR-9", status: "closed" }],
       ["peer_task", { action: "drop" }],
+      ["peer_task", { action: "list", under: "STR-1" }],
+      ["peer_task", { action: "add", title: "x", position: 1 }],
+      ["peer_task", { action: "add", title: "x", kind: "epic" }],
+      ["peer_task", { action: "add", title: "x", kind: "group", executable: true }],
+      ["peer_task", { action: "set", task: "t1", flat: true }],
+      ["peer_task", { action: "set", task: "t1", position: -1 }],
+      ["peer_task", { action: "set", task: "t1", position: 1.5 }],
+      ["peer_task", { action: "set", task: "t1", executable: "yes" }],
+      ["peer_task", { action: "set", task: "t1", under: "--status" }],
+      ["peer_task", { action: "remove", task: "t1", under: "t2" }],
     ] as const) {
       expect(() => tools.find((t) => t.name === name)!.arguments(args)).toThrow();
     }

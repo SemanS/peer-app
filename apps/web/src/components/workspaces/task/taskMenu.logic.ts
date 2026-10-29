@@ -11,6 +11,10 @@ export type TaskMenuAction =
   /** The area to move the task to; null takes it out of its area. */
   | { readonly kind: "move-area"; readonly area: string | null }
   | { readonly kind: "new-chat" }
+  /** Opens the Under picker: a new item under this task, or this task under another. */
+  | { readonly kind: "add-under" }
+  | { readonly kind: "move-under" }
+  | { readonly kind: "set-kind"; readonly to: "group" | "task" }
   | { readonly kind: "rename" }
   | { readonly kind: "reopen" }
   | { readonly kind: "toggle-done" }
@@ -37,6 +41,14 @@ export function taskMenuAction(
   switch (choice) {
     case "new-thread":
       return { kind: "new-chat" };
+    case "add-under":
+      return { kind: "add-under" };
+    case "move-under":
+      return { kind: "move-under" };
+    case "make-group":
+      return { kind: "set-kind", to: "group" };
+    case "make-task":
+      return { kind: "set-kind", to: "task" };
     case "rename":
       return { kind: "rename" };
     case "reopen":

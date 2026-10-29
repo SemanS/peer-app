@@ -4,20 +4,13 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import { assert, describe, it } from "@effect/vitest";
-import type { PeerTask } from "@t3tools/contracts";
+import type { PeerHubCreateTaskInput, PeerHubUpdateTaskInput, PeerTask } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+
+import * as PeerHubClient from "../peerHub/core/hub/PeerHubClient.ts";
+import * as PeerWork from "../peerHub/core/work/PeerWork.ts";
 
 import * as OpenSpec from "./peerCoreOpenSpec.ts";
-
-const task = (id: string, key: string, title: string, area?: string): PeerTask => ({
-  id,
-  key,
-  title,
-  ...(area === undefined ? {} : { area }),
-  status: "open",
-  createdBy: "ana@acme.test",
-  createdAt: "2026-10-29T10:00:00Z",
-  updatedAt: "2026-10-29T10:00:00Z",
-});
 
 const change = (id: string, title: string, capabilities: ReadonlyArray<string> = []) => ({
   id,
@@ -81,58 +74,122 @@ describe("OpenSpec import", () => {
     assert.isNull(OpenSpec.areaOf(change("b", "B", ["survey-editor", "billing"]), areas));
     assert.isNull(OpenSpec.areaOf(change("c", "C", ["analytics"]), areas));
   });
+});
 
-  it("creates what is new, updates only what Peer did not change, and shows conflicts", () => {
-    const areas = ["Survey Editor"];
-    const record = {
-      moved: { task: "t1", title: "Old title", area: null },
-      edited: { task: "t2", title: "Imported", area: null },
-      both: { task: "t3", title: "Base", area: null },
-    };
-    const steps = OpenSpec.plan(
-      [
-        change("fresh", "Fresh change", ["survey-editor"]),
-        change("moved", "New title"),
-        change("edited", "Imported"),
-        change("both", "OpenSpec title"),
-        change("adopt", "Adopt me"),
-        change("adopt-differs", "Spec words"),
-      ],
-      [
-        task("t1", "moved", "Old title"),
-        // Renamed in Peer; OpenSpec did not move: Peer's title stays.
-        task("t2", "edited", "Renamed in Peer"),
-        task("t3", "both", "Peer title"),
-        // Created by hand with the change's key: adopted, never duplicated.
-        task("t4", "ADOPT", "Adopt me"),
-        task("t5", "adopt-differs", "Hand words"),
-      ],
-      areas,
-      record,
-    );
-    assert.deepStrictEqual(
-      steps.map((step) => [
-        step.change.id,
-        step.kind,
-        step.kind === "update" ? step.title : step.kind === "conflict" ? step.fields : undefined,
-      ]),
-      [
-        ["fresh", "create", undefined],
-        ["moved", "update", "New title"],
-        ["edited", "same", undefined],
-        ["both", "conflict", ["title"]],
-        ["adopt", "same", undefined],
-        ["adopt-differs", "conflict", ["title"]],
-      ],
-    );
-    assert.deepStrictEqual(steps[0], {
-      kind: "create",
-      change: change("fresh", "Fresh change", ["survey-editor"]),
-      area: "Survey Editor",
-    });
-    assert.strictEqual(
-      OpenSpec.summary(steps),
-      "6 OpenSpec changes: 1 new, 1 to update, 2 in conflict, 2 up to date",
-    );
-  });
+/** A Hub that keeps the tree, as far as the import reads and writes it. */
+const standInHub = () => {
+  const tasks: Array<PeerTask> = [];
+  const writes: Array<string> = [];
+  const work = {
+    createTask: (input: PeerHubCreateTaskInput) =>
+      Effect.sync(() => {
+        const { workspace: _w, projectId: _p, ...fields } = input;
+        const created: PeerTask = {
+          ...fields,
+          id: `t${tasks.length + 1}`,
+          ...(fields.key === undefined ? {} : { key: fields.key.toUpperCase() }),
+          executable: fields.executable ?? fields.kind !== "group",
+          status: "open",
+          createdBy: "ana@acme.test",
+          createdAt: "2026-10-29T10:00:00Z",
+          updatedAt: "2026-10-29T10:00:00Z",
+        };
+        tasks.push(created);
+        writes.push(`create ${created.title}`);
+        return { createdTask: created };
+      }),
+    updateTask: (input: PeerHubUpdateTaskInput) =>
+      Effect.sync(() => {
+        const { workspace: _w, projectId: _p, taskId, source, ...fields } = input;
+        const at = tasks.findIndex((task) => task.id === taskId);
+        const { source: kept, ...rest } = tasks[at]!;
+        const next = source === undefined ? kept : (source ?? undefined);
+        // The import sends only the fields it changes, so none of them is undefined here.
+        tasks[at] = {
+          ...rest,
+          ...fields,
+          ...(next === undefined ? {} : { source: next }),
+        } as PeerTask;
+        writes.push(`update ${taskId}`);
+      }),
+  } as unknown as PeerWork.PeerWork["Service"];
+  const client = {
+    session: Effect.succeed({ hubUrl: "https://hub.test", session: "phs" }),
+    me: Effect.succeed({ email: "ana@acme.test", workspaces: [], joinable: [], features: {} }),
+    features: Effect.succeed({}),
+    api: {
+      work: () =>
+        Effect.sync(() => ({ projects: { pay: { areas: [], tasks: [...tasks], threads: [] } } })),
+    },
+  } as unknown as PeerHubClient.PeerHubClient["Service"];
+  return { tasks, writes, work, client };
+};
+
+describe("OpenSpec import as a tree", () => {
+  it.effect("imports a change's items once: a second run plans nothing", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.promise(() =>
+        NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "openspec-")),
+      );
+      const write = (path: string, text: string) =>
+        Effect.promise(async () => {
+          await NodeFSP.mkdir(NodePath.dirname(NodePath.join(root, path)), { recursive: true });
+          await NodeFSP.writeFile(NodePath.join(root, path), text);
+        });
+      yield* write("openspec/changes/add-x/proposal.md", "# Add X\n");
+      yield* write("openspec/changes/add-x/notes.md", "loose notes\n");
+      yield* write(
+        "openspec/changes/add-x/tasks.md",
+        [
+          "## 1. Server",
+          "- [x] 1.1 Store",
+          "- [ ] 1.2 Routes",
+          "  - [ ] 1.2.1 Read",
+          "  - [ ] 1.2.2 Write",
+          "  - Depends on 1.1",
+        ].join("\n"),
+      );
+      const hub = standInHub();
+      const lines: Array<string> = [];
+      const io = {
+        say: (line: string) => Effect.sync(() => void lines.push(line)),
+        askCode: Effect.never,
+      };
+      const target = { workspace: "acme", project: "pay", root, stateDir: root };
+      const run = OpenSpec.sync(target, () => Effect.succeed(true), io).pipe(
+        Effect.provideService(PeerWork.PeerWork, hub.work),
+        Effect.provideService(PeerHubClient.PeerHubClient, hub.client),
+      );
+      assert.isTrue(yield* run);
+      assert.strictEqual(
+        lines[0],
+        "6 items: 6 new, 0 to update, 0 in conflict, 0 up to date, 0 gone; 1 unsettled; dependencies: not served by this Hub",
+      );
+      assert.include(lines, "? Routes: run it as one task, or by its parts? Decide in Peer.");
+      assert.deepStrictEqual(lines.slice(-2), [
+        "Not interpreted:",
+        "  openspec/changes/add-x/notes.md",
+      ]);
+      assert.deepStrictEqual(
+        hub.tasks.map((task) => [task.title, task.parent ?? null, task.status]),
+        [
+          ["Add X", null, "open"],
+          ["Server", "t1", "open"],
+          ["Store", "t2", "done"],
+          ["Routes", "t2", "open"],
+          ["Read", "t4", "open"],
+          ["Write", "t4", "open"],
+        ],
+      );
+      const writes = hub.writes.length;
+      lines.length = 0;
+      assert.isTrue(yield* run);
+      assert.strictEqual(
+        lines[0],
+        "6 items: 0 new, 0 to update, 0 in conflict, 6 up to date, 0 gone; 1 unsettled; dependencies: not served by this Hub",
+      );
+      assert.strictEqual(hub.writes.length, writes);
+      yield* Effect.promise(() => NodeFSP.rm(root, { recursive: true, force: true }));
+    }),
+  );
 });

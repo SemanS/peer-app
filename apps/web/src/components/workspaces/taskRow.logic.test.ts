@@ -255,3 +255,19 @@ describe("what the row looks like", () => {
     expect(taskRouteKey(scope, "ord-7")).toBe("task:webinson:ordering:ord-7");
   });
 });
+
+describe("taskRowModel: an unsettled item", () => {
+  it("offers Decide, which opens the task", () => {
+    const row = model(task([], { unsettled: true }));
+    expect(row.chip?.label).toBe("Decide");
+    expect(row.chip?.target).toEqual(taskRowTarget(task([]), scope));
+  });
+
+  it("lets a chip that waits on the person go first, and offers nothing once done", () => {
+    const waiting = thread("a", { status: "blocked" });
+    expect(
+      model(task([waiting], { unsettled: true }), needs([[waiting, "input"]])).chip?.label,
+    ).toBe("Answer");
+    expect(model(task([], { unsettled: true, done: true })).chip).toBeUndefined();
+  });
+});

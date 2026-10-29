@@ -36,6 +36,11 @@ export interface PeerTaskProps extends PeerEnvironmentProps {
   readonly disabled: boolean;
   readonly onBusyChange: (busy: boolean) => void;
   readonly taskPreparation?: ComponentType<TaskPreparationProps> | undefined;
+  /**
+   * The project as the work tree has it (depth, kind, progress of each task). Absent, the task is a
+   * root that runs as one, as on an older Hub.
+   */
+  readonly workProject?: WorkProjectNode | undefined;
 }
 
 export type TaskPreparationState =

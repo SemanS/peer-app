@@ -1,4 +1,5 @@
 import type { SignalTone } from "./signals";
+import { ancestorIds, nestRows, treeIndexOf, type NestedRow } from "./taskTree.logic";
 import {
   TASK_COLUMNS,
   type TaskCard,
@@ -118,3 +119,33 @@ export const COLUMN_STATE: Readonly<Record<TaskColumn, TaskStateKind>> = {
   paused: "paused",
   new: "new",
 };
+
+/** A task's row in the list across projects: tasks of different projects never nest. */
+export const listRowKey = (card: Pick<WorkTaskCard, "project" | "task">): string =>
+  `${card.project.workspace}/${card.project.projectId}/${card.task.id}`;
+
+/**
+ * A group's rows in the tree's shape: an item under its nearest ancestor in the same group, the
+ * rows under a collapsed one (by `listRowKey`) hidden. The group's count stays every row's.
+ */
+export function listTreeRows(
+  rows: ReadonlyArray<WorkTaskCard>,
+  collapsed: ReadonlySet<string>,
+): ReadonlyArray<NestedRow<WorkTaskCard>> {
+  const indexes = new Map<WorkTaskCard["project"], ReturnType<typeof treeIndexOf>>();
+  const indexOf = (card: WorkTaskCard) => {
+    const known = indexes.get(card.project);
+    if (known !== undefined) return known;
+    const index = treeIndexOf(card.project);
+    indexes.set(card.project, index);
+    return index;
+  };
+  const prefix = (card: WorkTaskCard) => `${card.project.workspace}/${card.project.projectId}/`;
+  return nestRows({
+    items: rows,
+    idOf: listRowKey,
+    ancestorsOf: (card) => ancestorIds(indexOf(card), card.task).map((id) => prefix(card) + id),
+    treeIndex: (card) => indexOf(card).get(card.task.id)?.index ?? Number.MAX_SAFE_INTEGER,
+    collapsed,
+  });
+}

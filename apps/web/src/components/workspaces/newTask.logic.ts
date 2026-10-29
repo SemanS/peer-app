@@ -55,6 +55,8 @@ export interface NewTaskDraft {
   readonly area: string | null;
   /** A tracker key, or "" for none. */
   readonly key: string;
+  /** The item it goes under; null: a root. Absent on a Hub that keeps no tree. */
+  readonly parent?: string | null;
 }
 
 /** A task can be created once it has a title and any key the Hub would take. */
@@ -74,5 +76,6 @@ export function createTaskInput(
     title: oneLine(draft.title).trim(),
     ...(key === "" ? {} : { key }),
     ...(area === "" ? {} : { area }),
+    ...(draft.parent === undefined || draft.parent === null ? {} : { parent: draft.parent }),
   };
 }

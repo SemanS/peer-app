@@ -13,13 +13,24 @@ import { Button } from "../../ui/button";
 import { SidebarInset } from "../../ui/sidebar";
 import { agentLook, TitleInput } from "../marks";
 import { PeerPageHeader, TaskKey } from "../PeerPageHeader";
+import { MoveUnderDialog } from "../MoveUnderDialog";
+import { NewTaskDialog } from "../NewTaskDialog";
 import { TONE_BADGE } from "../signals";
+import {
+  canLaunch,
+  kindChange,
+  launchPrompt,
+  progressLabel,
+  servesTree,
+  settleChange,
+  taskItems,
+} from "../taskTree.logic";
 import type { PeerWebPlugin } from "../slots.types";
 import { projectCheckout } from "../useOpenWorkspaceProject";
 import { below, pickFromMenu, type MenuPosition, type WorkActions } from "../useWorkActions";
 import { useWorkData } from "../useWorkData";
 import { taskMenuItems } from "../workMenus.logic";
-import { taskLabel, type WorkThreadNode } from "../workTree.logic";
+import { taskLabel, type WorkTaskNode, type WorkThreadNode } from "../workTree.logic";
 import {
   findTask,
   taskPageModel,
@@ -28,13 +39,22 @@ import {
   type TaskPerson,
 } from "./task.logic";
 import { TaskActivity } from "./TaskActivity";
-import { TaskChats, TaskContextSection, TaskDetails, WaitsOnYou } from "./TaskSections";
+import {
+  DecisionBar,
+  TaskChats,
+  TaskContextSection,
+  TaskDetails,
+  TaskItems,
+  WaitsOnYou,
+} from "./TaskSections";
 import { taskMenuAction } from "./taskMenu.logic";
 
 /**
  * A task's page, which its title opens: what state it is in and what waits on the person, its
  * chats (a colleague's can only be asked about), the task context, what lately happened, and the
- * details behind a fold. The primary action follows the state.
+ * details behind a fold. The primary action follows the state. A task with items lists them, and an
+ * agent started on a group (or a task worked by its parts) gets its open items; an item nobody
+ * decided how to run asks that first and starts nothing.
  */
 export function TaskView({
   workspace,
@@ -94,6 +114,7 @@ export function TaskView({
               ids={ids}
               found={found}
               model={model}
+              needs={waiting}
               now={now}
             />
           )}
@@ -111,6 +132,7 @@ function TaskBody({
   ids,
   found,
   model,
+  needs,
   now,
 }: {
   readonly environmentId: EnvironmentId;
@@ -120,10 +142,13 @@ function TaskBody({
   readonly ids: TaskPageIds;
   readonly found: NonNullable<ReturnType<typeof findTask>>;
   readonly model: TaskPageModel;
+  readonly needs: ReturnType<typeof needsByOpen>;
   readonly now: number;
 }) {
   const navigate = useNavigate();
   const [renaming, setRenaming] = useState(false);
+  const [treeDialog, setTreeDialog] = useState<"add-under" | "move-under" | null>(null);
+  const [deciding, setDeciding] = useState(false);
   const [asking, setAsking] = useState<{ readonly recipient: string | undefined } | null>(null);
   // The requests plugin lends its dialog through a slot, so this page imports nothing of it.
   const RequestDialog = plugins.find(
@@ -145,7 +170,15 @@ function TaskBody({
     (plugin) => plugin.taskPreparation !== undefined,
   )?.taskPreparation;
   const Launcher = plugins.find((plugin) => plugin.taskLauncher !== undefined)?.taskLauncher;
+  const tree = servesTree(found.project);
+  const unsettled = tree && taskNode.unsettled === true && !taskNode.done;
+  const launchable = canLaunch(taskNode) || !tree;
+  // A leaf that runs as one keeps the brief's prompt; a group gets its open items.
+  const initialPrompt = launchPrompt(found.project, taskNode);
+  const items = taskItems(found.project, taskNode, needs);
+  const progress = progressLabel(taskNode);
   const preparing =
+    launchable &&
     !taskNode.done &&
     taskNode.threads.length === 0 &&
     Launcher !== undefined &&
@@ -159,6 +192,16 @@ function TaskBody({
       to: "/review/$workspace/$project/$task",
       params: { workspace, project, task: taskId },
     });
+  const openTask = (task: WorkTaskNode) =>
+    void navigate({
+      to: "/task/$workspace/$project/$task",
+      params: { workspace, project, task: task.id },
+    });
+  const decide = async (asOne: boolean) => {
+    setDeciding(true);
+    await actions.changeTaskTree(scope, taskNode, settleChange(asOne));
+    setDeciding(false);
+  };
   const openContext = () =>
     void navigate({
       to: "/context/$workspace/$project/$scope",
@@ -176,6 +219,7 @@ function TaskBody({
           inReview: taskNode.inReview === true,
           areas: found.project.areas.flatMap((area) => (area.name === null ? [] : [area.name])),
           area: hubTask?.area,
+          tree,
         }),
         ...entries.map((entry) => entry.item),
       ],
@@ -193,6 +237,13 @@ function TaskBody({
         break;
       case "new-chat":
         startChat();
+        break;
+      case "add-under":
+      case "move-under":
+        setTreeDialog(action.kind);
+        break;
+      case "set-kind":
+        void actions.changeTaskTree(scope, taskNode, kindChange(action.to));
         break;
       case "rename":
         setRenaming(true);
@@ -240,6 +291,9 @@ function TaskBody({
             {model.area === null ? null : (
               <span className="text-sm text-muted-foreground">{model.area}</span>
             )}
+            {progress === null ? null : (
+              <span className="text-sm text-muted-foreground tabular-nums">{progress} done</span>
+            )}
             {plugins.map(({ id, taskBadges: Badges }) =>
               // The handoff badge says "Handoff #n", which the primary action already says.
               Badges === undefined || id === "handoff" ? null : <Badges key={id} {...slot} />,
@@ -272,14 +326,36 @@ function TaskBody({
           ) : primary.kind === "chat" ? (
             <Button onClick={() => actions.open(primary.open)}>{primary.label}</Button>
           ) : null}
-          {!preparing && model.chats.length === 0 && (primary.kind === "start" || model.offerStart)
+          {!preparing &&
+          !unsettled &&
+          model.chats.length === 0 &&
+          (primary.kind === "start" || model.offerStart)
             ? startButton
             : null}
           {plugins.map(({ id, taskActions: Actions, taskLauncher }) =>
-            Actions === undefined || (preparing && taskLauncher !== undefined) ? null : (
+            Actions === undefined ||
+            (taskLauncher !== undefined &&
+              (preparing || !launchable || initialPrompt !== undefined)) ? null : (
               <Actions key={id} {...slot} />
             ),
           )}
+          {/* The launcher's own row action starts on the brief, so a group's carries its items. */}
+          {Launcher !== undefined &&
+          projectState !== undefined &&
+          !preparing &&
+          launchable &&
+          !taskNode.done &&
+          initialPrompt !== undefined ? (
+            <Launcher
+              environmentId={environmentId}
+              status={status}
+              workspace={workspace}
+              project={projectState}
+              taskId={taskId}
+              taskLabel={label}
+              initialPrompt={initialPrompt}
+            />
+          ) : null}
           <Button
             variant="outline"
             size="icon"
@@ -297,6 +373,8 @@ function TaskBody({
         </p>
       ) : null}
 
+      {unsettled ? <DecisionBar busy={deciding} onDecide={(asOne) => void decide(asOne)} /> : null}
+
       {projectState === undefined ? null : preparing ? (
         <Launcher
           environmentId={environmentId}
@@ -306,6 +384,7 @@ function TaskBody({
           taskId={taskId}
           taskLabel={label}
           preparation={Preparation}
+          {...withPrompt(initialPrompt)}
           inline
         />
       ) : Preparation === undefined ? null : (
@@ -340,6 +419,18 @@ function TaskBody({
               {model.chats.length > 0 ? startButton : null}
             </TaskChats>
           )}
+          <TaskItems
+            rows={items}
+            onOpen={openTask}
+            launcher={
+              Launcher === undefined || projectState === undefined
+                ? undefined
+                : {
+                    Launcher,
+                    props: { environmentId, status, workspace, project: projectState },
+                  }
+            }
+          />
           <TaskContextSection card={model.context} onOpen={openContext} />
           {plugins.map(({ id, taskSections: Section }) =>
             Section === undefined ? null : <Section key={id} {...slot} />,
@@ -360,6 +451,23 @@ function TaskBody({
         </aside>
       </div>
 
+      {treeDialog === "add-under" ? (
+        <NewTaskDialog
+          environmentId={environmentId}
+          project={found.project}
+          t3ProjectId={t3ProjectId}
+          parent={taskId}
+          onClose={() => setTreeDialog(null)}
+        />
+      ) : treeDialog === "move-under" ? (
+        <MoveUnderDialog
+          project={found.project}
+          task={taskNode}
+          onMove={(parent) => void actions.moveTaskUnder(scope, taskNode, parent)}
+          onClose={() => setTreeDialog(null)}
+        />
+      ) : null}
+
       {RequestDialog === undefined ? null : (
         <RequestDialog
           open={asking !== null}
@@ -376,6 +484,9 @@ function TaskBody({
     </div>
   );
 }
+
+const withPrompt = (initialPrompt: string | undefined) =>
+  initialPrompt === undefined ? {} : { initialPrompt };
 
 /** Marks for the people on the task, the person's own in the accent, overlapping. */
 function People({ people }: { readonly people: ReadonlyArray<TaskPerson> }) {

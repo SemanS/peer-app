@@ -463,19 +463,15 @@ const make = Effect.gen(function* () {
   ) {
     const { hubUrl, session } = yield* client.session;
     yield* state.project(input.workspace, input.projectId);
-    const key = input.key?.trim();
-    const area = input.area?.trim();
-    const createdTask = yield* hubApi.createTask(
-      hubUrl,
-      session,
-      input.workspace,
-      input.projectId,
-      {
-        title: input.title,
-        ...(key ? { key } : {}),
-        ...(area ? { area } : {}),
-      },
-    );
+    const { workspace, projectId, title, key: rawKey, area: rawArea, ...tree } = input;
+    const key = rawKey?.trim();
+    const area = rawArea?.trim();
+    const createdTask = yield* hubApi.createTask(hubUrl, session, workspace, projectId, {
+      title,
+      ...(key ? { key } : {}),
+      ...(area ? { area } : {}),
+      ...tree,
+    });
     yield* refresh();
     return { ...(yield* status.publish), createdTask };
   }, lock.withPermits(1));
@@ -485,11 +481,8 @@ const make = Effect.gen(function* () {
   ) {
     const { hubUrl, session } = yield* client.session;
     yield* state.project(input.workspace, input.projectId);
-    yield* hubApi.updateTask(hubUrl, session, input.workspace, input.projectId, input.taskId, {
-      ...(input.title === undefined ? {} : { title: input.title }),
-      ...(input.area === undefined ? {} : { area: input.area }),
-      ...(input.status === undefined ? {} : { status: input.status }),
-    });
+    const { workspace, projectId, taskId, ...change } = input;
+    yield* hubApi.updateTask(hubUrl, session, workspace, projectId, taskId, change);
     yield* refresh();
     return yield* status.publish;
   }, lock.withPermits(1));

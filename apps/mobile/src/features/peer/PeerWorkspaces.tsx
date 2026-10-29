@@ -10,8 +10,9 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { domainStateLabel } from "@t3tools/client-runtime/peer-domain-offers";
+import { buildWorkTree } from "@t3tools/client-runtime/peer/work";
 import { useNavigation } from "@react-navigation/native";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 
 import { AppText as Text } from "../../components/ui/AppText";
@@ -31,6 +32,7 @@ import { PeerCoordTimeline } from "./PeerCoordTimeline";
 import { PeerPluginsSection } from "./PeerPluginsSection";
 import { usePeerMobilePlugins, PEER_MOBILE_PLUGINS } from "./slots";
 import { alwaysWorkspaceSectionsAt, workspaceSectionsAt } from "./slots.logic";
+import { rowInset, taskListRows } from "./work/taskTree.logic";
 
 /**
  * Peer workspaces: the way to Work, then for each environment selected in Settings the team's open
@@ -95,6 +97,11 @@ function PeerEnvironment({
   const [message, setMessage] = useState<string | null>(null);
   const status = query.data;
   const plugins = usePeerMobilePlugins(status);
+  const workTree = useMemo(
+    () =>
+      status === null ? [] : buildWorkTree({ status, localThreads: [], now: 0, watch: false }),
+    [status],
+  );
   const Preparation = plugins.find((plugin) => plugin.taskPreparation)?.taskPreparation;
   const hasLauncher = plugins.some((plugin) => plugin.taskLauncher !== undefined);
   const project = status?.workspaces
@@ -155,58 +162,70 @@ function PeerEnvironment({
                     .join(" · ")}
                 </Text>
               ) : null}
-              {workspace.projects.flatMap((project) =>
-                project.work.tasks
-                  .filter((task) => task.status !== "done")
-                  .map((task) => (
-                    <Pressable
-                      key={`${project.project.id}/${task.id}`}
-                      accessibilityRole="button"
-                      accessibilityState={{
-                        selected:
-                          selection?.taskId === task.id &&
-                          selection?.projectId === project.project.id,
-                        disabled: busy,
-                      }}
-                      disabled={busy}
-                      className="gap-1 p-4"
-                      onPress={() => {
-                        setSelection({
-                          workspace: workspace.slug,
-                          projectId: project.project.id,
-                          taskId: task.id,
-                        });
-                        setMessage(null);
-                      }}
-                    >
-                      <Text className="font-t3-medium text-foreground">
-                        {[task.key, task.title].filter(Boolean).join(" · ")}
-                      </Text>
-                      <Text className="text-sm text-foreground-muted">
-                        {project.project.name} · {task.status}
-                        {selection?.taskId === task.id &&
-                        selection?.projectId === project.project.id
-                          ? " · Selected"
-                          : ""}
-                      </Text>
-                      {plugins.map(({ id, taskBadges: Badge }) =>
-                        Badge ? (
-                          <Badge
-                            key={id}
-                            environmentId={environmentId}
-                            label={label}
-                            workspace={workspace.slug}
-                            project={project}
-                            task={task}
-                            status={status}
-                            disabled={busy}
-                            onBusyChange={setBusy}
-                          />
-                        ) : null,
+              {workspace.projects.flatMap((project) => {
+                const node = workTree.find(
+                  (row) => row.workspace === workspace.slug && row.projectId === project.project.id,
+                );
+                const rows =
+                  node === undefined
+                    ? project.work.tasks
+                        .filter((task) => task.status !== "done")
+                        .map((task) => ({ task, depth: 0, progress: null, unsettled: false }))
+                    : taskListRows(node);
+                return rows.map(({ task, depth, progress, unsettled }) => (
+                  <Pressable
+                    key={`${project.project.id}/${task.id}`}
+                    accessibilityRole="button"
+                    accessibilityState={{
+                      selected:
+                        selection?.taskId === task.id &&
+                        selection?.projectId === project.project.id,
+                      disabled: busy,
+                    }}
+                    disabled={busy}
+                    className="gap-1 py-4 pr-4"
+                    style={{ paddingLeft: rowInset(depth) }}
+                    onPress={() => {
+                      setSelection({
+                        workspace: workspace.slug,
+                        projectId: project.project.id,
+                        taskId: task.id,
+                      });
+                      setMessage(null);
+                    }}
+                  >
+                    <Text className="font-t3-medium text-foreground">
+                      {unsettled ? "? " : ""}
+                      {[task.key, task.title].filter(Boolean).join(" · ")}
+                      {progress === null ? null : (
+                        <Text className="text-foreground-muted"> {progress}</Text>
                       )}
-                    </Pressable>
-                  )),
-              )}
+                    </Text>
+                    <Text className="text-sm text-foreground-muted">
+                      {project.project.name} · {task.status}
+                      {unsettled ? " · Decide: one task or its parts" : ""}
+                      {selection?.taskId === task.id && selection?.projectId === project.project.id
+                        ? " · Selected"
+                        : ""}
+                    </Text>
+                    {plugins.map(({ id, taskBadges: Badge }) =>
+                      Badge ? (
+                        <Badge
+                          key={id}
+                          environmentId={environmentId}
+                          label={label}
+                          workspace={workspace.slug}
+                          project={project}
+                          task={task}
+                          status={status}
+                          disabled={busy}
+                          onBusyChange={setBusy}
+                        />
+                      ) : null,
+                    )}
+                  </Pressable>
+                ));
+              })}
               {workspace.projects.every((project) =>
                 project.work.tasks.every((task) => task.status === "done"),
               ) ? (
@@ -258,6 +277,11 @@ function PeerEnvironment({
                     onBusyChange={setBusy}
                     disabled={busy}
                     taskPreparation={Preparation}
+                    workProject={workTree.find(
+                      (row) =>
+                        row.workspace === selection.workspace &&
+                        row.projectId === project.project.id,
+                    )}
                   />
                 ),
               )}

@@ -169,3 +169,36 @@ describe("a task's chats and teammates in its menu", () => {
     ]);
   });
 });
+
+describe("a task's tree items", () => {
+  const task: WorkTaskNode = {
+    id: "add-x",
+    key: undefined,
+    title: "Add the tree",
+    done: false,
+    status: "idle",
+    threads: [],
+    removable: false,
+    context: undefined,
+  };
+  const ids = (input: Parameters<typeof taskMenuItems>[0]) =>
+    taskMenuItems(input).map((item) => item.id);
+
+  it("offers nothing of a tree on a Hub that keeps none", () => {
+    expect(ids({ task, canStartThread: true })).toEqual(["new-thread", "rename", "toggle-done"]);
+  });
+
+  it("adds under, moves under, and makes a task a group and a group a task", () => {
+    expect(ids({ task, canStartThread: true, tree: true })).toEqual([
+      "new-thread",
+      "add-under",
+      "move-under",
+      "make-group",
+      "rename",
+      "toggle-done",
+    ]);
+    expect(ids({ task: { ...task, kind: "group" }, canStartThread: true, tree: true })).toContain(
+      "make-task",
+    );
+  });
+});

@@ -2,11 +2,12 @@ import { ChevronDownIcon, ChevronRightIcon, MessageCircleIcon } from "lucide-rea
 import { useState } from "react";
 
 import { cn } from "../../lib/utils";
-import { InlineButton } from "../ui/button";
+import { Button, InlineButton } from "../ui/button";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { activeLabel } from "./marks";
 import { PeopleStack, StateDot } from "./WorkBoardCards";
 import { ProjectMark, TONE_SURFACE, TONE_TEXT } from "./signals";
+import { progressLabel } from "./taskTree.logic";
 import {
   ALL_PROJECTS,
   projectScopeKey,
@@ -20,6 +21,8 @@ import {
   LIST_TABS,
   listCounts,
   listGroups,
+  listRowKey,
+  listTreeRows,
   otherNeeds,
   stateText,
   taskStateTone,
@@ -32,7 +35,8 @@ import { workPrimaryTarget } from "./workNavigation.logic";
  * The tasks as a compact list grouped by status: one row each with its title, area, the people on
  * it (only when someone is), chats (only when there are) and when it was last touched; the project
  * too while all projects show. Active tasks and done ones are two tabs, and a row opens its review
- * when it needs you, otherwise its task. What waits on you besides tasks is in Needs you, and a
+ * when it needs you, otherwise its task. Items of a task tree sit under the row above them that is
+ * their ancestor, folded by its chevron. What waits on you besides tasks is in Needs you, and a
  * line here opens that queue.
  */
 export function WorkTaskList({
@@ -53,6 +57,14 @@ export function WorkTaskList({
   const groups = listGroups(cards, tab);
   const counts = listCounts(cards);
   const others = tab === "active" ? otherNeeds(cards) : 0;
+  // Keys name the project, so what is folded stays per project.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (key: string) =>
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   return (
     <div className="@container/task-list flex min-w-0 flex-col gap-3">
       <ToggleGroup
@@ -98,6 +110,8 @@ export function WorkTaskList({
               key={group.id}
               group={group}
               showProject={scope === ALL_PROJECTS}
+              collapsed={collapsed}
+              onToggle={toggle}
               onOpen={onOpen}
             />
           ))}
@@ -116,13 +130,19 @@ export function WorkTaskList({
 function ListGroupView({
   group,
   showProject,
+  collapsed,
+  onToggle,
   onOpen,
 }: {
   readonly group: ListGroup;
   readonly showProject: boolean;
+  readonly collapsed: ReadonlySet<string>;
+  readonly onToggle: (key: string) => void;
   readonly onOpen: (target: TaskTarget) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const rows = listTreeRows(group.rows, collapsed);
+  const nested = rows.some((row) => row.children > 0 || row.indent > 0);
   return (
     <section
       aria-label={group.title}
@@ -144,8 +164,24 @@ function ListGroupView({
       </button>
       {open ? (
         <ul aria-label={group.title} className="divide-y divide-border/60">
-          {group.rows.map((card) => (
-            <ListRow key={card.key} card={card} showProject={showProject} onOpen={onOpen} />
+          {rows.map((row) => (
+            <ListRow
+              key={row.item.key}
+              card={row.item}
+              indent={row.indent}
+              tree={
+                nested
+                  ? {
+                      children: row.children,
+                      collapsed: collapsed.has(listRowKey(row.item)),
+                      underParent: row.underParent,
+                      onToggle: () => onToggle(listRowKey(row.item)),
+                    }
+                  : undefined
+              }
+              showProject={showProject}
+              onOpen={onOpen}
+            />
           ))}
         </ul>
       ) : null}
@@ -153,20 +189,60 @@ function ListGroupView({
   );
 }
 
-/** One task in a line or two: the title first, then where it is and who is on it, then when. */
+/**
+ * One task in a line or two: the title first, then where it is and who is on it, then when. An item
+ * whose parent shows elsewhere names it.
+ */
 function ListRow({
   card,
+  indent,
+  tree,
   showProject,
   onOpen,
 }: {
   readonly card: WorkTaskCard;
+  readonly indent: number;
+  /** Absent while no row of its group nests. */
+  readonly tree:
+    | {
+        readonly children: number;
+        readonly collapsed: boolean;
+        readonly underParent: boolean;
+        readonly onToggle: () => void;
+      }
+    | undefined;
   readonly showProject: boolean;
   readonly onOpen: (target: TaskTarget) => void;
 }) {
   const updated = activeLabel(card.updatedAt);
   const needsYou = taskStateTone(card.state.kind) === "needs";
+  const progress = progressLabel(card.task);
+  const parent =
+    tree === undefined || tree.underParent || card.task.parent === undefined
+      ? undefined
+      : card.project.areas
+          .flatMap((area) => area.tasks)
+          .find((task) => task.id === card.task.parent)?.title;
+  const deciding = card.task.unsettled === true && !card.task.done;
   return (
-    <li className="relative flex min-w-0 items-center gap-3 px-3 py-2.5 hover:bg-muted/40">
+    <li
+      className="relative flex min-w-0 items-center gap-3 px-3 py-2.5 hover:bg-muted/40"
+      style={indent === 0 ? undefined : { paddingInlineStart: `${0.75 + indent * 1.25}rem` }}
+    >
+      {tree === undefined ? null : tree.children > 0 ? (
+        <Button
+          size="icon-micro"
+          variant="ghost-muted"
+          className="relative z-10 -me-2 shrink-0"
+          aria-label={`${tree.collapsed ? "Show" : "Hide"} the items of ${card.task.title}`}
+          aria-expanded={!tree.collapsed}
+          onClick={tree.onToggle}
+        >
+          <ChevronRightIcon className={cn("size-3", !tree.collapsed && "rotate-90")} />
+        </Button>
+      ) : (
+        <span aria-hidden className="-me-2 w-5 shrink-0" />
+      )}
       <StateDot kind={card.state.kind} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex min-w-0 items-baseline gap-2">
@@ -196,6 +272,16 @@ function ListRow({
                 {stateText(card)}
               </span>
             ) : null,
+            progress === null ? null : (
+              <span key="progress" className="tabular-nums">
+                {progress}
+              </span>
+            ),
+            parent === undefined ? null : (
+              <span key="parent" className="min-w-0 truncate">
+                in {parent}
+              </span>
+            ),
             card.area === null ? null : <span key="area">{card.area}</span>,
             card.chats === 0 ? null : (
               <span key="chats" className="inline-flex items-center gap-1">
@@ -217,13 +303,18 @@ function ListRow({
             )}
         </span>
       </div>
-      {card.action === undefined ? null : (
+      {card.action === undefined && !deciding ? null : (
         <span className="relative z-10 flex shrink-0 items-center gap-3">
-          <InlineButton onClick={() => onOpen(card.action!.target)}>
-            {card.action.label}
-          </InlineButton>
-          {card.action.target.kind === "review" ? (
+          {card.action === undefined ? null : (
+            <InlineButton onClick={() => onOpen(card.action!.target)}>
+              {card.action.label}
+            </InlineButton>
+          )}
+          {card.action?.target.kind === "review" ? (
             <InlineButton onClick={() => onOpen(taskTarget(card))}>Task details</InlineButton>
+          ) : null}
+          {deciding && card.action === undefined ? (
+            <InlineButton onClick={() => onOpen(taskTarget(card))}>Decide</InlineButton>
           ) : null}
         </span>
       )}

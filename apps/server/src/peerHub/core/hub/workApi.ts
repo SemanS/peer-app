@@ -4,7 +4,13 @@
  *
  * @module peerHub/core/hub/workApi
  */
-import { PeerOwnershipView, PeerTask, PeerTaskOwner } from "@t3tools/contracts";
+import {
+  PeerOwnershipView,
+  PeerTask,
+  PeerTaskOwner,
+  type PeerHubCreateTaskInput,
+  type PeerHubUpdateTaskInput,
+} from "@t3tools/contracts";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type { HubCall } from "./hubApi.ts";
@@ -26,6 +32,18 @@ const decodeOwnerCallNeeded = Schema.decodeUnknownOption(OwnerCallNeeded);
 
 const segment = (value: string) => encodeURIComponent(value);
 
+/** The tree's fields of a task as the Hub's routes take them (`PeerTask`). */
+type TreeFields = Pick<
+  PeerHubCreateTaskInput,
+  "parent" | "kind" | "executable" | "unsettled" | "position" | "description"
+>;
+/** What `PATCH …/tasks/{task}/dependencies` answers. */
+const DependenciesChanged = Schema.Struct({
+  task: Schema.String,
+  dependsOn: Schema.Array(Schema.String),
+  changed: Schema.Boolean,
+});
+
 export const workApi = (
   request: HubCall,
   workspacePath: (slug: string, rest?: string) => string,
@@ -36,7 +54,12 @@ export const workApi = (
     session: string,
     slug: string,
     projectId: string,
-    body: { readonly title: string; readonly key?: string; readonly area?: string },
+    body: TreeFields & {
+      readonly title: string;
+      readonly key?: string;
+      readonly area?: string;
+      readonly source?: PeerHubCreateTaskInput["source"];
+    },
   ) =>
     request(PeerTask, {
       hubUrl,
@@ -52,10 +75,11 @@ export const workApi = (
     slug: string,
     projectId: string,
     taskId: string,
-    body: {
-      readonly title?: string;
-      readonly area?: string;
-      readonly status?: "open" | "review" | "done";
+    body: TreeFields & {
+      readonly title?: string | undefined;
+      readonly area?: string | undefined;
+      readonly source?: PeerHubUpdateTaskInput["source"];
+      readonly status?: "open" | "review" | "done" | undefined;
       readonly session?: string;
       readonly environment?: string;
       readonly op?: string;
@@ -84,6 +108,30 @@ export const workApi = (
       path: projectPath(slug, projectId, `/tasks/${segment(taskId)}`),
       method: "DELETE",
       session,
+    }),
+
+  /**
+   * Adds to what a task depends on (the dependencies feature); null when this Hub does not serve
+   * it, so an importer says so and goes on.
+   */
+  dependencies: (
+    hubUrl: string,
+    session: string,
+    slug: string,
+    projectId: string,
+    taskId: string,
+    body: { readonly add: ReadonlyArray<string> },
+  ) =>
+    request(DependenciesChanged, {
+      hubUrl,
+      path: projectPath(slug, projectId, `/tasks/${segment(taskId)}/dependencies`),
+      method: "PATCH",
+      session,
+      body: { add: body.add, remove: [] },
+      unsupported: {
+        value: null,
+        when: (_status: number, message: string) => message === "no such route",
+      },
     }),
 
   /** The owner of each task of the caller's projects (the ownership feature's view). */

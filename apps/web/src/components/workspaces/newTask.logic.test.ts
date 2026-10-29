@@ -96,4 +96,17 @@ describe("creating", () => {
       createTaskInput(scope, { title: "Split\npayments", area: "Payments", key: "krk-812" }),
     ).toEqual({ ...scope, title: "Split payments", area: "Payments", key: "KRK-812" });
   });
+
+  it("puts it under the chosen item, and sends no parent for a root", () => {
+    const draft = { title: "Card refunds", area: null, key: "" };
+    expect(createTaskInput(scope, { ...draft, parent: "t-1" })).toEqual({
+      ...scope,
+      title: "Card refunds",
+      parent: "t-1",
+    });
+    expect(createTaskInput(scope, { ...draft, parent: null })).toEqual({
+      ...scope,
+      title: "Card refunds",
+    });
+  });
 });

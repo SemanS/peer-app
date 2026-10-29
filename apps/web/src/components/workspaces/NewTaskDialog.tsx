@@ -44,6 +44,8 @@ import {
   PeerDialogMessage,
 } from "./PeerDialog";
 import { ProjectMark } from "./signals";
+import { servesTree } from "./taskTree.logic";
+import { UnderChip } from "./UnderChip";
 import { useWorkActions } from "./useWorkActions";
 import { issueKeyHint, type PeerVcsKind } from "./vcsWords";
 import { projectScopeKey } from "./workBoard.logic";
@@ -56,7 +58,8 @@ const NEW_AREA = "\u0000new-area:";
 
 /**
  * Capturing a task the way a modern tracker does: one line for what needs doing, and the rest as
- * quiet chips under it (the area, a tracker issue it links) that stay out of the way until wanted.
+ * quiet chips under it (the item it goes under, the area, a tracker issue it links) that stay out
+ * of the way until wanted.
  * Enter creates it; "Create more" keeps the composer open for the next one, and "Create and start
  * chat" opens a chat on the new task straight away where the project is open on this computer.
  */
@@ -64,10 +67,13 @@ export function NewTaskDialog({
   environmentId,
   project,
   t3ProjectId,
+  parent: initialParent = null,
   onClose,
 }: {
   readonly environmentId: EnvironmentId;
   readonly project: WorkProjectNode;
+  /** The item it goes under at first, as a row's "Add an item under…" opens it. */
+  readonly parent?: string | null;
   /** The project's repository as it is open on this computer; a chat needs it. */
   readonly t3ProjectId: ProjectId | undefined;
   readonly onClose: () => void;
@@ -79,6 +85,8 @@ export function NewTaskDialog({
   const [title, setTitle] = useState("");
   const [area, setArea] = useState<string | null>(null);
   const [key, setKey] = useState("");
+  const [parent, setParent] = useState<string | null>(initialParent);
+  const tree = servesTree(project);
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const creating = useRef(false);
@@ -86,7 +94,7 @@ export function NewTaskDialog({
   const [created, setCreated] = useState<string | null>(null);
   const scope = { workspace: project.workspace, projectId: project.projectId };
   const areas = project.areas.flatMap((node) => (node.name === null ? [] : [node.name]));
-  const draft = { title, area, key };
+  const draft = tree ? { title, area, key, parent } : { title, area, key };
   const ready = !busy && canCreate(draft);
   const count = titleCount(title);
 
@@ -190,6 +198,14 @@ export function NewTaskDialog({
                 }}
               />
               <div className="flex flex-wrap items-center gap-1.5">
+                {tree ? (
+                  <UnderChip
+                    project={project}
+                    value={parent}
+                    disabled={busy}
+                    onChange={setParent}
+                  />
+                ) : null}
                 <AreaChip areas={areas} value={area} disabled={busy} onChange={setArea} />
                 <IssueChip
                   value={key}

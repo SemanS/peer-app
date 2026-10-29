@@ -62,9 +62,12 @@ export function taskStateLook(kind: TaskStateKind): TaskStateLook {
   return LOOK[kind];
 }
 
-/** The chip that does a waiting task's one thing: review it, or answer or approve in its chat. */
+/**
+ * The chip that does a waiting task's one thing: review it, answer or approve in its chat, or, for
+ * an item nobody decided how to run yet, open it to decide.
+ */
 export interface TaskRowChip {
-  readonly label: "Review" | "Answer" | "Approve";
+  readonly label: "Review" | "Answer" | "Approve" | "Decide";
   readonly target: TaskRowTarget;
 }
 
@@ -159,7 +162,11 @@ export function taskRowModel(input: {
   const { task, scope } = input;
   const needOf = input.needOf ?? new Map<string, AgentNeed>();
   const state = taskState(task, needOf, input.review);
-  const chip = chipOf(state, task, scope, needOf);
+  const chip =
+    chipOf(state, task, scope, needOf) ??
+    (task.unsettled === true && !task.done
+      ? { label: "Decide" as const, target: taskRowTarget(task, scope) }
+      : undefined);
   return {
     state,
     look: taskStateLook(state.kind),

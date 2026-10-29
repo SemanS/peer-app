@@ -1,9 +1,11 @@
 /**
- * The terminal tree `Invite a teammate` picks a scope with: all areas and tasks, whole areas (which
- * cover their future tasks too), or single tasks, an area opening to show its tasks. Selecting is a
- * pure reducer over a small state, so the rules (an area's tasks are not assigned twice, a partly
- * chosen area shows `[-]`) are tested without a terminal; `treePrompt` draws it with Effect's
- * custom prompt.
+ * The terminal trees of a project's work: areas, then groups and tasks nested under them, a row
+ * opening to show its items. `Invite a teammate` selects in it (everything, whole areas, which
+ * cover their future tasks too, or single groups and tasks, a group covering its items);
+ * `Start a task` picks one row of it (an area, a group or a task). Both are pure reducers over a
+ * small state, so the rules (a whole node covers its subtree, a partly chosen one shows `[-]`, no
+ * task is chosen twice) are tested without a terminal; `treePrompt` and `treePickPrompt` draw them
+ * with Effect's custom prompt.
  *
  * @module cli/peerCoreTree
  */
@@ -12,47 +14,202 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Prompt } from "effect/cli";
 
-export interface TreeTask {
+export type TreeNodeKind = "area" | "group" | "task";
+
+export interface TreeNode {
+  /** A task's id; an area's name, "" for the tasks without an area. */
   readonly id: string;
   readonly title: string;
-  /** Who owns it now, when somebody does. */
+  readonly kind: TreeNodeKind;
+  /** Who owns it by its own row (an area: the area's owner), when somebody does. */
   readonly owner?: string;
   /** Imported from an OpenSpec change. */
   readonly openspec?: boolean;
+  /** A person has to decide whether it runs as one task or by its parts. */
+  readonly unsettled?: boolean;
+  /** It may be given to an agent and run as one (default: not a group). */
+  readonly executable?: boolean;
+  /** As the Hub shows it (a parent's is the aggregate of its items). */
+  readonly status?: "open" | "review" | "done";
+  /** Over its executable items, when it has any. */
+  readonly progress?: { readonly done: number; readonly total: number };
+  /** A task may have items too. */
+  readonly children: ReadonlyArray<TreeNode>;
 }
 
-export interface TreeArea {
-  /** null: the tasks that have no area (chosen one by one, they cover no future task). */
-  readonly name: string | null;
-  readonly owner?: string;
-  readonly tasks: ReadonlyArray<TreeTask>;
+/** The area node of a name, or of the tasks without an area. */
+export const areaNode = (
+  name: string | null,
+  children: ReadonlyArray<TreeNode>,
+  owner?: string,
+): TreeNode => ({
+  id: name ?? "",
+  title: name ?? "No area",
+  kind: "area",
+  ...(owner === undefined ? {} : { owner }),
+  children,
+});
+
+export const isExecutableNode = (node: TreeNode) =>
+  node.kind !== "area" && (node.executable ?? node.kind !== "group");
+
+/** Every node under `node`, depth first, in tree order. */
+export const descendants = (node: TreeNode): ReadonlyArray<TreeNode> =>
+  node.children.flatMap((child) => [child, ...descendants(child)]);
+
+/** The nodes from an area down to the one with `id` (an area's own id when `kind` is "area"). */
+export const pathTo = (
+  nodes: ReadonlyArray<TreeNode>,
+  target: { readonly kind: TreeNodeKind; readonly id: string },
+): ReadonlyArray<TreeNode> | null => {
+  const walk = (node: TreeNode, path: ReadonlyArray<TreeNode>): ReadonlyArray<TreeNode> | null => {
+    const here = [...path, node];
+    if ((node.kind === "area") === (target.kind === "area") && node.id === target.id) return here;
+    for (const child of node.children) {
+      const found = walk(child, here);
+      if (found !== null) return found;
+    }
+    return null;
+  };
+  for (const node of nodes) {
+    const found = walk(node, []);
+    if (found !== null) return found;
+  }
+  return null;
+};
+
+/** The open executable items under a node (or the node itself, when it runs as one), in order. */
+export const openItems = (node: TreeNode): ReadonlyArray<TreeNode> =>
+  descendants(node).filter(
+    (item) => isExecutableNode(item) && item.status !== "done" && item.status !== "review",
+  );
+
+/** The key a node is opened by: areas and tasks are told apart, an area's id being its name. */
+const keyOf = (node: TreeNode) => `${node.kind === "area" ? "a" : "t"}:${node.id}`;
+
+export interface NodeRow {
+  readonly kind: "node";
+  readonly node: TreeNode;
+  /** The nodes above it, its area first. */
+  readonly path: ReadonlyArray<TreeNode>;
 }
 
-/** What was chosen: everything, whole areas, and single tasks outside them. */
+export type Row =
+  | { readonly kind: "all" }
+  | NodeRow
+  | { readonly kind: "areaAll"; readonly area: TreeNode }
+  | { readonly kind: "continue" };
+
+/** The node rows that show while `open` holds the opened keys. */
+const nodeRows = (
+  nodes: ReadonlyArray<TreeNode>,
+  open: ReadonlyArray<string>,
+  withAreaAll: boolean,
+): ReadonlyArray<Row> => {
+  const walk = (node: TreeNode, path: ReadonlyArray<TreeNode>): ReadonlyArray<Row> => {
+    const row: NodeRow = { kind: "node", node, path };
+    if (!open.includes(keyOf(node)) || node.children.length === 0) return [row];
+    const below = [...path, node];
+    return [
+      row,
+      ...(withAreaAll && node.kind === "area" && node.id !== ""
+        ? [{ kind: "areaAll" as const, area: node }]
+        : []),
+      ...node.children.flatMap((child) => walk(child, below)),
+    ];
+  };
+  return nodes.flatMap((node) => walk(node, []));
+};
+
+const box = (state: Mark) => (state === "on" ? "[x]" : state === "some" ? "[-]" : "[ ]");
+const clip = (text: string, width: number) =>
+  text.length <= width ? text : `${text.slice(0, Math.max(width - 1, 1))}…`;
+
+/** A node's row: `▸ [ ] 2. Hub feature (3/8) ? · OpenSpec · bob's`, the box left out when picking. */
+const nodeLabel = (row: NodeRow, opened: boolean, mark: Mark | null) => {
+  const { node } = row;
+  const arrow = node.children.length === 0 ? " " : opened ? "▾" : "▸";
+  const indent = node.kind === "area" ? "" : "  ".repeat(row.path.length);
+  const count =
+    node.kind === "area"
+      ? ` (${descendants(node).length})`
+      : node.progress === undefined
+        ? ""
+        : ` (${node.progress.done}/${node.progress.total})`;
+  const tags = [
+    ...(node.openspec === true ? ["OpenSpec"] : []),
+    ...(node.owner === undefined ? [] : [`${node.owner}'s`]),
+  ];
+  return `${indent}${arrow} ${mark === null ? "" : `${box(mark)} `}${node.title}${count}${node.unsettled === true ? " ?" : ""}${tags.length === 0 ? "" : ` · ${tags.join(" · ")}`}`;
+};
+
+const VISIBLE = 16;
+
+/** A window of rows around the cursor, each one line at most `width` wide. */
+const windowed = (
+  message: string,
+  labels: ReadonlyArray<string>,
+  cursor: number,
+  hint: string,
+  width: number,
+) => {
+  const start = Math.max(0, Math.min(cursor - Math.floor(VISIBLE / 2), labels.length - VISIBLE));
+  const shown = labels.slice(start, start + VISIBLE);
+  return [
+    `? ${message}`,
+    ...(start > 0 ? ["  ↑ more"] : []),
+    ...shown.map((label, index) =>
+      clip(`${start + index === cursor ? "❯ " : "  "}${label}`, width),
+    ),
+    ...(start + VISIBLE < labels.length ? ["  ↓ more"] : []),
+    clip(hint, width),
+  ];
+};
+
+/** → opens the row's node; ← closes it, or, on a row inside an open node, closes that one. */
+const openOrClose = (
+  open: ReadonlyArray<string>,
+  row: NodeRow,
+  key: "right" | "left",
+): { readonly open: ReadonlyArray<string>; readonly focus: TreeNode } | null => {
+  const own = keyOf(row.node);
+  if (key === "right")
+    return row.node.children.length === 0 || open.includes(own)
+      ? null
+      : { open: [...open, own], focus: row.node };
+  if (row.node.children.length > 0 && open.includes(own))
+    return { open: open.filter((k) => k !== own), focus: row.node };
+  const parent = row.path.at(-1);
+  if (parent === undefined) return null;
+  return { open: open.filter((k) => k !== keyOf(parent)), focus: parent };
+};
+
+const indexOf = (all: ReadonlyArray<Row>, node: TreeNode) =>
+  Math.max(
+    0,
+    all.findIndex((r) => r.kind === "node" && r.node === node),
+  );
+
+/** What was chosen: everything, whole areas, and single groups or tasks outside them. */
 export interface Selection {
   readonly all: boolean;
   readonly areas: ReadonlyArray<string>;
+  /** Task ids; a group's (or a task's with items) covers its items. */
   readonly tasks: ReadonlyArray<string>;
 }
 
 export interface TreeState {
-  readonly areas: ReadonlyArray<TreeArea>;
+  readonly nodes: ReadonlyArray<TreeNode>;
   readonly cursor: number;
-  readonly open: ReadonlyArray<string | null>;
+  readonly open: ReadonlyArray<string>;
   readonly all: boolean;
   readonly whole: ReadonlyArray<string>;
   readonly tasks: ReadonlyArray<string>;
 }
 
-export type Row =
-  | { readonly kind: "all" }
-  | { readonly kind: "area"; readonly area: TreeArea }
-  | { readonly kind: "areaAll"; readonly area: TreeArea }
-  | { readonly kind: "task"; readonly area: TreeArea; readonly task: TreeTask }
-  | { readonly kind: "continue" };
-
-export const initialTree = (areas: ReadonlyArray<TreeArea>): TreeState => ({
-  areas: areas.filter((area) => area.name !== null || area.tasks.length > 0),
+/** The project's areas; the one without a name only when it holds something. */
+export const initialTree = (nodes: ReadonlyArray<TreeNode>): TreeState => ({
+  nodes: nodes.filter((node) => node.id !== "" || node.children.length > 0),
   cursor: 0,
   open: [],
   all: false,
@@ -62,42 +219,43 @@ export const initialTree = (areas: ReadonlyArray<TreeArea>): TreeState => ({
 
 export const rows = (state: TreeState): ReadonlyArray<Row> => [
   { kind: "all" },
-  ...state.areas.flatMap((area): ReadonlyArray<Row> =>
-    state.open.includes(area.name)
-      ? [
-          { kind: "area", area },
-          ...(area.name === null ? [] : [{ kind: "areaAll" as const, area }]),
-          ...area.tasks.map((task) => ({ kind: "task" as const, area, task })),
-        ]
-      : [{ kind: "area", area }],
-  ),
+  ...nodeRows(state.nodes, state.open, true),
   { kind: "continue" },
 ];
 
 type Mark = "on" | "off" | "some";
 
-const areaMark = (state: TreeState, area: TreeArea): Mark => {
-  if (state.all || (area.name !== null && state.whole.includes(area.name))) return "on";
-  const chosen = area.tasks.filter((task) => state.tasks.includes(task.id)).length;
+const covered = (state: TreeState, row: NodeRow) =>
+  state.all ||
+  [...row.path, row.node].some((node) =>
+    node.kind === "area"
+      ? node.id !== "" && state.whole.includes(node.id)
+      : state.tasks.includes(node.id),
+  );
+
+const nodeMark = (state: TreeState, row: NodeRow): Mark => {
+  if (covered(state, row)) return "on";
+  const { node } = row;
+  const chosen = descendants(node).filter((d) => state.tasks.includes(d.id)).length;
   if (chosen === 0) return "off";
-  // A group without an area is all of its tasks; a real area is whole only when chosen as one.
-  return area.name === null && chosen === area.tasks.length ? "on" : "some";
+  // The group without an area is all of its items; a node is whole only when chosen as one.
+  return node.kind === "area" &&
+    node.id === "" &&
+    node.children.every(
+      (child) => nodeMark(state, { kind: "node", node: child, path: [node] }) === "on",
+    )
+    ? "on"
+    : "some";
 };
 
 export const mark = (state: TreeState, row: Row): Mark => {
   switch (row.kind) {
     case "all":
       return state.all ? "on" : "off";
-    case "area":
-      return areaMark(state, row.area);
+    case "node":
+      return nodeMark(state, row);
     case "areaAll":
-      return state.all || state.whole.includes(row.area.name!) ? "on" : "off";
-    case "task":
-      return state.all ||
-        (row.area.name !== null && state.whole.includes(row.area.name)) ||
-        state.tasks.includes(row.task.id)
-        ? "on"
-        : "off";
+      return state.all || state.whole.includes(row.area.id) ? "on" : "off";
     case "continue":
       return "off";
   }
@@ -109,8 +267,8 @@ const spread = (state: TreeState): TreeState =>
     ? {
         ...state,
         all: false,
-        whole: state.areas.flatMap((a) => (a.name === null ? [] : [a.name])),
-        tasks: state.areas.filter((a) => a.name === null).flatMap((a) => a.tasks.map((t) => t.id)),
+        whole: state.nodes.flatMap((a) => (a.id === "" ? [] : [a.id])),
+        tasks: state.nodes.filter((a) => a.id === "").flatMap((a) => a.children.map((t) => t.id)),
       }
     : state;
 
@@ -122,31 +280,42 @@ export const toggle = (state: TreeState, row: Row): TreeState => {
   if (row.kind === "continue") return state;
   if (row.kind === "all") return { ...state, all: !state.all, whole: [], tasks: [] };
   const next = spread(state);
-  const ids = row.area.tasks.map((task) => task.id);
-  if (row.kind === "area" || row.kind === "areaAll") {
-    const on = areaMark(next, row.area) === "on";
-    if (row.area.name === null)
+  const node = row.kind === "areaAll" ? row.area : row.node;
+  const path = row.kind === "areaAll" ? [] : row.path;
+  const below = descendants(node).map((d) => d.id);
+  if (node.kind === "area") {
+    const on = nodeMark(next, { kind: "node", node, path: [] }) === "on";
+    if (node.id === "") {
+      const roots = node.children.map((child) => child.id);
       return {
         ...next,
-        tasks: on ? without(next.tasks, ids) : [...without(next.tasks, ids), ...ids],
+        tasks: on ? without(next.tasks, below) : [...without(next.tasks, below), ...roots],
       };
-    const name = row.area.name;
-    // A whole area covers its tasks: the single ones in it are not kept beside it.
+    }
+    // A whole area covers its items: the single ones in it are not kept beside it.
     return on
-      ? { ...next, whole: without(next.whole, [name]), tasks: without(next.tasks, ids) }
-      : { ...next, whole: [...next.whole, name], tasks: without(next.tasks, ids) };
+      ? { ...next, whole: without(next.whole, [node.id]), tasks: without(next.tasks, below) }
+      : { ...next, whole: [...next.whole, node.id], tasks: without(next.tasks, below) };
   }
-  const name = row.area.name;
-  if (name !== null && next.whole.includes(name))
-    // Taking one task out of a whole area leaves the rest as single tasks.
+  // Covered from above: the cover goes, and what it covered stays chosen except this node.
+  const chain = [...path, node];
+  const cover = chain.findIndex((n) =>
+    n.kind === "area" ? n.id !== "" && next.whole.includes(n.id) : next.tasks.includes(n.id),
+  );
+  if (cover !== -1 && cover < chain.length - 1) {
+    const top = chain[cover]!;
+    const tasks = without(next.tasks, [top.id]);
+    for (let i = cover; i < chain.length - 1; i++)
+      tasks.push(...chain[i]!.children.filter((c) => c !== chain[i + 1]).map((c) => c.id));
     return {
       ...next,
-      whole: without(next.whole, [name]),
-      tasks: [...without(next.tasks, ids), ...without(ids, [row.task.id])],
+      whole: top.kind === "area" ? without(next.whole, [top.id]) : next.whole,
+      tasks,
     };
-  return next.tasks.includes(row.task.id)
-    ? { ...next, tasks: without(next.tasks, [row.task.id]) }
-    : { ...next, tasks: [...next.tasks, row.task.id] };
+  }
+  return next.tasks.includes(node.id)
+    ? { ...next, tasks: without(next.tasks, [node.id]) }
+    : { ...next, tasks: [...without(next.tasks, below), node.id] };
 };
 
 export const selection = (state: TreeState): Selection => ({
@@ -156,64 +325,48 @@ export const selection = (state: TreeState): Selection => ({
 });
 
 /** The chosen scope in lines, as the confirmation shows it. */
-export const describe = (areas: ReadonlyArray<TreeArea>, chosen: Selection) => {
+export const describe = (nodes: ReadonlyArray<TreeNode>, chosen: Selection) => {
   if (chosen.all) return ["✓ All areas and tasks"];
   const lines = chosen.areas.map((name) => `✓ ${name} — all tasks, and new ones`);
-  for (const area of areas) {
-    const picked = area.tasks.filter((task) => chosen.tasks.includes(task.id));
+  for (const area of nodes) {
+    const picked = descendants(area).filter((node) => chosen.tasks.includes(node.id));
     if (picked.length === 0) continue;
+    const one = picked[0]!;
     lines.push(
-      `✓ ${area.name ?? "No area"} — ${picked.length === 1 ? picked[0]!.title : `${picked.length} tasks`}`,
+      `✓ ${area.title} — ${
+        picked.length === 1
+          ? `${one.title}${one.children.length === 0 ? "" : ", with its items"}`
+          : `${picked.length} tasks`
+      }`,
     );
   }
   return lines;
 };
 
-const box = (state: Mark) => (state === "on" ? "[x]" : state === "some" ? "[-]" : "[ ]");
-const clip = (text: string, width: number) =>
-  text.length <= width ? text : `${text.slice(0, Math.max(width - 1, 1))}…`;
-
 const label = (state: TreeState, row: Row) => {
   switch (row.kind) {
     case "all":
       return `${box(mark(state, row))} All areas and tasks`;
-    case "area": {
-      const arrow = state.open.includes(row.area.name) ? "▾" : "▸";
-      const owner = row.area.owner === undefined ? "" : ` · ${row.area.owner}'s`;
-      return `${arrow} ${box(mark(state, row))} ${row.area.name ?? "No area"} (${row.area.tasks.length})${owner}`;
-    }
+    case "node":
+      return nodeLabel(row, state.open.includes(keyOf(row.node)), mark(state, row));
     case "areaAll":
-      return `    ${box(mark(state, row))} All tasks in ${row.area.name}`;
-    case "task": {
-      const tags = [
-        ...(row.task.openspec === true ? ["OpenSpec"] : []),
-        ...(row.task.owner === undefined ? [] : [`${row.task.owner}'s`]),
-      ];
-      return `    ${box(mark(state, row))} ${row.task.title}${tags.length === 0 ? "" : ` · ${tags.join(" · ")}`}`;
-    }
+      return `    ${box(mark(state, row))} All tasks in ${row.area.title}`;
     case "continue":
       return "Continue";
   }
 };
 
-const VISIBLE = 16;
 const HINT = "↑↓ move · space select · → open · ← close · Enter on Continue";
 
 /** The frame: a window of rows around the cursor, each one line at most `width` wide. */
-export const frame = (state: TreeState, message: string, width = 80) => {
-  const all = rows(state);
-  const start = Math.max(0, Math.min(state.cursor - Math.floor(VISIBLE / 2), all.length - VISIBLE));
-  const shown = all.slice(start, start + VISIBLE);
-  return [
-    `? ${message}`,
-    ...(start > 0 ? ["  ↑ more"] : []),
-    ...shown.map((row, index) =>
-      clip(`${start + index === state.cursor ? "❯ " : "  "}${label(state, row)}`, width),
-    ),
-    ...(start + VISIBLE < all.length ? ["  ↓ more"] : []),
-    clip(HINT, width),
-  ];
-};
+export const frame = (state: TreeState, message: string, width = 80) =>
+  windowed(
+    message,
+    rows(state).map((row) => label(state, row)),
+    state.cursor,
+    HINT,
+    width,
+  );
 
 /** A key, as the prompt hands it: what becomes of the state, or the selection when done. */
 export const press = (
@@ -223,8 +376,13 @@ export const press = (
   const all = rows(state);
   const row = all[state.cursor]!;
   const move = (cursor: number) => ({ state: { ...state, cursor } });
-  const area =
-    row.kind === "area" || row.kind === "areaAll" || row.kind === "task" ? row.area : null;
+  // The "All tasks in" row opens and closes as its area does.
+  const nodeRow: NodeRow | null =
+    row.kind === "node"
+      ? row
+      : row.kind === "areaAll"
+        ? { kind: "node", node: row.area, path: [] }
+        : null;
   switch (key) {
     case "up":
       return move((state.cursor - 1 + all.length) % all.length);
@@ -234,50 +392,118 @@ export const press = (
     case "space":
       return { state: toggle(state, row) };
     case "right":
-      return area === null || state.open.includes(area.name)
-        ? { state }
-        : { state: { ...state, open: [...state.open, area.name] } };
     case "left": {
-      if (area === null || !state.open.includes(area.name)) return { state };
-      const closed = { ...state, open: state.open.filter((name) => name !== area.name) };
+      const changed = nodeRow === null ? null : openOrClose(state.open, nodeRow, key);
+      if (changed === null) return { state };
+      const next = { ...state, open: changed.open };
       return {
-        state: {
-          ...closed,
-          cursor: rows(closed).findIndex((r) => r.kind === "area" && r.area === area),
-        },
+        state: key === "left" ? { ...next, cursor: indexOf(rows(next), changed.focus) } : next,
       };
     }
     case "enter":
     case "return":
       if (row.kind === "continue") return { done: selection(state) };
-      if (row.kind === "area")
-        return press(state, state.open.includes(row.area.name) ? "left" : "right");
+      if (row.kind === "node" && (row.node.kind === "area" || row.node.children.length > 0))
+        return press(state, state.open.includes(keyOf(row.node)) ? "left" : "right");
       return { state: toggle(state, row) };
     default:
       return { state };
   }
 };
 
-type Action = Prompt.Action<TreeState, Selection>;
-const Action = Data.taggedEnum<Action>();
+/** The row picked: an area (its id its name, "" for no area), a group or a task. */
+export interface Picked {
+  readonly kind: TreeNodeKind;
+  readonly id: string;
+}
 
-/** The tree as a terminal prompt. */
-export const treePrompt = (message: string, areas: ReadonlyArray<TreeArea>) => {
+export interface PickState {
+  readonly nodes: ReadonlyArray<TreeNode>;
+  readonly cursor: number;
+  readonly open: ReadonlyArray<string>;
+}
+
+/**
+ * The tree to pick from: with one area it is open; with `expand`, the path down to that node is
+ * open and the cursor on it.
+ */
+export const initialPick = (nodes: ReadonlyArray<TreeNode>, expand?: Picked): PickState => {
+  const shown = nodes.filter(
+    (node) => node.kind !== "area" || node.id !== "" || node.children.length > 0,
+  );
+  const areas = shown.filter((node) => node.kind === "area");
+  const path = expand === undefined ? null : pathTo(shown, expand);
+  const open = path !== null ? path.map(keyOf) : areas.length === 1 ? [keyOf(areas[0]!)] : [];
+  const state = { nodes: shown, cursor: 0, open };
+  const at = path?.at(-1);
+  return at === undefined ? state : { ...state, cursor: indexOf(pickRows(state), at) };
+};
+
+export const pickRows = (state: PickState): ReadonlyArray<NodeRow> =>
+  nodeRows(state.nodes, state.open, false) as ReadonlyArray<NodeRow>;
+
+const PICK_HINT = "↑↓ move · → open · ← close · Enter choose";
+
+export const pickFrame = (state: PickState, message: string, width = 80) =>
+  windowed(
+    message,
+    pickRows(state).map((row) => nodeLabel(row, state.open.includes(keyOf(row.node)), null)),
+    state.cursor,
+    PICK_HINT,
+    width,
+  );
+
+/** A key in the pick tree: the next state, or the row Enter chose. Space does nothing. */
+export const pickPress = (
+  state: PickState,
+  key: string,
+): { readonly state: PickState } | { readonly done: Picked } => {
+  const all = pickRows(state);
+  const row = all[state.cursor];
+  if (row === undefined) return { state };
+  switch (key) {
+    case "up":
+      return { state: { ...state, cursor: (state.cursor - 1 + all.length) % all.length } };
+    case "down":
+    case "tab":
+      return { state: { ...state, cursor: (state.cursor + 1) % all.length } };
+    case "right":
+    case "left": {
+      const changed = openOrClose(state.open, row, key);
+      if (changed === null) return { state };
+      const next = { ...state, open: changed.open };
+      return {
+        state: key === "left" ? { ...next, cursor: indexOf(pickRows(next), changed.focus) } : next,
+      };
+    }
+    case "enter":
+    case "return":
+      return { done: { kind: row.node.kind, id: row.node.id } };
+    default:
+      return { state };
+  }
+};
+
+/** Effect's custom prompt over a reducer: each key a next frame or the answer. */
+const customPrompt = <S, A>(
+  initial: S,
+  draw: (state: S, width: number) => ReadonlyArray<string>,
+  step: (state: S, key: string) => { readonly state: S } | { readonly done: A },
+  message: string,
+) => {
+  type Action = Prompt.Action<S, A>;
+  const Action = Data.taggedEnum<Action>();
   let drawn = 0;
-  const erase = () => {
-    const text = drawn === 0 ? "" : `${"\x1b[2K\x1b[1A".repeat(drawn - 1)}\x1b[2K\x1b[G`;
-    return text;
-  };
-  return Prompt.Custom<TreeState, Selection>(initialTree(areas), {
+  const erase = () => (drawn === 0 ? "" : `${"\x1b[2K\x1b[1A".repeat(drawn - 1)}\x1b[2K\x1b[G`);
+  return Prompt.Custom<S, A>(initial, {
     render: (state, action) =>
       Effect.sync(() => {
         if (action._tag === "Submit") {
           drawn = 1;
           return `✔ ${message}`;
         }
-        const lines = frame(
+        const lines = draw(
           state,
-          message,
           (process.stdout.columns ?? 0) > 20 ? process.stdout.columns - 1 : 80,
         );
         drawn = lines.length;
@@ -287,7 +513,7 @@ export const treePrompt = (message: string, areas: ReadonlyArray<TreeArea>) => {
       Effect.sync((): Action => {
         const name =
           input.key.name === "" ? Option.getOrElse(input.input, () => "") : input.key.name;
-        const next = press(state, name === " " ? "space" : name);
+        const next = step(state, name === " " ? "space" : name);
         return "done" in next
           ? Action.Submit({ value: next.done })
           : Action.NextFrame({ state: next.state });
@@ -295,3 +521,16 @@ export const treePrompt = (message: string, areas: ReadonlyArray<TreeArea>) => {
     clear: () => Effect.sync(erase),
   });
 };
+
+/** The selecting tree as a terminal prompt. */
+export const treePrompt = (message: string, nodes: ReadonlyArray<TreeNode>) =>
+  customPrompt(initialTree(nodes), (state, width) => frame(state, message, width), press, message);
+
+/** The picking tree as a terminal prompt (`treePick`). */
+export const treePickPrompt = (message: string, nodes: ReadonlyArray<TreeNode>, expand?: Picked) =>
+  customPrompt(
+    initialPick(nodes, expand),
+    (state, width) => pickFrame(state, message, width),
+    pickPress,
+    message,
+  );

@@ -3,6 +3,7 @@ import * as Effect from "effect/Effect";
 
 import type { CliError } from "./cliContract.ts";
 import { NO_PLUGINS, type PeerBrokerHost } from "./host.ts";
+import { sessionTaskName, treeOrder } from "./tasks.ts";
 import { brokerFixture } from "./testkit.ts";
 
 type Task = ReturnType<PeerBrokerHost["tasks"]>[number];
@@ -185,5 +186,168 @@ describe("peer task", () => {
     } finally {
       await fixture.dispose();
     }
+  });
+
+  describe("the tree", () => {
+    const tree: ReadonlyArray<Task> = [
+      { id: "t7", title: "Loose", status: "open" },
+      { id: "t3", title: "Write the API", status: "done", parent: "t2", position: 1 },
+      {
+        id: "t1",
+        key: "ADD-X",
+        title: "Add X",
+        status: "open",
+        kind: "group",
+        executable: false,
+        progress: { done: 1, total: 3 },
+      },
+      {
+        id: "t2",
+        title: "Hub",
+        status: "open",
+        parent: "t1",
+        executable: false,
+        unsettled: true,
+        progress: { done: 1, total: 2 },
+      },
+      { id: "t4", title: "Store the rows", status: "open", parent: "t2", position: 0 },
+      { id: "t5", title: "Docs", status: "review", parent: "t1", position: 2 },
+      { id: "t6", title: "Orphan", status: "open", parent: "gone" },
+    ];
+
+    it("prints parents before children, siblings by position, progress, ? and group", async () => {
+      const { fixture, run } = await withTasks(tree);
+      try {
+        expect(await run(["list"])).toBe(
+          [
+            "Tasks of app (7):",
+            "  Loose [open] id:t7",
+            "  ADD-X · Add X 1/3 [open] group id:t1",
+            "    ? Hub 1/2 [open] id:t2",
+            "      Store the rows [open] id:t4",
+            "      Write the API [done] id:t3",
+            "    Docs [review] id:t5",
+            "  Orphan [open] id:t6",
+          ].join("\n"),
+        );
+        expect(await run(["list", "--flat"])).toBe(
+          [
+            "Tasks of app (7):",
+            "  Loose [open] id:t7",
+            "  Write the API [done] id:t3",
+            "  ADD-X · Add X [open] id:t1",
+            "  Hub [open] id:t2",
+            "  Store the rows [open] id:t4",
+            "  Docs [review] id:t5",
+            "  Orphan [open] id:t6",
+          ].join("\n"),
+        );
+      } finally {
+        await fixture.dispose();
+      }
+    });
+
+    it("keeps a cycle the Hub should never hold listed", () => {
+      const looped: ReadonlyArray<Task> = [
+        { id: "a", title: "A", parent: "b" },
+        { id: "b", title: "B", parent: "a" },
+      ];
+      expect(treeOrder(looped).map(({ task }) => task.id)).toEqual(["a", "b"]);
+    });
+
+    it("adds under a parent, as a group or not executable, and refuses an unknown parent", async () => {
+      const { fixture, run, fails, writes } = await withTasks(tree);
+      try {
+        expect(await run(["add", "Second", "store", "--under", "add-x", "--not-executable"])).toBe(
+          "Added Second store [open] id:t8 under ADD-X · Add X [open] id:t1.",
+        );
+        expect(await run(["add", "--kind", "group", "Phase 2"])).toBe(
+          "Added Phase 2 [open] group id:t9.",
+        );
+        const unknown = await fails(["add", "x", "--under", "NOPE-1"]);
+        expect(unknown.outcome).toBe("refused");
+        expect(unknown.reason).toContain("this project has no task NOPE-1");
+        expect((await fails(["add", "x", "--kind", "epic"])).outcome).toBe("usage");
+        expect((await fails(["add", "x", "--under", "none"])).outcome).toBe("refused");
+        expect((await fails(["add", "x", "--executable", "no"])).outcome).toBe("usage");
+        expect(writes).toEqual([
+          {
+            create: {
+              workspace: "acme",
+              project: "app",
+              title: "Second store",
+              parent: "t1",
+              executable: false,
+            },
+          },
+          { create: { workspace: "acme", project: "app", title: "Phase 2", kind: "group" } },
+        ]);
+      } finally {
+        await fixture.dispose();
+      }
+    });
+
+    it("moves, settles and orders an item, and refuses what the tree cannot hold", async () => {
+      const { fixture, run, fails, writes } = await withTasks(tree);
+      try {
+        expect(await run(["set", "t2", "--executable", "yes"])).toBe(
+          "Changed Hub [open] id:t2.\nThis settles it: an agent may run it as one task.",
+        );
+        expect(await run(["set", "t2", "--executable", "no"])).toContain(
+          "This settles it: it is not run as one task; its items are.",
+        );
+        expect(await run(["set", "t5", "--under", "none", "--position", "3"])).toBe(
+          "Changed Docs [review] id:t5.",
+        );
+        expect(await run(["set", "Loose", "--under", "ADD-X"])).toBe("Changed Loose [open] id:t7.");
+        for (const args of [
+          ["set", "t2", "--executable", "maybe"],
+          ["set", "t2", "--position", "-1"],
+          ["set", "t2", "--position", "1.5"],
+          ["set", "t2", "--position", "2000000"],
+          ["set", "t2", "--kind", "group"],
+          ["set", "t2", "--flat"],
+          ["list", "--not-executable"],
+          ["remove", "t2", "--flat"],
+        ])
+          expect((await fails(args)).outcome, args.join(" ")).toBe("usage");
+        const cycle = await fails(["set", "ADD-X", "--under", "t4"]);
+        expect(cycle.outcome).toBe("refused");
+        expect(cycle.reason).toContain("cannot sit under itself or one of its own items");
+        expect((await fails(["set", "t2", "--under", "t2"])).outcome).toBe("refused");
+        expect((await fails(["set", "t2", "--under", "STR-404"])).reason).toContain(
+          "has no task STR-404",
+        );
+        expect(writes).toEqual([
+          { update: { id: "t2", executable: true } },
+          { update: { id: "t2", executable: false } },
+          { update: { id: "t5", parent: "", position: 3 } },
+          { update: { id: "t7", parent: "t1" } },
+        ]);
+      } finally {
+        await fixture.dispose();
+      }
+    });
+
+    it("names a session's group by its progress and open items in peer status", () => {
+      const group = tree.find((task) => task.id === "t1")!;
+      expect(sessionTaskName(tree, group, "ADD-X · Add X")).toBe(
+        "ADD-X · Add X (group: 1/3 done, 1 open item)",
+      );
+      expect(
+        sessionTaskName(
+          tree,
+          tree.find((task) => task.id === "t2")!,
+          "Hub",
+        ),
+      ).toBe("Hub (items: 1/2 done, 1 open item)");
+      expect(
+        sessionTaskName(
+          tree,
+          tree.find((task) => task.id === "t4")!,
+          "Store",
+        ),
+      ).toBe("Store");
+    });
   });
 });

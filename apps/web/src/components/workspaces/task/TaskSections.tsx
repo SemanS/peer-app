@@ -5,19 +5,24 @@
  */
 import {
   ChevronRightIcon,
+  CircleHelpIcon,
   FileTextIcon,
   MessageCircleQuestionIcon,
   PackageCheckIcon,
   ShieldCheckIcon,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
 
 import { cn } from "../../../lib/utils";
 import { Button } from "../../ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../../ui/collapsible";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import { TONE_SURFACE, TONE_TEXT } from "../signals";
-import type { WorkOpen } from "../workTree.logic";
+import { taskStateLook } from "../taskRow.logic";
+import type { TaskItemRow } from "../taskTree.logic";
+import { StateDot } from "../workStatus";
+import type { TaskLauncherProps } from "../slots.types";
+import { taskLabel, type WorkOpen, type WorkTaskNode } from "../workTree.logic";
 import type { TaskWait } from "./task.logic";
 import type { TaskChatRow } from "./taskChats.logic";
 import type { TaskContextCard, TaskDetail } from "./taskDetails.logic";
@@ -251,5 +256,118 @@ export function TaskDetails({ rows }: { readonly rows: ReadonlyArray<TaskDetail>
         </dl>
       </CollapsiblePanel>
     </Collapsible>
+  );
+}
+
+/**
+ * An item an importer could not tell how to run: one agent on all of it, or its parts as the work.
+ * Nothing starts on it until someone says.
+ */
+export function DecisionBar({
+  busy,
+  onDecide,
+}: {
+  readonly busy: boolean;
+  readonly onDecide: (asOne: boolean) => void;
+}) {
+  return (
+    <section
+      aria-label="Decide how it runs"
+      className={cn(
+        "flex flex-wrap items-center gap-3.5 rounded-xl border px-4 py-3.5",
+        TONE_SURFACE.needs,
+      )}
+    >
+      <CircleHelpIcon aria-hidden className={cn("size-5 shrink-0", TONE_TEXT.needs)} />
+      <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-0.5">
+        <span className="text-sm font-semibold text-foreground">
+          Does an agent do this as one task, or by its parts?
+        </span>
+        <span className="text-sm text-muted-foreground">
+          It has items of its own. Decide before an agent starts on it.
+        </span>
+      </div>
+      <Button variant="warning-outline" size="sm" disabled={busy} onClick={() => onDecide(true)}>
+        One task
+      </Button>
+      <Button variant="warning-outline" size="sm" disabled={busy} onClick={() => onDecide(false)}>
+        Its parts
+      </Button>
+    </section>
+  );
+}
+
+/** The items under the task, in the tree's order: each opens its page, an open one starts an agent. */
+export function TaskItems({
+  rows,
+  onOpen,
+  launcher,
+}: {
+  readonly rows: ReadonlyArray<TaskItemRow>;
+  readonly onOpen: (task: WorkTaskNode) => void;
+  /** The task launcher and what it needs besides the item; absent where no agent can start here. */
+  readonly launcher:
+    | {
+        readonly Launcher: ComponentType<TaskLauncherProps>;
+        readonly props: Omit<TaskLauncherProps, "taskId" | "taskLabel">;
+      }
+    | undefined;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <section aria-label="Items" className="flex flex-col gap-2.5">
+      <PeerSectionLabel
+        after={
+          <span className="font-normal text-muted-foreground tabular-nums">{rows.length}</span>
+        }
+      >
+        Items
+      </PeerSectionLabel>
+      <ul className="flex flex-col divide-y divide-border/60 border-y border-border/60">
+        {rows.map((row) => {
+          const look = taskStateLook(row.state.kind);
+          return (
+            <li
+              key={row.task.id}
+              className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 py-2.5"
+              style={
+                row.indent === 0 ? undefined : { paddingInlineStart: `${row.indent * 1.25}rem` }
+              }
+            >
+              <StateDot tone={look.tone} hollow={look.hollow} />
+              <button
+                type="button"
+                className="flex min-w-0 flex-[1_1_14rem] items-baseline gap-1.5 rounded-sm text-left text-sm font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                onClick={() => onOpen(row.task)}
+              >
+                {row.task.key === undefined ? null : (
+                  <span className="shrink-0 font-mono text-2xs text-muted-foreground">
+                    {row.task.key}
+                  </span>
+                )}
+                <span className="min-w-0 [overflow-wrap:anywhere]">{row.task.title}</span>
+              </button>
+              <span className={cn("text-sm", TONE_TEXT[look.tone])}>{row.state.label}</span>
+              {row.progress === null ? null : (
+                <span className="text-sm text-muted-foreground tabular-nums">{row.progress}</span>
+              )}
+              {row.task.unsettled === true && !row.task.done ? (
+                <Button size="xs" variant="warning-outline" onClick={() => onOpen(row.task)}>
+                  Decide
+                </Button>
+              ) : null}
+              {row.canStart && launcher !== undefined ? (
+                <launcher.Launcher
+                  {...launcher.props}
+                  taskId={row.task.id}
+                  taskLabel={taskLabel(row.task)}
+                  {...(row.prompt === undefined ? {} : { initialPrompt: row.prompt })}
+                />
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

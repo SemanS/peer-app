@@ -16,11 +16,12 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Runtime from "effect/Runtime";
 
 import * as PeerHubClient from "../peerHub/core/hub/PeerHubClient.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
 import { hubOutcome, type OneShotIo, outcome } from "./peerCoreIo.ts";
-import type { Editor, MenuAsk, MenuSteps } from "./peerCoreMenu.ts";
 import * as Tree from "./peerCoreTree.ts";
 
 export interface TaskBranch {
@@ -151,12 +152,7 @@ export const scopeOfNode = (project: string, node: Tree.TreeNode): WorkScope => 
 
 const SCOPE_ITEMS_LISTED = 30;
 
-/**
- * The first prompt of an agent started on a scope. The server cannot import the client runtime,
- * so this is the twin of `scopePrompt` in `packages/client-runtime/src/peer/work.ts`;
- * `peerCoreTasks.test.ts` holds both to the same words.
- */
-export const scopePrompt = (scope: WorkScope): string => {
+const onePrompt = (scope: WorkScope): string => {
   if (scope.kind === "task") return `Work on the Peer task "${scope.title}" (${scope.id}).`;
   const listed = scope.items
     .slice(0, SCOPE_ITEMS_LISTED)
@@ -175,6 +171,30 @@ export const scopePrompt = (scope: WorkScope): string => {
       : `Work on the area "${scope.name}" of ${scope.project}: its open tasks, in order:`,
     ...list,
     "Mark each task done with peer task set <id> --status done as you finish it.",
+  ].join("\n");
+};
+
+/**
+ * The first prompt of an agent started on a scope, or on several in order (each scope's own words
+ * without its closing instruction, one closing line for the set). The server cannot import the
+ * client runtime, so this is the twin of `scopePrompt` in `packages/client-runtime/src/peer/work.ts`;
+ * `peerCoreTasks.test.ts` holds both to the same words.
+ */
+export const scopePrompt = (scope: WorkScope | ReadonlyArray<WorkScope>): string => {
+  const scopes: ReadonlyArray<WorkScope> = "kind" in scope ? [scope] : scope;
+  if (scopes.length === 1) return onePrompt(scopes[0]!);
+  const project = scopes.find((s) => s.kind !== "task")?.project;
+  return [
+    project === undefined
+      ? `Work on these ${scopes.length} Peer scopes, in this order:`
+      : `Work on these ${scopes.length} Peer scopes in ${project}, in this order:`,
+    ...scopes.flatMap((s, index) => {
+      const lines = onePrompt(s).split("\n");
+      if (lines.length > 1 && lines.at(-1)!.startsWith("Mark each ")) lines.pop();
+      return ["", `${index + 1}. ${lines.join("\n")}`];
+    }),
+    "",
+    "Mark each item done with peer task set <id> --status done as you finish it; peer done finishes the scope you are on.",
   ].join("\n");
 };
 
@@ -522,151 +542,32 @@ export const takeTask = (input: TakeInput, io: OneShotIo) =>
     yield* io.say(`You own ${label(task)} · ${task.title} now (${where}).`);
   });
 
-/** The tree's own rows after the project's: a new task, another project's tasks. */
-const NEW_TASK = "\0new";
-const OTHER_PROJECT = "\0project";
-const NO_PARENT = "\0none";
-
-interface StartProject {
-  readonly workspace: string;
-  readonly project: string;
-}
-
 /**
- * The menu's `Start a task`: the project's tree, any row picked. An unsettled item is settled
- * first (by its parts, the tree opens on it); a group or task nobody owns is taken; areas are
- * nobody's. The editor to open on it, with its first prompt, when one connected here can.
+ * `peer core take <id> <id>…`: each taken, or refused on its own line, in order; the command is
+ * refused only when none could be taken (uncertain when a refusal there was uncertain).
  */
-export const startOnTree = <R>(
-  ask: MenuAsk<R>,
-  steps: MenuSteps<R>,
+export const takeTasks = (
+  input: Omit<TakeInput, "task"> & { readonly tasks: ReadonlyArray<string> },
   io: OneShotIo,
-  input: {
-    readonly project: StartProject;
-    readonly chooseProject: Effect.Effect<StartProject | null, never, R>;
-    /** The person is on more projects than this one. */
-    readonly others: boolean;
-    readonly me: string | undefined;
-    /** The connected project here, and the editor that can start in it. */
-    readonly editor:
-      | {
-          readonly editor: Editor | undefined;
-          readonly here: {
-            readonly root: string;
-            readonly workspace: string;
-            readonly project: string;
-          };
-        }
-      | undefined;
-  },
 ) =>
   Effect.gen(function* () {
-    let project = input.project;
-    let expand: Tree.Picked | undefined;
-    for (;;) {
-      const { workspace, project: id } = project;
-      const nodes = yield* steps.scope(workspace, id);
-      const picked = yield* ask.treePick(
-        `Which task? (${workspace}/${id})`,
-        [
-          ...nodes,
-          { id: NEW_TASK, title: "New task…", kind: "task", children: [] },
-          ...(input.others
-            ? [
-                {
-                  id: OTHER_PROJECT,
-                  title: "Tasks of another project…",
-                  kind: "task" as const,
-                  children: [],
-                },
-              ]
-            : []),
-        ],
-        expand,
-      );
-      expand = undefined;
-      if (picked === null) return undefined;
-      if (picked.id === OTHER_PROJECT) {
-        const next = yield* input.chooseProject;
-        if (next === null) return undefined;
-        project = next;
+    const { tasks, ...rest } = input;
+    if (tasks.length === 1) return yield* takeTask({ ...rest, task: tasks[0]! }, io);
+    let taken = 0;
+    let uncertain = false;
+    for (const task of tasks) {
+      const result = yield* takeTask({ ...rest, task }, io).pipe(Effect.result);
+      if (Result.isSuccess(result)) {
+        taken++;
         continue;
       }
-      if (picked.id === NEW_TASK) {
-        const flat = (node: Tree.TreeNode): ReadonlyArray<{ title: string; value: string }> => {
-          const below = node.children.flatMap(flat);
-          return node.kind === "area" ? below : [{ title: node.title, value: node.id }, ...below];
-        };
-        const parents = nodes.flatMap(flat);
-        const parent =
-          parents.length === 0
-            ? NO_PARENT
-            : yield* ask.choose<string>("Under which item?", [
-                { title: "(none)", value: NO_PARENT },
-                ...parents,
-              ]);
-        if (parent === null) return undefined;
-        const title = yield* ask.text(`What is the task? (in ${workspace}/${id})`);
-        if (title === null || title.trim() === "") return undefined;
-        const take = yield* ask.confirm("Take it yourself?", true);
-        yield* steps.startTask({
-          ...project,
-          title: title.trim(),
-          take,
-          ...(parent === NO_PARENT ? {} : { parent }),
-        });
-        return undefined;
-      }
-      const path = Tree.pathTo(nodes, picked);
-      let node = path?.at(-1);
-      if (path === null || node === undefined) return undefined;
-      if (node.unsettled === true) {
-        const how = yield* ask.choose<"one" | "parts">(
-          `Run "${node.title}" as one task, or by its parts?`,
-          [
-            { title: "As one task", description: "An agent does it whole.", value: "one" },
-            {
-              title: "By its parts",
-              description: "Its items are the tasks; pick one of them or the whole.",
-              value: "parts",
-            },
-          ],
-        );
-        if (how === null) return undefined;
-        yield* steps.settleTask(workspace, id, node.id, how === "one");
-        if (how === "parts") {
-          expand = picked;
-          continue;
-        }
-        node = { ...node, unsettled: false, executable: true };
-      }
-      if (node.kind !== "area") {
-        const owner = path
-          .toReversed()
-          .find((n) => n.kind !== "area" && n.owner !== undefined)?.owner;
-        if (owner === undefined) yield* steps.takeTask(workspace, id, node.id);
-        else if (owner.toLowerCase() === input.me) yield* io.say(`${node.title} is yours already.`);
-        else {
-          yield* io.say(`${node.title} is ${owner}'s: ask them to hand it over, or pick another.`);
-          continue;
-        }
-      }
-      const at = input.editor;
-      if (
-        at?.editor !== undefined &&
-        at.here.workspace === workspace &&
-        at.here.project === id &&
-        (yield* ask.confirm(`Open ${at.editor.title} on it now?`, true))
-      )
-        return {
-          editor: at.editor.id,
-          folder: at.here.root,
-          prompt: scopePrompt(scopeOfNode(id, node)),
-        };
-      if (node.kind === "area")
-        yield* io.say(
-          `${node.title}: ${Tree.openItems(node).length} open tasks. An area is nobody's to take; start an agent on it in the project.`,
-        );
-      return undefined;
+      if (Runtime.getErrorExitCode(result.failure) === 4) uncertain = true;
+      for (const line of String(result.failure.message).split("\n")) yield* io.say(line);
     }
+    if (taken === 0)
+      return yield* outcome(
+        uncertain ? "uncertain" : "refused",
+        `none of ${tasks.join(", ")} could be taken`,
+        "see each one's line above; peer core tasks lists who owns what.",
+      );
   });

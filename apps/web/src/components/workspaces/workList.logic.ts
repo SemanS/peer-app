@@ -1,5 +1,11 @@
 import type { SignalTone } from "./signals";
-import { ancestorIds, nestRows, treeIndexOf, type NestedRow } from "./taskTree.logic";
+import {
+  ancestorIds,
+  nestRows,
+  treeIndexOf,
+  type NestedRow,
+  type SelectableRow,
+} from "./taskTree.logic";
 import {
   TASK_COLUMNS,
   type TaskCard,
@@ -148,4 +154,31 @@ export function listTreeRows(
     treeIndex: (card) => indexOf(card).get(card.task.id)?.index ?? Number.MAX_SAFE_INTEGER,
     collapsed,
   });
+}
+
+const projectPrefix = (card: Pick<WorkTaskCard, "project">) =>
+  `${card.project.workspace}/${card.project.projectId}/`;
+
+/**
+ * The list's tasks a person may pick for one agent, keyed as the list's rows: every open one, done
+ * ones never. Ancestors come from the tree, so a Hub without one gives flat rows.
+ */
+export function listSelectableRows(
+  cards: ReadonlyArray<TaskCard>,
+): ReadonlyArray<SelectableRow & { readonly card: WorkTaskCard }> {
+  const indexes = new Map<WorkTaskCard["project"], ReturnType<typeof treeIndexOf>>();
+  return cards
+    .filter(isTask)
+    .filter((card) => card.column !== null && !card.task.done)
+    .map((card) => {
+      const index = indexes.get(card.project) ?? treeIndexOf(card.project);
+      indexes.set(card.project, index);
+      const prefix = projectPrefix(card);
+      return {
+        key: listRowKey(card),
+        ancestors: ancestorIds(index, card.task).map((id) => prefix + id),
+        project: prefix,
+        card,
+      };
+    });
 }

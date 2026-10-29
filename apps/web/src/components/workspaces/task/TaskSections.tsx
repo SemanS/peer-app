@@ -6,6 +6,7 @@
 import {
   ChevronRightIcon,
   CircleHelpIcon,
+  PlayIcon,
   FileTextIcon,
   MessageCircleQuestionIcon,
   PackageCheckIcon,
@@ -14,15 +15,33 @@ import {
 import { useState, type ComponentType, type ReactNode } from "react";
 
 import { cn } from "../../../lib/utils";
-import { Button } from "../../ui/button";
+import { Button, InlineButton } from "../../ui/button";
+import { Checkbox } from "../../ui/checkbox";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../../ui/collapsible";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import { TONE_SURFACE, TONE_TEXT } from "../signals";
 import { taskStateLook } from "../taskRow.logic";
-import type { TaskItemRow } from "../taskTree.logic";
+import {
+  emptySelection,
+  liveSelection,
+  selectableTask,
+  selectionMark,
+  selectionPrompt,
+  selectionRoots,
+  selectRange,
+  toggleSelected,
+  treeIndexOf,
+  unsettledIn,
+  type TaskItemRow,
+} from "../taskTree.logic";
 import { StateDot } from "../workStatus";
 import type { TaskLauncherProps } from "../slots.types";
-import { taskLabel, type WorkOpen, type WorkTaskNode } from "../workTree.logic";
+import {
+  taskLabel,
+  type WorkOpen,
+  type WorkProjectNode,
+  type WorkTaskNode,
+} from "../workTree.logic";
 import type { TaskWait } from "./task.logic";
 import type { TaskChatRow } from "./taskChats.logic";
 import type { TaskContextCard, TaskDetail } from "./taskDetails.logic";
@@ -297,12 +316,21 @@ export function DecisionBar({
   );
 }
 
-/** The items under the task, in the tree's order: each opens its page, an open one starts an agent. */
+/**
+ * The items under the task, in the tree's order: each opens its page, an open one starts an agent.
+ * Open items can be picked by their boxes (an item brings what sits under it, Shift picks a range)
+ * to start one agent on all of them.
+ */
 export function TaskItems({
+  project,
+  taskId,
   rows,
   onOpen,
   launcher,
 }: {
+  readonly project: WorkProjectNode;
+  /** The page's task: another page starts with nothing picked. */
+  readonly taskId: string;
   readonly rows: ReadonlyArray<TaskItemRow>;
   readonly onOpen: (task: WorkTaskNode) => void;
   /** The task launcher and what it needs besides the item; absent where no agent can start here. */
@@ -313,7 +341,28 @@ export function TaskItems({
       }
     | undefined;
 }) {
+  const [stored, setSelection] = useState(() => emptySelection(taskId));
+  const [launching, setLaunching] = useState<{
+    readonly task: WorkTaskNode;
+    readonly prompt: string | undefined;
+  } | null>(null);
   if (rows.length === 0) return null;
+  const index = treeIndexOf(project);
+  const open = rows.filter((row) => !row.task.done);
+  const selectable = open.map((row) => selectableTask(index, project.projectId, row.task));
+  const selection = liveSelection(stored, taskId, selectable);
+  const shown = rows.map((row) => row.task.id);
+  const selected = open.filter((row) => selection.keys.has(row.task.id)).map((row) => row.task);
+  const roots = selectionRoots(selection, selectable).flatMap((id) =>
+    selected.filter((task) => task.id === id),
+  );
+  const unsettled = unsettledIn(selected);
+  const pick = (id: string, range: boolean) =>
+    setSelection(
+      range
+        ? selectRange(selection, selectable, shown, id)
+        : toggleSelected(selection, selectable, id),
+    );
   return (
     <section aria-label="Items" className="flex flex-col gap-2.5">
       <PeerSectionLabel
@@ -323,17 +372,73 @@ export function TaskItems({
       >
         Items
       </PeerSectionLabel>
+      {selected.length === 0 ? null : (
+        <div
+          role="toolbar"
+          aria-label="Selected items"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm"
+        >
+          {launcher === undefined ? (
+            <span className="font-medium tabular-nums">{selected.length} selected</span>
+          ) : (
+            <Button
+              size="xs"
+              disabled={unsettled !== undefined || roots.length === 0}
+              onClick={() => {
+                const first = roots[0];
+                if (first !== undefined) {
+                  setLaunching({ task: first, prompt: selectionPrompt(project, roots) });
+                }
+              }}
+            >
+              <PlayIcon aria-hidden />
+              Start agent on {selected.length} {selected.length === 1 ? "item" : "items"}
+            </Button>
+          )}
+          {unsettled === undefined ? null : (
+            <InlineButton tone="muted" onClick={() => onOpen(unsettled)}>
+              Decide {unsettled.title} first
+            </InlineButton>
+          )}
+          <InlineButton tone="muted" onClick={() => setSelection(emptySelection(taskId))}>
+            Clear
+          </InlineButton>
+        </div>
+      )}
       <ul className="flex flex-col divide-y divide-border/60 border-y border-border/60">
         {rows.map((row) => {
           const look = taskStateLook(row.state.kind);
           return (
             <li
               key={row.task.id}
-              className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 py-2.5"
+              className="group/item flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 py-2.5"
               style={
                 row.indent === 0 ? undefined : { paddingInlineStart: `${row.indent * 1.25}rem` }
               }
             >
+              {row.task.done ? (
+                <span aria-hidden className="w-4 shrink-0" />
+              ) : (
+                <span
+                  className={cn(
+                    "flex shrink-0",
+                    selected.length === 0 &&
+                      "opacity-0 group-hover/item:opacity-100 focus-within:opacity-100",
+                  )}
+                >
+                  <Checkbox
+                    aria-label={`Select ${row.task.title}`}
+                    checked={selectionMark(selection, selectable, row.task.id) === "checked"}
+                    indeterminate={selectionMark(selection, selectable, row.task.id) === "partial"}
+                    onCheckedChange={(_checked, details) =>
+                      pick(
+                        row.task.id,
+                        "shiftKey" in details.event && details.event.shiftKey === true,
+                      )
+                    }
+                  />
+                </span>
+              )}
               <StateDot tone={look.tone} hollow={look.hollow} />
               <button
                 type="button"
@@ -368,6 +473,16 @@ export function TaskItems({
           );
         })}
       </ul>
+      {launching === null || launcher === undefined ? null : (
+        <launcher.Launcher
+          {...launcher.props}
+          taskId={launching.task.id}
+          taskLabel={taskLabel(launching.task)}
+          {...(launching.prompt === undefined ? {} : { initialPrompt: launching.prompt })}
+          initialOpen
+          onClose={() => setLaunching(null)}
+        />
+      )}
     </section>
   );
 }

@@ -420,6 +420,8 @@ function TaskBody({
             </TaskChats>
           )}
           <TaskItems
+            project={found.project}
+            taskId={taskId}
             rows={items}
             onOpen={openTask}
             launcher={

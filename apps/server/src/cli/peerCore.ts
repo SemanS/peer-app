@@ -410,7 +410,7 @@ const menuAsk: PeerCoreMenu.MenuAsk<Prompt.Environment> = {
   tree: (message, nodes) =>
     Prompt.run(PeerCoreTree.treePrompt(message, nodes)).pipe(Effect.orElseSucceed(() => null)),
   treePick: (message, nodes, expand) =>
-    Prompt.run(PeerCoreTree.treePickPrompt(message, nodes, expand)).pipe(
+    Prompt.run(PeerCoreTree.treeStartPrompt(message, nodes, expand)).pipe(
       Effect.orElseSucceed(() => null),
     ),
   folder: (message) =>
@@ -993,8 +993,9 @@ const tasksCommand = Command.make("tasks", {
 
 const takeCommand = Command.make("take", {
   ...authLocationFlags,
-  task: Argument.String("task").pipe(
-    Argument.withDescription("The task or group, as peer core tasks lists it."),
+  tasks: Argument.String("task").pipe(
+    Argument.withDescription("The tasks or groups, as peer core tasks lists them."),
+    Argument.variadic({ min: 1 }),
   ),
   project: taskProjectFlag,
   asOne: Flag.Boolean("as-one").pipe(
@@ -1006,7 +1007,7 @@ const takeCommand = Command.make("take", {
     Flag.withDefault(false),
   ),
 }).pipe(
-  Command.withDescription("Become the owner of a task or group nobody owns."),
+  Command.withDescription("Become the owner of tasks or groups nobody owns."),
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
@@ -1017,9 +1018,9 @@ const takeCommand = Command.make("take", {
           "use one of them.",
         );
       const owner = yield* ownerOf(config.stateDir);
-      yield* PeerCoreTasks.takeTask(
+      yield* PeerCoreTasks.takeTasks(
         {
-          task: flags.task,
+          tasks: flags.tasks,
           ...(flags.asOne
             ? { settle: "one" as const }
             : flags.asParts

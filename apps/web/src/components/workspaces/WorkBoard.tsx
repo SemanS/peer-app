@@ -350,6 +350,16 @@ export function WorkBoard() {
                   onTab={setTab}
                   onOpen={cardActions.openTarget}
                   onShowNeeds={() => void navigate({ to: "/work", search: { view: "needs-you" } })}
+                  launch={
+                    environmentId === null || status === null
+                      ? undefined
+                      : {
+                          environmentId,
+                          status,
+                          Launcher: plugins.find((plugin) => plugin.taskLauncher !== undefined)
+                            ?.taskLauncher,
+                        }
+                  }
                 />
               ) : (
                 <>

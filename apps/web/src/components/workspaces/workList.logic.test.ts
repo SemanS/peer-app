@@ -9,6 +9,7 @@ import {
   listCounts,
   listGroups,
   listRows,
+  listSelectableRows,
   otherNeeds,
   stateText,
   taskStateTone,
@@ -200,5 +201,29 @@ describe("chatsLabel", () => {
     expect(chatsLabel(0)).toBe("no chats");
     expect(chatsLabel(1)).toBe("1 chat");
     expect(chatsLabel(3)).toBe("3 chats");
+  });
+});
+
+describe("listSelectableRows", () => {
+  it("offers every open task by its row's key with its ancestors, and no done one", () => {
+    const rows = listSelectableRows(
+      cardsOf([
+        task("g", [], { executable: false, childCount: 1 }),
+        task("i", [], { parent: "g", depth: 1 }),
+        task("old", [], { done: true }),
+      ]),
+    );
+    expect(rows.map((row) => [row.key, row.ancestors, row.project])).toEqual(
+      expect.arrayContaining([
+        ["acme/ordering/g", [], "acme/ordering/"],
+        ["acme/ordering/i", ["acme/ordering/g"], "acme/ordering/"],
+      ]),
+    );
+    expect(rows).toHaveLength(2);
+  });
+
+  it("gives flat rows on a Hub without a tree", () => {
+    const rows = listSelectableRows(cardsOf([task("a", []), task("b", [])]));
+    expect(rows.every((row) => row.ancestors.length === 0)).toBe(true);
   });
 });

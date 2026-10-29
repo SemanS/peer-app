@@ -879,7 +879,34 @@ const SCOPE_ITEMS_LISTED = 30;
  * The first prompt of an agent started on a scope, the same from every launcher. An unsettled
  * item is never given here: whoever starts it settles it first.
  */
-export function scopePrompt(scope: WorkScope): string {
+export function scopePrompt(scope: WorkScope | ReadonlyArray<WorkScope>): string {
+  if (!isScopeList(scope)) return oneScopePrompt(scope);
+  if (scope.length === 1) return oneScopePrompt(scope[0]!);
+  const project = scope.find((one) => one.kind !== "task")?.project;
+  const head =
+    project === undefined
+      ? `Work on these ${scope.length} Peer scopes, in this order:`
+      : `Work on these ${scope.length} Peer scopes in ${project}, in this order:`;
+  const parts = scope.map((one, index) => {
+    const lines = oneScopePrompt(one).split("\n");
+    // Each scope's own "Mark each …" line gives way to the one closing line of the set.
+    const kept = lines.at(-1)?.startsWith("Mark each ") === true ? lines.slice(0, -1) : lines;
+    return `${index + 1}. ${kept.join("\n")}`;
+  });
+  return [
+    head,
+    ...parts,
+    "Mark each item done with peer task set <id> --status done as you finish it; peer done finishes the scope you are on.",
+  ].join("\n\n");
+}
+
+function isScopeList(
+  scope: WorkScope | ReadonlyArray<WorkScope>,
+): scope is ReadonlyArray<WorkScope> {
+  return Array.isArray(scope);
+}
+
+function oneScopePrompt(scope: WorkScope): string {
   if (scope.kind === "task") return `Work on the Peer task "${scope.title}" (${scope.id}).`;
   const listed = scope.items
     .slice(0, SCOPE_ITEMS_LISTED)

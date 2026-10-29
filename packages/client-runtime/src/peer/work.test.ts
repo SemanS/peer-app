@@ -863,4 +863,45 @@ describe("the task tree", () => {
     expect(lines.at(-2)).toBe("and 2 more");
     expect(lines).toHaveLength(33);
   });
+
+  it("starts one agent on several scopes in order, with one closing instruction", () => {
+    const [tree] = buildWorkTree({ status: status(project()), localThreads: [], now: NOW });
+    const revenue = tree!.areas[0]!;
+    const node = (id: string) => revenue.tasks.find((candidate) => candidate.id === id)!;
+    const docs = scopeOfTask(tree!, node("docs"));
+    expect(scopePrompt([docs])).toBe(scopePrompt(docs));
+    expect(
+      scopePrompt([
+        scopeOfTask(tree!, node("str")),
+        scopeOfTask(tree!, node("change")),
+        scopeOfArea(tree!, revenue),
+      ]),
+    ).toBe(
+      [
+        "Work on these 3 Peer scopes in Kirkwood, in this order:",
+        "",
+        '1. Work on the Peer task "STR" (str).',
+        "",
+        [
+          '2. Work on the Peer group "Add the tree" (change) in Kirkwood: its open items, in order:',
+          "- api API",
+          "- routes Routes",
+          "- docs Docs",
+        ].join("\n"),
+        "",
+        [
+          '3. Work on the area "Revenue" of Kirkwood: its open tasks, in order:',
+          "- str STR",
+          "- api API",
+          "- routes Routes",
+          "- docs Docs",
+        ].join("\n"),
+        "",
+        "Mark each item done with peer task set <id> --status done as you finish it; peer done finishes the scope you are on.",
+      ].join("\n"),
+    );
+    expect(scopePrompt([docs, { kind: "task", id: "api", title: "API" }]).split("\n")[0]).toBe(
+      "Work on these 2 Peer scopes, in this order:",
+    );
+  });
 });

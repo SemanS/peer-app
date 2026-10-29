@@ -204,12 +204,15 @@ newer), or put `npx @webinson/peer-core` in front of each command below without 
    areas, whole areas (their future tasks too), whole groups of tasks or single tasks, in a tree you
    open area by area and group by group; a chosen group covers everything under it. With one
    `--project`, `--area <name>` and `--task <id>` do the same (a group's id works); whatever someone
-   already owns stays theirs. **Start a task** opens the same tree: pick an area, a group, a smaller
-   group or one task, and that is the scope your agent gets. A scope nobody owns becomes yours;
-   the editor's first prompt names it and lists its open items. An item marked `?` was imported
-   with items under it and nobody has said yet whether an agent does it as one task or by its
-   parts: picking it asks, and the answer is kept. **New task…** first asks under which item the
-   task goes.
+   already owns stays theirs. **Start a task** opens the same tree: Enter on an area, a group, a
+   smaller group or one task picks that scope alone, or mark several with Space (a marked row
+   covers everything under it) and choose **Continue**. Every picked scope nobody owns becomes
+   yours; someone else's is left out with their name. An item marked `?` was imported with items
+   under it and nobody has said yet whether an agent does it as one task or by its parts: picking
+   it asks, and the answer is kept. Then **Which agent?** lists the connected editors Peer can
+   start in this folder (Claude Code, Codex) and **None now**; the chosen editor opens with a
+   first prompt that names every scope in order and lists its open items. **New task…** first
+   asks under which item the task goes.
 2. `peer core share` in a project's folder shares it with a workspace (or name the folder:
    `peer core share ~/code/project`). The folder needs a git remote. On a terminal it asks which
    workspace when you belong to several and confirms before sharing. When the folder is a clone of
@@ -274,7 +277,8 @@ for how many of its items are done, `?` before an item whose way of running nobo
 with status, area and owner, the invitation's task first. `--open` shows only the tasks nobody
 owns, `--mine` yours, each with the groups above it. `peer core take <task>` makes you the owner of
 a task or a whole group nobody owns; a task someone owns, directly or through its group, is refused
-with their name. `--as-one` or `--as-parts` settles an undecided item while taking it. All act as
+with their name. `--as-one` or `--as-parts` settles an undecided item while taking it; several ids are taken one by
+one. All act as
 you, with the Hub, and need neither the app nor Peer Core running.
 
 ### Returning to older work
@@ -444,6 +448,14 @@ in the first prompt. An item that arrived with items under it and no decision sh
 whether an agent does it as **One task** or **Its parts** before anyone starts on it. **Move
 under…** and **Make a group** / **Make a task** are in the **…** menu. Who owns a group owns its
 items, unless an item has an owner of its own.
+
+To give one agent several tasks, tick them in the list (a checkbox appears at the start of each
+open row; a ticked group brings its items, Shift-click ticks a range) and use the bar above the
+list: **Start agent** opens the usual launch dialog, where you choose Claude Code or Codex, with a
+first prompt that names every ticked scope in order; **Take** makes you the owner of the ticked
+tasks nobody owns; **Clear** drops the selection. A ticked item that still waits for a decision
+blocks the start until you decide it. The **Items** section of a task's page has the same
+checkboxes and **Start agent on N items**.
 
 ## Peer plugins
 

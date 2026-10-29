@@ -17,7 +17,7 @@ import type * as CliError from "effect/cli/CliError";
 import { idFromName } from "../peerHub/names.ts";
 import * as PeerWorkspaces from "../peerHub/core/workspaces/PeerWorkspaces.ts";
 import { type OneShotIo, outcome } from "./peerCoreIo.ts";
-import { startOnTree } from "./peerCoreTasks.ts";
+import { startOnTree } from "./peerCoreStart.ts";
 import * as Tree from "./peerCoreTree.ts";
 
 /** Who may invite to a workspace: its owners and admins (a project's lead does it in the app). */
@@ -422,12 +422,12 @@ export interface MenuAsk<R = never> {
     message: string,
     nodes: ReadonlyArray<Tree.TreeNode>,
   ) => Effect.Effect<Tree.Selection | null, never, R>;
-  /** One row of the tree; `expand` opens the way down to that node. */
+  /** The scopes marked in the tree, in its order, or one row alone; `expand` opens the way to it. */
   readonly treePick: (
     message: string,
     nodes: ReadonlyArray<Tree.TreeNode>,
     expand?: Tree.Picked,
-  ) => Effect.Effect<Tree.Picked | null, never, R>;
+  ) => Effect.Effect<ReadonlyArray<Tree.Picked> | null, never, R>;
 }
 
 export interface TaskInput {
@@ -693,13 +693,8 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
               chooseProject,
               others: projects.length > 1,
               me: status.email?.toLowerCase(),
-              editor:
-                here?.state === "connected"
-                  ? {
-                      editor: editors.find((e) => e.connected && e.launchable),
-                      here,
-                    }
-                  : undefined,
+              editors: editors.filter((e) => e.connected && e.launchable),
+              here: here?.state === "connected" ? here : undefined,
             });
             if (launch !== undefined) ended = { editorsConnected, launch };
             return;

@@ -215,3 +215,60 @@ describe("the pick tree", () => {
     );
   });
 });
+
+describe("the start tree", () => {
+  const withNew = [...change, task("\0new", "New task…")];
+  const start = (keys: ReadonlyArray<string>, state = Tree.initialStart(withNew)) => {
+    let current = state;
+    for (const key of keys) {
+      const next = Tree.startPress(current, key);
+      if ("done" in next) return next.done;
+      current = next.state;
+    }
+    return current;
+  };
+
+  it("picks the row Enter is on while nothing is marked, an action row always alone", () => {
+    assert.deepStrictEqual(start(["enter"]), [{ kind: "area", id: "Hub" }]);
+    assert.deepStrictEqual(start(["right", "down", "enter"]), [{ kind: "group", id: "g1" }]);
+    assert.deepStrictEqual(start(["down", "down", "enter"]), [{ kind: "task", id: "\0new" }]);
+    // Space on an action row marks nothing; Continue with nothing marked is an empty set.
+    assert.deepStrictEqual(start(["down", "down", "space", "down", "enter"]), []);
+  });
+
+  it("marks scopes at any level and ends on Continue with them in tree order", () => {
+    // Hub ▾, add-x ▾: mark 2. Hub feature, then the tasks without an area (an area like any).
+    const state = start(["right", "down", "right", "down", "space", "down", "space"]);
+    assert("nodes" in state);
+    assert.deepStrictEqual(Tree.frame(state, "Which task?").slice(1, -1), [
+      "  ▾ [-] Hub (6)",
+      "    ▾ [-] add-x (1/3) · OpenSpec",
+      "      ▸ [x] 2. Hub feature (1/3)",
+      "❯ ▸ [x] No area (1)",
+      "    New task…",
+      "  Continue",
+    ]);
+    // Enter on a row with items opens it now, rather than picking it.
+    const opened = start(["enter"], state);
+    assert("nodes" in opened);
+    assert.strictEqual(Tree.frame(opened, "Which task?")[5], "      [x] Loose");
+    assert.deepStrictEqual(start(["down", "down", "down", "enter"], opened), [
+      { kind: "group", id: "g2" },
+      { kind: "area", id: "" },
+    ]);
+    // Marking the area takes the group into it: never one task twice.
+    assert.deepStrictEqual(
+      start(["up", "up", "up", "space", "down", "down", "down", "down", "down", "enter"], state),
+      [
+        { kind: "area", id: "Hub" },
+        { kind: "area", id: "" },
+      ],
+    );
+  });
+
+  it("opens the way down to a node it is asked to expand", () => {
+    const state = Tree.initialStart(withNew, { kind: "task", id: "t2" });
+    const row = Tree.rows(state)[state.cursor]!;
+    assert.strictEqual(row.kind === "node" ? row.node.id : row.kind, "t2");
+  });
+});

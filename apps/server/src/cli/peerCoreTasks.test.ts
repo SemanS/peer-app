@@ -155,4 +155,44 @@ describe("the scope prompt", () => {
       assert.strictEqual(PeerCoreTasks.scopePrompt(scope), clientScopePrompt(scope));
     assert.include(PeerCoreTasks.scopePrompt(scopes[2]!), "\nand 2 more\n");
   });
+
+  const set: ReadonlyArray<PeerCoreTasks.WorkScope> = [scopes[0]!, scopes[1]!, scopes[3]!];
+
+  it("words a set of scopes in order, one closing line for them all", () => {
+    assert.strictEqual(
+      PeerCoreTasks.scopePrompt(set),
+      [
+        "Work on these 3 Peer scopes in pay, in this order:",
+        "",
+        '1. Work on the Peer task "Cart" (t1).',
+        "",
+        '2. Work on the Peer group "2. Server" (g) in pay: its open items, in order:',
+        "- t0 Item 0",
+        "- t1 Item 1",
+        "",
+        '3. Work on the area "Checkout" of pay: its open tasks, in order:',
+        "- t0 Item 0",
+        "- t1 Item 1",
+        "- t2 Item 2",
+        "",
+        "Mark each item done with peer task set <id> --status done as you finish it; peer done finishes the scope you are on.",
+      ].join("\n"),
+    );
+    // A set of one is that scope's own words; tasks alone name no project.
+    assert.strictEqual(
+      PeerCoreTasks.scopePrompt([scopes[1]!]),
+      PeerCoreTasks.scopePrompt(scopes[1]!),
+    );
+    assert.strictEqual(
+      PeerCoreTasks.scopePrompt([scopes[0]!, { kind: "task", id: "t2", title: "Pay" }]).split(
+        "\n",
+      )[0],
+      "Work on these 2 Peer scopes, in this order:",
+    );
+  });
+
+  it("says for a set what the apps say", () => {
+    for (const scope of [set, [scopes[1]!], [scopes[0]!, scopes[0]!]])
+      assert.strictEqual(PeerCoreTasks.scopePrompt(scope), clientScopePrompt(scope));
+  });
 });

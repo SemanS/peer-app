@@ -1,3 +1,4 @@
+import type { EnvironmentId } from "@t3tools/contracts";
 import { runAtomCommand } from "@t3tools/client-runtime/state/runtime";
 
 import { randomUUID } from "../../../lib/utils";
@@ -17,6 +18,45 @@ import { requestTeamPage } from "./teamNavigation";
 
 const giving = new Set<string>();
 const taking = new Set<string>();
+
+interface OwnedTarget {
+  readonly workspace: string;
+  readonly project: string;
+  readonly task: string;
+}
+
+/** Whether the person may take the task: a member's, while nobody owns it and it is not done. */
+export function canTake(
+  status: Parameters<typeof taskOwnerFacts>[0],
+  target: OwnedTarget,
+): boolean {
+  return taskOwnerFacts(status, target)?.actions.take === true;
+}
+
+/** The person becomes the task's owner, once at a time per task; a refusal is reported. */
+export function takeTask(environmentId: EnvironmentId, target: OwnedTarget, name: string): void {
+  const key = `${environmentId}:${target.workspace}:${target.project}:${target.task}`;
+  if (taking.has(key)) return;
+  taking.add(key);
+  void runAtomCommand(
+    appAtomRegistry,
+    serverEnvironment.peerOwnership.take,
+    {
+      environmentId,
+      input: {
+        workspace: target.workspace,
+        project: target.project,
+        task: target.task,
+        op: randomUUID(),
+      },
+    },
+    { reportFailure: false },
+  )
+    .then((result) => {
+      reportFailure(`Could not take ${name}`, result);
+    })
+    .finally(() => taking.delete(key));
+}
 
 /** The item every member has: it opens the project's owner map, which only leads and admins edit. */
 const SEE_MAP_LABEL = "See the owner map";
@@ -59,30 +99,9 @@ export function taskMenu(props: TaskSlotProps): ReadonlyArray<TaskMenuEntry> {
       case OWNER_MENU_IDS.handOver:
         openOwnerDialog({ kind: "hand-over", ...target });
         return;
-      case OWNER_MENU_IDS.take: {
-        const key = `${environmentId}:${target.workspace}:${target.project}:${target.task}`;
-        if (taking.has(key)) return;
-        taking.add(key);
-        void runAtomCommand(
-          appAtomRegistry,
-          serverEnvironment.peerOwnership.take,
-          {
-            environmentId,
-            input: {
-              workspace: target.workspace,
-              project: target.project,
-              task: target.task,
-              op: randomUUID(),
-            },
-          },
-          { reportFailure: false },
-        )
-          .then((result) => {
-            reportFailure(`Could not take ${taskName(facts.task)}`, result);
-          })
-          .finally(() => taking.delete(key));
+      case OWNER_MENU_IDS.take:
+        takeTask(environmentId, target, taskName(facts.task));
         return;
-      }
       case OWNER_MENU_IDS.giveBack: {
         const key = `${environmentId}:${target.workspace}:${target.project}:${target.task}`;
         if (giving.has(key)) return;

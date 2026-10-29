@@ -32,6 +32,7 @@ import * as PeerCoreBind from "./peerCoreBind.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
 import * as PeerCoreMenu from "./peerCoreMenu.ts";
 import * as PeerCoreShare from "./peerCoreShare.ts";
+import * as PeerCoreStart from "./peerCoreStart.ts";
 import * as PeerCoreTasks from "./peerCoreTasks.ts";
 import * as Tree from "./peerCoreTree.ts";
 import { fail, type OneShotIo } from "./peerCoreIo.ts";
@@ -630,6 +631,36 @@ describe("peer core tasks and take", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("take_several_takes_each_and_is_refused_only_when_none_could_be", () =>
+    Effect.gen(function* () {
+      const { hub, core } = yield* joinedCyril();
+      const { lines, io } = recorder();
+      yield* PeerCoreTasks.takeTasks({ ...where, tasks: ["VL7", "VL8"] }, io).pipe(
+        Effect.provide(core),
+      );
+      assert.deepStrictEqual(lines.slice(0, 2), [
+        "You own VL7 · Split payments now (example/webshop).",
+        "peer core: refused: VL8 is owned by Bob (bob@example.com).",
+      ]);
+      assert.strictEqual(
+        hub.calls.filter((call) => call.url?.endsWith("/owner") === true).length,
+        1,
+      );
+      const result = yield* PeerCoreTasks.takeTasks(
+        { ...where, tasks: ["VL8", "VL99"] },
+        recorder().io,
+      ).pipe(Effect.provide(core), Effect.result);
+      assert.isTrue(Result.isFailure(result));
+      if (Result.isFailure(result)) {
+        assert.include(
+          String(result.failure.message),
+          "peer core: refused: none of VL8, VL99 could be taken.",
+        );
+        assert.strictEqual(Runtime.getErrorExitCode(result.failure), 3);
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("take_against_an_older_hub_is_refused_with_its_words", () =>
     Effect.gen(function* () {
       const { core } = yield* joinedCyril(true);
@@ -821,9 +852,9 @@ describe("peer core create, invite and the menu", () => {
     children: [],
     ...more,
   });
-  /** Picks the row whose id is the next answer, logging what it was offered. */
+  /** Picks the rows whose ids are the next answer (one id or a marked set), logging the offer. */
   const picking =
-    (answers: Array<string>, log?: Array<string>) =>
+    (answers: Array<string | ReadonlyArray<string>>, log?: Array<string>) =>
     (message: string, nodes: ReadonlyArray<Tree.TreeNode>, expand?: Tree.Picked) =>
       Effect.sync(() => {
         const all = nodes.flatMap(function flat(n): ReadonlyArray<Tree.TreeNode> {
@@ -835,9 +866,14 @@ describe("peer core create, invite and the menu", () => {
             .map((n) => n.title)
             .join(" | ")}`,
         );
-        const id = answers.shift();
-        const found = all.find((n) => n.id === id);
-        return found === undefined ? null : { kind: found.kind, id: found.id };
+        const answer = answers.shift();
+        if (answer === undefined) return null;
+        const found = (typeof answer === "string" ? [answer] : answer).map((id) =>
+          all.find((n) => n.id === id),
+        );
+        return found.some((n) => n === undefined)
+          ? null
+          : found.map((n) => ({ kind: n!.kind, id: n!.id }));
       });
 
   it("the menu recommends the step that gets the person to a shared project", () => {
@@ -1128,8 +1164,17 @@ describe("peer core create, invite and the menu", () => {
   ];
 
   /** The menu in a connected `pay` with Claude Code: what it took, settled and said, and its end. */
-  const startOn = (picks: Array<string>, chosen: Array<string> = []) =>
+  const claudeCode = { id: "claude", title: "Claude Code", connected: true, launchable: true };
+  const startOn = (
+    picks: Array<string | ReadonlyArray<string>>,
+    chosen: Array<string> = [],
+    more: {
+      readonly agent?: string;
+      readonly editors?: ReadonlyArray<PeerCoreMenu.Editor>;
+    } = {},
+  ) =>
     Effect.gen(function* () {
+      const agents: Array<string> = [];
       const took: Array<string> = [];
       const settled: Array<string> = [];
       const offered: Array<string> = [];
@@ -1139,6 +1184,10 @@ describe("peer core create, invite and the menu", () => {
       const ask: PeerCoreMenu.MenuAsk = {
         choose: (message, choices) =>
           Effect.sync(() => {
+            if (message === "Which agent?") {
+              agents.push(...choices.map((c) => `${c.title} · ${c.description}`));
+              return choices.find((c) => c.value === (more.agent ?? "claude"))?.value ?? null;
+            }
             const kind = message.startsWith("Run ") ? chosen.shift() : answers.shift();
             if (message.startsWith("Run ")) offered.push(message);
             return (
@@ -1168,9 +1217,7 @@ describe("peer core create, invite and the menu", () => {
             project: "pay",
           }),
           repositories: Effect.succeed([]),
-          editors: Effect.succeed([
-            { id: "claude", title: "Claude Code", connected: true, launchable: true },
-          ]),
+          editors: Effect.succeed(more.editors ?? [claudeCode]),
           join: () => Effect.void,
           founding: () => Effect.void,
           create: () => Effect.void,
@@ -1192,17 +1239,21 @@ describe("peer core create, invite and the menu", () => {
         },
         io,
       );
-      return { took, settled, offered, lines, end };
+      return { took, settled, offered, agents, lines, end };
     });
 
   it.effect("start a task picks a task in the tree, takes it, and opens the editor on it", () =>
     Effect.gen(function* () {
-      const { took, offered, end } = yield* startOn(["t1"]);
+      const { took, offered, agents, end } = yield* startOn(["t1"]);
       // The whole tree is offered, Bob's item too (with his name), then New task….
       assert.deepStrictEqual(offered, [
         "Which task? (acme/pay): Cart | 2. Hub feature | Server | Model | Store | Refunds | Mine | New task…",
       ]);
       assert.deepStrictEqual(took, ["t1"]);
+      assert.deepStrictEqual(agents, [
+        "Claude Code · Starts in ~/code/pay with Peer coordinating",
+        "None now · The task is yours; start an agent later.",
+      ]);
       assert.deepStrictEqual(end, {
         editorsConnected: true,
         launch: {
@@ -1270,6 +1321,129 @@ describe("peer core create, invite and the menu", () => {
           "- t5 Refunds",
         ]);
       }),
+  );
+
+  it.effect(
+    "several scopes: each settled and taken, then the agent chosen starts on the set in order",
+    () =>
+      Effect.gen(function* () {
+        const codex = { id: "codex", title: "Codex", connected: true, launchable: true };
+        const cursor = { id: "cursor", title: "Cursor", connected: true, launchable: false };
+        // Cart and the unsettled Server, marked together; Server runs by its parts.
+        const { took, settled, offered, agents, end } = yield* startOn([["t1", "t2"]], ["parts"], {
+          agent: "codex",
+          editors: [claudeCode, codex, cursor],
+        });
+        assert.deepStrictEqual(settled, ["t2 parts"]);
+        // By its parts in a set it stays a group: the tree is not opened again.
+        assert.deepStrictEqual(
+          offered.map((line) => line.split(":")[0]),
+          ["Which task? (acme/pay)", 'Run "Server" as one task, or by its parts?'],
+        );
+        assert.deepStrictEqual(took, ["t1", "t2"]);
+        assert.deepStrictEqual(agents, [
+          "Claude Code · Starts in ~/code/pay with Peer coordinating",
+          "Codex · Starts in ~/code/pay with Peer coordinating",
+          "None now · The task is yours; start an agent later.",
+        ]);
+        assert.deepStrictEqual(end.launch, {
+          editor: "codex",
+          folder: "/home/ana/code/pay",
+          prompt: [
+            "Work on these 2 Peer scopes in pay, in this order:",
+            "",
+            '1. Work on the Peer task "Cart" (t1).',
+            "",
+            '2. Work on the Peer group "Server" (t2) in pay: its open items, in order:',
+            "- t3 Model",
+            "- t4 Store",
+            "",
+            "Mark each item done with peer task set <id> --status done as you finish it; peer done finishes the scope you are on.",
+          ].join("\n"),
+        });
+      }),
+  );
+
+  it.effect("someone else's scope is left out of the set, and the rest starts", () =>
+    Effect.gen(function* () {
+      const { took, lines, end } = yield* startOn([["t1", "t5"]]);
+      assert.include(
+        lines.join("\n"),
+        "Refunds is bob@acme.test's: ask them to hand it over; it is left out.",
+      );
+      assert.deepStrictEqual(took, ["t1"]);
+      assert.strictEqual(end.launch?.prompt, 'Work on the Peer task "Cart" (t1).');
+      // One's own scope is not taken again; it starts with nothing left to take.
+      const mine = yield* startOn([["t5", "t6"]]);
+      assert.deepStrictEqual(mine.took, []);
+      assert.include(mine.lines.join("\n"), "Mine is yours already.");
+      assert.strictEqual(mine.end.launch?.prompt, 'Work on the Peer task "Mine" (t6).');
+    }),
+  );
+
+  it.effect("None now keeps the task yours; with no editor that can start, the menu says how", () =>
+    Effect.gen(function* () {
+      const later = yield* startOn(["t1"], [], { agent: "\0none-now" });
+      assert.deepStrictEqual(later.took, ["t1"]);
+      assert.deepStrictEqual(later.end, { editorsConnected: true });
+      const bare = yield* startOn(["t1"], [], {
+        editors: [{ id: "cursor", title: "Cursor", connected: true, launchable: false }],
+      });
+      assert.deepStrictEqual(bare.took, ["t1"]);
+      assert.deepStrictEqual(bare.agents, []);
+      assert.include(
+        bare.lines.join("\n"),
+        "No connected editor can start here: connect one with peer core connect claude or peer core connect codex.",
+      );
+      assert.isUndefined(bare.end.launch);
+    }),
+  );
+
+  it.effect("in another project's tree, only None now is offered", () =>
+    Effect.gen(function* () {
+      const agents: Array<string> = [];
+      const took: Array<string> = [];
+      const { lines, io } = recorder();
+      const ask: PeerCoreMenu.MenuAsk = {
+        choose: (message, choices) =>
+          Effect.sync(() => {
+            if (message === "Which agent?") agents.push(...choices.map((c) => c.title));
+            return choices.at(-1)?.value ?? null;
+          }),
+        text: () => Effect.die(new Error("asked for text")),
+        pick: () => Effect.die(new Error("asked to pick")),
+        folder: () => Effect.die(new Error("browsed")),
+        confirm: () => Effect.succeed(true),
+        tree: () => Effect.die(new Error("tree")),
+        treePick: picking([["t1"]]),
+      };
+      const launch = yield* PeerCoreStart.startOnTree(
+        ask,
+        // Only what Start a task uses of the menu's steps.
+        {
+          home: "/home/ana",
+          scope: () => Effect.succeed(payTree(false)),
+          takeTask: (_w: string, project: string, task: string) =>
+            Effect.sync(() => void took.push(`${project}/${task}`)),
+        } as unknown as PeerCoreMenu.MenuSteps,
+        io,
+        {
+          project: { workspace: "acme", project: "pay" },
+          chooseProject: Effect.succeed(null),
+          others: true,
+          me: "ana@acme.test",
+          editors: [claudeCode],
+          here: { root: "/home/ana/code/web", workspace: "acme", project: "web" },
+        },
+      );
+      assert.isUndefined(launch);
+      assert.deepStrictEqual(took, ["pay/t1"]);
+      assert.deepStrictEqual(agents, ["None now"]);
+      assert.include(
+        lines.join("\n"),
+        "An editor starts only in the project you are in (acme/web): run peer core in acme/pay's checkout to start one on it.",
+      );
+    }),
   );
 
   it.effect("a new task asks under which item it goes, nothing first", () =>

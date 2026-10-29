@@ -237,3 +237,159 @@ export function taskItems(
     prompt: launchPrompt(project, item),
   }));
 }
+
+/**
+ * A row several tasks are picked from: its key, its ancestors' keys (the nearest first) and the
+ * project it belongs to, since one agent starts on one project's tasks.
+ */
+export interface SelectableRow {
+  readonly key: string;
+  readonly ancestors: ReadonlyArray<string>;
+  readonly project: string;
+}
+
+/**
+ * The tasks a person picked to start one agent on. A row's subtree comes with it, so a row is
+ * checked only while everything under it is: taking one item out also takes out its ancestors,
+ * which then show partial. `anchor` is where a Shift-click range starts.
+ */
+export interface TaskSelection {
+  /** The list's scope it was made in: another scope starts empty. */
+  readonly scope: string;
+  readonly project: string | undefined;
+  readonly keys: ReadonlySet<string>;
+  readonly anchor: string | undefined;
+}
+
+export const emptySelection = (scope: string): TaskSelection => ({
+  scope,
+  project: undefined,
+  keys: new Set(),
+  anchor: undefined,
+});
+
+/**
+ * The selection as the rows there are now: empty in another scope, without the rows that went
+ * (done, or no longer listed).
+ */
+export function liveSelection(
+  selection: TaskSelection,
+  scope: string,
+  rows: ReadonlyArray<SelectableRow>,
+): TaskSelection {
+  if (selection.scope !== scope) return emptySelection(scope);
+  const known = new Set(rows.map((row) => row.key));
+  const keys = new Set([...selection.keys].filter((key) => known.has(key)));
+  return keys.size === selection.keys.size ? selection : { ...selection, keys };
+}
+
+const descendantKeys = (rows: ReadonlyArray<SelectableRow>, key: string) =>
+  rows.filter((row) => row.ancestors.includes(key)).map((row) => row.key);
+
+/** Starts over when the row is another project's: one selection is one project's tasks. */
+function forRow(selection: TaskSelection, row: SelectableRow): TaskSelection {
+  return selection.project === row.project
+    ? selection
+    : { ...emptySelection(selection.scope), project: row.project };
+}
+
+/** Checks a row with its subtree, or unchecks it with its subtree and its ancestors. */
+export function toggleSelected(
+  selection: TaskSelection,
+  rows: ReadonlyArray<SelectableRow>,
+  key: string,
+): TaskSelection {
+  const row = rows.find((candidate) => candidate.key === key);
+  if (row === undefined) return selection;
+  const base = forRow(selection, row);
+  const keys = new Set(base.keys);
+  if (keys.has(key)) {
+    for (const gone of [key, ...descendantKeys(rows, key), ...row.ancestors]) keys.delete(gone);
+  } else {
+    for (const added of [key, ...descendantKeys(rows, key)]) keys.add(added);
+  }
+  return { ...base, keys, anchor: key };
+}
+
+/**
+ * Shift-click: checks every shown row of the anchor's project from the anchor to this one, each
+ * with its subtree. Without an anchor among the shown rows it is a plain toggle.
+ */
+export function selectRange(
+  selection: TaskSelection,
+  rows: ReadonlyArray<SelectableRow>,
+  shown: ReadonlyArray<string>,
+  key: string,
+): TaskSelection {
+  const row = rows.find((candidate) => candidate.key === key);
+  const from = selection.anchor === undefined ? -1 : shown.indexOf(selection.anchor);
+  const to = shown.indexOf(key);
+  if (row === undefined || from === -1 || to === -1 || selection.project !== row.project) {
+    return toggleSelected(selection, rows, key);
+  }
+  const byKey = new Map(rows.map((candidate) => [candidate.key, candidate]));
+  const keys = new Set(selection.keys);
+  for (const at of shown.slice(Math.min(from, to), Math.max(from, to) + 1)) {
+    if (byKey.get(at)?.project !== row.project) continue;
+    for (const added of [at, ...descendantKeys(rows, at)]) keys.add(added);
+  }
+  return { ...selection, keys, anchor: key };
+}
+
+/** A row's box: checked with all of its subtree, partial while only some of it is. */
+export function selectionMark(
+  selection: TaskSelection,
+  rows: ReadonlyArray<SelectableRow>,
+  key: string,
+): "checked" | "partial" | "unchecked" {
+  const below = descendantKeys(rows, key);
+  const picked = [key, ...below].filter((candidate) => selection.keys.has(candidate)).length;
+  if (picked === 0) return "unchecked";
+  return picked === below.length + 1 ? "checked" : "partial";
+}
+
+/**
+ * The selected rows no selected ancestor covers, in the rows' order: what the agent's prompt
+ * names, each with what sits under it.
+ */
+export function selectionRoots(
+  selection: TaskSelection,
+  rows: ReadonlyArray<SelectableRow>,
+): ReadonlyArray<string> {
+  return rows
+    .filter(
+      (row) =>
+        selection.keys.has(row.key) &&
+        !row.ancestors.some((ancestor) => selection.keys.has(ancestor)),
+    )
+    .map((row) => row.key);
+}
+
+/** The project's task as a row to pick: keyed by its id, with its ancestors in the tree. */
+export function selectableTask(
+  index: ReturnType<typeof treeIndexOf>,
+  project: string,
+  task: Pick<WorkTaskNode, "id" | "parent">,
+): SelectableRow {
+  return { key: task.id, ancestors: ancestorIds(index, task), project };
+}
+
+/** A selection waits while an item in it is unsettled: someone decides how it runs first. */
+export function unsettledIn<T extends Pick<WorkTaskNode, "unsettled" | "done">>(
+  tasks: ReadonlyArray<T>,
+): T | undefined {
+  return tasks.find((task) => task.unsettled === true && !task.done);
+}
+
+/**
+ * The first prompt of one agent on the selected roots: the set's words for two or more, the
+ * launcher's own (`launchPrompt`) for one, so a lone task keeps its brief.
+ */
+export function selectionPrompt(
+  project: WorkProjectNode,
+  roots: ReadonlyArray<WorkTaskNode>,
+): string | undefined {
+  if (roots.length === 0) return undefined;
+  if (roots.length === 1) return launchPrompt(project, roots[0]!);
+  return scopePrompt(roots.map((task) => scopeOfTask(project, task)));
+}

@@ -124,19 +124,33 @@ const DEPENDS = /^depends on\s*:?\s*(.+?)\.?$/i;
 const TRAILING_DEPENDS = /\s*\((?:depends on|after)\s*:?\s*([^)]*)\)\s*$/i;
 
 const indentOf = (space: string) => [...space].reduce((n, c) => n + (c === "\t" ? 4 : 1), 0);
-const labelsIn = (text: string) =>
-  text
-    .split(/,|\band\b/)
-    .map((label) => label.trim().replace(/\.$/, ""))
-    .filter((label) => label !== "");
+const LABEL_WORD = /^\d+(?:\.\d+)*$/;
+/**
+ * The item labels a `Depends on` line names: `1.2`, `2.1 and 2.3`, `none`. Prose around them
+ * ("1.2. Mock the service, so this does not wait on 2.3") would name items it does not depend on,
+ * so only the words before the first one that is neither a label nor a joiner count.
+ */
+const labelsIn = (text: string) => {
+  const labels: Array<string> = [];
+  for (const word of text.split(/[\s,;]+/)) {
+    const label = word.replace(/[.:]+$/, "");
+    if (label === "" || /^(and|or|then|none|nothing|-|—)$/i.test(label)) continue;
+    if (!LABEL_WORD.test(label)) break;
+    labels.push(label);
+  }
+  return labels;
+};
 
 /** A title the Hub keeps whole, and the text it would cut, for the description's first line. */
 const titled = (text: string) => {
   const chars = [...text.trim().replace(/\s+/g, " ")].slice(0, READ_LIMIT);
   const whole = chars.join("");
-  return chars.length > TITLE_LIMIT
-    ? { title: chars.slice(0, TITLE_LIMIT).join("").trimEnd(), long: whole }
-    : { title: whole, long: undefined };
+  if (chars.length <= TITLE_LIMIT) return { title: whole, long: undefined };
+  // A long item reads better cut where its first sentence or clause ends than mid-word.
+  const head = chars.slice(0, TITLE_LIMIT).join("");
+  const stop = Math.max(head.lastIndexOf(". "), head.lastIndexOf(": "), head.lastIndexOf("; "));
+  const title = stop >= 24 ? head.slice(0, stop) : head.replace(/\s+\S*$/, "");
+  return { title: title.trimEnd(), long: whole };
 };
 
 interface Draft {

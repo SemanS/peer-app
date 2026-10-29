@@ -20,6 +20,7 @@ const TASKS = `# Tasks
   - Depends on 1.1, 9.9
 - [ ] Unnumbered item
   - a step of it
+  - Depends on: none, 1.2. Mock the service, so this does not wait on 2.1.
 
 ## 2. Clients
 
@@ -111,6 +112,8 @@ describe("readChange", () => {
         const unnumbered = byTitle.get("Unnumbered item")!;
         assert.match(unnumbered.ref, /^add-x#[0-9a-f]{8}$/);
         assert.strictEqual(unnumbered.description, "- a step of it");
+        // Prose after the labels names no dependency, and "none" is not an item.
+        assert.deepStrictEqual(unnumbered.dependencies, ["add-x#1.2"]);
         assert.strictEqual(byTitle.get("Web")!.parent, byTitle.get("Clients")!.ref);
         assert.deepStrictEqual(notInterpreted, [
           "openspec/changes/add-x/notes.md",
@@ -140,12 +143,17 @@ describe("readChange", () => {
 
   it("keeps the Hub's title length and opens the description with the whole text", () =>
     withChange(
-      { "openspec/changes/add-y/tasks.md": `- [ ] 1 ${"word ".repeat(40)}\n` },
+      {
+        "openspec/changes/add-y/tasks.md": `- [ ] 1 ${"word ".repeat(40)}\n- [ ] 2 Extend the action (\`modules/actions.ts\`): return the conflict as a structured result, keep the old callers compiling, and add a test for each of the three callers\n`,
+      },
       async (root) => {
-        const [, long] = (await readChange(root, "add-y")).items;
+        const [, long, sentence] = (await readChange(root, "add-y")).items;
         assert.isAtMost([...long!.title].length, 120);
         assert.isTrue(long!.description!.startsWith(long!.title));
         assert.isAbove(long!.description!.length, 120);
+        // A long item is cut where its first clause ends, never mid-word.
+        assert.strictEqual(sentence!.title, "Extend the action (`modules/actions.ts`)");
+        assert.isTrue(sentence!.description!.startsWith(sentence!.title));
       },
     ));
 });

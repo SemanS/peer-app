@@ -350,7 +350,8 @@ export type PeerKnowledgeChallenge = typeof PeerKnowledgeChallenge.Type;
  */
 export const PeerKnowledgeVerification = Schema.Struct({
   at: Schema.String,
-  kind: Schema.Literals(["read", "agent", "bulk", "verify"]),
+  // `cache`: only a `checked:` date in the file, with no ledger line behind it (kontext 0.10.0).
+  kind: Schema.Literals(["read", "agent", "bulk", "verify", "cache"]),
   commit: Schema.NullOr(Schema.String),
   by: Schema.NullOr(Schema.String),
   because: Schema.NullOr(Schema.String),
@@ -362,6 +363,19 @@ export const PeerKnowledgeVerification = Schema.Struct({
   landed: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export type PeerKnowledgeVerification = typeof PeerKnowledgeVerification.Type;
+
+/**
+ * The newest look that verifies: a person's read or a passed check (kontext 0.10.0 `last_verified`).
+ * `verification` stays the newest look of any kind, so an agent's stamp after a person's read is
+ * shown as the stamp while this says the read.
+ */
+export const PeerKnowledgeLastVerified = Schema.Struct({
+  kind: Schema.Literals(["read", "verify"]),
+  at: Schema.String,
+  commit: Schema.NullOr(Schema.String),
+  landed: Schema.optional(Schema.NullOr(Schema.String)),
+});
+export type PeerKnowledgeLastVerified = typeof PeerKnowledgeLastVerified.Type;
 
 /** Commits on an entry's governed paths after its verification commit, and the files they changed (20 at most). */
 export const PeerKnowledgeSince = Schema.Struct({
@@ -378,6 +392,7 @@ export type PeerKnowledgePremise = typeof PeerKnowledgePremise.Type;
 /** What a kontext with the verification ledger says of an entry; absent from older engines. */
 const entryProvenance = {
   verification: Schema.optional(PeerKnowledgeVerification),
+  lastVerified: Schema.optional(PeerKnowledgeLastVerified),
   since: Schema.optional(PeerKnowledgeSince),
   /** The shell command the entry names to check itself. */
   verify: Schema.optional(Schema.String),

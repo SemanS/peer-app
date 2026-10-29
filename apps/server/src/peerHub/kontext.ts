@@ -115,10 +115,25 @@ export class KontextClient extends Context.Reference<KontextClientShape>(
 
 export class KontextApiError extends Error {
   readonly code: string;
-  constructor(code: string, message: string) {
+  /** Older codes kontext lists for the same condition (`error.aliases`, kontext 0.10.0). */
+  readonly aliases: ReadonlyArray<string>;
+  /** kontext's machine fields next to `code` and `message` (`untrusted_verify` names the command). */
+  readonly details: Readonly<Record<string, unknown>>;
+  constructor(
+    code: string,
+    message: string,
+    details: Readonly<Record<string, unknown>> = {},
+    aliases: ReadonlyArray<string> = [],
+  ) {
     super(message);
     this.name = "KontextApiError";
     this.code = code;
+    this.details = details;
+    this.aliases = aliases;
+  }
+  /** Whether kontext raised `code`, now or under an older name. */
+  is(code: string): boolean {
+    return this.code === code || this.aliases.includes(code);
   }
 }
 
@@ -147,7 +162,7 @@ export async function kontextApi<A = unknown>(
     schema_version?: unknown;
     ok?: unknown;
     result?: A;
-    error?: { code?: unknown; message?: unknown };
+    error?: { code?: unknown; message?: unknown; aliases?: unknown } & Record<string, unknown>;
   };
   try {
     envelope = JSON.parse(run.stdout);
@@ -162,13 +177,15 @@ export async function kontextApi<A = unknown>(
       "incompatible",
       "kontext machine API v1 is required. Install a compatible kontext or set KONTEXT_BIN.",
     );
-  if (!envelope.ok)
+  if (!envelope.ok) {
+    const { code, message, aliases, ...details } = envelope.error ?? {};
     throw new KontextApiError(
-      typeof envelope.error?.code === "string" ? envelope.error.code : "failed",
-      typeof envelope.error?.message === "string"
-        ? envelope.error.message
-        : "kontext operation failed",
+      typeof code === "string" ? code : "failed",
+      typeof message === "string" ? message : "kontext operation failed",
+      details,
+      Array.isArray(aliases) ? aliases.filter((a): a is string => typeof a === "string") : [],
     );
+  }
   if (run.code !== 0)
     throw new KontextApiError("failed", run.stderr.trim() || `kontext exited ${run.code}`);
   if (!("result" in envelope))
@@ -185,6 +202,8 @@ export interface KontextEntry extends Omit<
   readonly checked?: string | null;
   /** kontext's verification ledger (`verification`, `since`, `verify`, `premises`), as it sent them. */
   readonly verification?: unknown;
+  /** The newest verifying look (kontext 0.10.0 `last_verified`); absent from older engines. */
+  readonly last_verified?: unknown;
   readonly since?: unknown;
   readonly verify?: unknown;
   readonly premises?: unknown;
@@ -196,7 +215,8 @@ export interface KontextEntry extends Omit<
 export const isKnowledgeIdentity = (id: string): boolean =>
   typeof id === "string" && /^[\p{L}\p{N}_.:-]{1,160}$/u.test(id);
 
-const VERIFICATION_KINDS = ["read", "agent", "bulk", "verify"] as const;
+// `cache` (kontext 0.10.0): a `checked:` date in the file with no ledger line behind it, never a verification.
+const VERIFICATION_KINDS = ["read", "agent", "bulk", "verify", "cache"] as const;
 const record = (value: unknown): Readonly<Record<string, unknown>> | null =>
   typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -237,6 +257,20 @@ export function verificationOf(raw: unknown): KnowledgeEntry["verification"] {
   };
 }
 
+/** kontext's `last_verified` of an entry (0.10.0): a person's read or a passed check; undefined otherwise. */
+export function lastVerifiedOf(raw: unknown): KnowledgeEntry["lastVerified"] {
+  const value = record(raw);
+  const kind = value?.kind === "read" || value?.kind === "verify" ? value.kind : undefined;
+  const at = line(value?.at, 40);
+  if (value === null || kind === undefined || at === null) return undefined;
+  return {
+    kind,
+    at,
+    commit: commitId(value.commit),
+    ...("landed" in value ? { landed: commitId(value.landed) } : {}),
+  };
+}
+
 /** kontext's `since` of an entry: a count of commits, the head, at most 20 changed paths. */
 export function sinceOf(raw: unknown): KnowledgeEntry["since"] {
   const value = record(raw);
@@ -266,7 +300,7 @@ export function premisesOf(raw: unknown): KnowledgeEntry["premises"] {
 }
 
 const presented = (
-  entry: Omit<KontextEntry, "verification" | "since" | "verify" | "premises">,
+  entry: Omit<KontextEntry, "verification" | "last_verified" | "since" | "verify" | "premises">,
 ): KnowledgeEntry => ({
   ...entry,
   kind: plain(entry.kind, 40),
@@ -285,14 +319,16 @@ const presented = (
 });
 
 export const asKnowledge = (entry: KontextEntry): KnowledgeEntry => {
-  const { verification, since, verify, premises, ...rest } = entry;
+  const { verification, last_verified, since, verify, premises, ...rest } = entry;
   const verified = verificationOf(verification);
+  const lastVerified = lastVerifiedOf(last_verified);
   const after = sinceOf(since);
   const command = line(verify, 500);
   const builds = premisesOf(premises);
   return {
     ...presented(rest),
     ...(verified === undefined ? {} : { verification: verified }),
+    ...(lastVerified === undefined ? {} : { lastVerified }),
     ...(after === undefined ? {} : { since: after }),
     ...(command === null ? {} : { verify: command }),
     ...(builds === undefined || builds.length === 0 ? {} : { premises: builds }),

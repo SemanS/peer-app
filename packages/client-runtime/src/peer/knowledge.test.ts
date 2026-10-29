@@ -123,7 +123,7 @@ describe("challenge wording and support", () => {
 
 describe("an entry's provenance", () => {
   const at = (
-    kind: "read" | "agent" | "bulk" | "verify",
+    kind: "read" | "agent" | "bulk" | "verify" | "cache",
     more: {
       passed?: boolean | null;
       commit?: string | null;
@@ -138,6 +138,28 @@ describe("an entry's provenance", () => {
     because: null,
     passed: null,
     ...more,
+  });
+
+  it("calls a date nobody recorded a look, and names the newest verifying look after a stamp (kontext 0.10.0)", () => {
+    expect(provenanceLine({ verification: at("cache", { commit: null }) })).toBe(
+      "Checked (unrecorded) on 2026-10-25",
+    );
+    expect(
+      provenanceLine({
+        verification: at("agent"),
+        lastVerified: {
+          kind: "verify",
+          at: "2026-10-20T08:00:00Z",
+          commit: "a7450a5".padEnd(40, "0"),
+        },
+      }),
+    ).toBe("Stamped by an agent at 55e6844, last verified by its test at a7450a5");
+    expect(
+      provenanceLine({
+        verification: at("bulk", { by: "Ana" }),
+        lastVerified: { kind: "read", at: "2026-10-20T08:00:00Z", commit: null },
+      }),
+    ).toBe("Confirmed by Ana at 55e6844 in a bulk confirmation, last confirmed on 2026-10-20");
   });
 
   it("names the proof and its commit, and a date only where an older kontext gave nothing more", () => {

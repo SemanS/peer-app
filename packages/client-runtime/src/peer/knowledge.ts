@@ -4,6 +4,7 @@ import {
   type PeerChallengeRow,
   type PeerKnowledgeChallenge,
   type PeerKnowledgeSince,
+  type PeerKnowledgeLastVerified,
   type PeerKnowledgeVerification,
 } from "@t3tools/contracts";
 import type { Atom } from "effect/reactivity";
@@ -190,7 +191,19 @@ export function challengeOffers(
 export interface EntryProvenance {
   readonly checked?: string | undefined;
   readonly verification?: PeerKnowledgeVerification | undefined;
+  readonly lastVerified?: PeerKnowledgeLastVerified | undefined;
   readonly since?: PeerKnowledgeSince | undefined;
+}
+
+/** ", last verified by its test at a7450a5": the newest verifying look, when the newest look is weaker. */
+function lastVerifiedNote(entry: EntryProvenance): string {
+  const last = entry.lastVerified;
+  if (last === undefined) return "";
+  const where =
+    last.commit === null ? ` on ${last.at.slice(0, 10)}` : ` at ${last.commit.slice(0, 7)}`;
+  return last.kind === "verify"
+    ? `, last verified by its test${where}`
+    : `, last confirmed${where}`;
 }
 
 /**
@@ -218,9 +231,12 @@ export function provenanceLine(entry: EntryProvenance): string {
     case "read":
       return `Confirmed${by}${where}`;
     case "agent":
-      return `Stamped by an agent${where}`;
+      return `Stamped by an agent${where}${lastVerifiedNote(entry)}`;
     case "bulk":
-      return `Confirmed${by}${where} in a bulk confirmation`;
+      return `Confirmed${by}${where} in a bulk confirmation${lastVerifiedNote(entry)}`;
+    case "cache":
+      // A date in the file with no ledger line behind it: nobody recorded the look.
+      return `Checked (unrecorded) on ${verification.at.slice(0, 10)}${lastVerifiedNote(entry)}`;
   }
 }
 

@@ -163,7 +163,8 @@ describe.skipIf(!process.env.KONTEXT_BIN)("keeping findings with the real kontex
       const compared = related.relations.find((relation) => relation.entry === learning);
       expect(compared).toMatchObject({ kind: "learning" });
       const revision = compared !== undefined && "revision" in compared ? compared.revision : "";
-      expect(revision).toMatch(/^[0-9a-f]{12}$/);
+      // kontext 0.10.0 gives the entry's blob id; 0.9 gave a 12-hex digest of its text.
+      expect(revision).toMatch(/^(?:[0-9a-f]{12}|[0-9a-f]{40})$/);
       const into = { entry: learning, revision: revision ?? "" };
 
       // Add to the learning: the preview is the amended body, and Apply stages that body alone.
@@ -265,7 +266,7 @@ describe.skipIf(!process.env.KONTEXT_BIN)("keeping findings with the real kontex
       expect(byId.get(learning)).toMatchObject({ change: "superseded", removed: false });
       expect(byId.get(learning)?.supersededBy).toHaveLength(1);
       expect(byId.get(newEntry.entry.id)).toMatchObject({ change: "added" });
-      expect(byId.get(learning)?.revision).toMatch(/^[0-9a-f]{12}$/);
+      expect(byId.get(learning)?.revision).toMatch(/^(?:[0-9a-f]{12}|[0-9a-f]{40})$/);
 
       // A replacement drafted against a moved revision is refused in words Peer reads as stale.
       yield* Effect.promise(() =>
@@ -277,8 +278,11 @@ describe.skipIf(!process.env.KONTEXT_BIN)("keeping findings with the real kontex
           () => expect.unreachable("revised a moved entry"),
           (error: unknown) => {
             expect(error).toBeInstanceOf(KontextApiError);
-            expect((error as KontextApiError).code).toBe("operation_conflict");
-            expect((error as KontextApiError).message).toMatch(/changed since revision/);
+            // kontext 0.10.0 says stale_entry everywhere, with operation_conflict among the aliases.
+            expect((error as KontextApiError).is("operation_conflict")).toBe(true);
+            expect((error as KontextApiError).message).toMatch(
+              /changed since revision|moved|stale/,
+            );
           },
         ),
       );

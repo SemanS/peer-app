@@ -25,6 +25,8 @@ import {
   entriesDrift,
   headFollow,
   reviewRefusal,
+  untrustedReason,
+  verifyEntry,
   type DriftEntry,
   type DriftGit,
 } from "./client/drift.ts";
@@ -822,5 +824,38 @@ describe("the default branch's moves, for change notices", () => {
     await follow("/repo", onMove);
     await follow("/repo", onMove);
     assert.deepStrictEqual(moves, ["1..2", "1..2"]);
+  });
+});
+
+describe("an entry's check that nobody pinned (kontext 0.10.0)", () => {
+  it("is unchecked, not an error, and tells the person the command and how to approve it", async () => {
+    const refusing: KontextClientShape = {
+      run: async () => ({
+        code: 1,
+        stdout: JSON.stringify({
+          schema_version: 1,
+          ok: false,
+          error: {
+            code: "untrusted_verify",
+            message: "verify command of x is not pinned",
+            id: "x",
+            command: "cargo test -q --lib x",
+            command_sha256: "ab".repeat(32),
+            hint: "kontext trust --verify x",
+          },
+        }),
+        stderr: "",
+      }),
+    };
+    const verified = await verifyEntry(refusing, "/repo", "x");
+    assert.deepStrictEqual(verified, {
+      available: false,
+      reason:
+        "Its check `cargo test -q --lib x` is not pinned in this checkout, so it did not run: a person approves it with `kontext trust --verify x`.",
+    });
+    assert.strictEqual(
+      untrustedReason("y", {}),
+      "Its check is not pinned in this checkout, so it did not run: a person approves it with `kontext trust --verify y`.",
+    );
   });
 });

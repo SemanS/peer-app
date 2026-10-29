@@ -56,6 +56,7 @@ const refusalOf = (failure: unknown) => {
     case "stale_entry":
       return new PeerHubError({ detail: STALE_ENTRY, code: failure.code, refused: true });
     case "decision_not_amended":
+    case "amend_not_additive":
       return new PeerHubError({ detail: failure.message, code: failure.code, refused: true });
     case "operation_conflict":
       // kontext says which: the file has edits here, or (a replacement) the entry moved on.

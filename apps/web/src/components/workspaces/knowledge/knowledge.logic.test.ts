@@ -409,7 +409,7 @@ describe("knowledge health", () => {
   });
 
   const at = (
-    kind: "read" | "agent" | "bulk" | "verify",
+    kind: "read" | "agent" | "bulk" | "verify" | "cache",
     more: { passed?: boolean | null; commit?: string | null; by?: string | null } = {},
   ) => ({
     at: "2026-10-25T08:00:00Z",
@@ -432,6 +432,10 @@ describe("knowledge health", () => {
     );
     expect(entryHealth({ checked, verification: at("agent") }, "current")).toBe("stamped");
     expect(entryHealth({ checked, verification: at("bulk") }, "current")).toBe("stamped");
+    // kontext 0.10.0: a date in the file with no ledger line behind it is a look, not a verification.
+    expect(entryHealth({ checked, verification: at("cache", { commit: null }) }, "current")).toBe(
+      "stamped",
+    );
     // Commits on its paths since the verification's commit outrank any verification.
     expect(
       entryHealth(

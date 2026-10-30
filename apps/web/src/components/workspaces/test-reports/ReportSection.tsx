@@ -48,8 +48,9 @@ type Member = { readonly email: string; readonly name: string };
  * and a save made from a report that was replaced meanwhile is refused with the newer one shown.
  */
 export function ReportSection(props: TaskSlotProps) {
-  const project = props.project?.project;
-  if (project === undefined) return null;
+  const state = props.project;
+  const project = state?.project;
+  if (state === undefined || project === undefined) return null;
   return (
     <TaskReports
       environmentId={props.environmentId}
@@ -59,7 +60,7 @@ export function ReportSection(props: TaskSlotProps) {
       members={project.members}
       task={props.task.id}
       taskName={props.task.key ?? props.task.title}
-      tasks={props.project.work.tasks}
+      tasks={state.work.tasks}
     />
   );
 }
@@ -72,6 +73,7 @@ function TaskReports({
   members,
   task,
   taskName,
+  tasks,
 }: Pick<TaskSlotProps, "environmentId" | "status"> & {
   readonly workspace: string;
   readonly project: string;
@@ -260,6 +262,7 @@ function ReportRow({
   busy,
   members,
   name,
+  taskLabel,
   canAssign,
   onReplace,
   onRemove,
@@ -329,6 +332,7 @@ function ItemRow({
   busy,
   members,
   name,
+  taskLabel,
   canAssign,
   onAssign,
 }: {

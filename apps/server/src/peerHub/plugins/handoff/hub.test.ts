@@ -1,3 +1,4 @@
+// @effect-diagnostics preferSchemaOverJson:off - the body the Hub is sent.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -58,11 +59,18 @@ it.effect("uses four narrow routes and keeps known refusals distinct from older 
     }
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
-it.effect.each([2, 1])(
-  "sends the session's run to a Hub at handoff revision %s only if it takes one",
+it.effect.each([3, 2, 1])(
+  "sends the session's run and delivery to a Hub at handoff revision %s only if it takes them",
   (revision) =>
     Effect.gen(function* () {
       const runs = [{ id: "run_A", agent: "claude", runtime: "terminal", state: "ended" }];
+      const delivery = {
+        state: "local" as const,
+        evidence: { branch: "feature/dns" },
+        observedAt: "2026-10-30T10:00:00Z",
+        environment: "laptop",
+        vcs: "git" as const,
+      };
       const hub = yield* standInHub({
         current: (url) =>
           url === "/v1/me"
@@ -80,13 +88,16 @@ it.effect.each([2, 1])(
         environment: "laptop",
         session: "agent",
         run: "run_A",
+        delivery,
       });
       assert.deepStrictEqual(composed.package.runs, runs);
       assert.strictEqual(
         hub.calls.at(-1)?.body,
-        revision >= 2
-          ? '{"environment":"laptop","session":"agent","run":"run_A"}'
-          : '{"environment":"laptop","session":"agent"}',
+        revision >= 3
+          ? JSON.stringify({ environment: "laptop", session: "agent", run: "run_A", delivery })
+          : revision >= 2
+            ? '{"environment":"laptop","session":"agent","run":"run_A"}'
+            : '{"environment":"laptop","session":"agent"}',
       );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );

@@ -1,4 +1,5 @@
 import {
+  type PeerHandoffDelivery,
   PeerHandoffPackage,
   PeerHandoffSummary,
   PeerHubError,
@@ -13,8 +14,27 @@ const S = Schema.String;
 const Runs = Schema.Array(Schema.Struct({ id: S, agent: S, runtime: S, state: S }));
 const Package = Schema.Struct({ ...PeerHandoffPackage.fields, runs: Schema.optional(Runs) });
 type Body =
-  | { environment: string; session: string; run?: string | undefined }
+  | {
+      environment: string;
+      session: string;
+      run?: string | undefined;
+      delivery?: PeerHandoffDelivery | undefined;
+    }
   | Record<string, never>;
+/**
+ * What a Hub of this `handoff` revision takes: one before 2 refuses a package that names a run
+ * (400), one before 3 a delivery.
+ */
+export function bodyFor(body: Body, handoff: number): Body {
+  if (!("session" in body)) return body;
+  const { run, delivery, environment, session } = body;
+  return {
+    environment,
+    session,
+    ...(run === undefined || handoff < 2 ? {} : { run }),
+    ...(delivery === undefined || handoff < 3 ? {} : { delivery }),
+  };
+}
 export function hubCalls(c: PeerHubClient.PeerHubClient["Service"]) {
   const path = (p: PeerHandoffPlace) =>
     `/handoffs/${encodeURIComponent(p.projectId)}/${encodeURIComponent(p.taskId)}`;
@@ -25,15 +45,16 @@ export function hubCalls(c: PeerHubClient.PeerHubClient["Service"]) {
   const supported = <A>(effect: Effect.Effect<A | null, PeerHubError>) =>
     effect.pipe(Effect.flatMap((a) => (a === null ? Effect.fail(refusal) : Effect.succeed(a))));
   return {
+    /** Whether the Hub keeps a handoff's delivery (`handoff` 3, as its catalog says). */
+    keepsDelivery: Effect.map(c.features, ({ handoff = 0 }) => handoff >= 3),
     compose: (p: PeerHandoffPlace, body: Body) =>
-      // A Hub before revision 2 of handoff refuses a package that names a run (400).
       Effect.flatMap(c.features, ({ handoff = 0 }) =>
         supported(
           c.request(Schema.Struct({ package: Package, changed: Schema.Boolean }), {
             workspace: p.workspace,
             path: path(p),
             method: "POST",
-            body: handoff >= 2 || !("run" in body) ? body : { ...body, run: undefined },
+            body: bodyFor(body, handoff),
             timeoutMs: 4000,
             unsupported,
           }),

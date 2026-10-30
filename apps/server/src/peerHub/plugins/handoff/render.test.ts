@@ -10,7 +10,10 @@ import {
   earlierCopyNotice,
   reportLine,
   replyLines,
+  deliveryLine,
+  policyLine,
   START,
+  START_LINE,
   END,
 } from "./render.ts";
 const p = Schema.decodeUnknownSync(PeerHandoffPackage)(fixture);
@@ -200,5 +203,106 @@ describe("the test report in a package", () => {
     expect(b.split(END)).toHaveLength(2);
     expect(b).not.toContain("@octocat");
     expect(agentText([hostile], 7).split("</shared-context>")).toHaveLength(2);
+  });
+});
+describe("delivery and policy", () => {
+  const base = { observedAt: "2026-10-30T10:00:00Z", environment: "env-ana" };
+  it("says each delivery state with the way to deliver when it is not shared", () => {
+    expect(
+      deliveryLine({
+        ...base,
+        vcs: "git",
+        state: "none",
+        evidence: { untracked: ["a.ts", "b.ts"], uncommitted: ["c.ts"], branch: "x" },
+      }),
+    ).toBe(
+      "Delivered: none · 2 files untracked, 1 file uncommitted (a.ts, b.ts, c.ts); commit and push, then run peer review again.",
+    );
+    expect(
+      deliveryLine({ ...base, vcs: "jj", state: "none", evidence: { untracked: ["a.ts"] } }),
+    ).toContain("jj describe (or jj new) and jj git push");
+    expect(
+      deliveryLine({ ...base, vcs: "git", state: "local", evidence: { branch: "feature/x" } }),
+    ).toBe("Delivered: local · feature/x not pushed; git push -u, then run peer review again.");
+    expect(
+      deliveryLine({
+        ...base,
+        vcs: "git",
+        state: "shared",
+        evidence: { branch: "feature/x", pullRequests: ["https://github.com/a/b/pull/12"] },
+      }),
+    ).toBe("Delivered: shared · feature/x, PR #12.");
+    expect(
+      deliveryLine({
+        ...base,
+        vcs: "jj",
+        state: "shared",
+        evidence: { changes: ["kkkkkkkkzzzz"], bookmarks: ["contract"] },
+      }),
+    ).toBe("Delivered: shared · contract.");
+    expect(
+      deliveryLine({
+        ...base,
+        vcs: "git",
+        state: "landed",
+        evidence: { pullRequests: ["https://github.com/a/b/pull/12"] },
+      }),
+    ).toBe("Delivered: landed · PR #12 merged.");
+    expect(deliveryLine(undefined)).toBeNull();
+  });
+  it("says what the policy made of it", () => {
+    expect(policyLine({ mode: "auto", version: 3, signals: [], accepted: true })).toBe(
+      "Accepted by policy v3.",
+    );
+    expect(
+      policyLine({
+        mode: "auto",
+        version: 3,
+        signals: ["not-delivered", "unowned"],
+        accepted: false,
+      }),
+    ).toBe("Waits for a person's review: not-delivered, unowned.");
+    expect(policyLine({ mode: "ask", version: 0, signals: [], accepted: false })).toContain(
+      "every handoff",
+    );
+    expect(policyLine(undefined)).toBeNull();
+  });
+  it("puts both in the reply after the package line, and in peer handoff's text", () => {
+    const delivery = {
+      ...base,
+      vcs: "git" as const,
+      state: "shared" as const,
+      evidence: { branch: "feature/x" },
+    };
+    const policy = { mode: "auto" as const, version: 2, signals: [], accepted: true };
+    const lines = replyLines(
+      {
+        workspace: "acme",
+        project: "pay",
+        task: "t",
+        number: 4,
+        contextVersion: null,
+        changed: true,
+        stored: true,
+        targets: [],
+        notices: ["Kept in Peer only."],
+      },
+      { delivery, policy },
+    );
+    expect(lines).toEqual([
+      "Handoff package #4 stored.",
+      "Delivered: shared · feature/x.",
+      "Accepted by policy v2.",
+      "Kept in Peer only.",
+    ]);
+    const text = agentText([{ ...p, delivery, policy }], p.context?.version ?? null);
+    expect(text).toContain(
+      "Delivered: shared · feature/x. Observed by Peer on env-ana at 2026-10-30T10:00:00Z.",
+    );
+    expect(text).toContain("Accepted by policy v2.");
+    expect(agentText([p], p.context?.version ?? null)).toContain("Delivered: not observed.");
+  });
+  it("keeps the start line within the hook's 300 characters", () => {
+    expect(START_LINE.length).toBeLessThanOrEqual(300);
   });
 });

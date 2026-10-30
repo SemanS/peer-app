@@ -56,3 +56,48 @@ it("runs post-review steps after commitment in order, bounds the budget and pres
     await fixture.dispose();
   }
 });
+it("carries the plugins' review facts in the move to review, never in done, and survives a failing one", async () => {
+  const moves: Array<{ status: string; facts: unknown }> = [];
+  const delivery = {
+    state: "shared" as const,
+    evidence: { branch: "feature/x" },
+    observedAt: "2026-10-30T10:00:00Z",
+    environment: "env",
+    vcs: "git" as const,
+  };
+  const fixture = await brokerFixture(() => ({
+    taskOf: () => "work",
+    finishTask: async (_w, _p, _t, _s, status, _op, facts) => {
+      moves.push({ status, facts });
+    },
+    plugins: async () => ({
+      ...NO_PLUGINS,
+      active: [
+        {
+          id: "handoff",
+          title: "Handoff",
+          contributions: {
+            reviewFacts: ({ remainingMs }) =>
+              Effect.sync(() => {
+                expect(remainingMs).toBeLessThanOrEqual(3000);
+                return { delivery };
+              }),
+          },
+        },
+        { id: "ask", title: "broken", contributions: { reviewFacts: () => Effect.die("broken") } },
+      ],
+    }),
+  }));
+  try {
+    await fixture.register("test");
+    const headers = { "x-peer-session": "claude:test" };
+    await fixture.broker["runCli"]("review", [], headers);
+    await fixture.broker["runCli"]("done", [], headers);
+    expect(moves).toEqual([
+      { status: "review", facts: { delivery } },
+      { status: "done", facts: {} },
+    ]);
+  } finally {
+    await fixture.dispose();
+  }
+});

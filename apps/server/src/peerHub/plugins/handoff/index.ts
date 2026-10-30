@@ -6,6 +6,7 @@ import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import { HandoffService, layer } from "./service.ts";
 import { handoffCommand } from "./cli.ts";
+import { START_LINE } from "./render.ts";
 export const HandoffPlugin = bindPlugin({
   id: "handoff",
   title: "Handoff for review",
@@ -21,6 +22,8 @@ export const HandoffPlugin = bindPlugin({
       state = yield* PeerState.PeerState;
     return {
       commands: [handoffCommand(work, agents, service)],
+      hooks: { startLine: Effect.succeed(START_LINE) },
+      reviewFacts: ({ session, remainingMs }) => service.reviewFacts(session, remainingMs),
       afterReview: ({ session, remainingMs }) => service.afterReview(session, remainingMs),
       status: { read: service.snapshot },
       hubChanges: {

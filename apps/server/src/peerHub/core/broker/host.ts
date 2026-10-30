@@ -41,6 +41,7 @@ import type {
   PeerCommand,
   PeerContributions,
   PeerIndexSource,
+  PeerReviewFacts,
   PeerRuntimeProvider,
 } from "../plugin.ts";
 import type { ActivePlugin, ExcludedCommand } from "../plugins/PeerPlugins.ts";
@@ -390,6 +391,7 @@ export interface PeerBrokerHost {
     session: string,
     status: "review" | "done",
     op: string,
+    facts?: PeerReviewFacts,
   ) => Promise<unknown>;
 
   /** What people see changed. */

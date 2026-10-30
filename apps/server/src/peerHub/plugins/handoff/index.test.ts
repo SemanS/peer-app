@@ -71,7 +71,9 @@ describe("handoff plugin lifecycle", () => {
       assert.isTrue(yield* plugins.isActive("handoff"));
       const contribution = (yield* plugins.built)[0]!.contributions;
       assert.strictEqual(contribution.commands?.[0]?.name, "handoff");
-      assert.isUndefined(contribution.hooks);
+      // A start line and no hook that could wake or hold an agent.
+      assert.deepStrictEqual(Object.keys(contribution.hooks ?? {}), ["startLine"]);
+      assert.isDefined(contribution.reviewFacts);
       assert.isDefined(contribution.afterReview);
       assert.deepStrictEqual(yield* contribution.status!.read, {
         target: "comment",

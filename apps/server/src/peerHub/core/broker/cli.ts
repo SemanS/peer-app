@@ -53,6 +53,7 @@ import {
 } from "./tasks.ts";
 import { SHARE_FLAGS, shareCommand, UNSHARED } from "./share.ts";
 import { helpText } from "./help.ts";
+import { reviewFacts } from "./handoffGuard.ts";
 import { checkpointInputs, inputCommand } from "./inputCheckpoints.ts";
 
 /** How long the `peer` shim waits for Peer's answer to a command that says nothing else. */
@@ -613,6 +614,8 @@ export async function runCli(
           if (unsettled !== null) throw refused(unsettled.reason, unsettled.next);
         }
       }
+      const facts =
+        command === "review" ? await reviewFacts.call(this, session, plugins, commandStarted) : {};
       let moved: Awaited<ReturnType<NonNullable<typeof this.host.finishTask>>>;
       try {
         moved = await this.host.finishTask!(
@@ -622,6 +625,7 @@ export async function runCli(
           session.id,
           command,
           newOp(),
+          facts,
         );
       } catch (error) {
         const code =

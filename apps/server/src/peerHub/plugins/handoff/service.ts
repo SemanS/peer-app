@@ -6,8 +6,10 @@ import {
   type PeerHandoffOutcome,
   type PeerHandoffSetTarget,
   type PeerHandoffPackage,
+  type PeerHandoffDelivery,
   type PeerWorkThread,
 } from "@t3tools/contracts";
+import * as DateTime from "effect/DateTime";
 import * as Fiber from "effect/Fiber";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -22,7 +24,7 @@ import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
-import type { PeerSessionView } from "../../core/plugin.ts";
+import type { PeerReviewFacts, PeerSessionView } from "../../core/plugin.ts";
 import { gitHubRepository } from "../../workLifecycle.ts";
 import { hubCalls } from "./hub.ts";
 import * as Gh from "./client/ghWrite.ts";
@@ -35,6 +37,7 @@ import {
   replyLines,
 } from "./render.ts";
 import { targetsOf, pullRequest } from "./targets.ts";
+import { observeDelivery } from "./client/delivery.ts";
 const Settings = Schema.Struct({
   target: PeerHandoffTarget,
   projectTargets: Schema.Record(Schema.String, PeerHandoffTarget),
@@ -71,6 +74,15 @@ export class HandoffService extends Context.Service<
       p: PeerHandoffPlace,
     ) => Effect.Effect<ReadonlyArray<PeerHandoffPackage>, PeerHubError>;
     readonly handOff: (p: PeerHandoffPlace) => Effect.Effect<PeerHandoffOutcome, PeerHubError>;
+    /**
+     * The delivery of the session's reported files as Peer sees it now, for the agent's move to
+     * review; nothing on a Hub that keeps none (`handoff` before 3). The package composed after the
+     * move carries the same observation.
+     */
+    readonly reviewFacts: (
+      session: PeerSessionView,
+      remainingMs: number,
+    ) => Effect.Effect<PeerReviewFacts>;
     readonly afterReview: (
       session: PeerSessionView,
       remainingMs: number,
@@ -266,6 +278,43 @@ export const make = Effect.gen(function* () {
       }
       return fresh;
     });
+  /** What the session's move to review observed of its delivery, for the composition after it. */
+  const observed = (session: PeerSessionView) =>
+    session.local("handoff", () => ({ delivery: undefined as PeerHandoffDelivery | undefined }));
+  const reviewFacts = (session: PeerSessionView, remainingMs: number) =>
+    Effect.gen(function* () {
+      const kept = observed(session);
+      kept.delivery = undefined;
+      if (!session.task || !(yield* hub.keepsDelivery)) return {};
+      const start = yield* Clock.currentTimeMillis;
+      const p = { workspace: session.workspace, projectId: session.project, taskId: session.task };
+      const { threads } = yield* owned(p);
+      // GitHub's records of the task's threads, and the lookup by branch when the GitHub plugin
+      // is on; a lookup that is slow leaves the records.
+      const known = (yield* plugins.isActive("github"))
+        ? yield* discover(p, threads, session, true).pipe(
+            Effect.timeout(`${Math.max(1, Math.min(2000, remainingMs - 1000))} millis`),
+            Effect.orElseSucceed(() => threads),
+          )
+        : threads;
+      const delivery = yield* Effect.promise(() =>
+        observeDelivery({
+          cwd: session.root || session.cwd,
+          files: session.files,
+          environment: String(state.environmentId),
+          observedAt: DateTime.formatIso(DateTime.makeUnsafe(start)),
+          pullRequests: known.flatMap((t) => t.pullRequests ?? []),
+        }),
+      );
+      yield* agents.log("handoff.delivery", {
+        task: session.task,
+        state: delivery?.state ?? "not-observed",
+        ms: (yield* Clock.currentTimeMillis) - start,
+      });
+      if (delivery === null) return {};
+      kept.delivery = delivery;
+      return { delivery };
+    }).pipe(Effect.orElseSucceed((): PeerReviewFacts => ({})));
   const publish = (p: PeerHandoffPlace, session: PeerSessionView | undefined, budget = 10000) =>
     Effect.gen(function* () {
       const start = yield* Clock.currentTimeMillis;
@@ -275,7 +324,12 @@ export const make = Effect.gen(function* () {
         .compose(
           p,
           session
-            ? { environment: String(state.environmentId), session: session.id, run: session.run }
+            ? {
+                environment: String(state.environmentId),
+                session: session.id,
+                run: session.run,
+                delivery: observed(session).delivery,
+              }
             : {},
         )
         .pipe(Effect.timeout(`${Math.min(4000, budget)} millis`), Effect.result);
@@ -284,7 +338,7 @@ export const make = Effect.gen(function* () {
           "Hub unavailable or task/session no longer eligible. Run peer review again.",
         );
         yield* remember(p, o);
-        return o;
+        return { o, delivery: session ? observed(session).delivery : undefined };
       }
       const pack = composed.success.package;
       o.stored = true;
@@ -301,6 +355,8 @@ export const make = Effect.gen(function* () {
         contextVersion: o.contextVersion,
         pullRequests: pack.pullRequests.length,
         source: pack.source,
+        ...(pack.delivery === undefined ? {} : { delivery: pack.delivery }),
+        ...(pack.policy === undefined ? {} : { policy: pack.policy }),
       };
       summaries.set(`${key(p)}/${pack.author}`, summary);
       yield* agents.log("handoff.compose", {
@@ -447,11 +503,16 @@ export const make = Effect.gen(function* () {
         ms: (yield* Clock.currentTimeMillis) - start,
         budgetLeft: Math.max(0, budget - ((yield* Clock.currentTimeMillis) - start)),
       });
-      return o;
+      return {
+        o,
+        delivery: pack.delivery ?? (session ? observed(session).delivery : undefined),
+        policy: pack.policy,
+      };
     });
   return HandoffService.of({
     snapshot,
     refresh,
+    reviewFacts,
     read: hub.read,
     reset: Effect.sync(() => {
       summaries.clear();
@@ -505,7 +566,7 @@ export const make = Effect.gen(function* () {
               failure("Only an unfinished task with one of your threads can be handed off."),
             );
           if (task.status === "open") yield* work.updateTask({ ...p, status: "review" });
-          return yield* publish(p, undefined);
+          return (yield* publish(p, undefined)).o;
         }),
       ),
     afterReview: (session, remainingMs) =>
@@ -518,7 +579,7 @@ export const make = Effect.gen(function* () {
               Math.min(10000, remainingMs),
             ),
           ).pipe(
-            Effect.map(replyLines),
+            Effect.map(({ o, ...facts }) => replyLines(o, facts)),
             Effect.timeout(`${remainingMs} millis`),
             Effect.orElseSucceed(() => ["Handoff package not finished. Run peer review again."]),
           )

@@ -532,13 +532,14 @@ const make = Effect.gen(function* () {
       withHub((hubUrl, session) =>
         hubApi.contextVersion(hubUrl, session, workspace, project, scope, version),
       ),
-    finishTask: (workspace, project, task, agentSession, taskStatus, op) =>
+    finishTask: (workspace, project, task, agentSession, taskStatus, op, facts) =>
       withHub((hubUrl, session) =>
         hubApi.updateTask(hubUrl, session, workspace, project, task, {
           status: taskStatus,
           session: agentSession,
           environment: environmentId,
           op,
+          ...(facts?.delivery === undefined ? {} : { delivery: facts.delivery }),
         }),
       ).then((answer) => {
         // The Hub did not move a task that waits for an owner's call or on live runs: nothing to read.

@@ -1,5 +1,10 @@
+// @effect-diagnostics globalDate:off - the peer command's budget in wall-clock time, as cli.ts counts it.
 /* oxlint-disable oxc/no-this-in-exported-function -- Bound by CoordinationBroker, whose methods pass their broker as `this`. */
+import * as Effect from "effect/Effect";
+
+import type { PeerReviewFacts } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";
+import type { PeerBrokerPlugins } from "./host.ts";
 import type { LocalSession } from "./sessions.ts";
 import { INTENT_DEADLINE_MS } from "../coordination/overlaps.ts";
 import { TIMED_OUT, within } from "./sync.ts";
@@ -67,4 +72,36 @@ export async function handoffRefusal(
       next: "check peer inputs status and retry when the context authority is reachable.",
     };
   }
+}
+
+/**
+ * What the active plugins observe for an agent's move to review (`reviewFacts`), each within what
+ * is left of 3 of the command's first 10 seconds; one that misses it or fails adds nothing.
+ */
+export async function reviewFacts(
+  this: CoordinationBroker,
+  session: LocalSession,
+  plugins: PeerBrokerPlugins,
+  started: number,
+): Promise<PeerReviewFacts> {
+  const facts: PeerReviewFacts = {};
+  for (const plugin of plugins.active) {
+    const observe = plugin.contributions.reviewFacts;
+    if (!observe) continue;
+    const remainingMs = Math.max(0, Math.min(3000, 10000 - (Date.now() - started)));
+    const seen = await this.host.run(
+      observe({ session: this.sessionView(session), remainingMs }).pipe(
+        Effect.timeout(`${Math.max(1, remainingMs)} millis`),
+        Effect.catchCause(() =>
+          Effect.sync((): PeerReviewFacts => {
+            this.record("plugin.failed", { plugin: plugin.id, at: "reviewFacts" });
+            return {};
+          }),
+        ),
+      ),
+      { signal: this.stopping.signal },
+    );
+    Object.assign(facts, seen);
+  }
+  return facts;
 }

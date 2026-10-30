@@ -1,4 +1,8 @@
-// @effect-diagnostics preferSchemaOverJson:off - fake Hub and gh wire fixtures.
+// @effect-diagnostics preferSchemaOverJson:off nodeBuiltinImport:off - fake Hub and gh wire fixtures, a git checkout.
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Context from "effect/Context";
@@ -10,8 +14,10 @@ import * as TestClock from "effect/testing/TestClock";
 import * as Schema from "effect/Schema";
 import { PeerHandoffPackage, type PeerTask, type PeerWorkThread } from "@t3tools/contracts";
 import fixture from "../../../../../../packages/contracts/src/peer/handoff.fixture.json" with { type: "json" };
+import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import {
   coreLayer,
+  meAnswer,
   paymentsSeed,
   seedState,
   standInHub,
@@ -27,6 +33,7 @@ import { brokerFixture } from "../../core/broker/testkit.ts";
 import { NO_PLUGINS } from "../../core/broker/host.ts";
 import { adapter, GhError, GhWrite, type Run } from "./client/ghWrite.ts";
 import { replyLines } from "./render.ts";
+import type { PeerSessionView } from "../../core/plugin.ts";
 const pack = {
   ...Schema.decodeUnknownSync(PeerHandoffPackage)(fixture),
   project: "pay",
@@ -66,7 +73,7 @@ const coordination = {
   contexts: [],
   candidates: [],
 };
-const setup = (run: Run, prs = 1) =>
+const setup = (run: Run, prs = 1, features?: Readonly<Record<string, number>>) =>
   Effect.gen(function* () {
     let broken = false,
       present = false,
@@ -79,10 +86,18 @@ const setup = (run: Run, prs = 1) =>
     const hub = yield* standInHub({
       current: () => {
         const request = calls.at(-1)!;
+        if (request.url === "/v1/me") return [200, meAnswer(features)];
         if (broken) return [503, { error: { code: "unavailable", message: "down" } }];
         if (request.method === "POST") {
           present = true;
-          const value = { package: shared, changed };
+          const sent = JSON.parse(request.body || "{}") as { delivery?: unknown };
+          const value = {
+            package: {
+              ...shared,
+              ...(sent.delivery === undefined ? {} : { delivery: sent.delivery }),
+            },
+            changed,
+          };
           changed = false;
           return [200, value];
         }
@@ -151,6 +166,14 @@ const setup = (run: Run, prs = 1) =>
       Effect.provide(Context.add(c, GhWrite, adapter(run))),
     );
     return {
+      me: PeerHubClient.PeerHubClient.pipe(
+        Effect.flatMap((client) => client.me),
+        Effect.provide(core),
+      ),
+      setPackage: (next: typeof pack) => {
+        shared = next;
+        changed = true;
+      },
       service: Context.get(own, HandoffService),
       advanceContext: () => {
         shared = { ...pack, number: 3, context: { ...pack.context!, version: 8 } };
@@ -544,5 +567,72 @@ describe("review package publication", () => {
       yield* Fiber.join(repeat);
       assert.strictEqual(bodies.size, 7);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+  it.effect.each([3, 2])(
+    "peer review observes the delivery for a Hub at handoff revision %s and says it with the policy",
+    (revision) =>
+      Effect.gen(function* () {
+        const root = NodeFS.realpathSync(
+          NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-hf-")),
+        );
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => NodeFS.rmSync(root, { recursive: true, force: true })),
+        );
+        const git = (...args: Array<string>) =>
+          NodeChildProcess.execFileSync("git", args, { cwd: root, stdio: "pipe" });
+        git("init", "-b", "feature/dns");
+        NodeFS.mkdirSync(NodePath.join(root, "types"));
+        NodeFS.writeFileSync(NodePath.join(root, "types/concurrency.ts"), "export {}\n");
+        const s = yield* setup(
+          (args) => Effect.succeed(args[0] === "repo" ? "PRIVATE" : args[1] === "list" ? "[]" : ""),
+          1,
+          { handoff: revision },
+        );
+        yield* s.me;
+        s.setGithub(false);
+        s.setPackage({
+          ...pack,
+          policy: { mode: "auto", version: 2, signals: ["not-delivered"], accepted: false },
+        });
+        const local = new Map<string, unknown>();
+        const session = {
+          id: "claude:a",
+          workspace: "acme",
+          project: "pay",
+          task: "krk-1",
+          root,
+          cwd: root,
+          files: ["types/concurrency.ts"],
+          local: <S>(plugin: string, init: () => S) => {
+            if (!local.has(plugin)) local.set(plugin, init());
+            return local.get(plugin) as S;
+          },
+        } as unknown as PeerSessionView;
+        const facts = yield* s.service.reviewFacts(session, 3000);
+        const lines = yield* s.service.afterReview(session, 5000);
+        const composed = s.calls.findLast((c) => c.method === "POST")!;
+        if (revision >= 3) {
+          assert.strictEqual(facts.delivery?.state, "none");
+          assert.deepStrictEqual(facts.delivery?.evidence.untracked, ["types/concurrency.ts"]);
+          assert.strictEqual(facts.delivery?.vcs, "git");
+          assert.deepStrictEqual(
+            (JSON.parse(composed.body) as { delivery?: unknown }).delivery,
+            facts.delivery,
+          );
+          assert.include(
+            lines.join("\n"),
+            "Delivered: none · 1 file untracked (types/concurrency.ts); commit and push, then run peer review again.",
+          );
+          assert.isTrue(s.logs.some((l) => l.event === "handoff.delivery"));
+        } else {
+          assert.deepStrictEqual(facts, {});
+          assert.notInclude(composed.body, "delivery");
+          assert.notInclude(lines.join("\n"), "Delivered:");
+        }
+        assert.include(lines.join("\n"), "Waits for a person's review: not-delivered.");
+        const summary = (yield* s.service.snapshot).summaries[0];
+        assert.strictEqual(summary?.policy?.mode, "auto");
+        assert.strictEqual(summary?.delivery?.state, revision >= 3 ? "none" : undefined);
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

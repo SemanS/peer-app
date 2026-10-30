@@ -8,6 +8,7 @@ import {
   PeerOwnershipView,
   PeerTask,
   PeerTaskOwner,
+  type PeerHandoffDelivery,
   type PeerHubCreateTaskInput,
   type PeerHubUpdateTaskInput,
 } from "@t3tools/contracts";
@@ -93,6 +94,8 @@ export const workApi = (
       readonly session?: string;
       readonly environment?: string;
       readonly op?: string;
+      /** An agent's move to review: the delivery its app observed (a Hub with `handoff` 3). */
+      readonly delivery?: PeerHandoffDelivery;
     },
   ) =>
     request(PeerTask, {

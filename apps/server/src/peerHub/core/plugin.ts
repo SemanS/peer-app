@@ -26,6 +26,7 @@ import * as NodeCrypto from "node:crypto";
 import type {
   EnvironmentAuthorizationError,
   PeerAgentView,
+  PeerHandoffDelivery,
   PeerHarness,
   PeerHubError,
   PeerHubStartAgentResult,
@@ -213,6 +214,11 @@ export interface PeerContributions {
     readonly session: PeerSessionView;
     readonly remainingMs: number;
   }) => Effect.Effect<{ readonly reason: string; readonly next: string } | null>;
+  /** What an agent's move to review carries (the delivery the Hub's review policy reads). */
+  readonly reviewFacts?: (input: {
+    readonly session: PeerSessionView;
+    readonly remainingMs: number;
+  }) => Effect.Effect<PeerReviewFacts>;
   readonly afterReview?: (input: {
     readonly session: PeerSessionView;
     readonly remainingMs: number;
@@ -299,6 +305,8 @@ export type PeerLifecycleEvent =
   | { readonly kind: "signing-out"; readonly keysAlreadyQueued?: boolean }
   | { readonly kind: "synced"; readonly workspaces: ReadonlyArray<PersistedWorkspace> }
   | { readonly kind: "left-workspace"; readonly workspace: string };
+
+export type PeerReviewFacts = { readonly delivery?: PeerHandoffDelivery };
 
 /** An agent session as plugins see it. */
 export interface PeerSessionView {

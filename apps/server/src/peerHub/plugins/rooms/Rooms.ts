@@ -91,17 +91,15 @@ const make = Effect.gen(function* () {
             : [],
         ),
       );
-      const open = yield* openRuns(state, placeOf(workspace, item));
-      const known: ReadonlyArray<HereRun> = open.map((run) => ({
-        id: run.id,
-        live: live.has(run.id),
-      }));
-      return [
-        ...known,
-        ...[...live]
-          .filter((id) => !known.some((run) => run.id === id))
-          .map((id) => ({ id, live: true })),
-      ];
+      const open = (yield* openRuns(state, placeOf(workspace, item))).map((run) => run.id);
+      // Before the first work report nothing says which thread carries a run.
+      const read = (yield* work.latestPass) !== null;
+      return yield* Effect.forEach([...new Set([...open, ...live])], (id): Effect.Effect<HereRun> =>
+        Effect.map(
+          read ? capacityOf(state, work, workspace, item.project, id) : Effect.succeed(undefined),
+          (capacity) => ({ id, live: live.has(id), capacity }),
+        ),
+      );
     });
 
   const heardOf = (

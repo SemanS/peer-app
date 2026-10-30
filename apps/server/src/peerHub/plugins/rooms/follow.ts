@@ -9,6 +9,7 @@
  */
 import {
   PeerHubError,
+  type PeerRoomCapacity,
   type PeerRoomInboxItem,
   type PeerRoomMessage,
   type PeerRoomTarget,
@@ -25,6 +26,8 @@ export interface HereRun {
   readonly id: string;
   /** A session of it is live on this computer. */
   readonly live: boolean;
+  /** What carries it; undefined until this computer has read its threads since it started. */
+  readonly capacity?: PeerRoomCapacity | undefined;
 }
 
 export type Decision =
@@ -34,9 +37,14 @@ export type Decision =
   | { readonly do: "take-offer"; readonly run: string }
   | { readonly do: "take-continue"; readonly run: string }
   | { readonly do: "take-review" }
-  | { readonly do: "take-start" };
+  | { readonly do: "take-start" }
+  | { readonly do: "fail"; readonly reason: string };
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** A team-reach delivery: nobody's pass let it through, only the run's reach, so only that run may hear it. */
+const isTeamReach = (message: PeerRoomMessage, delivery: PeerRoomTarget, me: string) =>
+  !same(message.author.email, me) && delivery.by === undefined;
 
 /** How the message reaches the agent: words only, the Hub already decided that it may. */
 export function kindOf(message: PeerRoomMessage, delivery: PeerRoomTarget, me: string): HeardKind {
@@ -44,7 +52,11 @@ export function kindOf(message: PeerRoomMessage, delivery: PeerRoomTarget, me: s
   return delivery.by !== undefined && same(delivery.by, me) ? "passed" : "team";
 }
 
-/** D6's order: a live session of the owner's run, a detached run here, else a new session or run. */
+/**
+ * D6's order: a live session of the owner's run, a detached run here, else a new session or run. A
+ * team-reach delivery has one run and nothing else: no other run, and never a start on its owner's
+ * capacity, which only their yes pays for.
+ */
 export function decide(
   message: PeerRoomMessage,
   delivery: PeerRoomTarget,
@@ -52,17 +64,29 @@ export function decide(
   me: string,
 ): Decision {
   const named = delivery.run;
-  const live = runs.find((run) => run.live && run.id === named) ?? runs.find((run) => run.live);
+  const reached = runs.find((run) => run.id === named);
+  const team = isTeamReach(message, delivery, me);
+  if (delivery.state !== "passed" && delivery.state !== "taken") return { do: "nothing" };
+  if (team && delivery.state === "passed" && reached === undefined)
+    return { do: "fail", reason: RUN_ENDED };
+  if (team && reached !== undefined) {
+    if (reached.capacity === undefined) return { do: "nothing" };
+    if (reached.capacity !== "shared") return { do: "fail", reason: RUN_NOW_PERSONAL };
+  }
   if (delivery.state === "taken")
-    return named !== undefined && runs.some((run) => run.live && run.id === named)
+    return reached?.live === true && named !== undefined
       ? { do: "offer", run: named }
       : { do: "nothing" };
-  if (delivery.state !== "passed") return { do: "nothing" };
+  const live = reached?.live === true ? reached : team ? undefined : runs.find((run) => run.live);
   if (live !== undefined) return { do: "take-offer", run: live.id };
-  const detached = runs.find((run) => run.id === named) ?? runs[0];
+  const detached = reached ?? runs[0];
   if (detached !== undefined) return { do: "take-continue", run: detached.id };
   return same(message.author.email, me) ? { do: "take-review" } : { do: "take-start" };
 }
+
+export const RUN_ENDED = "The run this message was for has ended.";
+export const RUN_NOW_PERSONAL =
+  "This run is no longer on the project's shared capacity, so the team cannot reach it directly.";
 
 /** A failed start says this; the Hub keeps it and the room shows it. */
 export const NO_CHECKOUT = "This computer has no checkout of the project.";
@@ -130,6 +154,8 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
     switch (decision.do) {
       case "nothing":
         return;
+      case "fail":
+        return yield* deps.fail(item, decision.reason);
       case "offer":
         yield* deps.queue(item, decision.run, kind);
         return yield* deps.wake;

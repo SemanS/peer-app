@@ -31,11 +31,22 @@ const refusal = (detail: string) => new PeerHubError({ detail, refused: true });
 const isReview = (harness: string): harness is "claude" | "codex" =>
   harness === "claude" || harness === "codex";
 
-/** The harness of a start: the one the message names, else the first the person declared, else Claude Code. */
-const harnessOf = (item: PeerRoomInboxItem, me: string, project: PeerProject) =>
-  item.message.to.find((target) => target.email === me)?.harness ??
-  project.capacity.personalHarnesses.find(isReview) ??
-  "claude";
+/**
+ * The harness of a start: the one its author named when the turn is theirs, else the first the
+ * person declared, else Claude Code. A colleague's message starts a turn on the owner's capacity,
+ * so it does not get to choose which of the owner's subscriptions pays for it.
+ */
+export const harnessOf = (
+  item: PeerRoomInboxItem,
+  me: string,
+  project: Pick<PeerProject, "capacity">,
+) => {
+  const mine = (email: string) => email.toLowerCase() === me.toLowerCase();
+  const named = mine(item.message.author.email)
+    ? item.message.to.find((target) => target.kind === "agent" && mine(target.email))?.harness
+    : undefined;
+  return named ?? project.capacity.personalHarnesses.find(isReview) ?? "claude";
+};
 
 /** The repository of the project this computer has a checkout of, first in the project's order. */
 export const checkoutOf = (

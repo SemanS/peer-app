@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
 import { TEST_ENVIRONMENT, type HubCall } from "../../core/testkit.ts";
-import { runCapacity } from "./client/start.ts";
+import { harnessOf, runCapacity } from "./client/start.ts";
 import {
   ACME,
   BOB,
@@ -174,6 +174,26 @@ describe("what a person does in a room", () => {
     assert.strictEqual(runCapacity(undefined, ["a"], threads), "personal");
     assert.strictEqual(runCapacity({ runtime: "herdr" }, ["a"], threads), "personal");
     assert.strictEqual(runCapacity({ ...run, thread: "peer:gone" }, ["a"], threads), "personal");
+  });
+});
+
+describe("which agent a start uses", () => {
+  const project = { capacity: { personal: "any", personalHarnesses: ["codex"] } } as never;
+  const itemBy = (author: string) => ({
+    project: "app",
+    task: "vl-7",
+    message: messageOf({
+      author: { email: author },
+      to: [{ kind: "agent", email: BOB, state: "passed", harness: "claude" }],
+    }),
+  });
+
+  it("is the one a person names for their own turn", () => {
+    assert.strictEqual(harnessOf(itemBy(BOB), BOB, project), "claude");
+  });
+
+  it("is the owner's own, whatever a colleague's message names", () => {
+    assert.strictEqual(harnessOf(itemBy(EVA), BOB, project), "codex");
   });
 });
 

@@ -3,7 +3,16 @@ import { PeerHubError, type PeerRoomInboxItem, type PeerRoomTarget } from "@t3to
 import * as Effect from "effect/Effect";
 
 import { BOB, EVA, messageOf } from "./fixtures.test.ts";
-import { act, decide, kindOf, NO_CHECKOUT, type FollowDeps, type HereRun } from "./follow.ts";
+import {
+  act,
+  decide,
+  kindOf,
+  NO_CHECKOUT,
+  RUN_ENDED,
+  RUN_NOW_PERSONAL,
+  type FollowDeps,
+  type HereRun,
+} from "./follow.ts";
 
 const delivery = (state: string, over: Partial<PeerRoomTarget> = {}): PeerRoomTarget => ({
   kind: "agent",
@@ -28,7 +37,7 @@ describe("decide", () => {
   });
 
   it("prefers the run the delivery names", () => {
-    const other: HereRun = { id: "run_3", live: true };
+    const other: HereRun = { id: "run_3", live: true, capacity: "shared" };
     const target = delivery("passed", { run: "run_3" });
     assert.deepStrictEqual(decide(passed(target), target, [live, other], BOB), {
       do: "take-offer",
@@ -50,13 +59,12 @@ describe("decide", () => {
   });
 
   it("starts a working run for a passed-on message with no usable run", () => {
-    assert.deepStrictEqual(decide(passed(delivery("passed")), delivery("passed"), [], BOB), {
-      do: "take-start",
-    });
+    const target = delivery("passed", { by: BOB });
+    assert.deepStrictEqual(decide(passed(target), target, [], BOB), { do: "take-start" });
   });
 
   it("after a crash, offers a taken delivery again to a live session of its run", () => {
-    const target = delivery("taken", { run: "run_1" });
+    const target = delivery("taken", { run: "run_1", by: BOB });
     assert.deepStrictEqual(decide(passed(target), target, [live], BOB), {
       do: "offer",
       run: "run_1",
@@ -71,6 +79,53 @@ describe("decide", () => {
   it("after a crash, starts nothing for a taken delivery that recorded no run", () => {
     assert.deepStrictEqual(decide(passed(delivery("taken")), delivery("taken"), [live], BOB), {
       do: "nothing",
+    });
+  });
+
+  describe("for a team-reach delivery", () => {
+    const shared: HereRun = { id: "run_1", live: true, capacity: "shared" };
+    const target = delivery("passed", { run: "run_1" });
+
+    it("offers it to its live run", () => {
+      assert.deepStrictEqual(decide(passed(target), target, [shared], BOB), {
+        do: "take-offer",
+        run: "run_1",
+      });
+    });
+
+    it("continues its run when that is detached", () => {
+      assert.deepStrictEqual(decide(passed(target), target, [{ ...shared, live: false }], BOB), {
+        do: "take-continue",
+        run: "run_1",
+      });
+    });
+
+    it("never gives it to another run, and never starts one on the owner's capacity", () => {
+      const other: HereRun = { id: "run_2", live: true, capacity: "shared" };
+      const fail = { do: "fail", reason: RUN_ENDED };
+      assert.deepStrictEqual(decide(passed(target), target, [other], BOB), fail);
+      assert.deepStrictEqual(decide(passed(target), target, [], BOB), fail);
+    });
+
+    it("fails with its own reason when the run is personal now", () => {
+      for (const state of ["passed", "taken"]) {
+        const now = delivery(state, { run: "run_1" });
+        assert.deepStrictEqual(
+          decide(passed(now), now, [{ ...shared, capacity: "personal" }], BOB),
+          { do: "fail", reason: RUN_NOW_PERSONAL },
+        );
+      }
+    });
+
+    it("waits while this computer cannot tell what carries the run", () => {
+      const { capacity: _unknown, ...unread } = shared;
+      assert.deepStrictEqual(decide(passed(target), target, [unread], BOB), { do: "nothing" });
+    });
+
+    it("reads an own delivery as own, though it has no `by` either", () => {
+      assert.deepStrictEqual(decide(own(delivery("passed")), delivery("passed"), [], BOB), {
+        do: "take-review",
+      });
     });
   });
 
@@ -159,6 +214,14 @@ describe("act", () => {
       const { deps, log } = depsOf();
       yield* act(deps, itemOf(own(delivery("passed"))));
       assert.deepStrictEqual(log, ["take -", "review", "record run_9", "heard run_9"]);
+    }),
+  );
+
+  it.effect("fails a team delivery whose run ended, and takes nothing", () =>
+    Effect.gen(function* () {
+      const { deps, log } = depsOf();
+      yield* act(deps, itemOf(passed(delivery("passed", { run: "run_gone" }))));
+      assert.deepStrictEqual(log, [`fail ${RUN_ENDED}`]);
     }),
   );
 

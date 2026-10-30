@@ -32,6 +32,12 @@ export const PEER_ROOM_DELIVERY_STATES = [
 ] as const;
 export type PeerRoomDeliveryState = (typeof PEER_ROOM_DELIVERY_STATES)[number];
 
+/**
+ * How long a `taken` delivery stands before Peer calls its session gone, and before its owner may
+ * try a start with no run again; the Hub refuses that sooner with `409 still_starting`.
+ */
+export const PEER_ROOM_START_GRACE_MS = 120_000;
+
 /** The moves a person's client or a Peer makes on a delivery. */
 export const PEER_ROOM_MOVES = ["pass", "decline", "take", "fail", "heard"] as const;
 export type PeerRoomMove = (typeof PEER_ROOM_MOVES)[number];

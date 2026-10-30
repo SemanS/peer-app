@@ -17,8 +17,10 @@ import {
   ROOM,
   roomPeer,
   roomsWhen,
+  sessionOf,
 } from "./fixtures.test.ts";
 import { RoomsPlugin } from "./index.ts";
+import { jobsAfterLeaving } from "./Rooms.ts";
 
 const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.scoped, Effect.provide(NodeServices.layer));
@@ -36,6 +38,12 @@ const rpc = (peer: Peer, method: string, input: unknown) =>
       stream: (_, stream) => stream as never,
     }) as Record<string, (input: unknown) => Effect.Effect<unknown, { readonly detail: string }>>;
     return yield* handlers[method]!(input);
+  });
+
+/** Waits on what the plugin's own fiber does; each turn hands it the runtime. */
+const waitFor = (done: () => boolean) =>
+  Effect.gen(function* () {
+    while (!done()) yield* Effect.promise(() => new Promise((resolve) => setImmediate(resolve)));
   });
 
 const bodyOf = (call: HubCall | undefined) => JSON.parse(call?.body ?? "{}") as unknown;
@@ -301,6 +309,82 @@ describe("the status", () => {
         );
         const rooms = yield* roomsWhen(peer.status, (next) => next !== undefined);
         assert.deepStrictEqual(rooms, { waiting: [], mentions: [], seqs: {}, revs: {} });
+      }),
+    ),
+  );
+});
+
+describe("leaving a workspace", () => {
+  it("clears that workspace's jobs and no other's", () => {
+    const heard = (workspace: string) => ({
+      kind: "heard" as const,
+      place: { workspace, project: "app", task: "vl-7" },
+      seq: 1,
+      run: "run_1",
+    });
+    const read = { kind: "read" as const, workspace: "other" };
+    assert.deepStrictEqual(
+      jobsAfterLeaving(
+        [heard("acme"), read, heard("other"), { ...read, workspace: "acme" }],
+        "acme",
+      ),
+      [read, heard("other")],
+    );
+  });
+});
+
+describe("a heard move", () => {
+  it.effect("the Hub did not take is sent again with the next read", () =>
+    run(
+      Effect.gen(function* () {
+        let down = true;
+        const current = roomHubOf({
+          route: (method, url) =>
+            method === "PATCH" && url.includes("/deliveries/")
+              ? down
+                ? [503, { error: { code: "down", message: "Not now." } }]
+                : [200, { message: messageOf() }]
+              : undefined,
+        });
+        const peer = yield* roomPeer(current);
+        const moves = () => callsTo(peer, "PATCH", "/deliveries/").length;
+        const { hooks, hubChanges } = yield* contributionsOf(peer);
+        yield* hooks!.delivery!({
+          session: sessionOf(),
+          refs: ["vl-7:12"],
+          state: "modelInput",
+        } as never);
+        yield* waitFor(() => moves() > 0);
+        const first = moves();
+        down = false;
+        yield* hubChanges!.onPing({
+          workspace: "acme",
+          change: "rooms",
+          origin: null,
+          data: { project: "app", task: "vl-7", seq: 12 },
+        } as never);
+        yield* waitFor(() => moves() > first);
+        assert.deepInclude(bodyOf(callsTo(peer, "PATCH", "/deliveries/").at(-1)) as object, {
+          move: "heard",
+          run: "run_1",
+        });
+      }),
+    ),
+  );
+});
+
+describe("marking a room seen", () => {
+  it.effect("reads the inbox again, so a mention leaves Needs you", () =>
+    run(
+      Effect.gen(function* () {
+        const need = { project: "app", task: "vl-7", message: messageOf({ to: [] }) };
+        const current = roomHubOf();
+        current.inbox = { ...current.inbox, mentions: [need] };
+        const peer = yield* roomPeer(current);
+        yield* roomsWhen(peer.status, (rooms) => rooms?.mentions.length === 1);
+        current.inbox = { ...current.inbox, mentions: [] };
+        yield* rpc(peer, "peer.rooms.seen", { ...place, seq: 12 });
+        yield* roomsWhen(peer.status, (rooms) => rooms?.mentions.length === 0);
       }),
     ),
   );

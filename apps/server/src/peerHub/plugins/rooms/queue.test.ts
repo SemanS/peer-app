@@ -30,6 +30,32 @@ const inState = (state: string, seq = 12) =>
   messageOf({ seq, to: [{ kind: "agent", email: BOB, state }] });
 const refs = (list: ReadonlyArray<Heard>) => list.map((one) => one.ref);
 
+describe("what a run was told", () => {
+  it("leaves the queue, is remembered, and still names its run", () => {
+    const queues = runQueues();
+    queues.add("run_1", heard(12));
+    queues.settle("run_1", "vl-7:12");
+    assert.deepStrictEqual(queues.of("run_1"), []);
+    assert.isTrue(queues.wasTold("run_1", "vl-7:12"));
+    assert.strictEqual(queues.runOf("acme", "app", "vl-7:12"), "run_1");
+  });
+
+  it("includes a first prompt, and goes when its delivery leaves the work list", () => {
+    const queues = runQueues();
+    queues.prompted("run_1", heard(12));
+    assert.isTrue(queues.wasTold("run_1", "vl-7:12"));
+    queues.prune("acme", inboxOf([]));
+    assert.isFalse(queues.wasTold("run_1", "vl-7:12"));
+  });
+
+  it("does not count a message taken back out of the queue", () => {
+    const queues = runQueues();
+    queues.add("run_1", heard(12));
+    queues.remove("run_1", "vl-7:12");
+    assert.isFalse(queues.wasTold("run_1", "vl-7:12"));
+  });
+});
+
 describe("the inbox read", () => {
   it("drops a message that left the work list, and keeps what is listed", () => {
     const queues = runQueues();

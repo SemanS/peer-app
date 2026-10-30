@@ -8,12 +8,14 @@
  * @module peerHub/plugins/rooms/follow
  */
 import {
+  PEER_ROOM_START_GRACE_MS,
   PeerHubError,
   type PeerRoomCapacity,
   type PeerRoomInboxItem,
   type PeerRoomMessage,
   type PeerRoomTarget,
 } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
@@ -28,6 +30,10 @@ export interface HereRun {
   readonly live: boolean;
   /** What carries it; undefined until this computer has read its threads since it started. */
   readonly capacity?: PeerRoomCapacity | undefined;
+  /** A session of it is open, though none is live here: it may be back, so nothing starts it. */
+  readonly running?: boolean;
+  /** Its person continues it where it ran (a terminal, an editor); Peer cannot. */
+  readonly staysPut?: boolean;
 }
 
 export type Decision =
@@ -36,6 +42,12 @@ export type Decision =
   | { readonly do: "offer"; readonly run: string }
   | { readonly do: "take-offer"; readonly run: string }
   | { readonly do: "take-continue"; readonly run: string }
+  /** A run that reads as running with no live session: taken and queued for its next session. */
+  | { readonly do: "take-queue"; readonly run: string }
+  /** A taken delivery's run has no live session here yet; `ms` is left of the grace. */
+  | { readonly do: "wait"; readonly ms: number }
+  /** Past the grace: its session is gone. */
+  | { readonly do: "lost"; readonly run: string }
   | { readonly do: "take-review" }
   | { readonly do: "take-start" }
   | { readonly do: "fail"; readonly reason: string };
@@ -62,6 +74,8 @@ export function decide(
   delivery: PeerRoomTarget,
   runs: ReadonlyArray<HereRun>,
   me: string,
+  /** How long it has stood taken under this Peer: since the take, or since Peer started. */
+  stood = 0,
 ): Decision {
   const named = delivery.run;
   const reached = runs.find((run) => run.id === named);
@@ -73,17 +87,24 @@ export function decide(
     if (reached.capacity === undefined) return { do: "nothing" };
     if (reached.capacity !== "shared") return { do: "fail", reason: RUN_NOW_PERSONAL };
   }
-  if (delivery.state === "taken")
-    return reached?.live === true && named !== undefined
-      ? { do: "offer", run: named }
-      : { do: "nothing" };
+  if (delivery.state === "taken") {
+    if (named === undefined) return { do: "nothing" };
+    if (reached?.live === true) return { do: "offer", run: named };
+    return stood >= PEER_ROOM_START_GRACE_MS
+      ? { do: "lost", run: named }
+      : { do: "wait", ms: PEER_ROOM_START_GRACE_MS - Math.max(0, stood) };
+  }
   const live = reached?.live === true ? reached : team ? undefined : runs.find((run) => run.live);
   if (live !== undefined) return { do: "take-offer", run: live.id };
-  const detached = reached ?? runs[0];
-  if (detached !== undefined) return { do: "take-continue", run: detached.id };
-  return same(message.author.email, me) ? { do: "take-review" } : { do: "take-start" };
+  const own = same(message.author.email, me);
+  const kept = reached ?? (own ? runs.find((run) => run.running || !run.staysPut) : runs[0]);
+  if (kept !== undefined)
+    return { do: kept.running === true ? "take-queue" : "take-continue", run: kept.id };
+  return own ? { do: "take-review" } : { do: "take-start" };
 }
 
+export const SESSION_ENDED = "Its session ended before answering.";
+export const NOT_RUNNING = "The agent is no longer running.";
 export const RUN_ENDED = "The run this message was for has ended.";
 export const RUN_NOW_PERSONAL =
   "This run is no longer on the project's shared capacity, so the team cannot reach it directly.";
@@ -91,7 +112,7 @@ export const RUN_NOW_PERSONAL =
 /** A failed start says this; the Hub keeps it and the room shows it. */
 export const NO_CHECKOUT = "This computer has no checkout of the project.";
 
-/** A start that made a run; `typed` is false when its agent runs but its prompt never reached it. */
+/** A start that made a run; `typed` means its prompt was typed, not that a model read it; false when its agent runs but its prompt never reached it. */
 export interface Started {
   readonly run: string;
   readonly typed: boolean;
@@ -108,10 +129,16 @@ export interface FollowDeps {
   readonly fail: (item: PeerRoomInboxItem, reason: string) => Effect.Effect<void>;
   /** Records on a taken delivery the run a start made, which ends "may not have started". */
   readonly record: (item: PeerRoomInboxItem, run: string) => Effect.Effect<void>;
-  /** The run whose queue holds this message here, if any. */
+  /** The run that holds this message here, queued or told, if any. */
   readonly queuedRun: (item: PeerRoomInboxItem) => string | undefined;
-  /** The agent has it in its first prompt. */
-  readonly heard: (item: PeerRoomInboxItem, run: string) => Effect.Effect<void>;
+  /** The run's first prompt carries it, so its sessions are not told it again. */
+  readonly prompted: (item: PeerRoomInboxItem, run: string) => Effect.Effect<void>;
+  /** A session of the run has been told this, as far as this Peer remembers. */
+  readonly told: (item: PeerRoomInboxItem, run: string) => boolean;
+  /** When this Peer started. */
+  readonly startedAt: number;
+  /** Reads the work list again in `ms`: nothing else would, on a quiet room. */
+  readonly later: (ms: number) => Effect.Effect<void>;
   /** Puts the message in the run's queue, for its notice and its next session's start. */
   readonly queue: (item: PeerRoomInboxItem, run: string, kind: HeardKind) => Effect.Effect<void>;
   readonly unqueue: (item: PeerRoomInboxItem, run: string) => Effect.Effect<void>;
@@ -135,7 +162,9 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
     const unrecorded = delivery.run === undefined ? deps.queuedRun(item) : undefined;
     if (delivery.state === "taken" && unrecorded !== undefined)
       return yield* deps.record(item, unrecorded);
-    const decision = decide(item.message, delivery, yield* deps.runsHere(item), deps.me);
+    const since = Math.max(Date.parse(delivery.at ?? "") || 0, deps.startedAt);
+    const stood = (yield* Clock.currentTimeMillis) - since;
+    const decision = decide(item.message, delivery, yield* deps.runsHere(item), deps.me, stood);
     const kind = kindOf(item.message, delivery, deps.me);
     // The agent exists from here on: a failed prompt must not read as a failed start, or Try
     // again would start a second one. It hears the message as any session of the run does.
@@ -145,7 +174,7 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
           onFailure: (error) => deps.fail(item, error.detail),
           onSuccess: ({ run, typed }) =>
             typed
-              ? Effect.andThen(deps.record(item, run), deps.heard(item, run))
+              ? Effect.andThen(deps.prompted(item, run), deps.record(item, run))
               : deps
                   .queue(item, run, kind)
                   .pipe(Effect.andThen(deps.record(item, run)), Effect.andThen(deps.wake)),
@@ -157,8 +186,17 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
       case "fail":
         return yield* deps.fail(item, decision.reason);
       case "offer":
+        if (deps.told(item, decision.run)) return;
         yield* deps.queue(item, decision.run, kind);
         return yield* deps.wake;
+      case "wait":
+        return yield* deps.later(decision.ms);
+      case "lost":
+        yield* deps.unqueue(item, decision.run);
+        return yield* deps.fail(item, deps.told(item, decision.run) ? SESSION_ENDED : NOT_RUNNING);
+      case "take-queue":
+        yield* deps.take(item, decision.run);
+        return yield* deps.queue(item, decision.run, kind);
       case "take-offer":
         yield* deps.take(item, decision.run);
         yield* deps.queue(item, decision.run, kind);
@@ -181,4 +219,16 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
   }).pipe(
     // A take someone else won, or a Hub out of reach: nothing started, the next read looks again.
     Effect.catch((error) => (isHubError(error) ? Effect.void : Effect.fail(error))),
+  );
+
+/** `act` for one of many: a defect in one delivery leaves the others, and the loop, running. */
+export const actOn = (deps: FollowDeps, item: PeerRoomInboxItem) =>
+  act(deps, item).pipe(
+    Effect.catchDefect((defect) =>
+      Effect.logWarning("rooms: a delivery could not be carried", {
+        task: item.task,
+        seq: item.message.seq,
+        defect: String(defect),
+      }),
+    ),
   );

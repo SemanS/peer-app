@@ -1,15 +1,19 @@
 import { assert, describe, it } from "@effect/vitest";
 import { PeerHubError, type PeerRoomInboxItem, type PeerRoomTarget } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as TestClock from "effect/testing/TestClock";
 
 import { BOB, EVA, messageOf } from "./fixtures.test.ts";
 import {
   act,
+  actOn,
   decide,
   kindOf,
   NO_CHECKOUT,
+  NOT_RUNNING,
   RUN_ENDED,
   RUN_NOW_PERSONAL,
+  SESSION_ENDED,
   type FollowDeps,
   type HereRun,
 } from "./follow.ts";
@@ -71,9 +75,37 @@ describe("decide", () => {
     });
   });
 
-  it("after a crash, starts nothing for a taken delivery whose run is not live", () => {
-    const target = delivery("taken", { run: "run_2" });
-    assert.deepStrictEqual(decide(passed(target), target, [detached], BOB), { do: "nothing" });
+  describe("for a taken delivery whose run has no live session", () => {
+    const target = delivery("taken", { run: "run_2", by: BOB });
+
+    it("starts nothing and waits out the grace", () => {
+      assert.deepStrictEqual(decide(passed(target), target, [detached], BOB, 30_000), {
+        do: "wait",
+        ms: 90_000,
+      });
+    });
+
+    it("calls it lost after the grace, and never gives it another run", () => {
+      assert.deepStrictEqual(decide(passed(target), target, [live], BOB, 120_000), {
+        do: "lost",
+        run: "run_2",
+      });
+    });
+  });
+
+  it("reads an open session with none live here as coming back: queued, nothing started", () => {
+    const back: HereRun = { id: "run_4", live: false, running: true };
+    assert.deepStrictEqual(decide(own(delivery("passed")), delivery("passed"), [back], BOB), {
+      do: "take-queue",
+      run: "run_4",
+    });
+  });
+
+  it("gives an own message a review session when its only run cannot continue here", () => {
+    const terminal: HereRun = { id: "run_5", live: false, staysPut: true };
+    assert.deepStrictEqual(decide(own(delivery("passed")), delivery("passed"), [terminal], BOB), {
+      do: "take-review",
+    });
   });
 
   it("after a crash, starts nothing for a taken delivery that recorded no run", () => {
@@ -102,7 +134,7 @@ describe("decide", () => {
 
     it("never gives it to another run, and never starts one on the owner's capacity", () => {
       const other: HereRun = { id: "run_2", live: true, capacity: "shared" };
-      const fail = { do: "fail", reason: RUN_ENDED };
+      const fail = { do: "fail", reason: RUN_ENDED } as const;
       assert.deepStrictEqual(decide(passed(target), target, [other], BOB), fail);
       assert.deepStrictEqual(decide(passed(target), target, [], BOB), fail);
     });
@@ -158,7 +190,10 @@ const depsOf = (over: Partial<FollowDeps> & { readonly runs?: ReadonlyArray<Here
     fail: (_item, reason) => note(`fail ${reason}`),
     record: (_item, run) => note(`record ${run}`),
     queuedRun: () => undefined,
-    heard: (_item, run) => note(`heard ${run}`),
+    prompted: (_item, run) => note(`prompted ${run}`),
+    told: () => false,
+    startedAt: 0,
+    later: (ms) => note(`later ${ms}`),
     queue: (_item, run, kind) => note(`queue ${run} ${kind}`),
     unqueue: (_item, run) => note(`unqueue ${run}`),
     wake: note("wake"),
@@ -209,11 +244,11 @@ describe("act", () => {
     }),
   );
 
-  it.effect("starts a review session, and records its run as heard", () =>
+  it.effect("starts a review session and records its run, but a typed prompt is not heard", () =>
     Effect.gen(function* () {
       const { deps, log } = depsOf();
       yield* act(deps, itemOf(own(delivery("passed"))));
-      assert.deepStrictEqual(log, ["take -", "review", "record run_9", "heard run_9"]);
+      assert.deepStrictEqual(log, ["take -", "review", "prompted run_9", "record run_9"]);
     }),
   );
 
@@ -229,7 +264,7 @@ describe("act", () => {
     Effect.gen(function* () {
       const { deps, log } = depsOf();
       yield* act(deps, itemOf(passed(delivery("passed", { by: BOB }))));
-      assert.deepStrictEqual(log, ["take -", "start", "record run_8", "heard run_8"]);
+      assert.deepStrictEqual(log, ["take -", "start", "prompted run_8", "record run_8"]);
     }),
   );
 
@@ -261,12 +296,88 @@ describe("act", () => {
     }),
   );
 
+  it.effect("does not tell a live session again what it was told", () =>
+    Effect.gen(function* () {
+      const { deps, log } = depsOf({ runs: [live], told: () => true });
+      yield* act(deps, itemOf(passed(delivery("taken", { run: "run_1", by: BOB }))));
+      assert.deepStrictEqual(log, []);
+    }),
+  );
+
+  it.effect("keeps a delivery taken and queued for a run with no live session", () =>
+    Effect.gen(function* () {
+      const { deps, log } = depsOf({ runs: [{ id: "run_4", live: false, running: true }] });
+      yield* act(deps, itemOf(own(delivery("passed"))));
+      assert.deepStrictEqual(log, ["take run_4", "queue run_4 own"]);
+    }),
+  );
+
+  describe("a taken delivery with a run and no live session", () => {
+    const at = "1970-01-01T00:16:40.000Z";
+    const lost = passed(delivery("taken", { run: "run_2", by: BOB, at }));
+    const after = (ms: number) => TestClock.setTime(1_000_000 + ms);
+
+    it.effect("waits the grace from the take, reading again when it ends", () =>
+      Effect.gen(function* () {
+        const { deps, log } = depsOf({ runs: [detached] });
+        yield* after(20_000);
+        yield* act(deps, itemOf(lost));
+        assert.deepStrictEqual(log, ["later 100000"]);
+      }),
+    );
+
+    it.effect("never fails on the first read after a restart, however old the take", () =>
+      Effect.gen(function* () {
+        yield* after(3_600_000);
+        const { deps, log } = depsOf({ runs: [detached], startedAt: 1_000_000 + 3_600_000 });
+        yield* act(deps, itemOf(lost));
+        assert.deepStrictEqual(log, ["later 120000"]);
+      }),
+    );
+
+    it.effect("fails it past the grace: told, its session ended", () =>
+      Effect.gen(function* () {
+        yield* after(120_000);
+        const { deps, log } = depsOf({ runs: [detached], told: () => true });
+        yield* act(deps, itemOf(lost));
+        assert.deepStrictEqual(log, ["unqueue run_2", `fail ${SESSION_ENDED}`]);
+      }),
+    );
+
+    it.effect("fails it past the grace: not told, the agent is gone", () =>
+      Effect.gen(function* () {
+        yield* after(120_000);
+        const { deps, log } = depsOf();
+        yield* act(deps, itemOf(lost));
+        assert.deepStrictEqual(log, ["unqueue run_2", `fail ${NOT_RUNNING}`]);
+      }),
+    );
+  });
+
+  it.effect("carries the other deliveries past one that dies", () =>
+    Effect.gen(function* () {
+      const log: string[] = [];
+      const { deps } = depsOf({
+        runs: [live],
+        take: (item, run) =>
+          item.message.seq === 1
+            ? Effect.die("a bad row")
+            : Effect.sync(() => void log.push(`take ${run}`)),
+      });
+      const items = [1, 2].map((seq) =>
+        itemOf(messageOf({ seq, author: { email: BOB }, to: [delivery("passed")] })),
+      );
+      yield* Effect.forEach(items, (item) => actOn(deps, item), { discard: true });
+      assert.deepStrictEqual(log, ["take run_1"]);
+    }),
+  );
+
   it.effect("never starts twice: a second read sees the delivery taken", () =>
     Effect.gen(function* () {
       const { deps, log } = depsOf();
       yield* act(deps, itemOf(own(delivery("passed"))));
       yield* act(deps, itemOf(own(delivery("taken"))));
-      assert.deepStrictEqual(log, ["take -", "review", "record run_9", "heard run_9"]);
+      assert.deepStrictEqual(log, ["take -", "review", "prompted run_9", "record run_9"]);
     }),
   );
 

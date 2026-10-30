@@ -30,11 +30,17 @@ export const stillTellable = (message: PeerRoomMessage | undefined, me: string) 
 
 export const runQueues = () => {
   const queues = new Map<string, Map<string, Heard>>();
+  /** What a session of a run was told, by run: it must not be told again, and its fate differs. */
+  const told = new Map<string, Map<string, Heard>>();
   const remove = (keep: (heard: Heard) => boolean) => {
-    for (const [run, queue] of queues) {
-      for (const [ref, heard] of queue) if (!keep(heard)) queue.delete(ref);
-      if (queue.size === 0) queues.delete(run);
-    }
+    for (const held of [queues, told])
+      for (const [run, queue] of held) {
+        for (const [ref, heard] of queue) if (!keep(heard)) queue.delete(ref);
+        if (queue.size === 0) held.delete(run);
+      }
+  };
+  const tell = (run: string, heard: Heard) => {
+    told.set(run, (told.get(run) ?? new Map<string, Heard>()).set(heard.ref, heard));
   };
   return {
     add: (run: string, heard: Heard) => {
@@ -43,9 +49,19 @@ export const runQueues = () => {
     remove: (run: string | undefined, ref: string) => {
       if (run !== undefined) queues.get(run)?.delete(ref);
     },
-    /** The run whose queue holds a message, if any. */
+    /** A run's first prompt carried it. */
+    prompted: tell,
+    /** A session has it, or answered it: it leaves the queue and is not told again. */
+    settle: (run: string | undefined, ref: string) => {
+      if (run === undefined) return;
+      const heard = queues.get(run)?.get(ref);
+      if (heard !== undefined) tell(run, heard);
+      queues.get(run)?.delete(ref);
+    },
+    wasTold: (run: string, ref: string) => told.get(run)?.has(ref) === true,
+    /** The run that holds a message here, in its queue or told, if any. */
     runOf: (workspace: string, project: string, ref: string) =>
-      [...queues].find(([, queue]) => {
+      [...queues, ...told].find(([, queue]) => {
         const heard = queue.get(ref);
         return heard?.workspace === workspace && heard.project === project;
       })?.[0],

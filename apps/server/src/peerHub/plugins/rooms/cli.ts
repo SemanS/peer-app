@@ -152,6 +152,7 @@ export const roomCommand = (
       const own = localOf(session);
       if (replyTo !== undefined) rooms.settled(session.run, refOf(session.task ?? "", replyTo));
       own.unanswered.clear();
+      own.remind.clear();
       return `Posted #${message.seq} in the room. Everyone on the project reads it.`;
     });
 

@@ -22,6 +22,7 @@ import {
   type PeerRoomsSetReachInput,
   type PeerRoomsWithdrawInput,
 } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -39,18 +40,28 @@ import { roomDiff } from "./client/diff.ts";
 import { runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
 import { capacityOf, checkoutOf, openRuns, roomStarts } from "./client/start.ts";
-import { act, type FollowDeps, type HereRun } from "./follow.ts";
+import { actOn, type FollowDeps, type HereRun } from "./follow.ts";
 import { roomsHub, type Place, type PostBody } from "./client/hub.ts";
 import { refOf, type Heard, type HeardKind } from "./text.ts";
 
-type Job =
-  | { readonly kind: "read"; readonly workspace: string }
-  | {
-      readonly kind: "heard";
-      readonly place: Place;
-      readonly seq: number;
-      readonly run: string | undefined;
-    };
+interface HeardJob {
+  readonly kind: "heard";
+  readonly place: Place;
+  readonly seq: number;
+  readonly run: string | undefined;
+}
+
+type Job = { readonly kind: "read"; readonly workspace: string } | HeardJob;
+
+const workspaceOf = (job: Job) => (job.kind === "read" ? job.workspace : job.place.workspace);
+
+/** What stays queued when a person leaves `workspace`: every other workspace's work. */
+export const jobsAfterLeaving = (jobs: ReadonlyArray<Job>, workspace: string) =>
+  jobs.filter((job) => workspaceOf(job) !== workspace);
+
+/** A Hub's refusal is final; anything else may not have reached it, so the move is owed still. */
+const owed = (error: PeerHubError) =>
+  error.status === undefined || error.status >= 500 || error.status === 429;
 
 const make = Effect.gen(function* () {
   const state = yield* PeerState.PeerState;
@@ -64,6 +75,13 @@ const make = Effect.gen(function* () {
   /** Run → its messages not yet confirmed heard, in arrival order. */
   const queues = runQueues();
   const starts = roomStarts(state, work, plugins);
+  const startedAt = yield* Clock.currentTimeMillis;
+  /** `heard` moves the Hub never confirmed, sent again with the next read that reaches it. */
+  const unsent = new Map<string, HeardJob>();
+  const heardKey = ({ place, seq }: HeardJob) =>
+    `${place.workspace}/${place.project}/${place.task}:${seq}`;
+  /** Workspaces with a read already set for when a grace ends. */
+  const rereads = new Set<string>();
 
   const emailOf = Effect.flatMap(state.email, (email) =>
     email === null
@@ -91,14 +109,25 @@ const make = Effect.gen(function* () {
             : [],
         ),
       );
-      const open = (yield* openRuns(state, placeOf(workspace, item))).map((run) => run.id);
+      const open = yield* openRuns(state, placeOf(workspace, item));
       // Before the first work report nothing says which thread carries a run.
       const read = (yield* work.latestPass) !== null;
-      return yield* Effect.forEach([...new Set([...open, ...live])], (id): Effect.Effect<HereRun> =>
-        Effect.map(
-          read ? capacityOf(state, work, workspace, item.project, id) : Effect.succeed(undefined),
-          (capacity) => ({ id, live: live.has(id), capacity }),
-        ),
+      return yield* Effect.forEach(
+        [...new Set([...open.map((run) => run.id), ...live])],
+        (id): Effect.Effect<HereRun> =>
+          Effect.map(
+            read ? capacityOf(state, work, workspace, item.project, id) : Effect.succeed(undefined),
+            (capacity) => {
+              const run = open.find((candidate) => candidate.id === id);
+              return {
+                id,
+                live: live.has(id),
+                capacity,
+                running: run?.sessions.some((session) => session.to === undefined) === true,
+                staysPut: run?.runtime === "terminal" || run?.runtime === "mcp",
+              };
+            },
+          ),
       );
     });
 
@@ -152,14 +181,20 @@ const make = Effect.gen(function* () {
         })
         .pipe(Effect.ignore),
     queuedRun: (item) => queues.runOf(workspace, item.project, refOf(item.task, item.message.seq)),
-    heard: (item, run) =>
-      hub
-        .move(placeOf(workspace, item), item.message.seq, me, {
-          move: "heard",
-          environment: state.environmentId,
-          run,
-        })
-        .pipe(Effect.ignore),
+    prompted: (item, run) =>
+      Effect.map(heardOf(workspace, item, "own", me), (heard) => queues.prompted(run, heard)),
+    told: (item, run) => queues.wasTold(run, refOf(item.task, item.message.seq)),
+    startedAt,
+    later: (ms) => {
+      if (rereads.has(workspace)) return Effect.void;
+      rereads.add(workspace);
+      return Effect.sleep(ms).pipe(
+        Effect.andThen(readSoon(workspace)),
+        Effect.ensuring(Effect.sync(() => rereads.delete(workspace))),
+        Effect.forkChild,
+        Effect.asVoid,
+      );
+    },
     queue: (item, run, kind) =>
       Effect.gen(function* () {
         queues.add(run, yield* heardOf(workspace, item, kind, me));
@@ -182,6 +217,20 @@ const make = Effect.gen(function* () {
       ),
   });
 
+  const handle = (job: HeardJob) =>
+    Effect.flatMap(emailOf, (email) =>
+      hub.move(job.place, job.seq, email, {
+        move: "heard",
+        environment: state.environmentId,
+        run: job.run,
+      }),
+    ).pipe(
+      Effect.match({
+        onFailure: (error) => (owed(error) ? void unsent.set(heardKey(job), job) : undefined),
+        onSuccess: () => void unsent.delete(heardKey(job)),
+      }),
+    );
+
   /** Reads one workspace's inbox; one the Hub does not answer for keeps what was read before. */
   const read = (workspace: string) =>
     Effect.gen(function* () {
@@ -191,22 +240,15 @@ const make = Effect.gen(function* () {
       yield* Ref.update(inboxes, (current) => new Map(current).set(workspace, inbox));
       queues.prune(workspace, inbox);
       yield* status.publish;
+      for (const job of [...unsent.values()])
+        if (workspaceOf(job) === workspace) yield* handle(job);
       const deps = followDeps(workspace, email);
-      yield* Effect.forEach(inbox.work, (item) => act(deps, item), { discard: true });
+      yield* Effect.forEach(inbox.work, (item) => actOn(deps, item), { discard: true });
     }).pipe(Effect.ignore);
 
   const readAll = Effect.gen(function* () {
     for (const workspace of yield* state.workspaces) yield* read(workspace.slug);
   });
-
-  const handle = (job: Extract<Job, { kind: "heard" }>) =>
-    Effect.flatMap(emailOf, (email) =>
-      hub.move(job.place, job.seq, email, {
-        move: "heard",
-        environment: state.environmentId,
-        run: job.run,
-      }),
-    ).pipe(Effect.ignore);
 
   const after =
     (workspace: string) =>
@@ -257,7 +299,9 @@ const make = Effect.gen(function* () {
         { workspace: session.workspace, project: session.project, task: session.task ?? "" },
         { ...body, run, environment: state.environmentId },
       ),
-    seen: ({ seq, ...place }: PeerRoomsSeenInput) => hub.seen(place, seq),
+    // What was read leaves Needs you: the Hub's list changes, and no ping says so.
+    seen: ({ seq, ...place }: PeerRoomsSeenInput) =>
+      hub.seen(place, seq).pipe(after(place.workspace)),
     pass: (input: PeerRoomsPassInput) =>
       move(input, { move: "pass", environment: state.environmentId, expect: input.expect }),
     decline: (input: PeerRoomsDeclineInput) =>
@@ -318,7 +362,7 @@ const make = Effect.gen(function* () {
             }),
       ),
     /** A heard or answered message leaves its run's queue. */
-    settled: queues.remove,
+    settled: queues.settle,
     /** `hooks.delivery` must not do I/O: the plugin's `run` sends the move. */
     queueHeard: (session: PeerSessionView, ref: string) => {
       const [task, seq] = [
@@ -350,7 +394,10 @@ const make = Effect.gen(function* () {
     /** Forgets one workspace's rooms, or every one's: signing out, leaving, turning off. */
     forget: (workspace?: string) =>
       Effect.gen(function* () {
-        yield* Queue.clear(jobs);
+        const left = yield* Queue.clear(jobs);
+        if (workspace !== undefined) yield* Queue.offerAll(jobs, jobsAfterLeaving(left, workspace));
+        for (const [key, job] of unsent)
+          if (workspace === undefined || workspaceOf(job) === workspace) unsent.delete(key);
         queues.forget(workspace);
         yield* Ref.update(inboxes, (current) => {
           const next = new Map(workspace === undefined ? [] : current);
@@ -360,7 +407,11 @@ const make = Effect.gen(function* () {
       }),
     keep: (workspaces: ReadonlyArray<string>) =>
       Effect.andThen(
-        Effect.sync(() => queues.keep(workspaces)),
+        Effect.sync(() => {
+          queues.keep(workspaces);
+          for (const [key, job] of unsent)
+            if (!workspaces.includes(workspaceOf(job))) unsent.delete(key);
+        }),
         Ref.update(
           inboxes,
           (current) => new Map([...current].filter(([slug]) => workspaces.includes(slug))),

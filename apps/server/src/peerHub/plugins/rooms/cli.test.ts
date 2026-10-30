@@ -96,19 +96,15 @@ describe("peer room", () => {
     const secret = "the launch code is here";
     const roomWith = (state: string) =>
       stand({
-        read: () =>
+        read: (() =>
           Effect.succeed({
             seq: 2,
             seen: 0,
             messages: [
-              messageOf({
-                seq: 2,
-                text: secret,
-                to: [{ kind: "agent", email: BOB, state }],
-              }),
+              messageOf({ seq: 2, text: secret, to: [{ kind: "agent", email: BOB, state }] }),
             ],
             reaches: [],
-          }),
+          })) as never,
       }).command;
 
     it.effect.each(["waiting", "declined", "withdrawn", "expired"])(
@@ -209,6 +205,7 @@ describe("peer room say", () => {
       const { command, posted, settled } = stand();
       const session = sessionOf();
       localOf(session).unanswered.add("vl-7:12");
+      localOf(session).remind.add("vl-7:12");
       const said = yield* peerRoom(
         command,
         ["say", "It", "rounds", "--reply", "12", "--to", "eva", "--at", "src/tax.ts:4-6"],
@@ -223,6 +220,7 @@ describe("peer room say", () => {
       assert.deepStrictEqual(body.anchor, { path: "src/tax.ts", line: 4, side: "new", endLine: 6 });
       assert.deepStrictEqual(settled, ["vl-7:12"]);
       assert.strictEqual(localOf(session).unanswered.size, 0);
+      assert.strictEqual(localOf(session).remind.size, 0);
     }),
   );
 

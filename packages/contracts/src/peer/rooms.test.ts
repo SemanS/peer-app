@@ -17,6 +17,11 @@ import {
 } from "./rooms.ts";
 
 const decodeMessage = Schema.decodeUnknownSync(PeerRoomMessage);
+const decodeRead = Schema.decodeUnknownSync(PeerRoomRead);
+const decodeInbox = Schema.decodeUnknownSync(PeerRoomInbox);
+const decodePost = Schema.decodeUnknownSync(PeerRoomsPostInput);
+const decodeReach = Schema.decodeUnknownSync(PeerRoomsSetReachInput);
+const decodeDiff = Schema.decodeUnknownSync(PeerRoomDiff);
 
 const message = {
   seq: 12,
@@ -48,14 +53,14 @@ describe("room rows", () => {
   });
 
   it("read as the routes answer", () => {
-    const read = Schema.decodeUnknownSync(PeerRoomRead)({
+    const read = decodeRead({
       seq: 12,
       seen: 3,
       messages: [message],
       reaches: [{ run: "run_1", reach: "team", capacity: "shared" }],
     });
     expect(read.reaches[0]?.reach).toBe("team");
-    const inbox = Schema.decodeUnknownSync(PeerRoomInbox)({
+    const inbox = decodeInbox({
       waiting: [{ project: "app", task: "t-1", message }],
       mentions: [],
       work: [],
@@ -67,28 +72,25 @@ describe("room rows", () => {
 
 describe("room inputs", () => {
   it("name people and agents, and nothing else", () => {
-    const decode = Schema.decodeUnknownSync(PeerRoomsPostInput);
     const post = { workspace: "acme", project: "app", task: "t", op: "o", text: "hi" };
     expect(
-      decode({ ...post, to: [{ kind: "agent", email: "a@b.c", harness: "codex" }] }).to,
+      decodePost({ ...post, to: [{ kind: "agent", email: "a@b.c", harness: "codex" }] }).to,
     ).toEqual([{ kind: "agent", email: "a@b.c", harness: "codex" }]);
-    expect(() => decode({ ...post, to: [{ kind: "group", email: "a@b.c" }] })).toThrow();
+    expect(() => decodePost({ ...post, to: [{ kind: "group", email: "a@b.c" }] })).toThrow();
   });
 
   it("set a reach to own or team, with no capacity from a client", () => {
-    const decode = Schema.decodeUnknownSync(PeerRoomsSetReachInput);
     const input = { workspace: "acme", project: "app", run: "run_1", reach: "team" };
-    expect(decode({ ...input, capacity: "shared" })).toEqual(input);
-    expect(() => decode({ ...input, reach: "everyone" })).toThrow();
+    expect(decodeReach({ ...input, capacity: "shared" })).toEqual(input);
+    expect(() => decodeReach({ ...input, reach: "everyone" })).toThrow();
   });
 
   it("answer a diff from here or say it is not here", () => {
-    const decode = Schema.decodeUnknownSync(PeerRoomDiff);
-    expect(decode({ state: "notHere", reason: "Not pushed.", files: ["a.ts"] }).state).toBe(
+    expect(decodeDiff({ state: "notHere", reason: "Not pushed.", files: ["a.ts"] }).state).toBe(
       "notHere",
     );
     expect(
-      decode({
+      decodeDiff({
         state: "here",
         source: "pushed",
         base: "a",

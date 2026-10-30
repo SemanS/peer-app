@@ -208,14 +208,19 @@ const RECOMMENDED = "Recommended";
 export const shortPath = (path: string, home: string) =>
   path === home || path.startsWith(`${home}${NodePath.sep}`) ? `~${path.slice(home.length)}` : path;
 
-/** The lines above the menu: who, which workspace, the project here, and the editors connected. */
+/**
+ * The lines above the menu: the build (so a stale `npx` cache shows), who, which workspace, the
+ * project here, and the editors connected.
+ */
 export const menuContext = (
   status: PeerHubStatus,
   here: Here | null,
   editors: ReadonlyArray<Editor>,
+  version?: string,
 ) => {
   const names = status.workspaces.map((w) => w.slug);
   const lines = [
+    ...(version === undefined ? [] : [`Peer Core ${version}`]),
     `Signed in as ${status.email ?? "nobody"}`,
     names.length === 0
       ? "Workspace: none yet"
@@ -444,6 +449,8 @@ export interface TaskInput {
 export interface MenuSteps<R = never> {
   readonly status: Effect.Effect<PeerHubStatus, CliError.UserError, R>;
   readonly home: string;
+  /** Peer's own version, when the build stamped it (a dev checkout has none). */
+  readonly version: string | undefined;
   /** The repository the menu runs in, null outside one. */
   readonly here: Effect.Effect<Here | null, never, R>;
   /** Repositories on this computer that no workspace has yet, to offer for connecting. */
@@ -541,7 +548,7 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
       const here = yield* steps.here;
       const editors = yield* steps.editors;
       const editorsConnected = editors.some((e) => e.connected);
-      const context = menuContext(status, here, editors).join("\n");
+      const context = menuContext(status, here, editors, steps.version).join("\n");
       if (context !== shown) {
         yield* io.say(context);
         shown = context;

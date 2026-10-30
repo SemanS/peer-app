@@ -945,6 +945,11 @@ describe("peer core create, invite and the menu", () => {
       "Project: peer · Not connected",
       "Editors: none connected yet",
     ]);
+    // A stamped build names itself first, so a stale npx cache is visible at a glance.
+    assert.deepStrictEqual(
+      PeerCoreMenu.menuContext(status(owner), here, [], "0.1.989").slice(0, 2),
+      ["Peer Core 0.1.989", "Signed in as ana@acme.test"],
+    );
     // A connected project and a connected editor Peer can start: open it first.
     const claude = { id: "claude", title: "Claude Code", connected: true, launchable: true };
     const cursor = { id: "cursor", title: "Cursor", connected: false, launchable: false };
@@ -1073,6 +1078,7 @@ describe("peer core create, invite and the menu", () => {
             status({ workspaces: [workspace("acme", "owner", ["pay", "web"])] as never }),
           ),
           home: "/home/ana",
+          version: undefined,
           here: Effect.succeed(null),
           repositories: Effect.succeed(["/home/ana/code/api"]),
           editors: Effect.succeed([
@@ -1211,6 +1217,7 @@ describe("peer core create, invite and the menu", () => {
             status({ workspaces: [workspace("acme", "owner", ["pay"])] as never }),
           ),
           home: "/home/ana",
+          version: undefined,
           here: Effect.succeed({
             root: "/home/ana/code/pay",
             state: "connected",
@@ -1424,6 +1431,7 @@ describe("peer core create, invite and the menu", () => {
         // Only what Start a task uses of the menu's steps.
         {
           home: "/home/ana",
+          version: undefined,
           scope: () => Effect.succeed(payTree(false)),
           checkoutOf: () => Effect.succeed(checkout),
           takeTask: (_w: string, project: string, task: string) =>
@@ -1504,6 +1512,7 @@ describe("peer core create, invite and the menu", () => {
             status({ workspaces: [workspace("acme", "owner", ["pay"])] as never }),
           ),
           home: "/home/ana",
+          version: undefined,
           checkoutOf: () => Effect.succeed(null),
           here: Effect.succeed(null),
           repositories: Effect.succeed([]),
@@ -1577,6 +1586,7 @@ describe("peer core create, invite and the menu", () => {
             }),
           ),
           home: "/home/ana",
+          version: undefined,
           checkoutOf: () => Effect.succeed(null),
           here: Effect.succeed({
             root: "/home/ana/code/peer",

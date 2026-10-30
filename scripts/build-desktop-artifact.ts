@@ -3720,6 +3720,8 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
       ChildProcess.make(spawnCommand.command, spawnCommand.args, {
         cwd: repoRoot,
         shell: spawnCommand.shell,
+        // The server bundle names its build (peer core's menu shows it); package.json cannot.
+        env: { ...process.env, PEER_VERSION: appVersion },
       }),
       { label: "vp run build:desktop", verbose: options.verbose },
     );

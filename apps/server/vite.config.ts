@@ -93,6 +93,9 @@ export default mergeConfig(
       },
       define: {
         __T3CODE_BUILD_CHANNEL__: JSON.stringify(cliBuildChannel),
+        // Peer's own 0.1.<n>, stamped by scripts/build-npm-peer.ts and the desktop artifact build;
+        // apps/server/package.json stays at upstream's 0.1.0, so it cannot tell builds apart.
+        __PEER_VERSION__: JSON.stringify(process.env.PEER_VERSION?.trim() ?? ""),
         __T3CODE_BUILD_RELAY_URL__: JSON.stringify(repoEnv.T3CODE_RELAY_URL?.trim() ?? ""),
         __T3CODE_BUILD_CLERK_PUBLISHABLE_KEY__: JSON.stringify(
           repoEnv.T3CODE_CLERK_PUBLISHABLE_KEY?.trim() ?? "",

@@ -53,6 +53,7 @@ import * as PeerCoreOpenSpec from "./peerCoreOpenSpec.ts";
 import * as PeerCoreTree from "./peerCoreTree.ts";
 import * as PeerCoreShare from "./peerCoreShare.ts";
 import * as PeerCoreTasks from "./peerCoreTasks.ts";
+import { peerVersion } from "./peerVersion.ts";
 
 const SOCKET_WAIT_MS = 20_000;
 const PEER_DOWNLOAD = "https://github.com/SemanS/peer-app/releases/latest";
@@ -461,6 +462,7 @@ const runMenu = (stateDir: string) =>
       {
         status,
         home: NodeOS.homedir(),
+        version: peerVersion(),
         here: Effect.gen(function* () {
           const checkout = yield* PeerCoreBind.repositoryRoot(process.cwd());
           if (checkout === null) return null;

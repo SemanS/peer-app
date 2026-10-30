@@ -31,8 +31,17 @@ const flag = (name: string) => {
 const build = !args.includes("--no-build");
 const name = flag("--name") ?? "@webinson/peer-core";
 
-const run = (command: string, argv: ReadonlyArray<string>, cwd: string) => {
-  const result = NodeChildProcess.spawnSync(command, [...argv], { cwd, stdio: "inherit" });
+const run = (
+  command: string,
+  argv: ReadonlyArray<string>,
+  cwd: string,
+  env: Readonly<Record<string, string>> = {},
+) => {
+  const result = NodeChildProcess.spawnSync(command, [...argv], {
+    cwd,
+    stdio: "inherit",
+    env: { ...process.env, ...env },
+  });
   if (result.status !== 0) throw new Error(`${command} ${argv.join(" ")} exited ${result.status}`);
 };
 const read = (command: string, argv: ReadonlyArray<string>, cwd: string) =>
@@ -152,7 +161,8 @@ Version ${version} of Peer Local (https://github.com/SemanS/peer-app, branch \`p
 `;
 
 const version = peerVersion();
-if (build) run("node", ["--run", "build:bundle"], serverDir);
+// The bundle learns its version from the build (apps/server/package.json stays at 0.1.0).
+if (build) run("node", ["--run", "build:bundle"], serverDir, { PEER_VERSION: version });
 if (!NodeFS.existsSync(NodePath.join(distDir, "bin.mjs")))
   throw new Error(`${distDir}/bin.mjs is missing.`);
 

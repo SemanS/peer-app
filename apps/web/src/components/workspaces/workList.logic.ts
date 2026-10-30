@@ -89,6 +89,8 @@ export function otherNeeds(cards: ReadonlyArray<TaskCard>): number {
  */
 export function stateText(card: Pick<WorkTaskCard, "task" | "state">): string {
   const { task, state } = card;
+  if (state.kind === "accepted")
+    return task.accepted === "policy" ? "Accepted by policy" : "Accepted";
   if (state.kind !== "done" || task.done) return state.label;
   return task.threads.some((thread) => thread.delivery === "merged")
     ? `${state.label} · PR merged`
@@ -111,6 +113,7 @@ export function taskStateTone(kind: TaskStateKind): SignalTone {
     case "waiting":
       return "working";
     case "done":
+    case "accepted":
       return "delivery";
     case "paused":
     case "new":

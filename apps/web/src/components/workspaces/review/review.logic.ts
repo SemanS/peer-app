@@ -63,6 +63,7 @@ export function handoffChat(
 const STATE_TONE: Readonly<Record<TaskStateKind, SignalTone>> = {
   done: "neutral",
   review: "delivery",
+  accepted: "delivery",
   approval: "needs",
   input: "needs",
   working: "working",

@@ -83,6 +83,11 @@ describe("what waits for the person's first review", () => {
     expect([...awaitingReviewIds(node, [ana, mine], "slavo@acme.dev")]).toEqual([ana.changeId]);
   });
 
+  it("lists nothing once the handoff is accepted, by a lead or by the review policy", () => {
+    const node = project([task({ inReview: true, accepted: "policy" })]);
+    expect(awaitingReviewIds(node, [ana], "slavo@acme.dev").size).toBe(0);
+  });
+
   it("lists nothing while the task is not in review", () => {
     expect(awaitingReviewIds(project([task()]), [ana], "slavo@acme.dev").size).toBe(0);
   });

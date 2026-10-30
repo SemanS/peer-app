@@ -28,6 +28,7 @@ const STATE_RANK: Readonly<Record<TaskStateKind, number>> = {
   input: 0,
   working: 1,
   waiting: 1,
+  accepted: 1,
   paused: 2,
   new: 3,
   done: 4,

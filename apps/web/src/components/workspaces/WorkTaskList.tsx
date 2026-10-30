@@ -496,7 +496,10 @@ function ListRow({
                 <span className="truncate">{card.project.name}</span>
               </span>
             ) : null,
-            needsYou || card.state.kind === "working" || card.state.kind === "waiting" ? (
+            needsYou ||
+            card.state.kind === "working" ||
+            card.state.kind === "waiting" ||
+            card.state.kind === "accepted" ? (
               <span key="state" className={TONE_TEXT[taskStateTone(card.state.kind)]}>
                 {stateText(card)}
               </span>

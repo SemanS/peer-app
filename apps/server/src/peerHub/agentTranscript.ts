@@ -93,15 +93,22 @@ function questionsOf(input: unknown): string {
     .join(" · ");
 }
 
+/** What an agent that waits says: a question it put, or only its last words. */
+export interface WaitingWords {
+  readonly kind: "question" | "words";
+  readonly text: string;
+}
+
 /**
  * What an agent that waits for an answer is asking: the question of a trailing AskUserQuestion
  * call, else its last words. Undefined when the end of the transcript holds neither.
  */
-export function waitingWords(entries: ReadonlyArray<PeerAgentEntry>): string | undefined {
+export function waitingWords(entries: ReadonlyArray<PeerAgentEntry>): WaitingWords | undefined {
   const last = entries.at(-1);
   if (last?.kind === "tool" && last.name === "AskUserQuestion" && last.summary !== "Ask: ")
-    return last.summary.replace(/^Ask: /, "");
-  return entries.findLast((entry) => entry.kind === "text")?.text;
+    return { kind: "question", text: last.summary.replace(/^Ask: /, "") };
+  const text = entries.findLast((entry) => entry.kind === "text")?.text;
+  return text === undefined ? undefined : { kind: "words", text };
 }
 
 export function toolSummary(name: string, input: unknown, cwd?: string): string {

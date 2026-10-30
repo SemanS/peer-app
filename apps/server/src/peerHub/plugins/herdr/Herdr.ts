@@ -153,7 +153,7 @@ const make = Effect.gen(function* () {
    * What a blocked agent asks, read once per pane and turn: the transcript's end does not change
    * while the agent waits, and the status is published often.
    */
-  const asked = new Map<string, string | undefined>();
+  const asked = new Map<string, AgentTranscript.WaitingWords | undefined>();
   const ASKS_TAIL_BYTES = 16 * 1024;
   const asksOf = (agent: HerdrAgentState) =>
     Effect.gen(function* () {
@@ -172,7 +172,7 @@ const make = Effect.gen(function* () {
                 ).pipe(Effect.orElseSucceed(() => [] as string[])),
               ),
             );
-      const asks = words === undefined ? undefined : words.slice(0, 300);
+      const asks = words === undefined ? undefined : { ...words, text: words.text.slice(0, 300) };
       if (asked.size >= 64) asked.clear();
       asked.set(key, asks);
       return asks;

@@ -113,6 +113,8 @@ export type TaskWait =
       readonly open: WorkOpen | undefined;
       /** What a herdr agent asks in its terminal, when Peer could read it; a Peer thread's question is read from the thread. */
       readonly question?: string;
+      /** A herdr agent's last words, when it waits on something its transcript does not show (a permission prompt). */
+      readonly lastWords?: string;
     };
 
 export interface TaskPageModel {
@@ -228,10 +230,12 @@ function waitsOn(input: {
     // "Claude", or "Your agent" while nothing names the agent.
     const who = row.agent === UNKNOWN_AGENT ? "Your agent" : row.agent;
     const open = row.open;
-    const question =
+    const asks =
       open?.kind === "herdr"
         ? status.agents.list.find((agent) => agent.id === open.agentId)?.asks
         : undefined;
+    const question = asks?.kind === "question" ? asks.text : undefined;
+    const lastWords = asks?.kind === "words" ? asks.text : undefined;
     waits.push(
       approval
         ? {
@@ -245,9 +249,10 @@ function waitsOn(input: {
             kind: "input",
             key: `input:${row.key}`,
             title: `${who} has a question for you`,
-            detail: `In “${row.title}”. ${question === undefined ? "Open the chat to answer." : "Answer it in its terminal, or open the chat."}`,
+            detail: `In “${row.title}”. ${asks === undefined ? "Open the chat to answer." : "Answer it in its terminal, or open the chat."}`,
             open: row.open,
             ...(question === undefined ? {} : { question }),
+            ...(lastWords === undefined ? {} : { lastWords }),
           },
     );
   }

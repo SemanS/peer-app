@@ -295,10 +295,13 @@ describe("PeerAgents.lastMessage", () => {
           },
         ]),
       ]);
-      assert.strictEqual(yield* agents.asking("w1:p1"), "Round half up, or to even? · Scope");
+      assert.deepStrictEqual(yield* agents.asking("w1:p1"), {
+        kind: "question",
+        text: "Round half up, or to even? · Scope",
+      });
       assert.strictEqual(yield* agents.lastMessage("w1:p1"), "I need a decision.");
       const plain = yield* withTranscript([said("Which one?")]);
-      assert.strictEqual(yield* plain.asking("w1:p1"), "Which one?");
+      assert.deepStrictEqual(yield* plain.asking("w1:p1"), { kind: "words", text: "Which one?" });
     }).pipe(Effect.scoped, Effect.provide(withFiles)),
   );
 

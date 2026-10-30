@@ -86,6 +86,11 @@ export function WaitsOnYou({
               <span className="text-sm text-muted-foreground">{wait.detail}</span>
               {wait.kind === "input" && wait.question !== undefined ? (
                 <p className="max-w-prose text-sm text-foreground">{wait.question}</p>
+              ) : wait.kind === "input" && wait.lastWords !== undefined ? (
+                <p className="max-w-prose text-sm text-foreground">
+                  <span className="text-muted-foreground">Last said · </span>
+                  {wait.lastWords}
+                </p>
               ) : wait.kind === "input" && wait.open?.kind === "thread" ? (
                 <PendingQuestion open={wait.open} />
               ) : null}

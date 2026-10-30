@@ -113,7 +113,7 @@ export class PeerAgents extends Context.Service<
      * What the agent in a pane asks while it waits for an answer: the question of a trailing
      * AskUserQuestion call, else its last words; undefined as for `lastMessage`.
      */
-    readonly asking: (pane: string) => Effect.Effect<string | undefined>;
+    readonly asking: (pane: string) => Effect.Effect<AgentTranscript.WaitingWords | undefined>;
     /**
      * The session most recently active in a runtime's pane (herdr's), as its hooks reported it: its
      * native id and the transcript its harness keeps; none when no session there is known.

@@ -386,7 +386,8 @@ export async function answerHook(
       // What the person asked first says more than a terminal title ("Claude Code").
       const asked = typeof body.prompt === "string" ? clip(body.prompt, 200) : "";
       const prompt = asked.length > 60 ? `${cutText(asked, 59)}…` : asked;
-      if (prompt !== "" && !session.labelFromPrompt) {
+      // A long prompt reaches the hook as a placeholder, which names nothing: the task does that.
+      if (prompt !== "" && !prompt.startsWith("<pasted_content") && !session.labelFromPrompt) {
         session.label = prompt;
         session.labelFromPrompt = true;
       }

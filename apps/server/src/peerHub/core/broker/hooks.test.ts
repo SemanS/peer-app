@@ -162,6 +162,23 @@ describe("the broker's hooks", () => {
     }
   });
 
+  it("labels a session by a prompt it can read, never by a pasted placeholder", async () => {
+    const fixture = await brokerFixture();
+    try {
+      const headers = { "x-peer-agent": "claude" };
+      const prompted = async (session_id: string, prompt: string) => {
+        const body = { session_id, cwd: fixture.root, prompt };
+        await fixture.broker["hook"]({ ...body, hook_event_name: "UserPromptSubmit" }, headers);
+        return fixture.broker["sessions"].get(`claude:${session_id}`)!.label;
+      };
+      const pasted = await prompted("long", '<pasted_content id="f6ea"> You answer a question');
+      expect(pasted).not.toContain("pasted_content");
+      expect(await prompted("short", "Fix the totals")).toBe("Fix the totals");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
   it("makes an interrupted Codex session idle and records its shell edits without ending it", async () => {
     let status = "";
     const fixture = await brokerFixture(() => ({ gitStatus: async () => status }));

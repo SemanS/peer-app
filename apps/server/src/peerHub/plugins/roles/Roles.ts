@@ -152,12 +152,23 @@ const make = Effect.gen(function* () {
       },
     ).pipe(Effect.andThen(bindPending(workspace)));
 
+  /**
+   * The review thread a session belongs to. A herdr agent's session never learns its thread (only
+   * a Peer thread's does), so a review started in herdr is known by the run the session joined.
+   */
+  const threadOf = (session: PeerSessionView) =>
+    data.threads.find(
+      (candidate) =>
+        candidate.thread === session.thread ||
+        (candidate.run !== undefined && candidate.run === session.run),
+    );
+
   /** What the role of a session is, from memory: the Hub's row, its review thread, what it took. */
   const roleOf = (session: PeerSessionView): string | undefined => {
     const view = projectOf(session.workspace, session.project);
     const row = view?.roles.find((candidate) => candidate.session === session.id);
     if (row !== undefined) return row.role;
-    const thread = data.threads.find((candidate) => candidate.thread === session.thread);
+    const thread = threadOf(session);
     if (thread !== undefined) return thread.role;
     const own = localOf(session);
     // The agent's own role stands until a read of the Hub after it no longer lists it.
@@ -189,8 +200,8 @@ const make = Effect.gen(function* () {
   /** A session of a review thread takes the role on the Hub once it reports (the thread's person set it). */
   const bind = (session: PeerSessionView) =>
     Effect.gen(function* () {
-      const thread = data.threads.find((candidate) => candidate.thread === session.thread);
-      if (thread === undefined || session.thread === undefined) return;
+      const thread = threadOf(session);
+      if (thread === undefined) return;
       const has = projectOf(session.workspace, session.project)?.roles.some(
         (row) => row.session === session.id,
       );
@@ -214,7 +225,9 @@ const make = Effect.gen(function* () {
     );
 
   const liveOf = (thread: string) =>
-    agents.sessions.pipe(Effect.map((sessions) => sessions.filter((s) => s.thread === thread)));
+    agents.sessions.pipe(
+      Effect.map((sessions) => sessions.filter((s) => threadOf(s)?.thread === thread)),
+    );
 
   return {
     roleOf,
@@ -229,7 +242,7 @@ const make = Effect.gen(function* () {
     })),
     /** A session starts: one of a review thread takes its role on the Hub, in the background. */
     started: (session: PeerSessionView) =>
-      data.threads.some((thread) => thread.thread === session.thread)
+      threadOf(session) !== undefined
         ? Queue.offer(jobs, { kind: "read", workspace: session.workspace }).pipe(Effect.asVoid)
         : Effect.void,
     /** The session's files changed through the shell, or it reverted them: the Hub's row says so. */
@@ -435,6 +448,7 @@ const make = Effect.gen(function* () {
           ...data.threads.filter((t) => t.thread !== started.threadKey),
           {
             thread: started.threadKey,
+            run,
             workspace: workspace.slug,
             project: project.id,
             role: "review",

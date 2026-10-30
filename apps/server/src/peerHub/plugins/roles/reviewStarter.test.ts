@@ -75,6 +75,22 @@ describe("the reviewStarter slot", () => {
     ),
   );
 
+  it.effect("a herdr session that knows no thread takes the role from the run it joined", () =>
+    run(
+      Effect.gen(function* () {
+        const peer = yield* peerWith([]);
+        const started = yield* (yield* peer.plugins.require("reviewStarter")).start(start);
+        const built = yield* peer.plugins.built;
+        const refusal = built.find(({ state }) => state.id === "roles")?.contributions.beforeReview;
+        const session = { workspace: "acme", project: "app", thread: undefined };
+        const inRun = yield* refusal!({ session: { ...session, run: started.run } } as never);
+        const elsewhere = yield* refusal!({ session: { ...session, run: "run_other" } } as never);
+        assert.isNotNull(inRun);
+        assert.isNull(elsewhere);
+      }),
+    ),
+  );
+
   it.effect("keeps the review prompt when the plugin gives none", () =>
     run(
       Effect.gen(function* () {

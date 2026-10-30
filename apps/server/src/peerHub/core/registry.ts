@@ -37,6 +37,7 @@ import { MemoryPlugin } from "../plugins/memory/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
 import { OwnershipPlugin } from "../plugins/ownership/index.ts";
 import { RolesPlugin } from "../plugins/roles/index.ts";
+import { RoomsPlugin } from "../plugins/rooms/index.ts";
 import { ToolTrustPlugin } from "../plugins/tool-trust/index.ts";
 import { RequestsPlugin } from "../plugins/requests/index.ts";
 import { SettingsPlugin } from "../plugins/settings/index.ts";
@@ -111,6 +112,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   OpenSpecPlugin,
   TestReportsPlugin,
   RolesPlugin,
+  RoomsPlugin,
   AcceptancePlugin,
   SettingsPlugin,
 ];

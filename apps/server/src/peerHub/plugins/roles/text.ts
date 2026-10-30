@@ -29,13 +29,17 @@ export const editStop = (paths: ReadonlyArray<string>) =>
 export const landingStop = (kind: string) =>
   `Denied by Peer: this is a review session, and a review session lands nothing (this ${kind} did not run). ${REPORT}`;
 
+/** The deny of a shell command that writes files, before it runs. */
+export const shellStop = (write: string) =>
+  `Denied by Peer: this is a review session, and a review session changes no files (this ${plain(write, 120)} did not run). ${REPORT}`;
+
 /** A review session's start block: its role and limits, at most 300 characters. */
 export const startBlock = () =>
   "Peer: this session reviews (role review). You may read files and run commands. You may not edit files, commit, push, open or merge pull requests, or run peer review or peer done. File what you found with peer tests.";
 
 /** Files a review session changed through the shell, where no edit hook looks: told once each. */
 export const changedText = (paths: ReadonlyArray<string>) =>
-  `Peer: ${pathsText(paths)} changed in this review session. A review session leaves no changes: revert ${paths.length === 1 ? "it" : "them"} (git checkout -- <path>), then report what you found with peer tests.`;
+  `Peer: ${pathsText(paths)} changed in this review session. A review session leaves no changes, and Peer denies the shell's ways of undoing one too: tell your person, and report what you found with peer tests.`;
 
 /** `peer review` from a review session. */
 export const reviewRefusal = {

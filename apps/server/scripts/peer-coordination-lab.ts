@@ -100,6 +100,10 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   works. It reports whether Bob's final tree is right, whether an edit was lost, how many converges ran, the
 //   moved notices Bob's agent heard and the characters Peer added. With REAL_AGENTS=1 it spends the person's
 //   subscription and runs only after the maintainer agrees; without it scripted stand-ins play both agents.
+//   REAL_SCENARIO=rooms (peer-lab/rooms.ts) proves a task's room: Bob names Ana's agent and nothing reaches it until she
+//   passes it on, she declines and Bob's status moves with no new message, Bob withdraws, a hostile message stays
+//   fenced, an agent cannot name an agent, Bob's own agent answers from a review session on his computer after Ana's run
+//   ended, and a restart with a `taken` delivery starts nothing. A stand-in herdr takes the agents Peer starts.
 //   LAB_CONTRACT=hard (with REAL_SCENARIO=contract) gives nothing of Ana's change away: neutral
 //   titles and branches, and both agents start together.
 //   LAB_CONTRACT=hidden (with REAL_SCENARIO=contract) is a dependency nobody names: Ana's task makes
@@ -199,6 +203,7 @@ import * as NodePath from "node:path";
 
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import * as Schema from "effect/Schema";
@@ -208,8 +213,10 @@ import {
   ORCHESTRATION_PROTOCOL_VERSION,
   PEER_FORECAST_METHODS,
   PEER_JUJUTSU_METHODS,
+  PEER_ROOMS_METHODS,
   WS_METHODS,
   WsRpcGroup,
+  type PeerRoomMessage,
   PeerAgreementsView,
   PeerImpactView,
   PeerPlansView,
@@ -225,6 +232,23 @@ import {
 
 import { agreementsLab, wasGiven, type HubAgreements } from "./peer-lab/agreements.ts";
 import { resourceLab } from "./peer-lab/resources.ts";
+import {
+  ROOMS_ANA_TASK,
+  ROOMS_REAL_OWN,
+  ROOMS_REAL_QUESTION,
+  ROOMS_TASK,
+  TOUCHED,
+  deliveryOf,
+  runRooms,
+  standInHerdr,
+  wholeFence,
+  type HerdrStart,
+  type RoomsAgent,
+  type RoomsKit,
+  type RoomsPerson,
+  type RoomsRun,
+} from "./peer-lab/rooms.ts";
+import { toldTexts } from "./peer-lab/told.ts";
 import {
   dependencyBlocks,
   withDependencyEvidence,
@@ -419,6 +443,8 @@ const TEAM = process.env.REAL_SCENARIO === "team";
 const FOLLOW = process.env.REAL_SCENARIO === "follow";
 /** REAL_SCENARIO=knowledge (`peer-lab/knowledge.ts`): a teammate's landing supersedes an entry a session read. */
 const KNOWLEDGE = process.env.REAL_SCENARIO === "knowledge";
+/** REAL_SCENARIO=rooms (`peer-lab/rooms.ts`): a task's room between two people and their agents. */
+const ROOMS = process.env.REAL_SCENARIO === "rooms";
 if (process.env.LAB_VCS !== undefined && !["git", "jj"].includes(process.env.LAB_VCS)) {
   throw new Error(`LAB_VCS must be git or jj, not ${process.env.LAB_VCS}`);
 }
@@ -817,7 +843,7 @@ async function setUpWorkspace() {
         session: admin,
         body: { title: task.title, key: task.key },
       });
-  } else if (REAL && !OWNERS && !FOLLOW) {
+  } else if (REAL && !OWNERS && !FOLLOW && !ROOMS) {
     const krk1 = await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
       method: "POST",
       session: admin,
@@ -1000,13 +1026,14 @@ const connect = (home: string, port: number, env: NodeJS.ProcessEnv) =>
  * (its broker keeps what each agent was told), then starts on the same home and resumes
  * coordination by itself, while the agents run on in herdr.
  */
-const restartComputer = (computer: Computer) =>
+const restartComputer = (computer: Computer, during: () => Promise<void> = async () => {}) =>
   Effect.gen(function* () {
     const child = computer.server.child;
     const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
     child.kill("SIGTERM");
     yield* Effect.promise(() => Promise.race([exited, sleep(20_000)]));
     check(child.exitCode !== null || child.signalCode !== null, `${computer.name}'s Peer quit`);
+    yield* Effect.promise(during);
     computer.server = yield* serve(computer.name, computer.home, computer.port, computer.env);
     computer.client = yield* connect(computer.home, computer.port, computer.env);
   });
@@ -4645,12 +4672,15 @@ function startHerdr(name: string) {
     XDG_STATE_HOME: NodePath.join(base, "s"),
     // The "none" arm: Peer's hooks and `peer` do nothing for the agents, as if Peer were not there.
     ...(CONTRACT && ARM === "none" ? { PEER_COORDINATION: "off" } : {}),
+    // The rooms scenario's panes run what Peer starts: its `claude` is the lab's, and no person's shell files move it.
+    ...(ROOMS ? { ZDOTDIR: NodePath.join(base, "z") } : {}),
     // LAB_CLAUDE_CONFIG_ANA / _BOB: that computer's Claude Code signs in with its own account, as two people's would.
     ...(process.env[`LAB_CLAUDE_CONFIG_${name.toUpperCase()}`]
       ? { CLAUDE_CONFIG_DIR: process.env[`LAB_CLAUDE_CONFIG_${name.toUpperCase()}`] }
       : {}),
     // A bare `peer` in the agent's shell is its own computer's, as on a person's computer.
     PATH: [
+      ...(ROOMS ? [NodePath.join(base, "bin")] : []),
       NodePath.join(lab, name.toLowerCase(), "userdata", "coord", "bin"),
       process.env.PATH ?? "",
     ]
@@ -4659,8 +4689,9 @@ function startHerdr(name: string) {
   };
   for (const key of ["HERDR_SOCKET_PATH", "HERDR_SESSION", "HERDR_ENV", "HERDR_PANE_ID"])
     delete env[key];
+  if (ROOMS) NodeFS.mkdirSync(NodePath.join(base, "z"), { recursive: true });
   const server = spawnLogged(herdrBin, ["server"], env);
-  return { env, server, socket: NodePath.join(base, "c", "herdr", "herdr.sock") };
+  return { env, base, server, socket: NodePath.join(base, "c", "herdr", "herdr.sock") };
 }
 type HerdrServer = ReturnType<typeof startHerdr>;
 
@@ -4725,17 +4756,12 @@ function captureScreens(
   return () => clearInterval(timer);
 }
 
-async function startClaude(
-  h: HerdrServer,
+/** Peer's hooks and the permissions a lab agent needs, as the file a Claude Code takes with --settings. */
+function writeClaudeSettings(
   computer: Computer,
-  name: string,
   options: {
-    /** Other hooks than Peer's own (the owners scenario's, which run Peer's). */
     readonly hooks?: Record<string, ReadonlyArray<HookGroup>>;
-    /** More shell commands the agent may run unasked. */
     readonly allow?: ReadonlyArray<string>;
-    /** Where it works: a task's worktree of the checkout (the checkout itself by default). */
-    readonly cwd?: string;
   } = {},
 ) {
   const settings = NodePath.join(computer.home, "claude-settings.json");
@@ -4780,6 +4806,47 @@ async function startClaude(
       2,
     ),
   );
+  return settings;
+}
+
+/**
+ * A pane Peer starts runs a bare `claude`. This one takes the computer's own settings and none of the person's, so its
+ * hooks reach the lab's Peer and never the operator's. What the lab starts itself already says so.
+ */
+function writeClaudeWrapper(h: HerdrServer, computer: Computer) {
+  const real = NodeChildProcess.execFileSync("sh", ["-c", "command -v claude"], {
+    encoding: "utf8",
+  }).trim();
+  const settings = writeClaudeSettings(computer);
+  const quoted = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
+  const bin = NodePath.join(h.base, "bin");
+  NodeFS.mkdirSync(bin, { recursive: true });
+  NodeFS.writeFileSync(
+    NodePath.join(bin, "claude"),
+    [
+      "#!/bin/sh",
+      `if [ "$1" = "--setting-sources" ]; then exec ${quoted(real)} "$@"; fi`,
+      `exec ${quoted(real)} --setting-sources project --settings ${quoted(settings)} --strict-mcp-config --permission-mode acceptEdits --model ${quoted(process.env.LAB_CLAUDE_MODEL ?? "sonnet")} "$@"`,
+      "",
+    ].join("\n"),
+    { mode: 0o755 },
+  );
+}
+
+async function startClaude(
+  h: HerdrServer,
+  computer: Computer,
+  name: string,
+  options: {
+    /** Other hooks than Peer's own (the owners scenario's, which run Peer's). */
+    readonly hooks?: Record<string, ReadonlyArray<HookGroup>>;
+    /** More shell commands the agent may run unasked. */
+    readonly allow?: ReadonlyArray<string>;
+    /** Where it works: a task's worktree of the checkout (the checkout itself by default). */
+    readonly cwd?: string;
+  } = {},
+) {
+  const settings = writeClaudeSettings(computer, options);
   const created = herdrJson(
     h,
     "workspace",
@@ -7170,6 +7237,494 @@ const followProgram = Effect.gen(function* () {
 }).pipe(Effect.scoped);
 
 /**
+ * REAL_SCENARIO=rooms REAL_AGENTS=1: real Claude Code on both computers. Peer starts Bob's review session in his real
+ * herdr, so its pane runs the lab's `claude` wrapper. What agents do is observed and reported, never failed on, except
+ * what the arm cannot go on without.
+ */
+const roomsRealProgram = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  writeFakeModel();
+  const anaHerdr = startHerdr("Ana");
+  const bobHerdr = startHerdr("Bob");
+  const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr.socket);
+  const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socket);
+  writeClaudeWrapper(anaHerdr, ana);
+  writeClaudeWrapper(bobHerdr, bob);
+  const created = yield* Effect.promise(() =>
+    hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+      method: "POST",
+      session: hubSession,
+      body: { title: ROOMS_TASK.title, key: ROOMS_TASK.key },
+    }),
+  );
+  const taskId = String(created.id);
+  for (const computer of [ana, bob])
+    yield* Effect.promise(() =>
+      until(`${computer.name}'s Peer knows ${ROOMS_TASK.key}`, async () => {
+        const synced = await Effect.runPromise(computer.client[WS_METHODS.peerHubSync]({}));
+        return (
+          synced.workspaces[0]?.projects
+            .find((p) => p.project.id === "lab")
+            ?.work.tasks.some((one) => one.key === ROOMS_TASK.key) === true
+        );
+      }),
+    );
+  branchOff(ana.checkout, ROOMS_TASK.branch);
+  const place = { workspace: "acme", project: "lab", task: taskId };
+  const roomPath = `/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(taskId)}/room`;
+  const room = async () =>
+    (await hubCall(`${roomPath}?limit=200`, { session: hubSession }))
+      .messages as ReadonlyArray<PeerRoomMessage>;
+  const runs = async () =>
+    (
+      (await hubCall(`/v1/workspaces/acme/runs/lab?task=${encodeURIComponent(taskId)}`, {
+        session: hubSession,
+      })) as unknown as { runs: ReadonlyArray<RoomsRun> }
+    ).runs;
+  const live: Array<{ computer: Computer; h: HerdrServer; pane: string; label?: string }> = [];
+  const rpc = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect);
+  /** What this arm must show: reported as any observation, and the run fails at its end without them. */
+  const missed: string[] = [];
+  const must = (ok: unknown, what: string) => {
+    observe(ok, what);
+    if (!ok) missed.push(what);
+  };
+  const herdrAgents = (h: HerdrServer) =>
+    (herdrJson(h, "agent", "list").result?.agents ?? []) as ReadonlyArray<{
+      readonly pane_id: string;
+      readonly agent?: string;
+      readonly cwd?: string;
+    }>;
+  /** A folder Claude Code has not seen asks to be trusted first: as a person, the lab says yes. */
+  const acceptTrust = (h: HerdrServer) => {
+    for (const { pane_id: pane } of herdrAgents(h)) {
+      const screen = herdrText(h, "pane", "read", pane, "--source", "visible");
+      if (!screen.includes("Yes, I trust this folder")) continue;
+      herdrText(
+        h,
+        "pane",
+        "send-keys",
+        pane,
+        /❯\s*Yes, I trust this folder/.test(screen) ? "enter" : "down",
+      );
+      say("trust", `answered in ${pane}`);
+    }
+  };
+  const waitOn = async (what: string, ready: () => Promise<boolean>, ms: number) => {
+    for (let waited = 0; waited < ms; waited += 3000) {
+      if (await ready()) return true;
+      await sleep(3000);
+      approveAll(live);
+      acceptTrust(anaHerdr);
+      acceptTrust(bobHerdr);
+    }
+    say("gave up waiting", what);
+    return false;
+  };
+  const delivery = async (seq: number, email: string) =>
+    deliveryOf(
+      (await room()).find((one) => one.seq === seq),
+      email,
+    );
+  const shown = async (chars: number) =>
+    JSON.stringify(
+      (await room()).map((one) => ({
+        seq: one.seq,
+        by: one.author.email,
+        run: one.author.run,
+        replyTo: one.replyTo,
+        text: one.text.slice(0, chars),
+        to: one.to.map((target) => [target.email, target.state, target.run, target.reason]),
+      })),
+    );
+  try {
+    // Claude Code keeps a worktree's trust under its repository's root, and asks in a worktree of a repository it has
+    // not seen: a prompt typed then is lost. Trust Bob's checkout now, while no prompt depends on it.
+    const trusted = NodeFS.realpathSync(bob.checkout);
+    const trustPane = yield* Effect.promise(() =>
+      startClaude(bobHerdr, bob, "trust", { cwd: trusted }),
+    );
+    herdrJson(bobHerdr, "agent", "prompt", trustPane, "/exit");
+    yield* Effect.promise(() => sleep(4000));
+    herdrText(bobHerdr, "pane", "close", trustPane);
+
+    const anaPane = yield* Effect.promise(() => startClaude(anaHerdr, ana, "ana"));
+    live.push({ computer: ana, h: anaHerdr, pane: anaPane });
+    herdrJson(anaHerdr, "agent", "prompt", anaPane, ROOMS_ANA_TASK);
+    say("Ana's agent prompted", ROOMS_ANA_TASK);
+    const editedAna = yield* Effect.promise(() =>
+      waitOn(
+        "Ana's first turn",
+        async () =>
+          NodeFS.readFileSync(NodePath.join(ana.checkout, "src/pricing.ts"), "utf8").includes(
+            "integer cents",
+          ) && ["idle", "done"].includes(statusOf(anaHerdr, anaPane)),
+        6 * 60_000,
+      ),
+    );
+    observe(editedAna, "Ana's agent made its edit and went idle");
+    git(ana.checkout, "add", "src/pricing.ts");
+    git(ana.checkout, "commit", "--quiet", "-m", `${ROOMS_TASK.key}: ${ROOMS_TASK.title}`);
+    git(ana.checkout, "push", "--quiet", "origin", ROOMS_TASK.branch);
+    say("the lab pushed Ana's branch, as she would", ROOMS_TASK.branch);
+    yield* Effect.promise(() =>
+      until(
+        "the Hub has Ana's run",
+        async () => (await runs()).some((run) => run.email === "ana@acme.test"),
+        60_000,
+      ),
+    );
+    const anaRun = (yield* Effect.promise(runs)).find((run) => run.email === "ana@acme.test")!;
+
+    // Bob's message waits.
+    const asked = yield* Effect.promise(() =>
+      rpc(
+        bob.client[PEER_ROOMS_METHODS.peerRoomsPost]({
+          ...place,
+          op: "real-ask",
+          text: ROOMS_REAL_QUESTION,
+          to: [{ kind: "agent", email: "ana@acme.test" }],
+        }),
+      ),
+    );
+    const waited = yield* Effect.promise(() => delivery(asked.seq, "ana@acme.test"));
+    check(waited?.state === "waiting", "Bob's message waits for Ana");
+    yield* Effect.promise(() => sleep(20_000));
+    check(
+      !NodeFS.readFileSync(ana.log, "utf8").includes("marker-real"),
+      "20 s later Ana's coordination log holds none of it",
+    );
+    check(["idle", "done"].includes(statusOf(anaHerdr, anaPane)), "and her agent stayed idle");
+
+    // Ana passes it on.
+    yield* Effect.promise(() =>
+      rpc(ana.client[PEER_ROOMS_METHODS.peerRoomsPass]({ ...place, seq: asked.seq })),
+    );
+    say("Ana passed it on", `#${asked.seq}`);
+    const answered = yield* Effect.promise(() =>
+      waitOn(
+        "Ana's agent's answer",
+        async () => (await delivery(asked.seq, "ana@acme.test"))?.state === "answered",
+        6 * 60_000,
+      ),
+    );
+    const heard = events(ana).flatMap((entry) =>
+      [...(typeof entry.text === "string" ? [entry.text] : []), ...toldTexts([entry])].filter(
+        (text) => text.includes("marker-real"),
+      ),
+    );
+    for (const text of heard) told("Ana's agent (from her log)", text);
+    must(
+      heard.some((text) => wholeFence(text, "marker-real")),
+      "her real agent was told it, fenced",
+    );
+    must(answered, "her agent answered with --reply and the Hub says `answered`");
+    say("the room", yield* Effect.promise(() => shown(300)));
+
+    // Her run ends; Bob's own question starts a review session on the change.
+    const anaCount = herdrAgents(anaHerdr).length;
+    yield* Effect.promise(() =>
+      rpc(
+        ana.client[WS_METHODS.peerHubEndRun]({
+          workspace: "acme",
+          projectId: "lab",
+          runId: anaRun.id,
+        }),
+      ),
+    );
+    yield* Effect.promise(() =>
+      until(
+        "the Hub has her run ended",
+        async () => (await runs()).some((run) => run.id === anaRun.id && run.endedAt !== undefined),
+        60_000,
+      ),
+    );
+    say("Ana's run ended", anaRun.id);
+    const anaHooksAtEnd = events(ana).filter((entry) => entry.event === "hook").length;
+    const own = yield* Effect.promise(() =>
+      rpc(
+        bob.client[PEER_ROOMS_METHODS.peerRoomsPost]({
+          ...place,
+          op: "real-own",
+          text: ROOMS_REAL_OWN,
+          to: [{ kind: "agent", email: "bob@acme.test" }],
+        }),
+      ),
+    );
+    const startedBob = yield* Effect.promise(() =>
+      waitOn(
+        "Peer to start Bob's agent",
+        async () => herdrAgents(bobHerdr).some((one) => one.agent === "claude"),
+        3 * 60_000,
+      ),
+    );
+    must(startedBob, "Peer started a Claude Code on Bob's computer");
+    const reviewPane = herdrAgents(bobHerdr).find((one) => one.agent === "claude");
+    if (reviewPane !== undefined) {
+      live.push({ computer: bob, h: bobHerdr, pane: reviewPane.pane_id, label: "bob-review" });
+      say("Bob's review pane", JSON.stringify(reviewPane));
+    }
+    const answeredOwn = yield* Effect.promise(() =>
+      waitOn(
+        "Bob's review session's answer",
+        async () => (await delivery(own.seq, "bob@acme.test"))?.state === "answered",
+        8 * 60_000,
+      ),
+    );
+    must(answeredOwn, "its answer is in the room and the Hub says `answered`");
+    const denied = events(bob).filter((entry) => entry.event === "roles.denied");
+    say("roles.denied on Bob's computer", JSON.stringify(denied));
+    const refusals = events(bob).flatMap((entry) => {
+      const output = (entry.answer as { hookSpecificOutput?: Record<string, string> } | undefined)
+        ?.hookSpecificOutput;
+      return entry.event === "hook" && output?.permissionDecision === "deny"
+        ? [{ tool: entry.tool, reason: output.permissionDecisionReason }]
+        : [];
+    });
+    say("what Peer denied Bob's agent", JSON.stringify(refusals));
+    must(
+      refusals.some((one) => one.tool === "Edit"),
+      "its Edit attempt was denied",
+    );
+    must(
+      refusals.some((one) => one.tool === "Bash"),
+      "its shell append was denied before it ran",
+    );
+    must(
+      !events(ana)
+        .concat(events(bob))
+        .some((entry) => entry.event === "overlap.opened"),
+      "no overlap opened on either computer",
+    );
+    const hubRuns = yield* Effect.promise(runs);
+    say("the task's runs", JSON.stringify(hubRuns));
+    observe(
+      hubRuns.filter((run) => run.email === "ana@acme.test").length === 1 &&
+        herdrAgents(anaHerdr).length === anaCount,
+      "Ana's computer started nothing",
+    );
+    must(
+      events(ana).filter((entry) => entry.event === "hook").length === anaHooksAtEnd,
+      "Ana's agent took no step once the lab had ended her run, whenever the run really ended",
+    );
+    const ended = events(ana).findIndex((entry) => entry.event === "run.ended");
+    say(
+      "Ana's log after her run ended",
+      JSON.stringify(
+        events(ana)
+          .slice(ended)
+          .filter((entry) => !["sync", "forecast.round", "forecast.git"].includes(entry.event))
+          .map((entry) => [entry.t, entry.event, entry.hookEvent ?? ""]),
+      ),
+    );
+    const cwd = reviewPane?.cwd;
+    if (cwd !== undefined && NodeFS.existsSync(NodePath.join(cwd, "src/pricing.ts"))) {
+      const text = NodeFS.readFileSync(NodePath.join(cwd, "src/pricing.ts"), "utf8");
+      must(text.includes("integer cents"), `the review checkout ${cwd} has Ana's change`);
+      observe(!text.includes("reviewed by Bob"), "its file is unedited");
+    } else observe(false, `the review checkout can be read (${String(cwd)})`);
+    say("the room at the end", yield* Effect.promise(() => shown(600)));
+    check(missed.length === 0, `the real arm showed all it must (missing: ${missed.join("; ")})`);
+  } finally {
+    for (const { computer, h, pane, label } of live) {
+      console.log(`\n===== ${label ?? computer.name}'s agent, last screen =====`);
+      console.log(
+        herdrText(h, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "200"),
+      );
+    }
+    for (const herdr of [anaHerdr, bobHerdr]) herdrText(herdr, "server", "stop");
+  }
+}).pipe(Effect.scoped);
+
+/**
+ * REAL_SCENARIO=rooms (`peer-lab/rooms.ts`): the people act through their own Peers, the lab reads the Hub and the logs.
+ */
+const roomsProgram = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  writeFakeModel();
+  const scope = yield* Effect.scope;
+  const anaHerdr = standInHerdr(NodePath.join(lab, "ah.sock"));
+  const bobHerdr = standInHerdr(NodePath.join(lab, "bh.sock"));
+  const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr.socketPath);
+  const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socketPath);
+  const created = yield* Effect.promise(() =>
+    hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+      method: "POST",
+      session: hubSession,
+      body: { title: ROOMS_TASK.title, key: ROOMS_TASK.key },
+    }),
+  );
+  const taskId = String(created.id);
+  for (const computer of [ana, bob])
+    yield* Effect.promise(() =>
+      until(`${computer.name}'s Peer knows ${ROOMS_TASK.key}`, async () => {
+        const synced = await Effect.runPromise(computer.client[WS_METHODS.peerHubSync]({}));
+        return (
+          synced.workspaces[0]?.projects
+            .find((p) => p.project.id === "lab")
+            ?.work.tasks.some((one) => one.key === ROOMS_TASK.key) === true
+        );
+      }),
+    );
+  branchOff(ana.checkout, ROOMS_TASK.branch);
+  const sessions = new Map<string, string>();
+  const sessionOf = async (who: "ana" | "bob") => {
+    const known = sessions.get(who);
+    if (known !== undefined) return known;
+    const email = `${who}@acme.test`;
+    const started = await hubCall("/v1/auth/email/start", { method: "POST", body: { email } });
+    const finished = await hubCall("/v1/auth/email/verify", {
+      method: "POST",
+      body: { email, code: started.code },
+    });
+    sessions.set(who, finished.session as string);
+    return finished.session as string;
+  };
+  const place = { workspace: "acme", project: "lab", task: taskId };
+  const person = (
+    computer: Computer,
+    email: string,
+    herdr: ReturnType<typeof standInHerdr>,
+  ): RoomsPerson => {
+    const { starts } = herdr;
+    const rpc = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect);
+    return {
+      email,
+      starts,
+      post: (op, text, to) =>
+        rpc(
+          computer.client[PEER_ROOMS_METHODS.peerRoomsPost]({
+            ...place,
+            op,
+            text,
+            to: to.map((target) => ({ kind: "agent" as const, email: target })),
+          }),
+        ),
+      pass: (seq) => rpc(computer.client[PEER_ROOMS_METHODS.peerRoomsPass]({ ...place, seq })),
+      decline: (seq, reason) =>
+        rpc(computer.client[PEER_ROOMS_METHODS.peerRoomsDecline]({ ...place, seq, reason })),
+      withdraw: (seq) =>
+        rpc(computer.client[PEER_ROOMS_METHODS.peerRoomsWithdraw]({ ...place, seq })),
+      endRun: (runId) =>
+        rpc(
+          computer.client[WS_METHODS.peerHubEndRun]({ workspace: "acme", projectId: "lab", runId }),
+        ),
+      rooms: async () => (await cachedStatus(computer)).rooms,
+      read: async () =>
+        (await rpc(computer.client[PEER_ROOMS_METHODS.peerRoomsRead]({ ...place, limit: 50 })))
+          .messages,
+      log: () => (NodeFS.existsSync(computer.log) ? NodeFS.readFileSync(computer.log, "utf8") : ""),
+      losePrompts: (lose) => {
+        herdr.control.losePrompts = lose;
+      },
+    };
+  };
+  const roomPath = `/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(taskId)}/room`;
+  const hubAs = async (who: "ana" | "bob", method: string, path: string, body?: unknown) => {
+    const response = await fetch(`${hubUrl}${path}`, {
+      method,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${await sessionOf(who)}`,
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    return {
+      status: response.status,
+      body: (await response.json()) as Record<string, any>,
+    };
+  };
+  const kit: RoomsKit = {
+    ana: person(ana, "ana@acme.test", anaHerdr),
+    bob: person(bob, "bob@acme.test", bobHerdr),
+    anaNeighbour: async () => {
+      await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+        method: "POST",
+        session: hubSession,
+        body: { title: "Another task", key: "KRK-2" },
+      });
+      await until("Ana's Peer knows KRK-2", async () => {
+        const synced = await Effect.runPromise(ana.client[WS_METHODS.peerHubSync]({}));
+        return (
+          synced.workspaces[0]?.projects
+            .find((p) => p.project.id === "lab")
+            ?.work.tasks.some((one) => one.key === "KRK-2") === true
+        );
+      });
+      const tree = NodePath.join(NodeFS.realpathSync(ana.home), "workspace/krk-2-another");
+      git(ana.checkout, "worktree", "add", "--quiet", "-b", "krk-2-another", tree);
+      const neighbour = agent(ana, "room-ana-2", "w31:p1", {}, tree) as RoomsAgent;
+      neighbour.start();
+      neighbour.edit("PreToolUse", "src/pricing.ts");
+      neighbour.edit("PostToolUse", "src/pricing.ts");
+      return neighbour;
+    },
+    touch: (cwd, path) => NodeFS.appendFileSync(NodePath.join(cwd, path), TOUCHED),
+    untouch: (cwd, path) => git(cwd, "checkout", "--", path),
+    anaAgent: agent(ana, "room-ana", "w30:p1") as RoomsAgent,
+    agentOf: (start, session = "room-review") =>
+      agent(
+        bob,
+        session,
+        start.pane,
+        Object.fromEntries(Object.entries(start.env)),
+        start.cwd,
+      ) as RoomsAgent,
+    room: async () => (await hubAs("bob", "GET", `${roomPath}?limit=200`)).body.messages,
+    runs: async () =>
+      (await hubAs("bob", "GET", `/v1/workspaces/acme/runs/lab?task=${encodeURIComponent(taskId)}`))
+        .body.runs ?? [],
+    hub: hubAs,
+    roomPath,
+    restartBob: (during) =>
+      Effect.runPromise(
+        restartComputer(bob, during).pipe(Effect.provideService(Scope.Scope, scope)),
+      ),
+    restartAna: (during) =>
+      Effect.runPromise(
+        restartComputer(ana, during).pipe(Effect.provideService(Scope.Scope, scope)),
+      ),
+    endRunOnAnasDisk: (run) => {
+      const file = NodePath.join(
+        ana.home,
+        (NodeFS.readdirSync(ana.home, { recursive: true }) as string[]).find(
+          (entry) => NodePath.basename(entry) === "peer-hub.json",
+        ) ?? "peer-hub.json",
+      );
+      const persisted = JSON.parse(NodeFS.readFileSync(file, "utf8"));
+      const at = new Date().toISOString();
+      persisted.runs[run] = {
+        ...persisted.runs[run],
+        endedAt: at,
+        outcome: "stopped",
+        pending: true,
+      };
+      NodeFS.writeFileSync(file, JSON.stringify(persisted));
+    },
+    say,
+    told,
+    until,
+    sleep,
+  };
+  try {
+    const failed = yield* Effect.promise(() => runRooms(kit));
+    yield* Effect.promise(() => sleep(1500));
+    say("rooms result", failed.length === 0 ? "every check held" : `${failed.length} failed`);
+    for (const what of failed) say("failed", what);
+    check(failed.length === 0, "every check of the rooms scenario held");
+  } finally {
+    anaHerdr.close();
+    bobHerdr.close();
+  }
+}).pipe(Effect.scoped);
+
+/**
  * REAL_SCENARIO=knowledge (`peer-lab/knowledge.ts`): Ana's reader session reads entry A, Bob's author session reads it
  * too, and the lab lands B superseding A from Bob's checkout as his person would (kontext capture, commit, push).
  * Ana's checkout fetches, and the reader's next step must name B once; the author and Ana's bystander hear nothing.
@@ -7603,17 +8158,21 @@ try {
           ? contractProgram
           : FOLLOW
             ? followProgram
-            : KNOWLEDGE
-              ? knowledgeProgram
-              : TASKS
-                ? realTasksProgram
-                : SETTLE
-                  ? realSettleProgram
-                  : SETTINGS_SCENARIO
-                    ? realSettingsProgram
-                    : process.env.REAL_AGENTS === "1"
-                      ? realProgram
-                      : program,
+            : ROOMS
+              ? REAL
+                ? roomsRealProgram
+                : roomsProgram
+              : KNOWLEDGE
+                ? knowledgeProgram
+                : TASKS
+                  ? realTasksProgram
+                  : SETTLE
+                    ? realSettleProgram
+                    : SETTINGS_SCENARIO
+                      ? realSettingsProgram
+                      : process.env.REAL_AGENTS === "1"
+                        ? realProgram
+                        : program,
   );
   say("PASS");
   process.exitCode = 0;

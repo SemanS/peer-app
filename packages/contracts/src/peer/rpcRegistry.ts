@@ -124,6 +124,7 @@ import {
   TestReportsRpcScopes,
 } from "./test-reports.rpc.ts";
 import { PEER_ROLES_METHODS, RolesRpcGroup, RolesRpcScopes } from "./roles.rpc.ts";
+import { PEER_ROOMS_METHODS, RoomsRpcGroup, RoomsRpcScopes } from "./rooms.rpc.ts";
 import { PEER_RUNS_METHODS, RunsRpcGroup, RunsRpcScopes } from "./runs.rpc.ts";
 import {
   AcceptanceRpcGroup,
@@ -134,6 +135,7 @@ import {
 export * from "./changes.rpc.ts";
 export * from "./jujutsu.rpc.ts";
 export * from "./roles.rpc.ts";
+export * from "./rooms.rpc.ts";
 
 /** Core's methods. */
 export const PEER_CORE_METHODS = {
@@ -608,6 +610,7 @@ export const PEER_WS_METHODS = {
   ...PEER_OPENSPEC_METHODS,
   ...PEER_TEST_REPORTS_METHODS,
   ...PEER_ROLES_METHODS,
+  ...PEER_ROOMS_METHODS,
   ...PEER_ACCEPTANCE_METHODS,
   ...PEER_RUNS_METHODS,
 } as const;
@@ -647,6 +650,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   OpenSpecRpcGroup,
   TestReportsRpcGroup,
   RolesRpcGroup,
+  RoomsRpcGroup,
   AcceptanceRpcGroup,
   RunsRpcGroup,
 );
@@ -688,6 +692,7 @@ export const PEER_RPC_SCOPES = {
   ...OpenSpecRpcScopes,
   ...TestReportsRpcScopes,
   ...RolesRpcScopes,
+  ...RoomsRpcScopes,
   ...AcceptanceRpcScopes,
   ...RunsRpcScopes,
 } as const;

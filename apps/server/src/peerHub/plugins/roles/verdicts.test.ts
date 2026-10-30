@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 
 import { CliError, render, type PeerToolContext } from "../../core/plugin.ts";
 import { acmeHubOf, BOB, logged, NOW, ready } from "./fixtures.test.ts";
-import { editStop, landingStop, startBlock } from "./text.ts";
+import { editStop, landingStop, shellStop, startBlock } from "./text.ts";
 import { judge } from "./verdicts.ts";
 
 const row = (session: string): PeerRoleRow => ({
@@ -42,6 +42,79 @@ const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 
 const ORDER = "src/order.js";
 
+describe("a review session's shell", () => {
+  const bash = (command: string) =>
+    ({
+      tool: "Bash",
+      command,
+      paths: [],
+      session: {},
+      event: "pre-tool",
+      remainingMs: 0,
+    }) as unknown as PeerToolContext;
+  const shell = (command: string) => judge("review", bash(command));
+
+  it.each([
+    "echo x >> src/pricing.ts",
+    "echo x > src/pricing.ts",
+    "echo x>out.txt",
+    "npm test &> log.txt",
+    "npm test 2> errors.txt",
+    "cat x | tee y",
+    "sed -i 's/a/b/' x",
+    "sed -i.bak 's/a/b/' x",
+    "perl -pi -e 's/a/b/' x",
+    "rm x",
+    "mv a b",
+    "cp a b",
+    "truncate -s 0 x",
+    "dd if=a of=b",
+    "patch -p1 < x.diff",
+    "git apply x.diff",
+    "git checkout -- src/pricing.ts",
+    "git restore src/pricing.ts",
+    "git reset --hard",
+    "git clean -fd",
+    "git stash",
+    "git -C sub stash push",
+    "npm test && rm x",
+  ])("denies %s", (command) => {
+    const stop = shell(command);
+    assert.strictEqual(stop?.where, "edit");
+    assert.strictEqual(stop?.verdict.decision, "deny");
+  });
+
+  it.each([
+    "npm test 2>/dev/null",
+    "npm test > /dev/null",
+    "npm test 2>&1",
+    "npm test >&2",
+    "npm test > /dev/null 2>&1",
+    "grep '>' x",
+    'grep ">>" x',
+    "grep \\> x",
+    "git log --format='%h > %s'",
+    "echo 'rm x'",
+    "git diff",
+    "git checkout main",
+    "git stash list",
+    "sed -n 1,5p x",
+    "perl -ne 'print' x",
+    "dd if=a",
+    "cat <<EOF\necho x > y\nEOF",
+  ])("lets %s run", (command) => {
+    assert.isNull(shell(command));
+  });
+
+  it("names landing first", () => {
+    assert.strictEqual(shell("git commit -m x > log")?.where, "landing");
+  });
+
+  it("leaves every other session's shell alone", () => {
+    assert.isNull(judge(undefined, bash("rm x")));
+  });
+});
+
 describe("a review session", () => {
   it.effect("cannot edit a file, on Claude Code or Codex", () =>
     run(
@@ -68,6 +141,47 @@ describe("a review session", () => {
           log.filter((line) => line.event === "roles.denied").map((line) => line.where),
           ["edit", "edit", "edit"],
         );
+      }),
+    ),
+  );
+
+  it.effect("reports no files or claims, so it opens no overlap; others report as they did", () =>
+    run(
+      Effect.gen(function* () {
+        const { peer, fixture } = yield* ready(reviewing());
+        yield* Effect.promise(() => fixture.register("one"));
+        yield* Effect.promise(() => fixture.register("three"));
+        const built = yield* peer.plugins.built;
+        const report = built.find(({ state }) => state.id === "roles")?.contributions
+          .reportSessions;
+        const touched = (id: string) => ({
+          id,
+          project: "app",
+          label: "x",
+          status: "working" as const,
+          files: [ORDER],
+          claims: ["src/**"],
+        });
+        const [review, normal] = yield* report!("acme", [
+          touched("claude:one"),
+          touched("claude:three"),
+        ]);
+        assert.deepStrictEqual(review, { ...touched("claude:one"), files: [], claims: [] });
+        assert.deepStrictEqual(normal, touched("claude:three"));
+      }),
+    ),
+  );
+
+  it.effect("is stopped by the hook before a shell write runs", () =>
+    run(
+      Effect.gen(function* () {
+        const { fixture } = yield* ready(reviewing());
+        const out = yield* hook(
+          fixture,
+          call(fixture.root, "Bash", { command: "echo x >> src/order.js" }),
+        );
+        assert.strictEqual(out.permissionDecision, "deny");
+        assert.strictEqual(out.permissionDecisionReason, shellStop("redirect to src/order.js"));
       }),
     ),
   );
@@ -122,6 +236,8 @@ describe("a review session", () => {
           }),
         );
         assert.strictEqual(out.permissionDecision, "deny");
+        const write = yield* hook(fixture, call(fixture.root, "Bash", { command: "rm x" }));
+        assert.strictEqual(write.permissionDecision, "deny");
       }),
     ),
   );

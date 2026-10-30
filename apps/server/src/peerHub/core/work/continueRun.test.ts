@@ -8,6 +8,7 @@ import * as RpcTest from "effect/rpc/RpcTest";
 import * as PeerHub from "../../PeerHub.ts";
 import { brokerFixture } from "../broker/testkit.ts";
 import * as PeerAdapters from "../coordination/PeerAdapters.ts";
+import * as PeerAgents from "../coordination/PeerAgents.ts";
 import * as PeerCoordination from "../coordination/PeerCoordination.ts";
 import * as PeerContextView from "../index/PeerContextView.ts";
 import { bindPlugin, type PeerRpcWrap, type PeerTaskLauncher } from "../plugin.ts";
@@ -151,6 +152,7 @@ const setup = Effect.gen(function* () {
     (made) => Effect.promise(() => made.dispose()),
   );
   yield* Effect.promise(() => fixture.broker.start());
+  yield* (yield* PeerAgents.PeerAgents.pipe(Effect.provide(core))).attach(fixture.broker);
   const handlers = PeerHub.rpcLayer(wrap).pipe(
     Layer.provide(
       Layer.mergeAll(

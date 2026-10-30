@@ -9,7 +9,7 @@ export { isLanding, landingKind } from "./broker/landing.ts";
 export { settleCandidate, settleNudge } from "./coordination/news.ts";
 // Each `jj` run of a shell command with its global options (`-R`, `--at-op`, `--ignore-immutable`, ...) and subcommand
 // words. Landing reads jj commands through the same parser, so a plugin that judges one cannot read it differently.
-export { jjInvocations } from "../handoffCommands.ts";
+export { jjInvocations, shellWrite } from "../handoffCommands.ts";
 export type { JjGlobalOption, JjInvocation } from "../handoffCommands.ts";
 import * as NodeCrypto from "node:crypto";
 /**
@@ -71,10 +71,8 @@ import type * as PeerWork from "./work/PeerWork.ts";
 export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
 
 /**
- * What a plugin's layer and contributions may require: core's services (design decision 3), and the
- * T3 services plugins build on: provider settings, which shared capacity adds its provider
- * instances to; the server's configuration and HTTP client, which memory keeps its local queue and
- * calls the Hub with; and T3's projects and threads, which memory binds agents' runtimes to.
+ * What a plugin's layer and contributions may require: core's services, and the T3 services plugins
+ * build on: provider settings, the server's configuration and HTTP client, its projects and threads.
  */
 import type * as PeerLog from "./log/PeerLog.ts";
 export type PeerCore =
@@ -286,6 +284,7 @@ export interface PeerContributions {
   readonly threadReport?: (threadKey: string) => { readonly observable?: boolean };
   readonly taskLauncher?: PeerTaskLauncher;
   readonly requestAcceptor?: PeerRequestAcceptor;
+  readonly reviewStarter?: import("./plugins/PeerReviewStarter.ts").PeerReviewStarter;
 }
 
 export type PeerLifecycleEvent =

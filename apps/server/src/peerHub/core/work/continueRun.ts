@@ -23,7 +23,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import * as PeerCoordination from "../coordination/PeerCoordination.ts";
+import * as PeerAgents from "../coordination/PeerAgents.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
 import type { PersistedRun } from "../state/PeerState.ts";
@@ -102,18 +102,13 @@ export const continueRun = Effect.fn("PeerRuns.continueRun")(function* (
     case "mcp":
       return notStarted("Continue it from the editor it ran in.");
     case "peer": {
-      const broker = (yield* PeerCoordination.PeerCoordination).broker();
       const last = run.sessions.at(-1);
-      if (broker?.host.queueNative === undefined || run.thread === undefined || last === undefined)
+      if (run.thread === undefined || last === undefined)
         return notStarted("Peer cannot wake this run's thread here now.");
-      const queueNative = broker.host.queueNative;
-      const thread = run.thread;
-      const queued = yield* Effect.promise(() =>
-        queueNative(
-          last.id,
-          `Peer: your person continues run ${run.id}. Pick the task up where the run left it.`,
-          thread,
-        ).catch(() => false),
+      const queued = yield* (yield* PeerAgents.PeerAgents).queueNative(
+        last.id,
+        `Peer: your person continues run ${run.id}. Pick the task up where the run left it.`,
+        run.thread,
       );
       return queued ? { started: true } : notStarted("Peer could not wake this thread's agent.");
     }

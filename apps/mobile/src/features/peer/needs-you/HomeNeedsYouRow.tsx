@@ -15,10 +15,10 @@ const Row = memo(function Row({
   return <NavigationRow title={`Needs you · ${count}`} subtitle={title} onPress={onPress} />;
 });
 export function HomeNeedsYouRow() {
-  const { items } = useNeedsYou(),
+  const { items, rooms, count } = useNeedsYou(),
     navigation = useNavigation();
   const open = useCallback(() => navigation.navigate("NeedsYou", {}), [navigation]);
-  return shouldShowHomeRow(items.length) ? (
-    <Row count={items.length} title={items[0]?.title ?? ""} onPress={open} />
+  return shouldShowHomeRow(count) ? (
+    <Row count={count} title={items[0]?.title ?? rooms[0]?.title ?? ""} onPress={open} />
   ) : null;
 }

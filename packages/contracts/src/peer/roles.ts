@@ -67,6 +67,8 @@ export type PeerRolesProject = typeof PeerRolesProject.Type;
  */
 export const PeerRolesThread = Schema.Struct({
   thread: Schema.String,
+  /** The run a started review works in: how a session that knows no thread is found. */
+  run: Schema.optional(Schema.String),
   workspace: Schema.String,
   project: Schema.String,
   role: Schema.String,
@@ -119,6 +121,8 @@ export type PeerRolesStartReviewInput = typeof PeerRolesStartReviewInput.Type;
 
 export const PeerRolesStartReviewResult = Schema.Struct({
   thread: Schema.String,
+  /** The run Peer created for it. */
+  run: Schema.optional(Schema.String),
   paneId: Schema.String,
   terminalId: Schema.String,
   promptError: Schema.optional(Schema.String),

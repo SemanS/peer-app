@@ -29,7 +29,7 @@ changes no outcome. Extend core instead when:
 - every agent must get it, whatever the environment's owner chose.
 
 Plugins that need each other's work meet in capability slots: a runtime that runs agents, a git
-host, an index source, the task launcher, the request acceptor. At most one active plugin fills
+host, an index source, the task launcher, the request acceptor, the review starter. At most one active plugin fills
 each, and core works without it. `PeerPlugins.require(slot)` returns the plugin that fills a slot,
 or fails saying that plugin is off or needs a newer Hub, so core can tell people why a capability is
 missing. Starting an agent from a team request goes through the request acceptor this way.

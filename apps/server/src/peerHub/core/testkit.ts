@@ -422,6 +422,7 @@ export const coreRpcStandIns = Layer.mergeAll(
   unused(PeerStatus.PeerStatus),
   unused(PeerWork.PeerWork),
   unused(PeerRuns.PeerRuns),
+  unused(PeerAgents.PeerAgents),
   unused(PeerWorkspaces.PeerWorkspaces),
   unused(PeerCoordination.PeerCoordination),
   unused(PeerAdapters.PeerAdapters),

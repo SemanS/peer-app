@@ -13,10 +13,12 @@ import { useNeedsYou } from "./useNeedsYou";
 import { NeedsYouScreen } from "./NeedsYouScreen";
 import { NeedsYouCard } from "./NeedsYouCards";
 import { NeedsYouRequestSheet } from "./NeedsYouRequestSheet";
+import { RoomNeedsYouCard } from "../rooms/RoomNeedsYouCard";
+import { roomNeedGroups } from "../rooms/rooms.logic";
 export function NeedsYouRouteScreen({
   route,
 }: StaticScreenProps<{ focus?: string; environment?: string }>) {
-  const { items, errors, environments, connected, loaded } = useNeedsYou(),
+  const { items, rooms, count, errors, environments, connected, loaded } = useNeedsYou(),
     [request, setRequest] = useState<Extract<NeedsYouItem, { kind: "request" }> | null>(null);
   const work = useWork();
   const [selectedTask, setSelectedTask] = useState<{ project: string; task: string } | null>(null);
@@ -50,7 +52,7 @@ export function NeedsYouRouteScreen({
   return (
     <NeedsYouScreen title="Needs you">
       <AppText accessibilityLiveRegion="polite" className="text-sm text-foreground-muted">
-        {items.length} {items.length === 1 ? "item" : "items"} need you.
+        {count} {count === 1 ? "item" : "items"} need you.
       </AppText>
       {errors.map((error) => (
         <AppText key={error.environmentId} accessibilityRole="alert">
@@ -67,9 +69,7 @@ export function NeedsYouRouteScreen({
           Peer settings.
         </AppText>
       ) : null}
-      {items.length === 0 && loaded && connected ? (
-        <AppText>Nothing needs you right now.</AppText>
-      ) : null}
+      {count === 0 && loaded && connected ? <AppText>Nothing needs you right now.</AppText> : null}
       {items.map((item) => (
         <NeedsYouCard
           key={item.key}
@@ -100,6 +100,9 @@ export function NeedsYouRouteScreen({
             return undefined;
           })()}
         />
+      ))}
+      {roomNeedGroups(rooms).map((group) => (
+        <RoomNeedsYouCard key={group.key} items={group.items} />
       ))}
       {accepted.size > 0 ? (
         <>

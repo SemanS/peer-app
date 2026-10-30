@@ -24,6 +24,7 @@ import type {
 import type * as Effect from "effect/Effect";
 import type { ResumableNativeThread } from "../../workLifecycle.ts";
 
+import type { PeerHubContinueRunInput, PeerHubContinueRunResult } from "@t3tools/contracts";
 import type {
   ContextRefusal,
   HubContextText,
@@ -161,6 +162,8 @@ export interface PeerBrokerHost {
   } | null>;
   readonly resumableThreads?: () => Promise<ReadonlyArray<ResumableNativeThread>>;
   readonly queueNative?: (session: string, text: string, thread: string) => Promise<boolean>;
+  /** Continues a detached run, as `peerHub.continueRun` does. */
+  readonly continueRun?: (input: PeerHubContinueRunInput) => Promise<PeerHubContinueRunResult>;
   /** An admitted native update still queued or running; false only after authoritative cancellation or retirement. */
   readonly nativeWakePending?: (session: string, thread: string) => Promise<boolean>;
   /**

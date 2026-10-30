@@ -8,9 +8,10 @@
 /**
  * The words of each command of a shell line, split at `; & | ( )` and line breaks, quotes and escapes
  * honoured. A heredoc's body is data, not commands: it is skipped, so an apostrophe in it opens no quote
- * and a `git commit` written into a file is not run.
+ * and a `git commit` written into a file is not run. An unquoted `>` is no word: where it writes goes
+ * to `redirects`, and a descriptor (`2>&1`) goes nowhere.
  */
-function commandsIn(command: string): string[][] {
+function commandsIn(command: string, redirects: string[] = []): string[][] {
   const commands: string[][] = [[]];
   let word = "";
   let quote = "";
@@ -62,6 +63,21 @@ function commandsIn(command: string): string[][] {
         i++;
       }
       if (delimiter !== "") heredocs.push({ delimiter, tabs });
+      continue;
+    }
+    if (char === ">") {
+      if (/^\d+$/.test(word)) word = "";
+      flush();
+      if (command[i] === ">" || command[i] === "|") i++;
+      const descriptor = command[i] === "&" && /[\d-]/.test(command[i + 1] ?? "");
+      if (command[i] === "&") i++;
+      while (command[i] === " " || command[i] === "\t") i++;
+      let target = "";
+      while (i < command.length && !/[\s;&|()<>]/.test(command[i]!)) {
+        if (command[i] !== "'" && command[i] !== '"') target += command[i];
+        i++;
+      }
+      if (!descriptor && target !== "") redirects.push(target);
       continue;
     }
     if (/[;&|\n()]/.test(char)) {
@@ -149,6 +165,41 @@ export function gitCommands(command: string): string[] {
         : `gh ${words[i] ?? ""} ${words[i + 1] ?? ""}`.trim(),
     ];
   });
+}
+
+const WRITE_COMMANDS: ReadonlySet<string> = new Set(["tee", "rm", "mv", "cp", "truncate", "patch"]);
+const GIT_WRITES: ReadonlySet<string> = new Set(["apply", "restore", "reset", "clean", "stash"]);
+const NOT_FILES: ReadonlySet<string> = new Set(["/dev/null", "/dev/stdout", "/dev/stderr"]);
+
+/**
+ * The first plain way a shell line writes files, as a stop names it; undefined when it shows none.
+ * Words only, as for landing: a script can still write, and `grep '>' x` does not.
+ */
+export function shellWrite(command: string): string | undefined {
+  const redirects: string[] = [];
+  const commands = commandsIn(command, redirects);
+  const file = redirects.find((target) => !NOT_FILES.has(target));
+  if (file !== undefined) return `redirect to ${file}`;
+  for (const words of commands) {
+    const start = executableOf(words);
+    if (start?.executable === undefined) continue;
+    const { executable } = start;
+    const args = words.slice(start.from);
+    if (WRITE_COMMANDS.has(executable)) return executable;
+    if (executable === "dd" && args.some((arg) => arg.startsWith("of="))) return "dd";
+    if (executable === "sed" && args.some((arg) => /^(-[Ensrz]*i|--in-place)/.test(arg)))
+      return "sed -i";
+    if (executable === "perl" && args.some((arg) => /^-[aFlnpsw0]*i/.test(arg))) return "perl -i";
+    if (executable !== "git") continue;
+    let i = 0;
+    while (args[i]?.startsWith("-")) i += ["-C", "-c"].includes(args[i]!) ? 2 : 1;
+    const verb = args[i];
+    const after = args.slice(i + 1);
+    if (verb === "checkout" && after.includes("--")) return "git checkout --";
+    if (verb === "stash" && (after[0] === "list" || after[0] === "show")) continue;
+    if (verb !== undefined && GIT_WRITES.has(verb)) return `git ${verb}`;
+  }
+  return undefined;
 }
 
 /** jj's global options that take a value, by the long name they are kept under. */

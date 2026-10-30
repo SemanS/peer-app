@@ -36,6 +36,7 @@ import { ownershipMobilePlugin } from "./ownership";
 import { requestsMobilePlugin } from "./requests";
 import { openSpecMobilePlugin } from "./openspec";
 import { rolesMobilePlugin } from "./roles";
+import { roomsMobilePlugin } from "./rooms";
 import { testReportsMobilePlugin } from "./test-reports";
 import { acceptanceMobilePlugin } from "./acceptance";
 import type { PeerMobilePlugin } from "./slotTypes";
@@ -74,6 +75,7 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   openSpecMobilePlugin,
   testReportsMobilePlugin,
   rolesMobilePlugin,
+  roomsMobilePlugin,
   acceptanceMobilePlugin,
 ];
 

@@ -493,6 +493,7 @@ export const CATALOG = defineEvents({
   "herdr.runtime.failed": herdrRuntime,
   "announcement.told": ev({}),
   "announcement.ack": ev({}),
+  "announcement.sync.failed": ev({}),
   "mcp.session": ev({ listChars: "count" }),
   "mcp.call": ev({ chars: "count", isError: "flag" }),
 } as const);

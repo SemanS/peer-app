@@ -81,6 +81,26 @@ describe("announcement workspace cache", () => {
     await cache.refresh("acme", async () => answer(clock));
     expect(cache.unsupported("acme")).toBe(false);
   });
+  it("is due five minutes after an answer, a minute after a failure, and not while unsupported", async () => {
+    let clock = at;
+    const cache = makeCache(() => clock);
+    expect(cache.due("acme")).toBe(true);
+    await cache.refresh("acme", async () => answer());
+    clock += 300000;
+    expect(cache.due("acme")).toBe(false);
+    clock += 1;
+    expect(cache.due("acme")).toBe(true);
+    cache.failed("acme");
+    expect(cache.due("acme")).toBe(false);
+    clock += 60000;
+    expect(cache.due("acme")).toBe(true);
+    await cache.refresh("acme", async () => null);
+    clock += 300001;
+    expect(cache.unsupported("acme")).toBe(true);
+    expect(cache.due("acme")).toBe(false);
+    clock += 300000;
+    expect(cache.due("acme")).toBe(true);
+  });
   it("updates own posts immediately and forgets withdrawn or inaccessible projects", async () => {
     const cache = makeCache(() => at);
     await cache.refresh("acme", async () => answer());

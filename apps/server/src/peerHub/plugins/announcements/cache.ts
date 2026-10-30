@@ -6,6 +6,7 @@ interface Entry {
   at: number;
   offset: number;
   unsupportedUntil: number;
+  retryAt: number;
   dirty: boolean;
   flight: Promise<void> | undefined;
 }
@@ -19,6 +20,7 @@ export function makeCache(clock: () => number = Date.now) {
         at: 0,
         offset: 0,
         unsupportedUntil: 0,
+        retryAt: 0,
         dirty: false,
         flight: undefined,
       });
@@ -53,6 +55,16 @@ export function makeCache(clock: () => number = Date.now) {
     rows,
     entry,
     unsupported: (workspace: string) => entry(workspace).unsupportedUntil > clock(),
+    /** `at` moves only on an answer, so a failed or skipped read needs its own wait or it repeats on every tick. */
+    due(workspace: string) {
+      const state = entry(workspace);
+      return (
+        clock() - state.at > 300000 && clock() >= state.retryAt && clock() >= state.unsupportedUntil
+      );
+    },
+    failed(workspace: string) {
+      entry(workspace).retryAt = clock() + 60000;
+    },
     async refresh(workspace: string, load: () => Promise<PeerAnnouncementSync | null>) {
       const state = entry(workspace);
       if (state.unsupportedUntil > clock()) return;

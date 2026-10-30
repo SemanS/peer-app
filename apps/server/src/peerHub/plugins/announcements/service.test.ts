@@ -9,7 +9,11 @@ import { PeerAgents } from "../../core/coordination/PeerAgents.ts";
 import { PeerStatus } from "../../core/status/PeerStatus.ts";
 import { brokerFixture } from "../../core/broker/testkit.ts";
 import { PeerAnnouncements, layer } from "./service.ts";
-import type { PeerAnnouncement, PeerAnnouncementSync } from "@t3tools/contracts";
+import {
+  PEER_LOCAL_WORKSPACE,
+  type PeerAnnouncement,
+  type PeerAnnouncementSync,
+} from "@t3tools/contracts";
 const row = {
   id: "a1b2c3",
   project: "app",
@@ -19,7 +23,7 @@ const row = {
   createdAt: "2026-10-09T08:00:00Z",
   expiresAt: "2099-10-10T08:00:00Z",
 };
-const project = {
+const appProject = {
   id: "app",
   name: "App",
   role: "member" as const,
@@ -88,7 +92,7 @@ describe("announcement service", () => {
               workspace: { slug: "acme", name: "Acme", currency: "EUR" },
               member: { email: "ana@acme.test", name: "Ana", role: "member" },
               knowledge: {},
-              projects: [project],
+              projects: [appProject],
             },
           })),
         }));
@@ -189,5 +193,78 @@ describe("announcement service", () => {
           "Failure",
         );
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  const periodicRead = (workspace: string, project: string) =>
+    Effect.gen(function* () {
+      const reply: { current: readonly [number, unknown] } = {
+        current: [200, { at: row.createdAt, announcements: [], delivered: [], rejected: [] }],
+      };
+      const hub = yield* standInHub({ current: () => reply.current });
+      const core = yield* Layer.build(
+        coreLayer(yield* seedState(signedInSeed(hub.url)), { session: "phs_test" }),
+      );
+      const state = yield* PeerState.pipe(Effect.provide(core));
+      yield* state.updatePersisted((persisted) => ({
+        ...persisted,
+        workspaces: persisted.workspaces.map((member) => ({
+          ...member,
+          manifest: {
+            version: 2,
+            workspace: { slug: "acme", name: "Acme", currency: "EUR" },
+            member: { email: "ana@acme.test", name: "Ana", role: "member" },
+            knowledge: {},
+            projects: [appProject],
+          },
+        })),
+      }));
+      const service = yield* PeerAnnouncements.pipe(Effect.provide(layer), Effect.provide(core));
+      const fixture = yield* Effect.acquireRelease(
+        Effect.promise(() =>
+          brokerFixture((host) => ({
+            placeOf: async (cwd) => {
+              const place = await host.placeOf(cwd);
+              return place === null ? null : { ...place, workspace, project };
+            },
+          })),
+        ),
+        (fixture) => Effect.promise(fixture.dispose),
+      );
+      const failures: unknown[] = [];
+      fixture.broker.host.log.subscribe((record) => {
+        if (record.event === "announcement.sync.failed") failures.push(record.workspace);
+      });
+      yield* Effect.promise(() => fixture.register("one"));
+      const agents = yield* PeerAgents.pipe(Effect.provide(core));
+      yield* agents.attach(fixture.broker);
+      return { service, hub, reply, failures };
+    });
+
+  it.effect("never asks the Hub about a local session's workspace", () =>
+    Effect.gen(function* () {
+      const { service, failures } = yield* periodicRead(PEER_LOCAL_WORKSPACE, "local-abc");
+      yield* TestClock.adjust("301 seconds");
+      yield* service.tick;
+      yield* service.tick;
+      expect(failures).toEqual([]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("retries a failed periodic read a minute later, not on the next tick", () =>
+    Effect.gen(function* () {
+      const { service, hub, reply, failures } = yield* periodicRead("acme", "app");
+      reply.current = [503, {}];
+      yield* TestClock.adjust("301 seconds");
+      yield* service.tick;
+      yield* service.tick;
+      expect(hub.calls).toHaveLength(1);
+      expect(failures).toEqual(["acme"]);
+      yield* TestClock.adjust("59 seconds");
+      yield* service.tick;
+      expect(hub.calls).toHaveLength(1);
+      yield* TestClock.adjust("2 seconds");
+      yield* service.tick;
+      expect(hub.calls).toHaveLength(2);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

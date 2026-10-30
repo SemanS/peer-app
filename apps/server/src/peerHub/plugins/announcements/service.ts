@@ -103,9 +103,14 @@ const make = Effect.gen(function* () {
       Effect.tap(() => agents.hubChanged),
     );
   const failed = (workspace: string) =>
-    agents
-      .log("announcement.sync.failed", { workspace })
-      .pipe(Effect.andThen(Effect.sync(() => outbox.failed(clock.currentTimeMillisUnsafe()))));
+    agents.log("announcement.sync.failed", { workspace }).pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          cache.failed(workspace);
+          outbox.failed(clock.currentTimeMillisUnsafe());
+        }),
+      ),
+    );
   const refreshQuiet = (workspace: string) =>
     refresh(workspace).pipe(Effect.catch(() => failed(workspace)));
   const text = (
@@ -281,6 +286,17 @@ const make = Effect.gen(function* () {
       return `Acknowledged ${unique.map((id) => id.slice(0, 6)).join(", ")}.`;
     });
   const flush = () => Effect.forEach(outbox.workspaces(), refreshQuiet, { discard: true });
+  const tick = Effect.gen(function* () {
+    const pending = Array.from(queued);
+    queued.clear();
+    for (const workspace of pending) {
+      yield* refreshQuiet(workspace);
+    }
+    if (outbox.due(clock.currentTimeMillisUnsafe())) yield* flush();
+    const sessions = yield* agents.sessions;
+    for (const workspace of new Set(sessions.filter(belongs).map((session) => session.workspace)))
+      if (cache.due(workspace)) yield* refreshQuiet(workspace);
+  });
   return {
     refresh,
     queueRefresh,
@@ -288,6 +304,7 @@ const make = Effect.gen(function* () {
     delivery,
     command,
     flush,
+    tick,
     start: (ctx: PeerHookContext) =>
       Effect.gen(function* () {
         if (
@@ -352,21 +369,7 @@ const make = Effect.gen(function* () {
         (workspace) => refreshQuiet(workspace.slug),
         { discard: true },
       );
-      return yield* Effect.forever(
-        Effect.gen(function* () {
-          yield* Effect.sleep("1 second");
-          const pending = Array.from(queued);
-          queued.clear();
-          for (const workspace of pending) {
-            yield* refreshQuiet(workspace);
-          }
-          if (outbox.due(clock.currentTimeMillisUnsafe())) yield* flush();
-          const sessions = yield* agents.sessions;
-          for (const workspace of new Set(sessions.map((session) => session.workspace)))
-            if (clock.currentTimeMillisUnsafe() - cache.entry(workspace).at > 300000)
-              yield* refreshQuiet(workspace);
-        }),
-      );
+      return yield* Effect.forever(Effect.sleep("1 second").pipe(Effect.andThen(tick)));
     }),
   };
 });

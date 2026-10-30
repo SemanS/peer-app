@@ -66,7 +66,11 @@ describe("scan cache round trip", () => {
         100,
         [record(), record({ dedupeKey: "msg_2:", model: "claude-opus-5-5", speed: "fast" })],
       ],
-      ["/b.jsonl", 200, [record({ sessionId: "session-b", reportedCostUsd: 1.5 })]],
+      [
+        "/b.jsonl",
+        200,
+        [record({ sessionId: "session-b", reportedCostUsd: 1.5, cwd: "/work/repo" })],
+      ],
     ]);
     original.set("/grok.jsonl", {
       size: 40,
@@ -83,7 +87,13 @@ describe("scan cache round trip", () => {
       mtimeMs: 400,
       provider: "codex",
       records: [
-        record({ provider: "codex", model: "gpt-6-astra", dedupeKey: null, speed: "ultrafast" }),
+        record({
+          provider: "codex",
+          model: "gpt-6-astra",
+          dedupeKey: null,
+          speed: "ultrafast",
+          cwd: "/work/repo",
+        }),
       ],
       tailRecords: [],
       position: position({
@@ -91,6 +101,7 @@ describe("scan cache round trip", () => {
           model: "gpt-6-astra",
           speed: "ultrafast",
           sessionId: "session-c",
+          cwd: "/work/repo",
           lastUsageSignature: '{"input_tokens":1}',
           sawSessionMeta: true,
           suppressingForkCopies: false,
@@ -148,6 +159,19 @@ describe("scan cache round trip", () => {
     expect(
       decodeScanCache(JSON.parse(JSON.stringify(poisoned)), TEST_FORMAT_MAP).has("/a.jsonl"),
     ).toBe(false);
+  });
+
+  it("keeps records from before `cwd` but has a live transcript read again", () => {
+    const encoded = encodeScanCache(cacheWith([["/a.jsonl", 100, [record()]]]));
+    const previous = { ...encoded, version: 5 };
+
+    const entry = decodeScanCache(JSON.parse(JSON.stringify(previous)), TEST_FORMAT_MAP).get(
+      "/a.jsonl",
+    );
+
+    expect(entry?.records).toEqual([record()]);
+    expect(entry?.size).toBe(-1);
+    expect(entry?.position.resumeOffset).toBe(0);
   });
 
   it("rejects a document from before records carried a speed", () => {

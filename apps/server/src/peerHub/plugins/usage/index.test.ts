@@ -5,6 +5,8 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as RpcTest from "effect/rpc/RpcTest";
+import * as ServerConfig from "../../../config.ts";
+import { UsageSessionReader } from "../../../usage/usageSessionTotals.ts";
 import * as PeerHub from "../../PeerHub.ts";
 import type { PeerRpcWrap } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
@@ -15,6 +17,7 @@ import {
   signedInSeed,
   standInHub,
 } from "../../core/testkit.ts";
+import * as PeerCoreRuntime from "../../headless/PeerCoreRuntime.ts";
 import { UsagePlugin } from "./index.ts";
 import { PeerUsageService, layer } from "./service.ts";
 
@@ -265,6 +268,45 @@ describe("a report", () => {
         const failed = yield* usage.report(report).pipe(Effect.result);
         assert.isTrue(Result.isFailure(failed));
       }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("where the local usage engine lives", () => {
+  it.effect("the app runs the reporter; without an engine the plugin runs none", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub({ current: () => [200, {}] });
+      const core = yield* Layer.build(
+        coreLayer(yield* seedState(signedInSeed(hub.url)), { session: "s" }),
+      );
+      const without = yield* UsagePlugin.contributions.pipe(Effect.provide(core));
+      assert.isUndefined(without.run);
+      assert.isDefined(without.rpc);
+
+      const withEngine = yield* UsagePlugin.contributions.pipe(
+        Effect.provide(core),
+        Effect.provideService(UsageSessionReader, () => Effect.succeed([])),
+      );
+      assert.isDefined(withEngine.run);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("headless Peer Core builds every plugin, usage active, on its own services", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub({ current: () => [200, {}] });
+      const baseDir = yield* seedState(signedInSeed(hub.url));
+      const config = yield* ServerConfig.ServerConfig.pipe(
+        Effect.provide(ServerConfig.layerTest(process.cwd(), baseDir)),
+      );
+      const core = yield* Layer.build(PeerCoreRuntime.oneShotLayer(config));
+      const plugins = yield* Effect.gen(function* () {
+        yield* PeerPlugins.startPlugins;
+        return yield* PeerPlugins.PeerPlugins;
+      }).pipe(Effect.provide(core));
+      const usage = (yield* plugins.states).find((plugin) => plugin.id === "usage");
+      assert.isDefined(usage);
+      assert.isTrue(usage?.active);
+      assert.isUndefined(usage?.reason);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

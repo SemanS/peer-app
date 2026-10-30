@@ -172,6 +172,7 @@ import * as CursorAccountReader from "@t3tools/provider-cursor/server/CursorAcco
 import * as CursorKeychain from "@t3tools/provider-cursor/server/CursorKeychain";
 import * as CursorUsageAccounts from "@t3tools/provider-cursor/server/CursorUsageAccounts";
 import * as UsageService from "./usage/UsageService.ts";
+import { UsageSessionReader } from "./usage/usageSessionTotals.ts";
 import * as RuntimeLayer from "./orchestration-v2/runtimeLayer.ts";
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
 import * as ThreadSearch from "./orchestration-v2/ThreadSearch.ts";
@@ -566,6 +567,12 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   PeerHub.layer.pipe(
     Layer.provide(AgentAwarenessRelay.layer),
     Layer.provide(Layer.merge(ProjectionStoreV2.layer, ProviderContinuationRequests.layer)),
+    Layer.provide(
+      Layer.effect(
+        UsageSessionReader,
+        Effect.map(UsageService.UsageService, (usage) => usage.readSessionTotals),
+      ),
+    ),
   ),
   HeldHooksWaker.layer,
   layerThreadSettlementWorker,

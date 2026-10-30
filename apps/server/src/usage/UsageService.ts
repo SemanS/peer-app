@@ -10,6 +10,7 @@ import {
   type UsagePricing,
   type UsageSummary,
   type UsageSummaryInput,
+  type UsageTokenTotals,
   UsageReadError,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
@@ -40,7 +41,7 @@ import type {
   TranscriptUsageFormat,
   UsageRecord,
 } from "@t3tools/provider-core/server/usage";
-import { resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
+import { type AggregateOptions, resolveModelAliases, UsageAggregator } from "./usageAggregation.ts";
 import { createOverrideRateTable, parseRateTable, type RateTable } from "./usagePricing.ts";
 import {
   listTranscriptFiles,
@@ -52,11 +53,13 @@ import {
   dedupeWithinFile,
   LEGACY_SCAN_CACHE_FILE_NAME,
   makeScanCacheWriter,
+  PREVIOUS_SCAN_CACHE_FILE_NAMES,
   pruneScanCache,
   SCAN_CACHE_FILE_NAME,
   type CachedFile,
   type ScanCache,
 } from "./usageScanCache.ts";
+import type { ReadSessionTotals, UsageSessionTotal } from "./usageSessionTotals.ts";
 
 const LITELLM_RATES_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -153,6 +156,7 @@ export class UsageService extends Context.Service<
   UsageService,
   {
     readonly readSummary: (input: UsageSummaryInput) => Effect.Effect<UsageSummary, UsageReadError>;
+    readonly readSessionTotals: ReadSessionTotals;
     readonly refreshRates: Effect.Effect<UsagePricing>;
   }
 >()("t3/usage/UsageService") {}
@@ -179,6 +183,7 @@ const layerTest = Layer.succeed(
         pricing: EMPTY_PRICING,
         scanDurationMs: 0,
       }),
+    readSessionTotals: () => Effect.succeed([]),
     refreshRates: Effect.succeed(EMPTY_PRICING),
   }),
 );
@@ -202,7 +207,9 @@ export const make = Effect.gen(function* () {
 
   const ratesCachePath = path.join(config.stateDir, "usage-model-rates.json");
   const scanCachePath = path.join(config.stateDir, SCAN_CACHE_FILE_NAME);
-  const legacyScanCachePath = path.join(config.stateDir, LEGACY_SCAN_CACHE_FILE_NAME);
+  const olderScanCachePaths = [...PREVIOUS_SCAN_CACHE_FILE_NAMES, LEGACY_SCAN_CACHE_FILE_NAME].map(
+    (fileName) => path.join(config.stateDir, fileName),
+  );
   const writeCacheFile = (filePath: string, contents: string) =>
     writeFileStringAtomically({ filePath, contents }).pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
@@ -378,8 +385,9 @@ export const make = Effect.gen(function* () {
           Effect.catchCause(() => Effect.succeed(null)),
         );
       let document = yield* readDocument(scanCachePath);
-      if (document === null) {
-        document = yield* readDocument(legacyScanCachePath);
+      for (const olderPath of olderScanCachePaths) {
+        if (document !== null) break;
+        document = yield* readDocument(olderPath);
         cacheDirty = document !== null;
       }
       if (document === null) return;
@@ -616,6 +624,7 @@ export const make = Effect.gen(function* () {
   const scanSummary = Effect.fn("UsageService.scanSummary")(function* (
     input: UsageSummaryInput,
     settings: ServerSettingsValue,
+    onCounted?: AggregateOptions["onCounted"],
   ) {
     if (input.sinceDay > input.untilDay) {
       return yield* new UsageReadError({
@@ -681,6 +690,7 @@ export const make = Effect.gen(function* () {
       rates,
       priceOverrides: createOverrideRateTable(settings.usagePriceOverrides),
       modelAliases: resolveModelAliases(settings.usageModelAliases),
+      ...(onCounted === undefined ? {} : { onCounted }),
     });
 
     const sources: UsageSource[] = [];
@@ -826,7 +836,41 @@ export const make = Effect.gen(function* () {
     return yield* Deferred.await(deferred);
   });
 
-  return { readSummary, refreshRates, awaitPersisted } as const;
+  /** The summary's own scan, so a session's totals and cost add up to what the page shows. */
+  const readSessionTotals: ReadSessionTotals = Effect.fn("UsageService.readSessionTotals")(
+    function* ({ sinceDay, untilDay }) {
+      const settings = yield* readSettings;
+      const sessions = new Map<string, UsageSessionTotal>();
+      const add: AggregateOptions["onCounted"] = ({ day, record, source, priced }) => {
+        const { provider, model, sessionId, cwd, totals } = record;
+        const key = [day, provider, model, sessionId, cwd, source].join("\0");
+        const known = sessions.get(key);
+        const sum = (field: keyof UsageTokenTotals) => (known?.totals[field] ?? 0) + totals[field];
+        sessions.set(key, {
+          day,
+          provider,
+          model,
+          sessionId,
+          ...(cwd === undefined ? {} : { cwd }),
+          dir: source,
+          totals: {
+            uncachedInputTokens: sum("uncachedInputTokens"),
+            cachedInputTokens: sum("cachedInputTokens"),
+            cacheCreationTokens: sum("cacheCreationTokens"),
+            outputTokens: sum("outputTokens"),
+            reasoningTokens: sum("reasoningTokens"),
+          },
+          costUsd: (known?.costUsd ?? 0) + priced.costUsd,
+          unpriced: (known?.unpriced ?? true) && priced.costSource === "unpriced",
+        });
+      };
+      yield* scanSummary({ timeZone: "UTC", sinceDay, untilDay }, settings, add);
+      yield* schedulePersist;
+      return [...sessions.values()];
+    },
+  );
+
+  return { readSummary, readSessionTotals, refreshRates, awaitPersisted } as const;
 });
 
 export const layer = Layer.effect(UsageService, make);

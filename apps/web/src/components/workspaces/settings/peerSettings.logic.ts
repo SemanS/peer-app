@@ -405,7 +405,7 @@ const SLOT_PLACEMENTS: Readonly<Record<SlotKind, Readonly<Record<string, SlotHos
   settings: { capacity: "capacity", "tool-trust": "tool-trust", slack: "own" },
   alwaysSettings: {},
   workspaceSettings: { audit: "audit", github: "integrations", metrics: "people" },
-  projectSettings: { capacity: "own" },
+  projectSettings: { capacity: "own", acceptance: "coordination" },
 };
 
 export const slotHost = (kind: SlotKind, plugin: string): SlotHost =>

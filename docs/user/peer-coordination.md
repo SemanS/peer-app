@@ -984,6 +984,23 @@ On a task with one of your threads, **Hand off for review** moves it into review
 
 Publishing defaults to **Pull request comment**. **Settings → This computer → Coordination & plugins** also offers **Not at all**, which keeps the package in Peer only. Each project can opt in to **Pull request description**. Publishing needs an active GitHub plugin, github.com and a signed-in GitHub CLI on the connected environment. Public repositories and repositories whose visibility cannot be checked receive only a pointer and counts. Other people’s pull requests are never edited.
 
+The task's **Review** page opens with the decision: "Accept 1.1? 2 signals: not-delivered, unowned" with
+**Mark task done** and **Reopen with a note…**, or "Accepted by policy v3 · waiting to land" with
+**Withdraw acceptance…**. Under it, three facts say where each comes from: **Verified** (the newest test
+report's items, seen run by Peer or author-reported, left to a task or needing an owner), **Delivered**
+(whether the change is shared, as Peer saw it on the author's computer at `peer review`) and **Provides**
+(the plan's contract lines, else the brief's outcome, and the tasks that wait for this one). What changed
+and the report's items follow; the agent's own notes, its blockers among them, sit under one fold. Needs
+attention lists only what Peer knows: open overlaps, inputs that changed, and the policy's signals.
+
+**Review policy.** In **Settings → Projects →** the project **→ Coordination**, a lead or an admin picks
+**Ask a person** (the default) or **Accept by policy**. Under the second, an agent's handoff is accepted in
+the lead's name when nothing speaks against it: the task has a test report, nothing failed, every
+unverified item has an owner or a task, the change is shared, and the session has no open overlap and no
+owner's call waiting. The task stays in review until its work lands and no longer waits on anyone;
+withdraw the acceptance to review it yourself. A person's own move to review is never accepted by policy.
+Members read the rule; a Hub that keeps no policy says so.
+
 **Withdraw** removes your package and your own published region and comments; it leaves the task’s status unchanged. If GitHub cannot be reached, the result names any manual cleanup. Withdraw before switching the plugin off to remove published blocks. Peer workspaces on mobile shows the package under the selected task and the target setting.
 
 ## Nothing lands unread
@@ -1168,7 +1185,7 @@ delivered was accepted. Peer records who accepted what and when; payment and con
    the same checks.
 4. **Accept.** On the task's page, a lead of the project or a workspace admin chooses **Accept…**, with a
    note of up to 300 characters if they like. A task in review moves to done as the lead's own move; a
-   done task stays done. An open task cannot be accepted yet. **Withdraw…** takes an acceptance back with
+   done task stays done. An open task cannot be accepted yet. **Withdraw acceptance…** takes an acceptance back with
    a note; the task's status does not change, and the page keeps both, with who and when.
 
 Acceptance stops nothing. A person can mark a task done without it, and an agent's `peer done` is

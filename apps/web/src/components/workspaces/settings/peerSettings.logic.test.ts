@@ -281,6 +281,8 @@ describe("where plugin settings are hosted", () => {
     expect(slotHost("workspaceSettings", "audit")).toBe("audit");
     expect(slotHost("workspaceSettings", "github")).toBe("integrations");
     expect(slotHost("workspaceSettings", "metrics")).toBe("people");
+    // The review policy sits with the project's other coordination rules.
+    expect(slotHost("projectSettings", "acceptance")).toBe("coordination");
   });
 
   it("leaves Slack and a project's capacity to the pages that render them with what they need", () => {

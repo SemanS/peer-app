@@ -7508,7 +7508,7 @@ const roomsRealProgram = Effect.gen(function* () {
     );
     must(
       events(ana).filter((entry) => entry.event === "hook").length === anaHooksAtEnd,
-      "Ana's agent took no step after her run ended",
+      "Ana's agent took no step once the lab had ended her run, whenever the run really ended",
     );
     const ended = events(ana).findIndex((entry) => entry.event === "run.ended");
     say(

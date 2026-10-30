@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as TestClock from "effect/testing/TestClock";
 import { PeerHubError } from "@t3tools/contracts";
 
 import { CliError, render, type PeerSessionView } from "../../core/plugin.ts";
@@ -233,6 +234,17 @@ describe("peer room say", () => {
       const ops = (posted as Array<{ body: { op: string } }>).map(({ body }) => body.op);
       assert.strictEqual(ops[0], ops[1]);
       assert.notStrictEqual(ops[0], ops[2]);
+    }),
+  );
+
+  it.effect("posts the same words again a minute later, as a new message", () =>
+    Effect.gen(function* () {
+      const { command, posted } = stand();
+      yield* peerRoom(command, ["say", "Done."]);
+      yield* TestClock.adjust("1 minute");
+      yield* peerRoom(command, ["say", "Done."]);
+      const ops = (posted as Array<{ body: { op: string } }>).map(({ body }) => body.op);
+      assert.notStrictEqual(ops[0], ops[1]);
     }),
   );
 

@@ -1,11 +1,13 @@
 /**
  * `peer room` and `peer room say`, and their tools `peer_room_read` and `peer_room_say`. Outcomes
  * follow the peer-cli-contract: a wrong line is usage, a Hub's refusal is refused, no answer is
- * uncertain, and repeating the same `say` posts once, as its operation id comes from what it says.
+ * uncertain, and repeating the same `say` within a minute posts once, as its operation id comes from
+ * what it says and when; a later "Done." is a new message.
  *
  * @module peerHub/plugins/rooms/cli
  */
 import { PeerHubError, type PeerRoomTargetInput } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 
 import {
@@ -26,7 +28,7 @@ import type { Rooms } from "./Rooms.ts";
 import { localOf } from "./hooks.ts";
 import { NO_TASK, refOf } from "./text.ts";
 
-const REPEAT = "repeat the same command; its operation id makes a second send do nothing.";
+const REPEAT = "repeat the same command now; its operation id makes a second send do nothing.";
 const SHOWN = 20;
 const SAY_FLAGS = new Set(["--reply", "--to", "--at"]);
 
@@ -143,8 +145,9 @@ export const roomCommand = (
           error instanceof CliError ? error : usage(String(error), `run ${FORM}.`),
       });
       const replyTo = reply === undefined ? undefined : Number(reply);
+      const minute = Math.floor((yield* Clock.currentTimeMillis) / 60_000);
       const op = toldDigest(
-        [session.run, text, reply ?? "", at ?? "", ...named.toSorted()].join("\u0000"),
+        [session.run, minute, text, reply ?? "", at ?? "", ...named.toSorted()].join("\u0000"),
       );
       const message = yield* rooms
         .postAs(session, session.run, { op, text, to: parsed.to, anchor: parsed.anchor, replyTo })

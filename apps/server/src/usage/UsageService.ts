@@ -59,7 +59,11 @@ import {
   type CachedFile,
   type ScanCache,
 } from "./usageScanCache.ts";
-import type { ReadSessionTotals, UsageSessionTotal } from "./usageSessionTotals.ts";
+import {
+  type ReadSessionTotals,
+  transcriptSourceFailed,
+  type UsageSessionTotal,
+} from "./usageSessionTotals.ts";
 
 const LITELLM_RATES_URL =
   "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -183,7 +187,7 @@ const layerTest = Layer.succeed(
         pricing: EMPTY_PRICING,
         scanDurationMs: 0,
       }),
-    readSessionTotals: () => Effect.succeed({ sessions: [], partial: false }),
+    readSessionTotals: () => Effect.succeed({ sessions: [], failed: false }),
     refreshRates: Effect.succeed(EMPTY_PRICING),
   }),
 );
@@ -872,7 +876,7 @@ export const make = Effect.gen(function* () {
       yield* schedulePersist;
       return {
         sessions: [...sessions.values()],
-        partial: sources.some(({ status }) => status === "partial" || status === "failed"),
+        failed: transcriptSourceFailed(sources),
       };
     },
   );

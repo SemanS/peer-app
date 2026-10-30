@@ -277,8 +277,8 @@ describe("UsageService", () => {
       yield* Effect.gen(function* () {
         const service = yield* UsageService.make;
         const summary = yield* service.readSummary(WINDOW);
-        const { sessions: totals, partial } = yield* service.readSessionTotals(WINDOW);
-        assert.isFalse(partial);
+        const { sessions: totals, failed } = yield* service.readSessionTotals(WINDOW);
+        assert.isFalse(failed);
         const sum = <A>(items: readonly A[], of: (item: A) => number) =>
           items.reduce((total, item) => total + of(item), 0);
 
@@ -880,6 +880,7 @@ describe("UsageService", () => {
         cursor.state.error = "Sign in to Cursor again to read account usage.";
         const failed = yield* service.readSummary({ ...WINDOW, awaitRefresh: true });
         assert.strictEqual(cursorSource(failed)?.status, "partial");
+        assert.isFalse((yield* service.readSessionTotals(WINDOW)).failed);
         assert.strictEqual(cursorSource(failed)?.message, cursor.state.error);
         assert.isUndefined(cursorSource(failed)?.refreshing);
         assert.strictEqual(totalOutputTokens(failed), 5);
@@ -1380,10 +1381,12 @@ describe("UsageService", () => {
           const partial = yield* service.readSummary(WINDOW);
           assert.strictEqual(totalOutputTokens(partial), 5);
           assert.strictEqual(partial.sources[0]?.status, "partial");
-          assert.isTrue((yield* service.readSessionTotals(WINDOW)).partial);
+          // One file stays out and the rest is reported.
+          const read = yield* service.readSessionTotals(WINDOW);
+          assert.isFalse(read.failed);
+          assert.lengthOf(read.sessions, 1);
 
           yield* Effect.promise(() => NodeFSP.chmod(unreadable, 0o600));
-          assert.isFalse((yield* service.readSessionTotals(WINDOW)).partial);
           const healthy = yield* service.readSummary(WINDOW);
           assert.strictEqual(totalOutputTokens(healthy), 12);
           assert.strictEqual(healthy.sources[0]?.status, "ok");

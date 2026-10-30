@@ -12,6 +12,7 @@ import * as TestClock from "effect/testing/TestClock";
 
 import type { UsageSessionTotal } from "../../../usage/usageSessionTotals.ts";
 import type { UsageReportOutcome } from "./hub.ts";
+import { parseRemotes } from "./remoteMemory.ts";
 import { createReporter, type ReporterInput } from "./reporter.ts";
 
 const NOW = Date.parse("2026-10-30T12:00:00Z");
@@ -68,6 +69,48 @@ const total = (sessionId: string, output: number, day = "2026-10-30"): UsageSess
   unpriced: false,
 });
 
+/** A remotes file in memory, which survives a new reporter as the real one survives a restart. */
+const memoryFile = () => {
+  const file = {
+    text: null as string | null,
+    writes: 0,
+    fails: false,
+    read: () => Promise.resolve(file.text),
+    write: (text: string) => {
+      if (file.fails) return Promise.reject(new Error("disk full"));
+      file.text = text;
+      file.writes += 1;
+      return Promise.resolve();
+    },
+  };
+  return file;
+};
+
+/** One workspace whose `pay` project is github.com/acme/api. */
+const withRepository = () => {
+  const state = persisted();
+  return {
+    ...state,
+    runs: {},
+    workspaces: [
+      {
+        slug: "acme",
+        manifest: {
+          ...state.workspaces[0]!.manifest,
+          projects: [
+            {
+              id: "pay",
+              repositories: [{ id: "api", url: "https://github.com/acme/api.git" } as never],
+            },
+          ],
+        },
+      },
+    ],
+  };
+};
+
+const ACME_API = "https://github.com/acme/api.git";
+
 /** A reporter over plain stand-ins, each answer changed by assigning to `world`. */
 const stage = (
   over: Partial<Omit<ReporterInput, "usage">> & {
@@ -81,7 +124,7 @@ const stage = (
     features: { usage: 1 } as Readonly<Record<string, number>>,
     sharing: { sharing: true, at: "2026-10-01T00:00:00Z" } as PeerUsageSharingAnswer,
     sessions: [total("pay", 5)],
-    partial: false,
+    failed: false,
     answer: ((): Effect.Effect<UsageReportOutcome, PeerHubError> => Effect.succeed("stored")) as (
       input: PeerUsageReportInput,
     ) => Effect.Effect<UsageReportOutcome, PeerHubError>,
@@ -112,9 +155,10 @@ const stage = (
     read: () =>
       Effect.sync(() => {
         world.reads += 1;
-        return { sessions: world.sessions, partial: world.partial };
+        return { sessions: world.sessions, failed: world.failed };
       }),
     remoteOf: () => Promise.resolve(null),
+    remotesFile: memoryFile(),
     now: () => world.now,
     ...rest,
   });
@@ -186,7 +230,7 @@ describe("a pass", () => {
         read: (input) =>
           Effect.sync(() => {
             asked = input;
-            return { sessions: [], partial: false };
+            return { sessions: [], failed: false };
           }),
       });
       yield* reporter.pass;
@@ -260,20 +304,20 @@ describe("a pass", () => {
     }),
   );
 
-  it.effect("sends nothing when the sessions were read in part, or could not be read", () =>
+  it.effect("sends nothing when a transcript source failed, or nothing could be read", () =>
     Effect.gen(function* () {
       const reads = { fails: false };
       const { world, reporter } = stage({
         read: () =>
           reads.fails
             ? Effect.fail(new UsageReadError({ reason: "scanFailed", detail: "no" }))
-            : Effect.sync(() => ({ sessions: world.sessions, partial: world.partial })),
+            : Effect.sync(() => ({ sessions: world.sessions, failed: world.failed })),
       });
-      world.partial = true;
+      world.failed = true;
       yield* reporter.pass;
       assert.deepStrictEqual(world.reports, []);
 
-      world.partial = false;
+      world.failed = false;
       reads.fails = true;
       yield* reporter.pass;
       assert.deepStrictEqual(world.reports, []);
@@ -286,7 +330,7 @@ describe("a pass", () => {
 
   it.effect("asks again for an `origin` that was not found, and places the session then", () =>
     Effect.gen(function* () {
-      const answers: Array<string | null> = [null, "https://github.com/acme/api.git"];
+      const answers: Array<string | null> = [null, ACME_API];
       const asked: Array<string> = [];
       const { world, reporter } = stage({
         remoteOf: (cwd) => {
@@ -294,24 +338,7 @@ describe("a pass", () => {
           return Promise.resolve(answers.shift() ?? null);
         },
       });
-      const state = persisted();
-      world.state = {
-        ...state,
-        workspaces: [
-          {
-            slug: "acme",
-            manifest: {
-              ...state.workspaces[0]!.manifest,
-              projects: [
-                {
-                  id: "pay",
-                  repositories: [{ id: "api", url: "https://github.com/acme/api.git" } as never],
-                },
-              ],
-            },
-          },
-        ],
-      };
+      world.state = withRepository() as never;
       world.sessions = [{ ...total("elsewhere", 5), cwd: "/one" }];
       yield* reporter.pass;
       assert.deepStrictEqual(world.reports, []);
@@ -319,6 +346,100 @@ describe("a pass", () => {
       assert.lengthOf(world.reports, 1);
       yield* reporter.pass;
       assert.deepStrictEqual(asked, ["/one", "/one"]);
+    }),
+  );
+
+  it.effect("keeps a mixed day whole after a worktree is deleted and Peer restarts", () =>
+    Effect.gen(function* () {
+      const remotesFile = memoryFile();
+      const sessions = [
+        { ...total("kept", 5), cwd: "/work/api" },
+        { ...total("gone", 7), cwd: "/work/worktree" },
+      ];
+      const first = stage({ remotesFile, remoteOf: () => Promise.resolve(ACME_API) });
+      first.world.state = withRepository() as never;
+      first.world.sessions = sessions;
+      yield* first.reporter.pass;
+      assert.strictEqual(first.world.reports[0]?.rows[0]?.output, 12);
+
+      const restarted = stage({
+        remotesFile,
+        remoteOf: (cwd) => Promise.resolve(cwd === "/work/api" ? ACME_API : null),
+      });
+      restarted.world.state = withRepository() as never;
+      restarted.world.sessions = [...sessions, { ...total("new", 1), cwd: "/work/api" }];
+      yield* restarted.reporter.pass;
+      assert.strictEqual(restarted.world.reports[0]?.rows[0]?.output, 13);
+    }),
+  );
+
+  it.effect("sees a new `origin` the next day, since a path can be cloned again", () =>
+    Effect.gen(function* () {
+      const remotes = { now: ACME_API };
+      const { world, reporter } = stage({ remoteOf: () => Promise.resolve(remotes.now) });
+      world.state = withRepository() as never;
+      world.sessions = [{ ...total("one", 5), cwd: "/work/api" }];
+      yield* reporter.pass;
+      assert.lengthOf(world.reports, 1);
+
+      remotes.now = "https://github.com/ana/notes.git";
+      world.sessions = [{ ...total("one", 6), cwd: "/work/api" }];
+      world.now = NOW + 24 * 60 * 60 * 1000;
+      yield* reporter.pass;
+      assert.lengthOf(world.reports, 1);
+    }),
+  );
+
+  it.effect("keeps no credential, and forgets a directory gone from the window", () =>
+    Effect.gen(function* () {
+      const remotesFile = memoryFile();
+      const { world, reporter } = stage({
+        remotesFile,
+        remoteOf: () => Promise.resolve("https://ana:s3cret@github.com/acme/api.git"),
+      });
+      world.state = withRepository() as never;
+      world.sessions = [
+        { ...total("one", 5), cwd: "/work/one" },
+        { ...total("two", 5), cwd: "/work/two" },
+      ];
+      yield* reporter.pass;
+      assert.deepStrictEqual(
+        [...parseRemotes(remotesFile.text)],
+        [
+          ["/work/one", ACME_API],
+          ["/work/two", ACME_API],
+        ],
+      );
+
+      world.sessions = [{ ...total("one", 5), cwd: "/work/one" }];
+      yield* reporter.pass;
+      assert.deepStrictEqual([...parseRemotes(remotesFile.text).keys()], ["/work/one"]);
+    }),
+  );
+
+  it.effect("writes the file only when it changed, and a failed write stops nothing", () =>
+    Effect.gen(function* () {
+      const remotesFile = memoryFile();
+      const { world, reporter } = stage({
+        remotesFile,
+        remoteOf: () => Promise.resolve(ACME_API),
+      });
+      world.state = withRepository() as never;
+      world.sessions = [{ ...total("one", 5), cwd: "/work/one" }];
+      yield* reporter.pass;
+      yield* reporter.pass;
+      assert.strictEqual(remotesFile.writes, 1);
+
+      remotesFile.fails = true;
+      world.sessions = [
+        { ...total("one", 6), cwd: "/work/one" },
+        { ...total("two", 5), cwd: "/work/two" },
+      ];
+      yield* reporter.pass;
+      assert.lengthOf(world.reports, 2);
+      remotesFile.fails = false;
+      yield* reporter.pass;
+      assert.strictEqual(remotesFile.writes, 2);
     }),
   );
 

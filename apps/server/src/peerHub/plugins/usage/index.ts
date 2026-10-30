@@ -5,6 +5,7 @@ import { UsageSessionReader } from "../../../usage/usageSessionTotals.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
+import { remoteFile, remoteWhenPresent } from "./remoteMemory.ts";
 import { createReporter } from "./reporter.ts";
 import { PeerUsageService, layer } from "./service.ts";
 
@@ -32,7 +33,8 @@ export const UsagePlugin = bindPlugin({
               features,
               usage,
               read,
-              remoteOf: PeerState.remoteOf,
+              remoteOf: remoteWhenPresent(PeerState.remoteOf),
+              remotesFile: remoteFile(`${state.hubHome}/.usage/remotes.json`),
               now: () => clock.currentTimeMillisUnsafe(),
             }).run,
           }),

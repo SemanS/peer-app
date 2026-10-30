@@ -30,6 +30,7 @@ import * as UsageService from "../../../usage/UsageService.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import { coreLayer, meAnswer, paymentsSeed, seedState, standInHub } from "../../core/testkit.ts";
+import { remoteFile, remoteWhenPresent } from "./remoteMemory.ts";
 import { createReporter } from "./reporter.ts";
 import { PeerUsageService, layer } from "./service.ts";
 
@@ -198,16 +199,22 @@ interface Stage {
     readonly output: number;
     readonly model?: string;
   }>;
+  /** Transcripts of these sessions cannot be read. */
+  readonly unreadable?: ReadonlyArray<string>;
+  /** Deleted after this report, for a second one by a new reporter. */
+  readonly thenDelete?: keyof Paths;
   readonly runSessions?: ReadonlyArray<string>;
 }
 
-const reportOf = ({ sessions, runSessions = [] }: Stage) =>
+type Paths = Record<"repository" | "personal" | "lib" | "gone", string>;
+
+const reportOf = ({ sessions, unreadable = [], thenDelete, runSessions = [] }: Stage) =>
   Effect.gen(function* () {
     const home = yield* Effect.acquireRelease(
       Effect.promise(() => NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "usage-privacy-"))),
       (path) => Effect.promise(() => NodeFSP.rm(path, { recursive: true, force: true })),
     );
-    const paths = {
+    const paths: Paths = {
       repository: NodePath.join(home, SENTINELS.repository),
       personal: NodePath.join(home, SENTINELS.personal),
       lib: NodePath.join(home, "lib"),
@@ -225,6 +232,7 @@ const reportOf = ({ sessions, runSessions = [] }: Stage) =>
           NodePath.join(folder, `${id}.jsonl`),
           transcript(id, paths[cwd as keyof typeof paths] ?? cwd, output, at, model),
         );
+      for (const id of unreadable) await NodeFSP.chmod(NodePath.join(folder, `${id}.jsonl`), 0);
     });
 
     const hub = yield* standInHub({
@@ -244,18 +252,27 @@ const reportOf = ({ sessions, runSessions = [] }: Stage) =>
     const state = yield* PeerState.PeerState.pipe(Effect.provide(core));
     const usage = yield* PeerUsageService.pipe(Effect.provide(layer), Effect.provide(core));
     yield* client.me;
-    const reporter = createReporter({
-      state,
-      features: client.features,
-      usage,
-      read: engine.readSessionTotals,
-      remoteOf: PeerState.remoteOf,
-      now: () => Date.now(),
-    });
-    yield* reporter.pass;
+    const remotesPath = NodePath.join(home, "memory", "remotes.json");
+    const reporterNow = () =>
+      createReporter({
+        state,
+        features: client.features,
+        usage,
+        read: engine.readSessionTotals,
+        remoteOf: remoteWhenPresent(PeerState.remoteOf),
+        remotesFile: remoteFile(remotesPath),
+        now: () => Date.now(),
+      });
+    yield* reporterNow().pass;
+    if (thenDelete !== undefined) {
+      yield* Effect.promise(() => NodeFSP.rm(paths[thenDelete], { recursive: true }));
+      yield* reporterNow().pass;
+    }
     return {
       calls: hub.calls,
       reports: hub.calls.filter((call) => call.url?.includes("/usage/reports/")),
+      remotesPath,
+      paths,
     };
   });
 
@@ -324,6 +341,55 @@ describe("what leaves the computer", () => {
       for (const text of everyText(calls))
         for (const sentinel of [SENTINELS.modelPath, SENTINELS.modelArn])
           assert.notInclude(text, sentinel);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.live("still goes out when one transcript cannot be read, without that transcript", () =>
+    Effect.gen(function* () {
+      const { reports } = yield* reportOf({
+        sessions: [
+          { id: "readable", cwd: "repository", output: 3 },
+          { id: "unreadable", cwd: "repository", output: 4 },
+        ],
+        unreadable: ["unreadable"],
+      });
+      assert.lengthOf(reports, 1);
+      assert.strictEqual(decodeBody(reports[0]?.body ?? "").rows[0]?.output, 3);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.live("never holds what the computer keeps of its directories, which stays private", () =>
+    Effect.gen(function* () {
+      const { calls, reports, remotesPath, paths } = yield* reportOf({
+        sessions: [{ id: "one", cwd: "repository", output: 3 }],
+      });
+      assert.lengthOf(reports, 1);
+      const kept = yield* Effect.promise(() => NodeFSP.readFile(remotesPath, "utf8"));
+      const stat = yield* Effect.promise(() => NodeFSP.stat(remotesPath));
+      assert.strictEqual(stat.mode & 0o777, 0o600);
+      const entries = Object.entries<string>(JSON.parse(kept));
+      assert.lengthOf(entries, 1);
+      assert.include(entries[0]?.[0], SENTINELS.repository);
+      for (const text of everyText(calls)) {
+        assert.notInclude(text, paths.repository);
+        assert.notInclude(text, entries[0]?.[1] ?? "unset");
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.live("keeps a deleted worktree's session in its day, after a restart too", () =>
+    Effect.gen(function* () {
+      const { calls, reports } = yield* reportOf({
+        sessions: [{ id: "one", cwd: "repository", output: 3 }],
+        thenDelete: "repository",
+      });
+      // The second reporter remembers nothing it sent, so it sends the same rows again.
+      assert.lengthOf(reports, 2);
+      assert.deepStrictEqual(
+        decodeBody(reports[1]?.body ?? "").rows,
+        decodeBody(reports[0]?.body ?? "").rows,
+      );
+      for (const text of everyText(calls)) assert.notInclude(text, SENTINELS.repository);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

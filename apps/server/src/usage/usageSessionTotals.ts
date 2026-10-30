@@ -2,6 +2,7 @@ import type {
   UsageDay,
   UsageProviderKind,
   UsageReadError,
+  UsageSource,
   UsageTokenTotals,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -25,9 +26,22 @@ export interface UsageSessionTotal {
 
 export interface UsageSessionTotals {
   readonly sessions: ReadonlyArray<UsageSessionTotal>;
-  /** A source could not be read whole, so the sessions may be fewer than they are. */
-  readonly partial: boolean;
+  /** A Claude or Codex transcript source failed outright (`transcriptSourceFailed`). */
+  readonly failed: boolean;
 }
+
+const TRANSCRIPT_PROVIDERS: ReadonlySet<UsageProviderKind> = new Set(["claude", "codex"]);
+
+/**
+ * Whether the read lost a source that carries workspace work. `partial` does not count, and neither
+ * does any other provider: an unreadable file stays out and a signed-out Cursor is its own matter,
+ * and neither may stop what can be read.
+ */
+export const transcriptSourceFailed = (sources: ReadonlyArray<UsageSource>) =>
+  sources.some(
+    ({ status, fingerprint }) =>
+      status === "failed" && TRANSCRIPT_PROVIDERS.has(fingerprint.provider),
+  );
 
 export type ReadSessionTotals = (input: {
   readonly sinceDay: UsageDay;

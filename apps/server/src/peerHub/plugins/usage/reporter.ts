@@ -5,7 +5,8 @@
  *
  * A report never takes data back: what was reported stays true, so a rollup with no sessions now
  * sends nothing, and a person's sharing switch is the only way rows go away. A pass that cannot see
- * everything (a missing manifest, a partial read) sends nothing, since its rollups would shrink.
+ * everything (a missing manifest, a failed transcript source) sends nothing, since its rollups would
+ * shrink.
  *
  * What was sent is kept in memory: a restart sends the same rows again, which the Hub takes as a
  * newer `rev` of the same report.
@@ -20,11 +21,13 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
 import type { ReadSessionTotals, UsageSessionTotal } from "../../../usage/usageSessionTotals.ts";
+import { withoutCredentials } from "../../core/state/remotes.ts";
 import type * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import { toldDigest } from "../../core/plugin.ts";
 import type * as PeerState from "../../core/state/PeerState.ts";
 import { realpathOrSelf } from "../../core/state/PeerState.ts";
 import { attribute, needsRemote, runPlaces } from "./attribution.ts";
+import { parseRemotes, printRemotes, type RemoteFile } from "./remoteMemory.ts";
 import type { PeerUsageService } from "./service.ts";
 import { reportRows, type UsageRowInput } from "./rows.ts";
 
@@ -44,6 +47,7 @@ export interface ReporterInput {
   readonly usage: Pick<PeerUsageService["Service"], "sharing" | "report" | "sharingTurnedOn">;
   readonly read: ReadSessionTotals;
   readonly remoteOf: (cwd: string) => Promise<string | null>;
+  readonly remotesFile: RemoteFile;
   readonly now: () => number;
 }
 
@@ -51,18 +55,30 @@ export interface ReporterInput {
 const rollupKey = (project: string, day: string) => `${day}/${project}`;
 const rollupPlace = (key: string) => ({ day: key.slice(0, 10), project: key.slice(11) });
 
-export function createReporter({ state, features, usage, read, remoteOf, now }: ReporterInput) {
+export function createReporter({
+  state,
+  features,
+  usage,
+  read,
+  remoteOf,
+  remotesFile,
+  now,
+}: ReporterInput) {
   const environment = String(state.environmentId);
   /** Workspace → rollup → digest of the rows the Hub took. */
   const sent = new Map<string, Map<string, string>>();
   /** Workspace → when sharing went on, as the Hub says: any change means its rows are gone. */
   const sharedAt = new Map<string, string | null>();
   /**
-   * `origin` per directory, only when found: null also means `git` failed this once. Cleared daily,
-   * so a repository that moved projects is seen again.
+   * `origin` per directory, only when found: null also means `git` failed this once. It outlives
+   * the directory, so a deleted worktree's sessions keep their project (`remoteMemory.ts`).
    */
   const remotes = new Map<string, string>();
-  let remotesDay = "";
+  let remotesText: string | null = null;
+  let remotesWriteLogged = false;
+  /** Asked today. A path can be cloned again with another `origin`, so a live one is asked daily. */
+  const asked = new Set<string>();
+  let askedDay = "";
   let person: string | null = null;
   let lastRev = 0;
 
@@ -101,22 +117,48 @@ export function createReporter({ state, features, usage, read, remoteOf, now }: 
       return sharing;
     });
 
+  const loadRemotes = Effect.gen(function* () {
+    if (remotesText !== null) return;
+    const text = yield* Effect.promise(() => remotesFile.read());
+    for (const [cwd, remote] of parseRemotes(text)) remotes.set(cwd, remote);
+    remotesText = text ?? "";
+  });
+
   const readRemotes = (cwds: ReadonlySet<string>, today: string) =>
     Effect.gen(function* () {
-      if (remotesDay !== today) {
-        remotes.clear();
-        remotesDay = today;
+      if (askedDay !== today) {
+        asked.clear();
+        askedDay = today;
       }
       yield* Effect.forEach(
-        [...cwds].filter((cwd) => !remotes.has(cwd)),
+        [...cwds].filter((cwd) => !asked.has(cwd)),
         (cwd) =>
           Effect.promise(() => remoteOf(cwd)).pipe(
             Effect.map((remote) => {
-              if (remote !== null) remotes.set(cwd, remote);
+              if (remote === null) return;
+              remotes.set(cwd, withoutCredentials(remote));
+              asked.add(cwd);
             }),
           ),
         { concurrency: REMOTE_CONCURRENCY, discard: true },
       );
+    });
+
+  /** Forgets directories gone from the window, and writes only a memory that changed. */
+  const keepRemotes = (seen: ReadonlySet<string>) =>
+    Effect.gen(function* () {
+      for (const cwd of remotes.keys()) if (!seen.has(cwd)) remotes.delete(cwd);
+      const text = printRemotes(remotes);
+      if (text === remotesText || (remotes.size === 0 && remotesText === "")) return;
+      const written = yield* Effect.tryPromise(() => remotesFile.write(text)).pipe(Effect.result);
+      if (Result.isSuccess(written)) {
+        remotesText = text;
+      } else if (!remotesWriteLogged) {
+        remotesWriteLogged = true;
+        yield* Effect.logWarning(
+          "Peer usage: what this computer knows of its remotes was not saved",
+        );
+      }
     });
 
   /** Each sharing workspace's sessions, by rollup. Any session not returned stays here. */
@@ -134,6 +176,7 @@ export function createReporter({ state, features, usage, read, remoteOf, now }: 
         manifests: persisted.workspaces.map((workspace) => workspace.manifest),
         remoteOf: (cwd: string) => remotes.get(cwd) ?? null,
       };
+      yield* loadRemotes;
       yield* readRemotes(
         new Set(
           sessions.flatMap((session) =>
@@ -142,6 +185,7 @@ export function createReporter({ state, features, usage, read, remoteOf, now }: 
         ),
         today,
       );
+      yield* keepRemotes(new Set(sessions.flatMap(({ cwd }) => (cwd === undefined ? [] : [cwd]))));
       const rollups = new Map<string, Map<string, Array<UsageRowInput>>>();
       for (const session of sessions) {
         const place = attribute(session, context);
@@ -232,8 +276,8 @@ export function createReporter({ state, features, usage, read, remoteOf, now }: 
       Effect.option,
     );
     if (Option.isNone(totals)) return;
-    if (totals.value.partial) {
-      yield* Effect.logWarning("Peer usage: a source was read in part, so nothing is sent");
+    if (totals.value.failed) {
+      yield* Effect.logWarning("Peer usage: a transcript source failed, so nothing is sent");
       return;
     }
     const rollups = yield* placeSessions(

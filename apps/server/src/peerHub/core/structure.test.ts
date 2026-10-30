@@ -36,10 +36,13 @@ const ENTRY_BUDGET = 150;
  * integrate and converge, with every jj call and parser in `client/`; `follow.ts` and
  * `operations.ts` are the seams to split along. 82 lines more than at that landing, for the fixes of
  * the simulated lab: the author alignment before a second converge, the fetch's budget, the person's name
- * on an undo and the push notice's fallback.
+ * on an undo and the push notice's fallback. Handoff's is its size when
+ * `add-handoff-facts-and-review-policy` landed the delivery observation (design D1: git and jj read
+ * in `client/delivery.ts`, the seam to split along) beside the package, its targets and its text.
  */
 const CEILINGS: Readonly<Record<string, number>> = {
   forecast: 2192,
+  handoff: 1694,
   jujutsu: 2354,
   memory: 3_430,
   slack: 1_369,

@@ -1263,7 +1263,7 @@ Open **Workspace usage** from a workspace's **Activity** in Tasks, or find it in
 
 **Not measured** means no source, not zero, and the page says why. Tokens and money appear only for people who turn on **Share my usage with this workspace**, and the page says how many people its totals cover. API spend and token value are estimates at list prices: token value covers all reported tokens, API spend only what ran on the workspace's shared capacity. The gateway's own total covers its budget period, not the days you chose. **Code changed** needs GitHub checks under **Settings → Integrations**.
 
-Sharing is off until you turn it on, for each workspace, and only you can change it. Your computers then send daily counts for work in that workspace's repositories, including up to the last 35 days: agent, model, project, tokens, sessions and an estimated cost, never prompts, paths, titles or transcripts. First numbers appear within a few minutes while Peer is open, then every 30 minutes. Peer Core reports nothing. Turning sharing off erases what you reported to that workspace at once. Reports are kept for 90 days.
+Sharing is off until you turn it on, for each workspace, and only you can change it. Your computers then send daily counts for work in that workspace's repositories, on its shared capacity or on its tasks, including up to the last 35 days: agent, model, project, tokens, sessions, an estimated cost and the computer's id, never prompts, paths, titles or transcripts. First numbers appear within a few minutes while Peer is open, then every 30 minutes. Peer Core reports nothing. Turning sharing off erases what you reported to that workspace at once. Reports are kept for 90 days.
 
 ## Catching up
 

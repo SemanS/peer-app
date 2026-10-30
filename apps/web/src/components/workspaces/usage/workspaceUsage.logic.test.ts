@@ -8,6 +8,7 @@ import {
   gatewayText,
   sharingErasedText,
   sharingHasReported,
+  SHARING_SENT,
   sharingOnNote,
   usageAgent,
   usageAgentRows,
@@ -133,7 +134,20 @@ describe("the tiles", () => {
     });
     expect(tile(plans, "tokenValue").lines).toEqual(["Estimate at list prices · all on plans"]);
     expect(tile(plans, "apiSpend").lines).toEqual([
-      "Nothing ran on shared capacity in these days.",
+      "No priced usage on shared capacity in these days.",
+    ]);
+  });
+
+  it("say tokens with no price have none, not that nothing was reported", () => {
+    const unpriced = overview({
+      apiSpend: { usd: null, gateway: null },
+      tokenValue: null,
+      tokens: { input: 900, output: 100, cached: 0 },
+    });
+    expect(tile(unpriced, "tokenValue").value).toEqual({ kind: "not-measured" });
+    expect(tile(unpriced, "tokenValue").lines).toEqual(["These models have no known price."]);
+    expect(tile(unpriced, "apiSpend").lines).toEqual([
+      "No priced usage on shared capacity in these days.",
     ]);
   });
 
@@ -159,8 +173,15 @@ describe("the tiles", () => {
     });
     expect(tile(own, "tokens").lines).toEqual(["Your sharing is off."]);
     expect(tile({ ...own, coverage: { ...own.coverage, sharing: 1 } }, "apiSpend").lines).toEqual([
-      "None of your work ran on shared capacity in these days.",
+      "No priced usage of yours on shared capacity in these days.",
     ]);
+  });
+});
+
+describe("what sharing sends", () => {
+  it("names every kind of work a report covers, and the computer's id", () => {
+    for (const words of ["repositories", "shared capacity", "tasks", "the computer's id"])
+      expect(SHARING_SENT).toContain(words);
   });
 });
 

@@ -158,8 +158,8 @@ function unreportedReason({ scope, coverage }: PeerUsageOverview): string {
 function apiSpendReason(overview: PeerUsageOverview): string {
   if (overview.coverage.sharing === 0) return unreportedReason(overview);
   return overview.scope === "self"
-    ? "None of your work ran on shared capacity in these days."
-    : "Nothing ran on shared capacity in these days.";
+    ? "No priced usage of yours on shared capacity in these days."
+    : "No priced usage on shared capacity in these days.";
 }
 
 function ticketsTile(tickets: NonNullable<PeerUsageOverview["tickets"]>): UsageTile {
@@ -219,7 +219,9 @@ function tokenValueTile(overview: PeerUsageOverview): UsageTile {
       id: "tokenValue",
       label: "Token value",
       value: notMeasured,
-      lines: [unreportedReason(overview)],
+      lines: [
+        overview.tokens === null ? unreportedReason(overview) : "These models have no known price.",
+      ],
     };
   }
   const plans =
@@ -414,7 +416,7 @@ export const SHARING_TITLE = "Share my usage with this workspace";
 
 /** What is sent, said the same way on and off, since turning it on is the consent. */
 export const SHARING_SENT =
-  "Your computers send daily counts for work in this workspace's repositories: agent, model, project, tokens, sessions and an estimated cost. Never prompts, paths, titles, branches or transcripts. Owners and admins see your numbers by name, and only you can change this.";
+  "Your computers send daily counts for work in this workspace's repositories, on its shared capacity or on its tasks: agent, model, project, tokens, sessions, an estimated cost and the computer's id. Never prompts, paths, titles, branches or transcripts. Owners and admins see your numbers by name, and only you can change this.";
 
 export const SHARING_OFF_NOTE =
   "Sharing is off, so your computers send nothing. Turning it on also sends up to the last 35 days.";

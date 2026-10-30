@@ -100,6 +100,10 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   works. It reports whether Bob's final tree is right, whether an edit was lost, how many converges ran, the
 //   moved notices Bob's agent heard and the characters Peer added. With REAL_AGENTS=1 it spends the person's
 //   subscription and runs only after the maintainer agrees; without it scripted stand-ins play both agents.
+//   REAL_SCENARIO=rooms (peer-lab/rooms.ts) proves a task's room: Bob names Ana's agent and nothing reaches it until she
+//   passes it on, she declines and Bob's status moves with no new message, Bob withdraws, a hostile message stays
+//   fenced, an agent cannot name an agent, Bob's own agent answers from a review session on his computer after Ana's run
+//   ended, and a restart with a `taken` delivery starts nothing. A stand-in herdr takes the agents Peer starts.
 //   LAB_CONTRACT=hard (with REAL_SCENARIO=contract) gives nothing of Ana's change away: neutral
 //   titles and branches, and both agents start together.
 //   LAB_CONTRACT=hidden (with REAL_SCENARIO=contract) is a dependency nobody names: Ana's task makes
@@ -199,6 +203,7 @@ import * as NodePath from "node:path";
 
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import * as Schema from "effect/Schema";
@@ -208,6 +213,7 @@ import {
   ORCHESTRATION_PROTOCOL_VERSION,
   PEER_FORECAST_METHODS,
   PEER_JUJUTSU_METHODS,
+  PEER_ROOMS_METHODS,
   WS_METHODS,
   WsRpcGroup,
   PeerAgreementsView,
@@ -225,6 +231,15 @@ import {
 
 import { agreementsLab, wasGiven, type HubAgreements } from "./peer-lab/agreements.ts";
 import { resourceLab } from "./peer-lab/resources.ts";
+import {
+  ROOMS_TASK,
+  runRooms,
+  standInHerdr,
+  type HerdrStart,
+  type RoomsAgent,
+  type RoomsKit,
+  type RoomsPerson,
+} from "./peer-lab/rooms.ts";
 import {
   dependencyBlocks,
   withDependencyEvidence,
@@ -419,6 +434,9 @@ const TEAM = process.env.REAL_SCENARIO === "team";
 const FOLLOW = process.env.REAL_SCENARIO === "follow";
 /** REAL_SCENARIO=knowledge (`peer-lab/knowledge.ts`): a teammate's landing supersedes an entry a session read. */
 const KNOWLEDGE = process.env.REAL_SCENARIO === "knowledge";
+/** REAL_SCENARIO=rooms (`peer-lab/rooms.ts`): a task's room between two people and their agents. */
+const ROOMS = process.env.REAL_SCENARIO === "rooms";
+if (ROOMS && REAL) throw new Error("REAL_SCENARIO=rooms has no real-agent arm yet");
 if (process.env.LAB_VCS !== undefined && !["git", "jj"].includes(process.env.LAB_VCS)) {
   throw new Error(`LAB_VCS must be git or jj, not ${process.env.LAB_VCS}`);
 }
@@ -817,7 +835,7 @@ async function setUpWorkspace() {
         session: admin,
         body: { title: task.title, key: task.key },
       });
-  } else if (REAL && !OWNERS && !FOLLOW) {
+  } else if (REAL && !OWNERS && !FOLLOW && !ROOMS) {
     const krk1 = await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
       method: "POST",
       session: admin,
@@ -1000,13 +1018,14 @@ const connect = (home: string, port: number, env: NodeJS.ProcessEnv) =>
  * (its broker keeps what each agent was told), then starts on the same home and resumes
  * coordination by itself, while the agents run on in herdr.
  */
-const restartComputer = (computer: Computer) =>
+const restartComputer = (computer: Computer, during: () => Promise<void> = async () => {}) =>
   Effect.gen(function* () {
     const child = computer.server.child;
     const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()));
     child.kill("SIGTERM");
     yield* Effect.promise(() => Promise.race([exited, sleep(20_000)]));
     check(child.exitCode !== null || child.signalCode !== null, `${computer.name}'s Peer quit`);
+    yield* Effect.promise(during);
     computer.server = yield* serve(computer.name, computer.home, computer.port, computer.env);
     computer.client = yield* connect(computer.home, computer.port, computer.env);
   });
@@ -7170,6 +7189,142 @@ const followProgram = Effect.gen(function* () {
 }).pipe(Effect.scoped);
 
 /**
+ * REAL_SCENARIO=rooms (`peer-lab/rooms.ts`): the people act through their own Peers, the lab reads the Hub and the logs.
+ */
+const roomsProgram = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  writeFakeModel();
+  const scope = yield* Effect.scope;
+  const anaHerdr = standInHerdr(NodePath.join(lab, "ah.sock"));
+  const bobHerdr = standInHerdr(NodePath.join(lab, "bh.sock"));
+  const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr.socketPath);
+  const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socketPath);
+  const created = yield* Effect.promise(() =>
+    hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+      method: "POST",
+      session: hubSession,
+      body: { title: ROOMS_TASK.title, key: ROOMS_TASK.key },
+    }),
+  );
+  const taskId = String(created.id);
+  for (const computer of [ana, bob])
+    yield* Effect.promise(() =>
+      until(`${computer.name}'s Peer knows ${ROOMS_TASK.key}`, async () => {
+        const synced = await Effect.runPromise(computer.client[WS_METHODS.peerHubSync]({}));
+        return (
+          synced.workspaces[0]?.projects
+            .find((p) => p.project.id === "lab")
+            ?.work.tasks.some((one) => one.key === ROOMS_TASK.key) === true
+        );
+      }),
+    );
+  branchOff(ana.checkout, ROOMS_TASK.branch);
+  const sessions = new Map<string, string>();
+  const sessionOf = async (who: "ana" | "bob") => {
+    const known = sessions.get(who);
+    if (known !== undefined) return known;
+    const email = `${who}@acme.test`;
+    const started = await hubCall("/v1/auth/email/start", { method: "POST", body: { email } });
+    const finished = await hubCall("/v1/auth/email/verify", {
+      method: "POST",
+      body: { email, code: started.code },
+    });
+    sessions.set(who, finished.session as string);
+    return finished.session as string;
+  };
+  const place = { workspace: "acme", project: "lab", task: taskId };
+  const person = (
+    computer: Computer,
+    email: string,
+    starts: ReadonlyArray<HerdrStart>,
+  ): RoomsPerson => {
+    const rpc = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect);
+    return {
+      email,
+      starts,
+      post: (op, text, to) =>
+        rpc(
+          computer.client[PEER_ROOMS_METHODS.peerRoomsPost]({
+            ...place,
+            op,
+            text,
+            to: to.map((target) => ({ kind: "agent" as const, email: target })),
+          }),
+        ),
+      pass: (seq) => rpc(computer.client[PEER_ROOMS_METHODS.peerRoomsPass]({ ...place, seq })),
+      decline: (seq, reason) =>
+        rpc(computer.client[PEER_ROOMS_METHODS.peerRoomsDecline]({ ...place, seq, reason })),
+      withdraw: (seq) =>
+        rpc(computer.client[PEER_ROOMS_METHODS.peerRoomsWithdraw]({ ...place, seq })),
+      endRun: (runId) =>
+        rpc(
+          computer.client[WS_METHODS.peerHubEndRun]({ workspace: "acme", projectId: "lab", runId }),
+        ),
+      rooms: async () => (await cachedStatus(computer)).rooms,
+      read: async () =>
+        (await rpc(computer.client[PEER_ROOMS_METHODS.peerRoomsRead]({ ...place, limit: 50 })))
+          .messages,
+      log: () => (NodeFS.existsSync(computer.log) ? NodeFS.readFileSync(computer.log, "utf8") : ""),
+    };
+  };
+  const roomPath = `/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(taskId)}/room`;
+  const hubAs = async (who: "ana" | "bob", method: string, path: string, body?: unknown) => {
+    const response = await fetch(`${hubUrl}${path}`, {
+      method,
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${await sessionOf(who)}`,
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    return {
+      status: response.status,
+      body: (await response.json()) as Record<string, any>,
+    };
+  };
+  const kit: RoomsKit = {
+    ana: person(ana, "ana@acme.test", anaHerdr.starts),
+    bob: person(bob, "bob@acme.test", bobHerdr.starts),
+    anaAgent: agent(ana, "room-ana", "w30:p1") as RoomsAgent,
+    agentOf: (start) =>
+      agent(
+        bob,
+        "room-review",
+        start.pane,
+        Object.fromEntries(Object.entries(start.env)),
+        start.cwd,
+      ) as RoomsAgent,
+    room: async () => (await hubAs("bob", "GET", `${roomPath}?limit=200`)).body.messages,
+    runs: async () =>
+      (await hubAs("bob", "GET", `/v1/workspaces/acme/runs/lab?task=${encodeURIComponent(taskId)}`))
+        .body.runs ?? [],
+    hub: hubAs,
+    roomPath,
+    restartBob: (during) =>
+      Effect.runPromise(
+        restartComputer(bob, during).pipe(Effect.provideService(Scope.Scope, scope)),
+      ),
+    say,
+    told,
+    until,
+    sleep,
+  };
+  try {
+    const failed = yield* Effect.promise(() => runRooms(kit));
+    yield* Effect.promise(() => sleep(1500));
+    say("rooms result", failed.length === 0 ? "every check held" : `${failed.length} failed`);
+    for (const what of failed) say("failed", what);
+    check(failed.length === 0, "every check of the rooms scenario held");
+  } finally {
+    anaHerdr.close();
+    bobHerdr.close();
+  }
+}).pipe(Effect.scoped);
+
+/**
  * REAL_SCENARIO=knowledge (`peer-lab/knowledge.ts`): Ana's reader session reads entry A, Bob's author session reads it
  * too, and the lab lands B superseding A from Bob's checkout as his person would (kontext capture, commit, push).
  * Ana's checkout fetches, and the reader's next step must name B once; the author and Ana's bystander hear nothing.
@@ -7603,17 +7758,19 @@ try {
           ? contractProgram
           : FOLLOW
             ? followProgram
-            : KNOWLEDGE
-              ? knowledgeProgram
-              : TASKS
-                ? realTasksProgram
-                : SETTLE
-                  ? realSettleProgram
-                  : SETTINGS_SCENARIO
-                    ? realSettingsProgram
-                    : process.env.REAL_AGENTS === "1"
-                      ? realProgram
-                      : program,
+            : ROOMS
+              ? roomsProgram
+              : KNOWLEDGE
+                ? knowledgeProgram
+                : TASKS
+                  ? realTasksProgram
+                  : SETTLE
+                    ? realSettleProgram
+                    : SETTINGS_SCENARIO
+                      ? realSettingsProgram
+                      : process.env.REAL_AGENTS === "1"
+                        ? realProgram
+                        : program,
   );
   say("PASS");
   process.exitCode = 0;

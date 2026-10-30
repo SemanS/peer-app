@@ -39,12 +39,16 @@ const ENTRY_BUDGET = 150;
  * on an undo and the push notice's fallback. Handoff's is its size when
  * `add-handoff-facts-and-review-policy` landed the delivery observation (design D1: git and jj read
  * in `client/delivery.ts`, the seam to split along) beside the package, its targets and its text.
+ * Rooms' is its size when the review of `add-task-rooms` was fixed: consent and capacity checks in
+ * `decide`, stuck deliveries, the marked cuts and the diff's search; `follow.ts` and `client/` are
+ * the seams to split along.
  */
 const CEILINGS: Readonly<Record<string, number>> = {
   forecast: 2192,
   handoff: 1728,
   jujutsu: 2354,
   memory: 3_430,
+  rooms: 2230,
   slack: 1_369,
 };
 

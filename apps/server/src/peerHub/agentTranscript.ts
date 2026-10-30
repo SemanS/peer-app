@@ -77,6 +77,33 @@ function relative(path: unknown, cwd: string | undefined): string {
 }
 
 /** A tool call in a few words, the way a person would say what the agent did. */
+/** The questions an AskUserQuestion call puts, one line; its headings alone when it has no text. */
+function questionsOf(input: unknown): string {
+  const questions = (input as { questions?: unknown } | null)?.questions;
+  if (!Array.isArray(questions)) return "";
+  return questions
+    .map((q: { question?: unknown; header?: unknown }) =>
+      typeof q?.question === "string" && q.question.trim() !== ""
+        ? q.question.trim()
+        : typeof q?.header === "string"
+          ? q.header.trim()
+          : "",
+    )
+    .filter((q) => q !== "")
+    .join(" · ");
+}
+
+/**
+ * What an agent that waits for an answer is asking: the question of a trailing AskUserQuestion
+ * call, else its last words. Undefined when the end of the transcript holds neither.
+ */
+export function waitingWords(entries: ReadonlyArray<PeerAgentEntry>): string | undefined {
+  const last = entries.at(-1);
+  if (last?.kind === "tool" && last.name === "AskUserQuestion" && last.summary !== "Ask: ")
+    return last.summary.replace(/^Ask: /, "");
+  return entries.findLast((entry) => entry.kind === "text")?.text;
+}
+
 export function toolSummary(name: string, input: unknown, cwd?: string): string {
   const field = (key: string) => {
     const value = (input as Record<string, unknown> | null)?.[key];
@@ -107,6 +134,8 @@ export function toolSummary(name: string, input: unknown, cwd?: string): string 
       return `Agent: ${clip(field("description"), 120)}`;
     case "TodoWrite":
       return "Update the plan";
+    case "AskUserQuestion":
+      return `Ask: ${clip(questionsOf(input), 300)}`;
     default: {
       const mcp = /^mcp__(.+?)__(.+)$/.exec(name);
       return mcp === null ? name : `${mcp[1]} · ${mcp[2]}`;

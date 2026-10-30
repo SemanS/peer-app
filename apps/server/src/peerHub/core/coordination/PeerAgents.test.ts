@@ -277,6 +277,31 @@ describe("PeerAgents.lastMessage", () => {
     }).pipe(Effect.scoped, Effect.provide(withFiles)),
   );
 
+  it.effect("reads the question of an agent that waits for an answer, else its last words", () =>
+    Effect.gen(function* () {
+      const agents = yield* withTranscript([
+        said("I need a decision."),
+        record("assistant", [
+          {
+            type: "tool_use",
+            id: "q1",
+            name: "AskUserQuestion",
+            input: {
+              questions: [
+                { header: "Rounding", question: "Round half up, or to even?", options: [] },
+                { header: "Scope", question: "", options: [] },
+              ],
+            },
+          },
+        ]),
+      ]);
+      assert.strictEqual(yield* agents.asking("w1:p1"), "Round half up, or to even? · Scope");
+      assert.strictEqual(yield* agents.lastMessage("w1:p1"), "I need a decision.");
+      const plain = yield* withTranscript([said("Which one?")]);
+      assert.strictEqual(yield* plain.asking("w1:p1"), "Which one?");
+    }).pipe(Effect.scoped, Effect.provide(withFiles)),
+  );
+
   it.effect("knows nothing of a pane without a session, and of coordination being off", () =>
     Effect.gen(function* () {
       const agents = yield* withTranscript([said("Done.")]);

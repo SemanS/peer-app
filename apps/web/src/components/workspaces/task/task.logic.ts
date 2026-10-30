@@ -111,6 +111,8 @@ export type TaskWait =
       readonly detail: string;
       /** Where the chat opens; undefined for one on another computer that cannot be opened here. */
       readonly open: WorkOpen | undefined;
+      /** What a herdr agent asks in its terminal, when Peer could read it; a Peer thread's question is read from the thread. */
+      readonly question?: string;
     };
 
 export interface TaskPageModel {
@@ -225,6 +227,11 @@ function waitsOn(input: {
     if (row === undefined) continue;
     // "Claude", or "Your agent" while nothing names the agent.
     const who = row.agent === UNKNOWN_AGENT ? "Your agent" : row.agent;
+    const open = row.open;
+    const question =
+      open?.kind === "herdr"
+        ? status.agents.list.find((agent) => agent.id === open.agentId)?.asks
+        : undefined;
     waits.push(
       approval
         ? {
@@ -238,8 +245,9 @@ function waitsOn(input: {
             kind: "input",
             key: `input:${row.key}`,
             title: `${who} has a question for you`,
-            detail: `In “${row.title}”. Open the chat to answer.`,
+            detail: `In “${row.title}”. ${question === undefined ? "Open the chat to answer." : "Answer it in its terminal, or open the chat."}`,
             open: row.open,
+            ...(question === undefined ? {} : { question }),
           },
     );
   }

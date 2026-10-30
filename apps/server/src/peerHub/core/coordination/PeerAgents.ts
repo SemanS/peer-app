@@ -7,7 +7,7 @@
  *
  * @module peerHub/core/coordination/PeerAgents
  */
-import { PeerHubError, type PeerStaleReads } from "@t3tools/contracts";
+import { type PeerAgentEntry, PeerHubError, type PeerStaleReads } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -110,6 +110,11 @@ export class PeerAgents extends Context.Service<
      */
     readonly lastMessage: (pane: string) => Effect.Effect<string | undefined>;
     /**
+     * What the agent in a pane asks while it waits for an answer: the question of a trailing
+     * AskUserQuestion call, else its last words; undefined as for `lastMessage`.
+     */
+    readonly asking: (pane: string) => Effect.Effect<string | undefined>;
+    /**
      * The session most recently active in a runtime's pane (herdr's), as its hooks reported it: its
      * native id and the transcript its harness keeps; none when no session there is known.
      */
@@ -202,6 +207,21 @@ const make = Effect.gen(function* () {
             ),
     });
 
+  /** The end of the transcript of the session in `pane`, as entries; empty when there is none to read. */
+  const tailEntries = (pane: string) =>
+    Effect.gen(function* () {
+      const hooked = broker?.sessionInPane(pane);
+      if (hooked === undefined) return [] as ReadonlyArray<PeerAgentEntry>;
+      const path = yield* Effect.tryPromise(() =>
+        AgentTranscript.findClaudeTranscript(hooked),
+      ).pipe(Effect.orElseSucceed(() => null));
+      if (path === null) return [] as ReadonlyArray<PeerAgentEntry>;
+      const lines = yield* Effect.tryPromise(() =>
+        AgentTranscript.readTranscriptTail(path, LAST_MESSAGE_BYTES),
+      ).pipe(Effect.orElseSucceed(() => []));
+      return AgentTranscript.transcriptEntries(lines);
+    });
+
   return PeerAgents.of({
     changeCheckout: (root, change) =>
       Effect.acquireUseRelease(
@@ -276,19 +296,11 @@ const make = Effect.gen(function* () {
               }),
       }),
     lastMessage: (pane) =>
-      Effect.gen(function* () {
-        const hooked = broker?.sessionInPane(pane);
-        if (hooked === undefined) return undefined;
-        const path = yield* Effect.tryPromise(() =>
-          AgentTranscript.findClaudeTranscript(hooked),
-        ).pipe(Effect.orElseSucceed(() => null));
-        if (path === null) return undefined;
-        const lines = yield* Effect.tryPromise(() =>
-          AgentTranscript.readTranscriptTail(path, LAST_MESSAGE_BYTES),
-        ).pipe(Effect.orElseSucceed(() => []));
-        return AgentTranscript.transcriptEntries(lines).findLast((entry) => entry.kind === "text")
-          ?.text;
-      }),
+      Effect.map(
+        tailEntries(pane),
+        (entries) => entries.findLast((entry) => entry.kind === "text")?.text,
+      ),
+    asking: (pane) => Effect.map(tailEntries(pane), AgentTranscript.waitingWords),
     inPane: (pane) => broker?.sessionInPane(pane),
     level: (session) => broker?.coordinationLevel(session) ?? "C",
     markSettled: (session, overlap, notes) => {

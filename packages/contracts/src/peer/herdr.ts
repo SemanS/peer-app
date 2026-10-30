@@ -19,6 +19,11 @@ export const PeerLocalAgent = Schema.Struct({
   agent: Schema.optional(Schema.String),
   title: Schema.String,
   status: PeerWorkStatus,
+  /**
+   * What it asks while it waits for an answer in its terminal (`blocked`): the question of its
+   * AskUserQuestion call, else its last words, bounded; absent when Peer cannot read its transcript.
+   */
+  asks: Schema.optional(Schema.String),
   cwd: Schema.optional(Schema.String),
   branch: Schema.optional(Schema.String),
   /** Its repository is Jujutsu, colocated with Git; absent means Git (older Peers and Hubs). */

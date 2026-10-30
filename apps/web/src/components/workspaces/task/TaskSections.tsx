@@ -84,7 +84,9 @@ export function WaitsOnYou({
             <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-0.5">
               <span className="text-sm font-semibold text-foreground">{wait.title}</span>
               <span className="text-sm text-muted-foreground">{wait.detail}</span>
-              {wait.kind === "input" && wait.open?.kind === "thread" ? (
+              {wait.kind === "input" && wait.question !== undefined ? (
+                <p className="max-w-prose text-sm text-foreground">{wait.question}</p>
+              ) : wait.kind === "input" && wait.open?.kind === "thread" ? (
                 <PendingQuestion open={wait.open} />
               ) : null}
             </div>

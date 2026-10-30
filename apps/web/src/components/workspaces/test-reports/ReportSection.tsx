@@ -37,6 +37,8 @@ const KIND_WORD = { pass: "Passed", fail: "Failed", unverified: "Unverified" } a
 const RESULTS: ReadonlyArray<PeerTestReportResult> = ["pass", "fail", "mixed"];
 /** The owner select's value for an item nobody answers for; no address looks like it. */
 const NO_OWNER = "no-owner";
+/** Its value for an item its author left to a dependent task; choosing a person or "No owner" replaces that. */
+const LEFT_TO_TASK = "left-to-task";
 
 type Member = { readonly email: string; readonly name: string };
 
@@ -396,7 +398,8 @@ function OwnerSelect({
   readonly name: (email: string) => string;
   readonly onAssign: (owner: string | null) => void;
 }) {
-  const value = item.owner ?? NO_OWNER;
+  const leftToTask = item.owner === undefined && item.task !== undefined;
+  const value = item.owner ?? (leftToTask ? LEFT_TO_TASK : NO_OWNER);
   // Someone who left the project still shows as the owner the Hub keeps.
   const people =
     item.owner === undefined ||
@@ -415,10 +418,15 @@ function OwnerSelect({
       >
         <SelectTrigger size="xs" aria-label={`Owner of “${item.text}”`}>
           <SelectValue>
-            {item.owner === undefined ? "Needs an owner" : name(item.owner)}
+            {item.owner !== undefined
+              ? name(item.owner)
+              : leftToTask
+                ? "Left to a task"
+                : "Needs an owner"}
           </SelectValue>
         </SelectTrigger>
         <SelectPopup>
+          {leftToTask ? <SelectItem value={LEFT_TO_TASK}>Left to a task</SelectItem> : null}
           <SelectItem value={NO_OWNER}>No owner</SelectItem>
           {people.map((member) => (
             <SelectItem key={member.email} value={member.email}>

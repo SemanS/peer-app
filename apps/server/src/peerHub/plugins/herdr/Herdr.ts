@@ -149,12 +149,37 @@ const make = Effect.gen(function* () {
     };
   };
 
+  /**
+   * What a blocked agent asks, read once per pane and turn: the transcript's end does not change
+   * while the agent waits, and the status is published often.
+   */
+  const asked = new Map<string, string | undefined>();
+  const asksOf = (agent: HerdrAgentState) =>
+    Effect.gen(function* () {
+      if (agent.status !== "blocked") return undefined;
+      const key = `${agent.paneId}\u0000${agent.completionSeq ?? ""}`;
+      if (asked.has(key)) return asked.get(key);
+      const words = yield* sessions.asking(agent.paneId);
+      const asks = words === undefined ? undefined : words.slice(0, 300);
+      if (asked.size >= 64) asked.clear();
+      asked.set(key, asks);
+      return asks;
+    });
+
   const agentsNow: Herdr["Service"]["agents"] = Effect.gen(function* () {
     const { persisted } = yield* state.read;
     const list = agents.current();
+    const views: PeerLocalAgent[] = [];
+    for (const agent of list ?? []) {
+      const asks = yield* asksOf(agent);
+      views.push({
+        ...localAgentView(persisted, agent),
+        ...(asks === undefined ? {} : { asks }),
+      });
+    }
     return {
       herdr: list === null ? "not-running" : "running",
-      list: (list ?? []).map((agent) => localAgentView(persisted, agent)),
+      list: views,
       postHocSkipped: persisted.workspaces.reduce(
         (count, workspace) => count + (skipped.get(workspace.slug) ?? 0),
         0,

@@ -150,6 +150,26 @@ describe("delivery observation", () => {
     assert.isNull(await observe(NodeFS.mkdtempSync(NodePath.join(home, "plain-")), ["a.ts"]));
   });
 
+  it("a session that reported no files is judged by what its checkout changed", async () => {
+    // A run continued after a restart: an earlier session committed the work and pushed it.
+    const work = cloned();
+    git(work, "switch", "-c", "feature/contract");
+    write(work, "types/concurrency.ts", "export {}\n");
+    git(work, "add", ".");
+    git(work, "commit", "-m", "contract");
+    const local = await observe(work, []);
+    assert.strictEqual(local?.state, "local");
+    git(work, "push", "-u", "origin", "feature/contract");
+    const shared = await observe(work, []);
+    assert.strictEqual(shared?.state, "shared");
+    assert.strictEqual(shared?.evidence.branch, "feature/contract");
+    // Something untracked beside the pushed work still makes it none, and names it.
+    write(work, "types/later.ts", "export {}\n");
+    const none = await observe(work, []);
+    assert.strictEqual(none?.state, "none");
+    assert.deepStrictEqual(none?.evidence.untracked, ["types/later.ts"]);
+  });
+
   it("a jj change pushed to a bookmark is shared with its change id and bookmark", async () => {
     const work = cloned();
     jj(work, "git", "init", "--colocate");

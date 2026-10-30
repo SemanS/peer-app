@@ -42,7 +42,7 @@ const ENTRY_BUDGET = 150;
  */
 const CEILINGS: Readonly<Record<string, number>> = {
   forecast: 2192,
-  handoff: 1694,
+  handoff: 1728,
   jujutsu: 2354,
   memory: 3_430,
   slack: 1_369,

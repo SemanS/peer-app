@@ -327,13 +327,47 @@ async function observeJj(
 }
 
 /**
- * The delivery of the reported files, or null when Peer cannot say: no file was reported, the
- * directory is no checkout Peer works in, or git or jj failed.
+ * What the checkout itself changed, for a session that reported no files of its own (a run
+ * continued after a restart, a session that only hands off): the paths committed since trunk, or
+ * since the upstream when the remote names no default branch, and the dirty ones; in Jujutsu the
+ * paths of the stack between trunk and the working copy. Peer observes the run's work, not only
+ * this session's edits.
+ */
+async function ownChanges(root: string, kind: "git" | "jj"): Promise<ReadonlyArray<string>> {
+  const dirty = await dirtyFiles(root, []).catch(() => ({
+    untracked: [] as string[],
+    uncommitted: [] as string[],
+  }));
+  const paths = new Set([...dirty.untracked, ...dirty.uncommitted]);
+  if (kind === "jj") {
+    for (const entry of await jjStack(root).catch(() => [] as ReadonlyArray<JjEntry>))
+      for (const path of entry.paths) paths.add(path);
+  } else {
+    const base =
+      (await gitLine(root, ["merge-base", "HEAD", "refs/remotes/origin/HEAD"]).catch(() => "")) ||
+      (await gitLine(root, ["rev-parse", "@{u}"]).catch(() => ""));
+    if (base !== "") {
+      const committed = await git(root, ["log", "--name-only", "--format=", `${base}..HEAD`]).catch(
+        () => "",
+      );
+      for (const line of committed.split("\n")) if (line.trim() !== "") paths.add(line.trim());
+    }
+  }
+  return [...paths].slice(0, 200);
+}
+
+/**
+ * The delivery of the reported files, or of the checkout's own changes when the session reported
+ * none; null when Peer cannot say: nothing changed, the reported files are outside the repository,
+ * the directory is no checkout Peer works in, or git or jj failed.
  */
 export async function observeDelivery(input: DeliveryInput): Promise<PeerHandoffDelivery | null> {
   const found = await checkoutKind(input.cwd).catch(() => null);
   if (found === null || found.kind === "jj-unsupported") return null;
-  const files = repositoryFiles(found.root, input.files);
+  const files =
+    input.files.length === 0
+      ? await ownChanges(found.root, found.kind)
+      : repositoryFiles(found.root, input.files);
   if (files.length === 0) return null;
   const observed = await (
     found.kind === "jj"

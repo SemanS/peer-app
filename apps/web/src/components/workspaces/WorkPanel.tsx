@@ -11,7 +11,12 @@ import { ProjectSection } from "./ProjectSection";
 import { SignalTiles } from "./ProjectSignals";
 import { isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
 import { ShareProject } from "./ShareProject";
-import { NavRow, ProjectActivityNav, ProjectKnowledgeNav } from "./SidebarNav";
+import {
+  NavRow,
+  ProjectActivityNav,
+  ProjectKnowledgeNav,
+  WorkspaceActivityNav,
+} from "./SidebarNav";
 import type { SidebarTab } from "./SidebarViewSwitch.logic";
 import { useLocalProject } from "./StableWorkNavigation";
 import { useOpenScopedChats } from "./useOpenScopedChats";
@@ -53,6 +58,9 @@ export function WorkPanel({
   return (
     <WorkHereContext.Provider value={here}>
       <div className="flex flex-col gap-5 pb-6">
+        {tab === "activity" && status?.signedIn === true ? (
+          <WorkspaceActivityNav status={status} plugins={plugins} activeThread={activeThread} />
+        ) : null}
         {tab !== "tasks" ? (
           environmentId === null || status === null ? (
             <p className="px-2 text-xs text-muted-foreground">Connecting…</p>

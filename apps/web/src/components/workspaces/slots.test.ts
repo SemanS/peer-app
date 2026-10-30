@@ -42,6 +42,7 @@ describe("the web plugin registry", () => {
       "recipes",
       "forecast",
       "metrics",
+      "usage",
       "digest",
       "impact",
       "ownership",

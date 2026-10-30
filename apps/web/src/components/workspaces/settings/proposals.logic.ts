@@ -7,6 +7,7 @@
 import { harnessLabel } from "@t3tools/client-runtime/peer-settings";
 import type { PeerSettingsProposal } from "@t3tools/contracts";
 
+import { ASK_TO_BE_ADDED } from "../no-projects/noProjects.logic";
 import type { PeerSettingsLocation } from "./peerSettings.logic";
 
 /** The longest reason a decline may give (the Hub's limit). */
@@ -62,6 +63,13 @@ export function proposalsOnPage(
     )
     .toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at));
 }
+
+/**
+ * A member's ask to be put on a project: closing it alone gives them nothing, so whoever decides it
+ * picks the projects there.
+ */
+export const asksToBeAdded = (proposal: PeerSettingsProposal) =>
+  proposal.lines.length === 0 && proposal.message === ASK_TO_BE_ADDED;
 
 /** How long a proposer is shown what became of a proposal of theirs. */
 export const DECIDED_SHOWN_MS = 7 * 24 * 60 * 60 * 1000;

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { PeerSettingsLocation } from "./peerSettings.logic";
 import {
   DECIDED_SHOWN_MS,
+  asksToBeAdded,
   bannerText,
   decidedOnPage,
   decisionText,
@@ -199,5 +200,13 @@ describe("what became of a proposer's proposals", () => {
     const one = decided("p1", { state: "applied", revision: 44 });
     expect(bannerText([], [], [one])).toBe("Your proposal was decided");
     expect(bannerText([], [], [one, one])).toBe("2 of your proposals were decided");
+  });
+});
+
+describe("asksToBeAdded", () => {
+  it("is a member's ask to be put on a project, and no other proposal", () => {
+    const ask = { lines: [], message: "Please add me to a project" };
+    expect(asksToBeAdded(proposal("a", ask))).toBe(true);
+    expect(asksToBeAdded(proposal("b", { ...ask, message: "Please rotate the key" }))).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import type { PeerSettingsProposal } from "@t3tools/contracts";
+import type { PeerSettingsProposal, PeerWorkspaceMembers } from "@t3tools/contracts";
 import { useLocation } from "@tanstack/react-router";
 import { ChevronRightIcon, FileDiffIcon } from "lucide-react";
 import { useId, useState } from "react";
@@ -21,6 +21,7 @@ import {
   PeerFenced,
   PeerStackedField,
 } from "../PeerDialog";
+import { MemberProjectsDialog } from "../MemberProjectsDialog";
 import { TONE_SURFACE } from "../signals";
 import { failureMessage } from "../WorkspaceAccess";
 import { reportFailure } from "../workFeedback";
@@ -29,6 +30,7 @@ import { useOptionalPeerSettings, usePeerSettings } from "./PeerSettingsContext"
 import { parsePeerSettingsPath } from "./peerSettings.logic";
 import {
   DECLINE_MAX,
+  asksToBeAdded,
   bannerText,
   decidedOnPage,
   decisionText,
@@ -135,6 +137,66 @@ function DeclineProposalDialog({
 }
 
 /**
+ * Answers a member's ask to be added: puts them on the projects ticked, and only then closes the ask, so that it never reads done while they are on nothing.
+ */
+function AddToProjectDialog({
+  workspace,
+  proposal,
+  member,
+  name,
+  onClose,
+  onAdded,
+}: {
+  readonly workspace: string;
+  readonly proposal: PeerSettingsProposal;
+  /** Who asked, as the members list says now; undefined once they left. */
+  readonly member: PeerWorkspaceMembers["members"][number] | undefined;
+  readonly name: string;
+  readonly onClose: () => void;
+  readonly onAdded: () => void;
+}) {
+  const { environmentId, status } = usePeerSettings();
+  const setProjects = useAtomCommand(serverEnvironment.peerHubSetMemberProjects, {
+    reportFailure: false,
+  });
+  const apply = useAtomCommand(serverEnvironment.peerSettings.applyProposal, {
+    reportFailure: false,
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const projects = status.workspaces.find((entry) => entry.slug === workspace)?.projects ?? [];
+  return (
+    <MemberProjectsDialog
+      name={name}
+      projects={projects.map(({ project }) => ({ id: project.id, name: project.name }))}
+      limit={member?.projects ?? null}
+      busy={busy}
+      error={member === undefined ? `${name} is no longer in this workspace.` : error}
+      onCancel={onClose}
+      onSave={(picked) => {
+        if (member === undefined) return;
+        setBusy(true);
+        setError(null);
+        void setProjects({
+          environmentId,
+          input: { workspace, email: member.email, projects: picked },
+        })
+          .then(async (result) => {
+            const failure = failureMessage(result);
+            if (failure !== null) return setError(failure);
+            const closed = await apply({ environmentId, input: { workspace, id: proposal.id } });
+            const notClosed = failureMessage(closed);
+            if (notClosed !== null) return setError(notClosed);
+            onAdded();
+            onClose();
+          })
+          .finally(() => setBusy(false));
+      }}
+    />
+  );
+}
+
+/**
  * One proposal: who proposed it, why, what it changes, and what the person may do with it while it
  * waits, or what became of it once decided.
  */
@@ -160,8 +222,13 @@ function ProposalRow({
   const [declining, setDeclining] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  const members = useAtomCommand(serverEnvironment.peerHubMembers, { reportFailure: false });
+  const [adding, setAdding] = useState<{
+    readonly member: PeerWorkspaceMembers["members"][number] | undefined;
+  } | null>(null);
   const name = view.nameOf(proposal.by);
   const isAsk = proposal.lines.length === 0;
+  const addable = asksToBeAdded(proposal);
   const pending = proposal.state === "pending";
   const decider =
     proposal.decidedBy === null || proposal.decidedBy === undefined
@@ -185,7 +252,9 @@ function ProposalRow({
       <p className="text-sm break-words text-foreground">“{proposal.message}”</p>
       {isAsk ? (
         <p className="text-xs text-muted-foreground">
-          This asks for something rather than proposing a change.
+          {addable
+            ? `Mark done closes this without adding ${name}. Add them to a project to give them access.`
+            : "This asks for something rather than proposing a change."}
         </p>
       ) : (
         <ChangeLines lines={proposal.lines} />
@@ -215,10 +284,35 @@ function ProposalRow({
               Review
             </Button>
           ) : null}
+          {proposal.canDecide && addable ? (
+            <Button
+              size="xs"
+              onClick={() => {
+                void members({
+                  environmentId,
+                  input: { workspace: view.workspace },
+                }).then((result) => {
+                  if (result._tag !== "Success") {
+                    reportFailure("Could not read the members", result);
+                    return;
+                  }
+                  const asked = proposal.by.email.toLowerCase();
+                  setAdding({
+                    member: result.value.members.find(
+                      (entry) => entry.email.toLowerCase() === asked,
+                    ),
+                  });
+                });
+              }}
+            >
+              Add to a project…
+            </Button>
+          ) : null}
           {proposal.canDecide && isAsk ? (
             // An ask changes nothing: the owner's word closes it, with no revision.
             <Button
               size="xs"
+              variant={addable ? "outline" : "default"}
               disabled={finishing}
               onClick={() => {
                 setFinishing(true);
@@ -262,6 +356,16 @@ function ProposalRow({
           ) : null}
         </div>
       ) : null}
+      {adding === null ? null : (
+        <AddToProjectDialog
+          workspace={view.workspace}
+          proposal={proposal}
+          member={adding.member}
+          name={name}
+          onClose={() => setAdding(null)}
+          onAdded={onChanged}
+        />
+      )}
       {declining ? (
         <DeclineProposalDialog
           workspace={view.workspace}

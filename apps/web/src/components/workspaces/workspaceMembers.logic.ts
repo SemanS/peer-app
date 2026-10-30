@@ -82,6 +82,7 @@ export function limitWords(
   projects: ReadonlyArray<string>,
   nameOf: (project: string) => string | undefined,
 ): string {
+  if (projects.length === 0) return "on no project yet";
   return `on ${listed(projects.map((id) => nameOf(id) ?? id))} only`;
 }
 

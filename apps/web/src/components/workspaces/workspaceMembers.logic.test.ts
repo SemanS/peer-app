@@ -154,6 +154,7 @@ describe("who invites to which projects", () => {
 describe("a member's limit", () => {
   it("is shown with the projects' names", () => {
     expect(limitWords(["webshop"], () => "Webshop")).toBe("on Webshop only");
+    expect(limitWords([], () => undefined)).toBe("on no project yet");
     expect(
       limitWords(["webshop", "billing"], (id) => (id === "webshop" ? "Webshop" : undefined)),
     ).toBe("on Webshop and billing only");

@@ -29,7 +29,7 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 
-import type { PeerSessionView } from "../../core/plugin.ts";
+import type { PeerSessionView, ReportedSession } from "../../core/plugin.ts";
 import { isSafeGitRef } from "../../gitSafety.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
@@ -388,6 +388,19 @@ const make = Effect.gen(function* () {
      * prompt or the one a plugin gives (`reviewStarter`); the thread's sessions take the role
      * `review`. Core's checks of a start apply.
      */
+    /**
+     * A review session reports no files and no claims: the Hub pairs those into overlaps, and an
+     * overlap wakes the other agent, so a question would cost the author's person a turn.
+     */
+    reportSessions: (_workspace: string, reported: ReadonlyArray<ReportedSession>) =>
+      Effect.map(agents.sessions, (live) =>
+        reported.map((session) => {
+          const view = live.find((candidate) => candidate.id === session.id);
+          return view !== undefined && roleOf(view) === "review"
+            ? { ...session, files: [], claims: [] }
+            : session;
+        }),
+      ),
     reviewRuns: (workspace: string, project: string) =>
       Effect.sync(
         (): ReadonlySet<string> =>

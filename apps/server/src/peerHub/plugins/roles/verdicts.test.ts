@@ -145,6 +145,33 @@ describe("a review session", () => {
     ),
   );
 
+  it.effect("reports no files or claims, so it opens no overlap; others report as they did", () =>
+    run(
+      Effect.gen(function* () {
+        const { peer, fixture } = yield* ready(reviewing());
+        yield* Effect.promise(() => fixture.register("one"));
+        yield* Effect.promise(() => fixture.register("three"));
+        const built = yield* peer.plugins.built;
+        const report = built.find(({ state }) => state.id === "roles")?.contributions
+          .reportSessions;
+        const touched = (id: string) => ({
+          id,
+          project: "app",
+          label: "x",
+          status: "working" as const,
+          files: [ORDER],
+          claims: ["src/**"],
+        });
+        const [review, normal] = yield* report!("acme", [
+          touched("claude:one"),
+          touched("claude:three"),
+        ]);
+        assert.deepStrictEqual(review, { ...touched("claude:one"), files: [], claims: [] });
+        assert.deepStrictEqual(normal, touched("claude:three"));
+      }),
+    ),
+  );
+
   it.effect("is stopped by the hook before a shell write runs", () =>
     run(
       Effect.gen(function* () {

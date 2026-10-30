@@ -7,7 +7,15 @@ import * as NodePath from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
-import { type DiffInput, readPatch, roomDiff } from "./client/diff.ts";
+import {
+  changeToReview,
+  type DiffInput,
+  pushedRefs,
+  readPatch,
+  roomDiff,
+  workRun,
+  worktreeOf,
+} from "./client/diff.ts";
 
 const git = (cwd: string, ...args: string[]) =>
   NodeChildProcess.execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", ...args], {
@@ -57,6 +65,92 @@ const pushedBranch = (origin: string, dir: string) => {
   git(hers, "push", "-q", "origin", "ana/tax");
   return git(hers, "rev-parse", "HEAD");
 };
+
+describe("the run a diff reads", () => {
+  const sessions = [{ run: "run_review", root: "/review", repositoryId: "api" }];
+
+  it("passes over a review run, newest or not", () => {
+    assert.deepStrictEqual(
+      workRun({
+        runs: [
+          { id: "run_review", keys: [] },
+          { id: "run_work", keys: [] },
+        ],
+        reviews: new Set(["run_review"]),
+        sessions: [...sessions, { run: "run_work", root: "/work", repositoryId: "web" }],
+        threads: [],
+      }),
+      { root: "/work", repository: "web" },
+    );
+  });
+
+  it("finds a detached run by its thread's branch", () => {
+    assert.deepStrictEqual(
+      workRun({
+        runs: [{ id: "run_work", keys: ["herdr:t1"] }],
+        reviews: new Set(),
+        sessions: [],
+        threads: [{ id: "herdr:t1", branch: "ana/tax" }],
+      }),
+      { branch: "ana/tax" },
+    );
+  });
+
+  it("finds that branch's worktree", () =>
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { dir, work } = yield* repositories;
+          const tree = NodePath.join(dir, "tree");
+          git(work, "worktree", "add", "-q", "-b", "ana/tax", tree);
+          const found = yield* Effect.promise(() => worktreeOf(work, "ana/tax"));
+          assert.strictEqual(NodeFS.realpathSync(found ?? ""), NodeFS.realpathSync(tree));
+          assert.isUndefined(yield* Effect.promise(() => worktreeOf(work, "ana/other")));
+        }),
+      ),
+    ));
+});
+
+describe("the change a review session starts on", () => {
+  it.effect("is the first ref on the remote, fetched as its remote branch", () =>
+    scoped(
+      Effect.gen(function* () {
+        const { dir, origin, work } = yield* repositories;
+        const head = pushedBranch(origin, dir);
+        const change = yield* Effect.promise(() => changeToReview(work, ["gone", "ana/tax"]));
+        assert.deepStrictEqual(change, { ref: "ana/tax", base: "origin/ana/tax" });
+        assert.strictEqual(git(work, "rev-parse", "origin/ana/tax"), head);
+      }),
+    ),
+  );
+
+  it.effect("is nothing when no ref is on the remote", () =>
+    scoped(
+      Effect.gen(function* () {
+        const { work } = yield* repositories;
+        assert.isUndefined(yield* Effect.promise(() => changeToReview(work, ["gone"])));
+      }),
+    ),
+  );
+
+  it("looks at handoffs first and never at the base", () => {
+    assert.deepStrictEqual(
+      pushedRefs(
+        [
+          { delivery: { evidence: { branch: "old" } } },
+          { delivery: { evidence: { branch: "new" } } },
+        ],
+        [
+          { branch: "main", email: "a" },
+          { branch: "old", email: "a" },
+          { branch: "thread", email: "a" },
+        ],
+        "main",
+      ),
+      ["new", "old", "thread"],
+    );
+  });
+});
 
 describe("the room's diff", () => {
   it.effect("is this computer's run's checkout against the merge base, uncommitted included", () =>
@@ -143,6 +237,90 @@ describe("the room's diff", () => {
     ),
   );
 
+  it.effect("leaves the person's FETCH_HEAD alone, in a private ref", () =>
+    scoped(
+      Effect.gen(function* () {
+        const { dir, origin, work } = yield* repositories;
+        const head = pushedBranch(origin, dir);
+        const mine = NodePath.join(work, ".git", "FETCH_HEAD");
+        NodeFS.writeFileSync(mine, "theirs\n");
+        yield* roomDiff(
+          input({
+            checkout: { path: work },
+            threads: [{ branch: "ana/tax", email: "ana@acme.test" }],
+          }),
+        );
+        assert.strictEqual(NodeFS.readFileSync(mine, "utf8"), "theirs\n");
+        assert.include(git(work, "for-each-ref", "refs/peer/rooms"), head);
+      }),
+    ),
+  );
+
+  it.effect("looks past a run with nothing in it to the pushed work", () =>
+    scoped(
+      Effect.gen(function* () {
+        const { dir, origin, work } = yield* repositories;
+        pushedBranch(origin, dir);
+        git(work, "checkout", "-q", "-b", "empty");
+        const diff = yield* roomDiff(
+          input({
+            root: work,
+            checkout: { path: work },
+            threads: [{ branch: "ana/tax", email: "ana@acme.test" }],
+          }),
+        );
+        assert.strictEqual(diff.state === "here" && diff.source, "pushed");
+      }),
+    ),
+  );
+
+  it.effect("answers with an empty diff when nothing better turns up", () =>
+    scoped(
+      Effect.gen(function* () {
+        const { work } = yield* repositories;
+        git(work, "checkout", "-q", "-b", "empty");
+        const diff = yield* roomDiff(input({ root: work, checkout: { path: work } }));
+        assert.strictEqual(diff.state === "here" && diff.patch, "");
+      }),
+    ),
+  );
+
+  it.effect("skips a run on the base branch, and never takes the base for a pushed ref", () =>
+    scoped(
+      Effect.gen(function* () {
+        const { work } = yield* repositories;
+        NodeFS.writeFileSync(NodePath.join(work, "a.txt"), "someone else's edit\n");
+        const diff = yield* roomDiff(
+          input({
+            root: work,
+            checkout: { path: work },
+            threads: [{ branch: "main", email: "ana@acme.test" }],
+          }),
+        );
+        assert.strictEqual(diff.state, "notHere");
+      }),
+    ),
+  );
+
+  it.effect("tells a remote it could not reach from work that was not pushed", () =>
+    scoped(
+      Effect.gen(function* () {
+        const { work, dir } = yield* repositories;
+        git(work, "remote", "set-url", "origin", NodePath.join(dir, "gone.git"));
+        const diff = yield* roomDiff(
+          input({
+            checkout: { path: work },
+            threads: [{ branch: "ana/tax", email: "ana@acme.test" }],
+          }),
+        );
+        assert.strictEqual(diff.state, "notHere");
+        if (diff.state !== "notHere") return;
+        assert.notInclude(diff.reason, "has not been pushed");
+        assert.include(diff.reason, "cannot tell whether Ana's work is pushed");
+      }),
+    ),
+  );
+
   it.effect("says the work is not here, with the paths the Hub knows", () =>
     scoped(
       Effect.gen(function* () {
@@ -194,6 +372,7 @@ describe("the room's diff", () => {
     scoped(
       Effect.gen(function* () {
         const { work } = yield* repositories;
+        git(work, "checkout", "-q", "-b", "mine");
         NodeFS.writeFileSync(NodePath.join(work, "a.txt"), `${"x".repeat(200)}\n`.repeat(4000));
         const diff = yield* roomDiff(input({ root: work }));
         assert.strictEqual(diff.state, "here");

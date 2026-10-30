@@ -91,6 +91,19 @@ describe("the reviewStarter slot", () => {
     ),
   );
 
+  it.effect("says which runs of a project are reviews", () =>
+    run(
+      Effect.gen(function* () {
+        const peer = yield* peerWith([]);
+        const starter = yield* peer.plugins.require("reviewStarter");
+        const started = yield* starter.start(start);
+        const runs = yield* starter.reviewRuns("acme", "app");
+        assert.isTrue(started.run !== undefined && runs.has(started.run));
+        assert.strictEqual((yield* starter.reviewRuns("acme", "other")).size, 0);
+      }),
+    ),
+  );
+
   it.effect("keeps the review prompt when the plugin gives none", () =>
     run(
       Effect.gen(function* () {

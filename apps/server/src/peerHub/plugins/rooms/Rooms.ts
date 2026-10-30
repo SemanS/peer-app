@@ -34,9 +34,10 @@ import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import type { PeerSessionView } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
+import { runKeys } from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
-import { roomDiff } from "./client/diff.ts";
+import { changeToReview, pushedRefs, roomDiff, workRun, worktreeOf } from "./client/diff.ts";
 import { runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
 import { capacityOf, checkoutOf, openRuns, roomStarts } from "./client/start.ts";
@@ -131,6 +132,50 @@ const make = Effect.gen(function* () {
       );
     });
 
+  /** Where the task's work may be: the project's checkout here, handoffs and every member's threads. */
+  const workOf = (place: PeerRoomsPlace) =>
+    Effect.gen(function* () {
+      const { project } = yield* state.project(place.workspace, place.project);
+      const checkout = yield* checkoutOf(state, place.workspace, project);
+      const threads = (yield* work.threads(place.workspace, place.project))
+        .filter((thread) => thread.task === place.task)
+        .toSorted((a, b) => b.seenAt.localeCompare(a.seenAt));
+      return {
+        project,
+        checkout,
+        base: checkout?.repository.branch ?? project.repositories[0]?.branch ?? "main",
+        handoffs: yield* hub.handoffs(place).pipe(Effect.orElseSucceed(() => [])),
+        threads,
+      };
+    });
+
+  /** The checkout of this computer's newest run that does the task's work, detached ones too. */
+  const workHere = (place: PeerRoomsPlace, checkout: string | undefined) =>
+    Effect.gen(function* () {
+      const reviews = yield* plugins.require("reviewStarter").pipe(
+        Effect.flatMap((starter) => starter.reviewRuns(place.workspace, place.project)),
+        Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
+      );
+      const sessions = (yield* agents.sessions).filter(
+        (session) =>
+          session.workspace === place.workspace &&
+          session.project === place.project &&
+          session.task === place.task,
+      );
+      const found = workRun({
+        runs: (yield* openRuns(state, place)).map((run) => ({ id: run.id, keys: runKeys(run) })),
+        reviews,
+        sessions,
+        threads: (yield* work.localThreads).get(place.workspace) ?? [],
+      });
+      if (found === undefined || found.root !== undefined) return found;
+      const root =
+        checkout === undefined
+          ? undefined
+          : yield* Effect.promise(() => worktreeOf(checkout, found.branch));
+      return root === undefined ? undefined : { root, repository: undefined };
+    });
+
   const heardOf = (
     workspace: string,
     item: PeerRoomInboxItem,
@@ -208,9 +253,17 @@ const make = Effect.gen(function* () {
         (result) => (result.started ? null : (result.reason ?? "Peer could not continue the run.")),
       ),
     review: (item) =>
-      Effect.flatMap(heardOf(workspace, item, "own", me), (heard) =>
-        starts.review(workspace, item, me, heard),
-      ),
+      Effect.gen(function* () {
+        const heard = yield* heardOf(workspace, item, "own", me);
+        const place = placeOf(workspace, item);
+        const { base, checkout, handoffs, threads } = yield* workOf(place);
+        const refs = pushedRefs(handoffs, threads, base);
+        const change =
+          checkout === undefined
+            ? undefined
+            : yield* Effect.promise(() => changeToReview(checkout.path, refs));
+        return yield* starts.review(workspace, item, me, heard, change);
+      }),
     start: (item) =>
       Effect.flatMap(heardOf(workspace, item, "passed", me), (heard) =>
         starts.work(workspace, item, me, heard),
@@ -318,23 +371,15 @@ const make = Effect.gen(function* () {
       }),
     diff: (place: PeerRoomsPlace): Effect.Effect<PeerRoomDiff, PeerHubError> =>
       Effect.gen(function* () {
-        const { project } = yield* state.project(place.workspace, place.project);
-        const sessions = yield* agents.sessions;
-        const root = sessions.find(
-          (session) =>
-            session.workspace === place.workspace &&
-            session.project === place.project &&
-            session.task === place.task,
-        )?.root;
+        const { project, base, checkout, handoffs, threads } = yield* workOf(place);
         const views = yield* agents.view(place.workspace);
-        const threads = (yield* work.threads(place.workspace, place.project))
-          .filter((thread) => thread.task === place.task)
-          .toSorted((a, b) => b.seenAt.localeCompare(a.seenAt));
+        const here = yield* workHere(place, checkout?.path);
         return yield* roomDiff({
-          root,
-          base: project.repositories[0]?.branch ?? "main",
-          checkout: yield* checkoutOf(state, place.workspace, project),
-          handoffs: yield* hub.handoffs(place).pipe(Effect.orElseSucceed(() => [])),
+          root: here?.root,
+          rootBase: project.repositories.find((row) => row.id === here?.repository)?.branch,
+          base,
+          checkout,
+          handoffs,
           threads,
           files: views.sessions.flatMap((session) =>
             session.task === place.task ? session.files : [],

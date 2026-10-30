@@ -135,7 +135,14 @@ export const roomStarts = (
     });
   return {
     /** A session with role `review` on the person's capacity. */
-    review: (workspace: string, item: PeerRoomInboxItem, me: string, heard: Heard) =>
+    review: (
+      workspace: string,
+      item: PeerRoomInboxItem,
+      me: string,
+      heard: Heard,
+      /** The change it reads, fetched, so it does not answer from the base branch. */
+      change: { readonly ref: string; readonly base: string } | undefined,
+    ) =>
       Effect.gen(function* () {
         const { project, task, checkout } = yield* placeOf(workspace, item);
         const harness = harnessOf(item, me, project);
@@ -148,7 +155,8 @@ export const roomStarts = (
           taskId: task.id,
           repositoryId: checkout.repository.id,
           harness,
-          prompt: reviewRoomPrompt(heard),
+          ...(change === undefined ? {} : { baseBranch: change.base }),
+          prompt: reviewRoomPrompt(heard, change?.ref),
         });
         return {
           run: started.run ?? started.thread,

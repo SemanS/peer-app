@@ -75,7 +75,7 @@ export const RolesPlugin = bindPlugin({
       status: { read: roles.status },
       turnOff: roles.forget(),
       rpc: rolesRpc(roles),
-      reviewStarter: { start: roles.startReview },
+      reviewStarter: { start: roles.startReview, reviewRuns: roles.reviewRuns },
       run: roles.follow,
     } satisfies PeerContributions;
   }),

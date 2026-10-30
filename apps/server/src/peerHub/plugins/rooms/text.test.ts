@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { heardText, reminderText, stepText, STEP_MAX, type Heard } from "./text.ts";
+import {
+  heardText,
+  reminderText,
+  reviewRoomPrompt,
+  stepText,
+  STEP_MAX,
+  type Heard,
+} from "./text.ts";
 
 const heard = (over: Partial<Heard> = {}): Heard => ({
   ref: "vl-7:12",
@@ -117,6 +124,13 @@ describe("a step", () => {
     const step = stepText([heard({ text: "z".repeat(4000), taskName: "t".repeat(200) })]);
     expect(step?.refs).toHaveLength(1);
     expect(step?.text.length).toBeLessThanOrEqual(STEP_MAX);
+  });
+});
+
+describe("a review session's prompt", () => {
+  it("names the branch it starts on, when it has one", () => {
+    expect(reviewRoomPrompt(heard(), "ana/tax")).toContain("started on ana/tax, the change itself");
+    expect(reviewRoomPrompt(heard())).toContain("This is a review session: read the change");
   });
 });
 

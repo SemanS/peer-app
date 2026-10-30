@@ -130,9 +130,9 @@ export const reminderText = (seqs: ReadonlyArray<number>) =>
 export const taskLine = (taskName: string) => plain(taskName, 80);
 
 /** The first prompt of a review session that answers a person's own question. */
-export const reviewRoomPrompt = (heard: Heard) =>
+export const reviewRoomPrompt = (heard: Heard, branch?: string) =>
   [
-    `You answer a question on ${taskLine(heard.taskName)} in its room. This is a review session: read the change and run its checks; Peer stops edits and landing steps.`,
+    `You answer a question on ${taskLine(heard.taskName)} in its room. This is a review session${branch === undefined ? "" : `, started on ${plain(branch, 200)}, the change itself`}: read the change and run its checks; Peer stops edits and landing steps.`,
     heardText(heard),
   ].join("\n");
 

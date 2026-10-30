@@ -16,4 +16,6 @@ export interface PeerReviewStarter {
   readonly start: (
     input: PeerRolesStartReviewInput & { readonly prompt?: string },
   ) => Effect.Effect<PeerRolesStartReviewResult, PeerHubError>;
+  /** The project's runs with role `review`, as this computer knows them. */
+  readonly reviewRuns: (workspace: string, project: string) => Effect.Effect<ReadonlySet<string>>;
 }

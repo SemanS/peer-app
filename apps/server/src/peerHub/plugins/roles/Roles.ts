@@ -388,6 +388,18 @@ const make = Effect.gen(function* () {
      * prompt or the one a plugin gives (`reviewStarter`); the thread's sessions take the role
      * `review`. Core's checks of a start apply.
      */
+    reviewRuns: (workspace: string, project: string) =>
+      Effect.sync(
+        (): ReadonlySet<string> =>
+          new Set(
+            [
+              ...data.threads.filter(
+                (row) => row.workspace === workspace && row.project === project,
+              ),
+              ...(projectOf(workspace, project)?.roles ?? []),
+            ].flatMap((row) => (row.role === "review" && row.run !== undefined ? [row.run] : [])),
+          ),
+      ),
     startReview: Effect.fn("Roles.startReview")(function* (
       input: PeerRolesStartReviewInput & { readonly prompt?: string },
     ) {

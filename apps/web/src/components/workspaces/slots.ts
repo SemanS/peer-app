@@ -15,6 +15,7 @@ import { resourcesWebPlugin } from "./resources";
 import { dependenciesWebPlugin } from "./dependencies";
 import { ownershipWebPlugin } from "./ownership";
 import { rolesWebPlugin } from "./roles";
+import { roomsWebPlugin } from "./rooms";
 import { testReportsWebPlugin } from "./test-reports";
 import { acceptanceWebPlugin } from "./acceptance";
 /**
@@ -82,6 +83,7 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   openspecWebPlugin,
   testReportsWebPlugin,
   rolesWebPlugin,
+  roomsWebPlugin,
   acceptanceWebPlugin,
   settingsWebPlugin,
 ];

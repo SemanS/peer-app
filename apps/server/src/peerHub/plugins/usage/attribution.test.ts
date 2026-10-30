@@ -63,6 +63,14 @@ describe("a session's place", () => {
     expect(place).toEqual({ workspace: "acme", project: "pay", capacity: "personal" });
   });
 
+  it("is shared capacity's even when a run of another workspace names it", () => {
+    const place = attribute(session({ dir: "/home/ana/.t3/hub/beta/claude/tools/projects" }), {
+      ...context,
+      runs: runPlaces([run({})], "ana@acme.test"),
+    });
+    expect(place).toEqual({ workspace: "beta", project: "tools", capacity: "shared" });
+  });
+
   it("goes by the agent as well as the id: a run's sessions are `<agent>:<native id>`", () => {
     const runs = runPlaces([run({})], "ana@acme.test");
     expect(attribute(session({ provider: "codex" }), { ...context, runs })).toBeNull();
@@ -105,6 +113,22 @@ describe("a session's place", () => {
 
   it("is nothing for a repository of two workspaces", () => {
     expect(attribute(session({ cwd: "/work/web" }), context)).toBeNull();
+  });
+
+  it("reads a repository's path without regard to case", () => {
+    const remoteOf = () => "git@github.com:ACME/Api.git";
+    expect(attribute(session({ cwd: "/work/x" }), { ...context, remoteOf })).toEqual({
+      workspace: "acme",
+      project: "pay",
+      capacity: "personal",
+    });
+  });
+
+  it("is nothing for a repository of two workspaces that spell it differently", () => {
+    const other = manifest("beta", { shared: "https://github.com/Acme/Web" });
+    expect(
+      attribute(session({ cwd: "/work/web" }), { ...context, manifests: [acme, other] }),
+    ).toBeNull();
   });
 
   it("is nothing for a repository of no workspace, a gone directory or none at all", () => {

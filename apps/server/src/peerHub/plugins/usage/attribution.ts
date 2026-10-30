@@ -79,7 +79,25 @@ function placeByRepository(
   if (cwd === undefined || manifests.includes(null)) return null;
   const remote = remoteOf(cwd);
   if (remote === null) return null;
-  const matches = matchRepositories(remote, manifests);
+  // Hosts treat a repository's path without regard to case, and two spellings must stay one
+  // repository or a session could reach one of the two workspaces that hold it.
+  const matches = matchRepositories(
+    remote.toLowerCase(),
+    manifests.map((manifest) =>
+      manifest === null
+        ? null
+        : {
+            ...manifest,
+            projects: manifest.projects.map((project) => ({
+              ...project,
+              repositories: project.repositories.map((repository) => ({
+                ...repository,
+                url: repository.url.toLowerCase(),
+              })),
+            })),
+          },
+    ),
+  );
   if (new Set(matches.map((match) => match.workspace)).size !== 1) return null;
   const project = matches.map((match) => match.project).toSorted()[0]!;
   return { workspace: matches[0]!.workspace, project };
@@ -95,11 +113,12 @@ export function attribute(
   context: AttributionContext,
 ): AttributedPlace | null {
   const shared = sharedPlace(session.dir, context.hubHomes);
+  // Shared capacity first: a run of one workspace on another's capacity is the other's cost.
   const place =
+    shared ??
     (session.sessionId === ""
       ? undefined
       : context.runs.get(sessionKey(session.provider, session.sessionId))) ??
-    shared ??
     placeByRepository(session.cwd, context);
   if (place === null) return null;
   // A place from a run or a folder may outlive its project, and the Hub would only refuse it.

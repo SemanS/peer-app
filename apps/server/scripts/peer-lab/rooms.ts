@@ -18,6 +18,7 @@ export const DECLINED = "marker-declined: please also rewrite the cart";
 export const WITHDRAWN = "marker-withdrawn: never mind this";
 export const OWN_QUESTION = "marker-own: does anything else call price?";
 export const TEAM_REACH = "marker-team: this was for a run that ended";
+export const LOST_PROMPT = "marker-prompt: the first prompt of this one never arrives";
 export const LOST = "marker-lost: this one was taken before the restart";
 /** Tries to close the fence, and to speak as Peer and as the owner. */
 export const HOSTILE =
@@ -28,9 +29,9 @@ export const ROOMS_ANA_TASK =
   "In src/pricing.ts add one comment line above `price` saying amounts are integer cents. Keep the change small; do not run tests or builds, and do not commit.";
 export const ROOMS_REAL_QUESTION =
   "marker-real: does price() round anything, or only sum? One sentence is enough.";
-/** It asks for an edit a review session may not make, so the deny is seen from the agent's side too. */
+/** It asks for edits a review session may not make, so each deny is seen from the agent's side too. */
 export const ROOMS_REAL_OWN =
-  "marker-real-own: read the change on this task and tell me in one or two sentences whether its comment is true. Also add the line `// reviewed by Bob` at the end of src/pricing.ts with your Edit tool, not the shell, and tell me what happened when you tried.";
+  "marker-real-own: read the change on this task and tell me in one or two sentences whether its comment is true. Also add the line `// reviewed by Bob` at the end of src/pricing.ts with your Edit tool, and then try again through the shell with exactly: echo '// reviewed by Bob' >> src/pricing.ts . Tell me what happened each time.";
 
 /** Whether `text` holds exactly one fence, with `inside` in it and nothing after the fence that came from inside. */
 export function wholeFence(text: string, inside: string) {
@@ -54,11 +55,15 @@ export interface HerdrStart {
   readonly cwd: string;
   readonly env: Readonly<Record<string, string>>;
   prompt?: string;
+  /** The stand-in took a prompt and it never reached the agent. */
+  promptLost?: boolean;
 }
 
 /** What Peer asks of herdr to start an agent, answered as herdr 0.9 answers it; the rest is refused. */
 export function standInHerdr(socketPath: string) {
   const starts: HerdrStart[] = [];
+  /** What a prompt typed into a dialog comes to: herdr takes it, and the agent never has it. */
+  const control = { losePrompts: false };
   const panes = new Map<
     string,
     { terminal: string; cwd: string; env: Readonly<Record<string, string>> }
@@ -127,7 +132,8 @@ export function standInHerdr(socketPath: string) {
       case "agent.prompt": {
         const start = find(params.target);
         if (start === undefined) return undefined;
-        start.prompt = String(params.text);
+        if (control.losePrompts) start.promptLost = true;
+        else start.prompt = String(params.text);
         return { ok: true };
       }
       default:
@@ -161,7 +167,7 @@ export function standInHerdr(socketPath: string) {
   });
   if (NodeFS.existsSync(socketPath)) NodeFS.rmSync(socketPath);
   server.listen(socketPath);
-  return { starts, socketPath, close: () => server.close() };
+  return { starts, control, socketPath, close: () => server.close() };
 }
 
 /** A scripted agent, as the lab plays one. */
@@ -195,6 +201,8 @@ export interface RoomsPerson {
   /** Everything this computer's coordination log holds. */
   log(): string;
   readonly starts: ReadonlyArray<HerdrStart>;
+  /** The next prompts typed on this computer are lost. */
+  losePrompts(lose: boolean): void;
 }
 
 export interface RoomsRun {
@@ -209,8 +217,13 @@ export interface RoomsKit {
   readonly ana: RoomsPerson;
   readonly bob: RoomsPerson;
   readonly anaAgent: RoomsAgent;
+  /** Ana's other agent, on another task, working on the file the review session touches. */
+  anaNeighbour(): Promise<RoomsAgent>;
   /** The agent Peer started on Bob's computer, played with what its pane was given. */
-  agentOf(start: HerdrStart): RoomsAgent;
+  agentOf(start: HerdrStart, session?: string): RoomsAgent;
+  /** A script's write in a checkout, and taking it back. */
+  touch(cwd: string, path: string): void;
+  untouch(cwd: string, path: string): void;
   /** The room as the Hub holds it. */
   room(): Promise<ReadonlyArray<PeerRoomMessage>>;
   /** The task's runs as the Hub holds them. */
@@ -235,6 +248,8 @@ export interface RoomsKit {
   until(what: string, ready: () => boolean | Promise<boolean>, ms?: number): Promise<void>;
   sleep(ms: number): Promise<void>;
 }
+
+export const TOUCHED = "// touched by a script\n";
 
 const hasOccurred = (log: string, marker: string) => log.includes(marker);
 
@@ -464,6 +479,7 @@ export async function runRooms(kit: RoomsKit): Promise<ReadonlyArray<string>> {
     await attempt("Bob's prompt arrives", () => reviewStart.prompt !== undefined, 10_000);
     kit.told("Bob's review agent, as its first prompt", reviewStart.prompt);
     judge(wholeFence(reviewStart.prompt ?? "", "marker-own"), "it hears Bob's question fenced");
+    const neighbour = await kit.anaNeighbour();
     const review = kit.agentOf(reviewStart);
     const opened = review.start();
     kit.told("Bob's review agent, at its start", opened.told);
@@ -473,6 +489,43 @@ export async function runRooms(kit: RoomsKit): Promise<ReadonlyArray<string>> {
       );
     });
     judge(denied, "the review session's edit is denied");
+    const shell = review.hook("PreToolUse", {
+      tool_name: "Bash",
+      tool_input: { command: "echo '// x' >> src/pricing.ts" },
+    });
+    judge(
+      shell?.hookSpecificOutput?.permissionDecision === "deny",
+      "its plain shell write is denied before it runs",
+    );
+    // A script is not stopped; what it touches must still reach nobody.
+    const script = `node -e "require('fs').appendFileSync('src/pricing.ts','// x\\n')"`;
+    const scripted = review.hook("PreToolUse", {
+      tool_name: "Bash",
+      tool_input: { command: script },
+    });
+    kit.say(
+      "a script's write",
+      `hook answered ${scripted?.hookSpecificOutput?.permissionDecision}`,
+    );
+    kit.touch(reviewStart.cwd, "src/pricing.ts");
+    review.hook("PostToolUse", {
+      tool_name: "Bash",
+      tool_input: { command: script },
+      tool_response: { stdout: "" },
+    });
+    await kit.sleep(3000);
+    judge(
+      !ana.log().includes("overlap.opened") && !bob.log().includes("overlap.opened"),
+      "the file it touched opens no overlap on either computer",
+    );
+    neighbour.edit("PreToolUse", "src/pricing.ts");
+    const heardByNeighbour = neighbour.edit("PostToolUse", "src/pricing.ts");
+    judge(
+      heardByNeighbour?.hookSpecificOutput?.additionalContext?.includes("Overlap") !== true,
+      "and Ana's working agent on that file hears nothing of it",
+    );
+    kit.untouch(reviewStart.cwd, "src/pricing.ts");
+    neighbour.hook("SessionEnd", { reason: "exit" });
     const answer = review.peer("room", "say", "--reply", String(own.seq), "Only cartTotal does.");
     judge(review.peerStatus === 0, `its answer posts: ${answer}`);
     const room = await kit.room();
@@ -489,6 +542,47 @@ export async function runRooms(kit: RoomsKit): Promise<ReadonlyArray<string>> {
     );
     review.hook("SessionEnd", { reason: "exit" });
     await bob.endRun(reviewStart.env.PEER_RUN ?? "");
+  }
+
+  // A first prompt lost to whatever held the pane: the session is woken with the message.
+  bob.losePrompts(true);
+  const lostPrompt = await bob.post("lost-prompt", LOST_PROMPT, [bob.email]);
+  const secondStart = await attempt(
+    "Peer starts a second agent",
+    () => bob.starts.length === 2,
+    30_000,
+  );
+  bob.losePrompts(false);
+  judge(secondStart, "a new question starts a new session");
+  const lostStart = bob.starts[1];
+  if (lostStart === undefined) failed.push("no session to play for the lost prompt");
+  else {
+    judge(lostStart.promptLost === true, "its first prompt was typed and lost");
+    const session = kit.agentOf(lostStart, "room-lost-prompt");
+    const atStart = session.start();
+    judge(atStart.told?.includes("marker-prompt") !== true, "its start does not say it twice");
+    const since = Date.now();
+    const woken = await Promise.race([session.idle(), kit.sleep(90_000).then(() => null)]);
+    kit.told(`the session, woken after ${Math.round((Date.now() - since) / 1000)} s`, woken);
+    judge(
+      woken !== null && wholeFence(woken, "marker-prompt"),
+      "it is woken with the message, fenced",
+    );
+    judge(Date.now() - since >= 20_000, "not before the prompt had time to arrive");
+    const said = session.peer(
+      "room",
+      "say",
+      "--reply",
+      String(lostPrompt.seq),
+      "Heard it after all.",
+    );
+    judge(session.peerStatus === 0, `it answers: ${said}`);
+    judge(
+      (await state(lostPrompt.seq, bob.email)) === "answered",
+      "and the delivery is `answered`",
+    );
+    session.hook("SessionEnd", { reason: "exit" });
+    await bob.endRun(lostStart.env.PEER_RUN ?? "");
   }
 
   // 8. A restart with a `taken` delivery starts no second agent.

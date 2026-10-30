@@ -237,6 +237,7 @@ import {
   ROOMS_REAL_OWN,
   ROOMS_REAL_QUESTION,
   ROOMS_TASK,
+  TOUCHED,
   deliveryOf,
   runRooms,
   standInHerdr,
@@ -7476,9 +7477,27 @@ const roomsRealProgram = Effect.gen(function* () {
     must(answeredOwn, "its answer is in the room and the Hub says `answered`");
     const denied = events(bob).filter((entry) => entry.event === "roles.denied");
     say("roles.denied on Bob's computer", JSON.stringify(denied));
+    const refusals = events(bob).flatMap((entry) => {
+      const output = (entry.answer as { hookSpecificOutput?: Record<string, string> } | undefined)
+        ?.hookSpecificOutput;
+      return entry.event === "hook" && output?.permissionDecision === "deny"
+        ? [{ tool: entry.tool, reason: output.permissionDecisionReason }]
+        : [];
+    });
+    say("what Peer denied Bob's agent", JSON.stringify(refusals));
     must(
-      denied.some((entry) => entry.where === "edit"),
-      "its edit attempt was denied",
+      refusals.some((one) => one.tool === "Edit"),
+      "its Edit attempt was denied",
+    );
+    must(
+      refusals.some((one) => one.tool === "Bash"),
+      "its shell append was denied before it ran",
+    );
+    must(
+      !events(ana)
+        .concat(events(bob))
+        .some((entry) => entry.event === "overlap.opened"),
+      "no overlap opened on either computer",
     );
     const hubRuns = yield* Effect.promise(runs);
     say("the task's runs", JSON.stringify(hubRuns));
@@ -7487,9 +7506,19 @@ const roomsRealProgram = Effect.gen(function* () {
         herdrAgents(anaHerdr).length === anaCount,
       "Ana's computer started nothing",
     );
-    observe(
+    must(
       events(ana).filter((entry) => entry.event === "hook").length === anaHooksAtEnd,
       "Ana's agent took no step after her run ended",
+    );
+    const ended = events(ana).findIndex((entry) => entry.event === "run.ended");
+    say(
+      "Ana's log after her run ended",
+      JSON.stringify(
+        events(ana)
+          .slice(ended)
+          .filter((entry) => !["sync", "forecast.round", "forecast.git"].includes(entry.event))
+          .map((entry) => [entry.t, entry.event, entry.hookEvent ?? ""]),
+      ),
     );
     const cwd = reviewPane?.cwd;
     if (cwd !== undefined && NodeFS.existsSync(NodePath.join(cwd, "src/pricing.ts"))) {
@@ -7561,8 +7590,9 @@ const roomsProgram = Effect.gen(function* () {
   const person = (
     computer: Computer,
     email: string,
-    starts: ReadonlyArray<HerdrStart>,
+    herdr: ReturnType<typeof standInHerdr>,
   ): RoomsPerson => {
+    const { starts } = herdr;
     const rpc = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect);
     return {
       email,
@@ -7590,6 +7620,9 @@ const roomsProgram = Effect.gen(function* () {
         (await rpc(computer.client[PEER_ROOMS_METHODS.peerRoomsRead]({ ...place, limit: 50 })))
           .messages,
       log: () => (NodeFS.existsSync(computer.log) ? NodeFS.readFileSync(computer.log, "utf8") : ""),
+      losePrompts: (lose) => {
+        herdr.control.losePrompts = lose;
+      },
     };
   };
   const roomPath = `/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(taskId)}/room`;
@@ -7608,13 +7641,37 @@ const roomsProgram = Effect.gen(function* () {
     };
   };
   const kit: RoomsKit = {
-    ana: person(ana, "ana@acme.test", anaHerdr.starts),
-    bob: person(bob, "bob@acme.test", bobHerdr.starts),
+    ana: person(ana, "ana@acme.test", anaHerdr),
+    bob: person(bob, "bob@acme.test", bobHerdr),
+    anaNeighbour: async () => {
+      await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+        method: "POST",
+        session: hubSession,
+        body: { title: "Another task", key: "KRK-2" },
+      });
+      await until("Ana's Peer knows KRK-2", async () => {
+        const synced = await Effect.runPromise(ana.client[WS_METHODS.peerHubSync]({}));
+        return (
+          synced.workspaces[0]?.projects
+            .find((p) => p.project.id === "lab")
+            ?.work.tasks.some((one) => one.key === "KRK-2") === true
+        );
+      });
+      const tree = NodePath.join(NodeFS.realpathSync(ana.home), "workspace/krk-2-another");
+      git(ana.checkout, "worktree", "add", "--quiet", "-b", "krk-2-another", tree);
+      const neighbour = agent(ana, "room-ana-2", "w31:p1", {}, tree) as RoomsAgent;
+      neighbour.start();
+      neighbour.edit("PreToolUse", "src/pricing.ts");
+      neighbour.edit("PostToolUse", "src/pricing.ts");
+      return neighbour;
+    },
+    touch: (cwd, path) => NodeFS.appendFileSync(NodePath.join(cwd, path), TOUCHED),
+    untouch: (cwd, path) => git(cwd, "checkout", "--", path),
     anaAgent: agent(ana, "room-ana", "w30:p1") as RoomsAgent,
-    agentOf: (start) =>
+    agentOf: (start, session = "room-review") =>
       agent(
         bob,
-        "room-review",
+        session,
         start.pane,
         Object.fromEntries(Object.entries(start.env)),
         start.cwd,

@@ -14,16 +14,21 @@ import {
 
 import { clip } from "../../../peerText.ts";
 
-const needOf = (workspace: string, item: PeerRoomInboxItem): PeerRoomNeed => ({
-  workspace,
-  project: item.project,
-  task: item.task,
-  seq: item.message.seq,
-  author: item.message.author.email,
-  ...(item.message.author.run === undefined ? {} : { agent: true }),
-  text: clip(item.message.text, LIMITS.text),
-  at: item.message.at,
-});
+const needOf = (workspace: string, item: PeerRoomInboxItem): PeerRoomNeed => {
+  const { text } = item.message;
+  const shown = clip(text, LIMITS.text);
+  return {
+    workspace,
+    project: item.project,
+    task: item.task,
+    seq: item.message.seq,
+    author: item.message.author.email,
+    ...(item.message.author.run === undefined ? {} : { agent: true }),
+    text: shown,
+    ...(clip(text, text.length).length > shown.length ? { cut: true } : {}),
+    at: item.message.at,
+  };
+};
 
 export function statusOf(read: ReadonlyMap<string, PeerRoomInbox>): PeerRoomsStatus {
   const all = [...read];

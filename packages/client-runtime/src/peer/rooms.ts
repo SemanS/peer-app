@@ -276,9 +276,13 @@ export interface RoomNeedsYouItem extends RoomPlace {
   readonly seq: number;
   readonly title: string;
   readonly text: string;
+  /** Said under a `text` that is only the start of its message. */
+  readonly cutNote: string | null;
   readonly at: string;
   readonly actions: ReadonlyArray<"pass" | "decline" | "open">;
 }
+
+const NEED_CUT = "Cut here. Open room shows it whole.";
 
 /** Needs you's items, newest first, then grouped per task by `needsYouByTask`. */
 export function roomNeedsYou(
@@ -296,6 +300,7 @@ export function roomNeedsYou(
       seq: need.seq,
       title: kind === "waiting" ? `${who} asks your agent` : `${who} mentioned you`,
       text: need.text,
+      cutNote: need.cut === true ? NEED_CUT : null,
       at: need.at,
       actions: kind === "waiting" ? ["pass", "decline", "open"] : ["open"],
     };

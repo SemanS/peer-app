@@ -225,6 +225,18 @@ describe("needs you", () => {
     });
   });
 
+  it("says when a text is only the start of its message, and otherwise nothing", () => {
+    const long: PeerRoomsStatus = {
+      ...rooms,
+      waiting: [{ ...need("t-1", 3, "2026-10-30T10:00:00Z"), cut: true }],
+      mentions: [],
+    };
+    expect(roomNeedsYou(long, (row) => row.author)[0]?.cutNote).toBe(
+      "Cut here. Open room shows it whole.",
+    );
+    expect(roomNeedsYou(rooms, (row) => row.author)[0]?.cutNote).toBeNull();
+  });
+
   it("groups them per task, and counts them for the badge", () => {
     const groups = needsYouByTask(roomNeedsYou(rooms, (row) => row.author));
     expect(groups.map((group) => group.items.length)).toEqual([1, 2]);

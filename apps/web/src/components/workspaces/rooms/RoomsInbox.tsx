@@ -71,6 +71,9 @@ function RoomItem({
       <p className="line-clamp-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
         {item.text}
       </p>
+      {item.cutNote === null ? null : (
+        <p className="text-xs text-muted-foreground">{item.cutNote}</p>
+      )}
       <div className="flex flex-wrap items-center gap-1">
         {item.actions.includes("pass") && canMove ? (
           <Button

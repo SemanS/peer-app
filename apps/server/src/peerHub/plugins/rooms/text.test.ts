@@ -81,6 +81,34 @@ describe("a step", () => {
     expect(step?.text.endsWith("2 more: peer room")).toBe(true);
   });
 
+  it.each(["own", "passed", "team"] as const)(
+    "always tells the first of a 4,000 character %s message, and marks the cut",
+    (kind) => {
+      const long = heard({
+        kind,
+        text: "z".repeat(4000),
+        taskName: "t".repeat(200),
+        author: "a".repeat(100),
+        owner: "o".repeat(100),
+        anchor: { path: "p/".repeat(300), line: 123456, endLine: 123457, side: "new" },
+      });
+      const step = stepText([long, ...many(4)]);
+      expect(step?.refs[0]).toBe("vl-7:12");
+      expect(step?.text.length).toBeLessThanOrEqual(STEP_MAX);
+      expect(step?.text).toMatch(/\(cut at \d+ of 4,000: peer room 12 reads all\)/);
+      expect(step?.text.endsWith("more: peer room")).toBe(true);
+    },
+  );
+
+  it("marks a cut once, outside the fence", () => {
+    const text = heardText(heard({ text: "x".repeat(4000) }));
+    expect(text).toContain("</shared-context>\n(cut at 800 of 4,000: peer room 12 reads all)");
+  });
+
+  it("marks nothing when the message fits", () => {
+    expect(heardText(heard())).not.toContain("cut at");
+  });
+
   it("is nothing when nothing waits", () => {
     expect(stepText([])).toBeNull();
   });

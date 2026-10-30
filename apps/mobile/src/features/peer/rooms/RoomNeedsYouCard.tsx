@@ -55,6 +55,9 @@ function RoomNeedItem({ item }: { readonly item: RoomNeed }) {
     <View className="gap-1 border-t border-border pt-2">
       <AppText className="font-t3-medium">{item.title}</AppText>
       <AppText className="text-sm text-foreground-muted">{item.text}</AppText>
+      {item.cutNote === null ? null : (
+        <AppText className="text-xs text-foreground-muted">{item.cutNote}</AppText>
+      )}
       {item.offline ? (
         <AppText className="text-sm text-foreground-muted">
           {item.environmentLabel} is offline. Connect it to answer.

@@ -92,6 +92,82 @@ describe("peer room", () => {
     }),
   );
 
+  describe("for what names this agent and was never let through", () => {
+    const secret = "the launch code is here";
+    const roomWith = (state: string) =>
+      stand({
+        read: () =>
+          Effect.succeed({
+            seq: 2,
+            seen: 0,
+            messages: [
+              messageOf({
+                seq: 2,
+                text: secret,
+                to: [{ kind: "agent", email: BOB, state }],
+              }),
+            ],
+            reaches: [],
+          }),
+      }).command;
+
+    it.effect.each(["waiting", "declined", "withdrawn", "expired"])(
+      "withholds the text of a %s delivery, in the list and by number",
+      (state) =>
+        Effect.gen(function* () {
+          for (const args of [[], ["2"]]) {
+            const said = yield* peerRoom(roomWith(state), args);
+            assert.notInclude(said, secret);
+            assert.include(said, "text withheld: Bob has not passed this on");
+          }
+        }),
+    );
+
+    it.effect("shows a delivery its person let through", () =>
+      Effect.gen(function* () {
+        assert.include(yield* peerRoom(roomWith("taken"), []), secret);
+      }),
+    );
+  });
+
+  it.effect("marks a cut in the list, and peer room <n> prints that message whole", () =>
+    Effect.gen(function* () {
+      const text = `${"line one\n"}${"y".repeat(3000)}`;
+      const reads: unknown[] = [];
+      const { command } = stand({
+        read: ((input: unknown) =>
+          Effect.sync(() => {
+            reads.push(input);
+            return {
+              seq: 3,
+              seen: 0,
+              messages: [messageOf({ seq: 3, text, to: [] })],
+              reaches: [],
+            };
+          })) as never,
+      });
+      assert.include(yield* peerRoom(command, []), "(cut at 400 of 3,009: peer room 3 reads all)");
+      reads.length = 0;
+      const said = yield* peerRoom(command, ["3"]);
+      assert.deepStrictEqual(reads, [
+        { workspace: "acme", project: "app", task: "vl-7", after: 2, limit: 1 },
+      ]);
+      assert.include(said, "- line one\n");
+      assert.include(said, "y".repeat(3000));
+      assert.strictEqual(said.match(/<shared-context>/g)?.length, 1);
+      assert.notInclude(said, "cut at");
+    }),
+  );
+
+  it.effect("says when a number is not in the room", () =>
+    Effect.gen(function* () {
+      assert.match(
+        yield* peerRoom(stand().command, ["9"]),
+        /^peer: refused: this room has no message #9/,
+      );
+    }),
+  );
+
   it.effect("reads no more than the last 20 messages", () =>
     Effect.gen(function* () {
       const reads: unknown[] = [];
@@ -212,8 +288,10 @@ describe("peer room say", () => {
 describe("the agent tools", () => {
   const [read, say] = roomTools;
 
-  it("read takes nothing", () => {
+  it("read takes nothing, or one message's number", () => {
     assert.deepStrictEqual(read?.arguments({}), []);
+    assert.deepStrictEqual(read?.arguments({ message: 12 }), ["12"]);
+    assert.throws(() => read?.arguments({ message: "--to" }), CliError);
     assert.strictEqual(read?.command, "room");
   });
 

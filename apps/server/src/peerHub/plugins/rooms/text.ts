@@ -35,9 +35,28 @@ export interface Heard {
 
 export const refOf = (task: string, seq: number) => `${task}:${seq}`;
 
+/** Longer than any message the Hub keeps. */
+const WHOLE = 1_000_000;
+
+const count = (size: number) => size.toLocaleString("en-US");
+
+/** Every cut says so, and how to read the rest. */
+const cutMark = (shown: number, whole: number, seq: number) =>
+  `(cut at ${count(shown)} of ${count(whole)}: peer room ${seq} reads all)`;
+
+/** `text` as one line of at most `max`, and the mark of what that left out. */
+export const clipped = (text: string, max: number, seq: number) => {
+  const whole = plain(text, WHOLE);
+  const shown = plain(text, max);
+  return {
+    shown,
+    mark: shown.length < whole.length ? cutMark(shown.length, whole.length, seq) : undefined,
+  };
+};
+
 /** Teammate text, fenced as data and indented under the line that introduces it. */
 const fence = (text: string) =>
-  fenced([plain(text, TEXT_MAX)])
+  fenced([text])
     .split("\n")
     .map((line) => `  ${line}`);
 
@@ -60,13 +79,26 @@ const opening = (heard: Heard) => {
   }
 };
 
-/** One message as an agent hears it. */
-export const heardText = (heard: Heard) =>
+const compose = (heard: Heard, text: string, mark?: string) =>
   [
     opening(heard),
-    ...fence(heard.text),
+    ...fence(text),
+    ...(mark === undefined ? [] : [mark]),
     `Answer with: peer room say --reply ${heard.seq} "<answer>". Everyone on the project reads it.`,
   ].join("\n");
+
+/**
+ * One message as an agent hears it, in at most `room` characters: Peer's own lines are reserved
+ * first, because a block over the plugin's ceiling would be dropped whole and never told.
+ */
+export function heardText(heard: Heard, room = Number.POSITIVE_INFINITY) {
+  const whole = plain(heard.text, WHOLE);
+  const entire = compose(heard, whole);
+  if (whole.length <= TEXT_MAX && entire.length <= room) return entire;
+  const reserved = compose(heard, "", cutMark(TEXT_MAX, whole.length, heard.seq)).length;
+  const { shown, mark } = clipped(heard.text, Math.min(TEXT_MAX, room - reserved), heard.seq);
+  return compose(heard, shown, mark);
+}
 
 /** As many waiting messages as a step carries, and how many more wait. */
 export function stepText(
@@ -76,9 +108,10 @@ export function stepText(
   const refs: string[] = [];
   const room = (left: number) => (left === 0 ? 0 : `\n${left} more: peer room`.length + 2);
   for (const heard of waiting.slice(0, STEP_MESSAGES)) {
-    const block = heardText(heard);
+    const tail = room(waiting.length - blocks.length - 1);
+    const block = blocks.length === 0 ? heardText(heard, STEP_MAX - tail) : heardText(heard);
     const size = [...blocks, block].join("\n\n").length;
-    if (size + room(waiting.length - blocks.length - 1) > STEP_MAX) break;
+    if (size + tail > STEP_MAX) break;
     blocks.push(block);
     refs.push(heard.ref);
   }
@@ -111,6 +144,6 @@ export const passedRunPrompt = (heard: Heard) =>
   ].join("\n");
 
 export const START_LINE =
-  "A task has a room its people and their agents read: peer room reads it, peer room say \"<text>\" [--reply <n>] [--to <person>] [--at <path>:<line>] posts as your person's agent. An agent's message wakes nobody.";
+  "A task has a room its people and their agents read: peer room reads it, peer room <n> reads one message whole, peer room say \"<text>\" [--reply <n>] [--to <person>] [--at <path>:<line>] posts as your person's agent. An agent's message wakes nobody.";
 
 export const NO_TASK = "This session is on no task, so it has no room.";

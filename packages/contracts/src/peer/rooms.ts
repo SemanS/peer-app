@@ -178,6 +178,8 @@ export const PeerRoomNeed = Schema.Struct({
   /** The author's agent wrote it. */
   agent: Schema.optional(Schema.Boolean),
   text: Schema.String,
+  /** `text` is the start of a longer message. */
+  cut: Schema.optional(Schema.Boolean),
   at: Schema.String,
 });
 export type PeerRoomNeed = typeof PeerRoomNeed.Type;

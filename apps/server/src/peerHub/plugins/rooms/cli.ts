@@ -21,7 +21,7 @@ import {
 import type * as PeerState from "../../core/state/PeerState.ts";
 import type * as PeerWork from "../../core/work/PeerWork.ts";
 import { anchorOf, FORM, personOf } from "./client/parse.ts";
-import { roomText } from "./client/render.ts";
+import { oneMessageText, roomText } from "./client/render.ts";
 import type { Rooms } from "./Rooms.ts";
 import { localOf } from "./hooks.ts";
 import { NO_TASK, refOf } from "./text.ts";
@@ -76,9 +76,29 @@ export const roomCommand = (
         taskName: yield* work.taskName(session.workspace, session.project, task),
         messages,
         waiting,
+        me: email ?? "",
         nameOf: nameOf(session),
       });
     }).pipe(Effect.mapError((error) => failure(error, false)));
+
+  const readOne = (session: PeerSessionView, task: string, seq: number) =>
+    Effect.gen(function* () {
+      const place = { workspace: session.workspace, project: session.project, task };
+      const { messages } = yield* rooms
+        .read({ ...place, after: seq - 1, limit: 1 })
+        .pipe(Effect.mapError((error) => failure(error, false)));
+      const message = messages.find((candidate) => candidate.seq === seq);
+      if (message === undefined)
+        return yield* Effect.fail(
+          refused(`this room has no message #${seq}`, "run peer room to see its numbers."),
+        );
+      return oneMessageText({
+        taskName: yield* work.taskName(session.workspace, session.project, task),
+        message,
+        me: (yield* state.email) ?? "",
+        nameOf: nameOf(session),
+      });
+    });
 
   const say = (session: PeerSessionView, args: ReadonlyArray<string>, words: string) =>
     Effect.gen(function* () {
@@ -137,7 +157,8 @@ export const roomCommand = (
 
   return {
     name: "room",
-    usage: 'room | room say "<text>" [--reply <n>] [--to <person>]... [--at <path>:<line>]',
+    usage:
+      'room | room <n> | room say "<text>" [--reply <n>] [--to <person>]... [--at <path>:<line>]',
     summary: "read your task's room, or post in it as your person's agent",
     run: ({ session, args, plain }) =>
       Effect.gen(function* () {
@@ -152,6 +173,7 @@ export const roomCommand = (
             return yield* Effect.fail(usage("peer room takes no flags", `run ${FORM}.`));
           return yield* read(session, task);
         }
+        if (/^[1-9]\d*$/.test(verb)) return yield* readOne(session, task, Number(verb));
         if (verb !== "say")
           return yield* Effect.fail(
             usage(`there is no peer room ${verb.slice(0, 40)}`, `run ${FORM}.`),

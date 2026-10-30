@@ -224,6 +224,7 @@ describe("the status", () => {
         const rooms = yield* roomsWhen(peer.status, (next) => next?.mentions.length === 1);
         assert.lengthOf(rooms?.waiting ?? [], 32);
         assert.isAtMost(rooms?.waiting[0]?.text.length ?? 0, 200);
+        assert.isTrue(rooms?.waiting[0]?.cut);
         assert.deepStrictEqual(rooms?.mentions[0], {
           workspace: "acme",
           project: "app",

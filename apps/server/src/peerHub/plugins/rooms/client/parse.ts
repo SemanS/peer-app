@@ -8,7 +8,7 @@ import type { PeerRoomAnchor } from "@t3tools/contracts";
 import { usage } from "../../../core/plugin.ts";
 
 export const FORM =
-  'peer room | peer room say "<text>" [--reply <n>] [--to <person>]... [--at <path>:<line>]';
+  'peer room | peer room <n> | peer room say "<text>" [--reply <n>] [--to <person>]... [--at <path>:<line>]';
 
 /** `--at <path>:<line>`. */
 export function anchorOf(at: string | undefined): PeerRoomAnchor | undefined {

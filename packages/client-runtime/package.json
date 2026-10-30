@@ -491,6 +491,7 @@
     "./peer/ownership": "./src/peer/ownership.ts",
     "./peer/test-reports": "./src/peer/testReports.ts",
     "./peer/roles": "./src/peer/roles.ts",
+    "./peer/rooms": "./src/peer/rooms.ts",
     "./peer/acceptance": "./src/peer/acceptance.ts",
     "./peer/runs": "./src/peer/runs.ts",
     "./peer/digest": "./src/peer/digest.ts",

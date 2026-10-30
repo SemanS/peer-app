@@ -14,6 +14,7 @@ import {
   type PeerAcceptanceEvent,
   type PeerAcceptancePlace,
   type PeerAcceptanceSummary,
+  type PeerAcceptanceVia,
   type PeerHandoffPackage,
   type PeerHubStatus,
   type PeerProject,
@@ -26,7 +27,11 @@ import type { Atom } from "effect/reactivity";
 
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import { request } from "../rpc/client.ts";
-import { createEnvironmentQueryAtomFamily, createEnvironmentRpcCommand } from "../state/runtime.ts";
+import {
+  createEnvironmentQueryAtomFamily,
+  createEnvironmentRpcCommand,
+  createEnvironmentRpcQueryAtomFamily,
+} from "../state/runtime.ts";
 
 /**
  * The plugin's atoms, spread into the server atoms: a task's acceptance with its history, read
@@ -64,6 +69,16 @@ export function createPeerAcceptanceAtoms<R, ER>(
     peerAcceptanceWithdraw: createEnvironmentRpcCommand(runtime, {
       label: "peer:acceptance:withdraw",
       tag: WS_METHODS.peerAcceptanceWithdraw,
+    }),
+    /** A project's review policy, for its settings section. */
+    peerAcceptanceReviewPolicy: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "peer:acceptance:reviewPolicy",
+      tag: WS_METHODS.peerAcceptanceReviewPolicy,
+      staleTimeMs: 0,
+    }),
+    peerAcceptanceSetReviewPolicy: createEnvironmentRpcCommand(runtime, {
+      label: "peer:acceptance:setReviewPolicy",
+      tag: WS_METHODS.peerAcceptanceSetReviewPolicy,
     }),
   };
 }
@@ -106,7 +121,12 @@ export const mayAccept = (
  */
 export type CurrentAcceptance = Pick<PeerAcceptance, "by"> & {
   readonly beforeReopening?: boolean | undefined;
+  /** `policy` when the project's review policy gave it in `by`'s name. */
+  readonly via?: PeerAcceptanceVia | undefined;
 };
+
+/** " via policy" for an acceptance the review policy gave, nothing for a person's own. */
+const viaWords = (via: PeerAcceptanceVia | undefined) => (via === "policy" ? " via policy" : "");
 
 const reopenedAfter = (current: CurrentAcceptance, task: DeliveryStatus) =>
   current.beforeReopening ?? task === "open";
@@ -192,25 +212,31 @@ export function personName(
   return local === "" ? email : `${local[0]?.toUpperCase() ?? ""}${local.slice(1)}`;
 }
 
-/** The card's heading: "Accepted by Ana · 28 Oct, 10:00", with "before reopening" once reopened. */
+/**
+ * The card's heading: "Accepted by Ana · 28 Oct, 10:00" ("Accepted by Ana via policy · …" for the
+ * policy's), with "before reopening" once reopened.
+ */
 export function acceptedLine(
   current: CurrentAcceptance & Pick<PeerAcceptance, "at">,
   task: DeliveryStatus,
   nameOf: (email: string) => string,
   clock: (at: string) => string = acceptedAtLabel,
 ): string {
-  return `Accepted by ${nameOf(current.by)} · ${clock(current.at)}${reopenedAfter(current, task) ? " · before reopening" : ""}`;
+  return `Accepted by ${nameOf(current.by)}${viaWords(current.via)} · ${clock(current.at)}${reopenedAfter(current, task) ? " · before reopening" : ""}`;
 }
 
-/** One history entry as the card lists it: "Withdrawn by Ana · 28 Oct, 11:00", its note apart. */
+/**
+ * One history entry as the card lists it: "Withdrawn by Ana · 28 Oct, 11:00", "Accepted by Ana via
+ * policy · 28 Oct, 10:00", its note apart.
+ */
 export function historyLine(
-  event: Pick<PeerAcceptanceEvent, "kind" | "by" | "at">,
+  event: Pick<PeerAcceptanceEvent, "kind" | "by" | "at" | "via">,
   nameOf: (email: string) => string,
   clock: (at: string) => string = acceptedAtLabel,
 ): string {
   const verb =
     event.kind === "accepted" ? "Accepted" : event.kind === "withdrawn" ? "Withdrawn" : event.kind;
-  return `${verb} by ${nameOf(event.by)} · ${clock(event.at)}`;
+  return `${verb} by ${nameOf(event.by)}${viaWords(event.via)} · ${clock(event.at)}`;
 }
 
 /** The history newest first, as the card lists it. */
@@ -222,16 +248,16 @@ export const historyNewestFirst = (history: ReadonlyArray<PeerAcceptanceEvent>) 
  * "done · not accepted" for a done task with none; undefined for an open or reviewed task with none.
  */
 export function teamAcceptanceFact(
-  row: Pick<PeerAcceptanceSummary, "by" | "beforeReopening"> | undefined,
+  row: Pick<PeerAcceptanceSummary, "by" | "beforeReopening" | "via"> | undefined,
   task: DeliveryStatus,
   nameOf: (email: string) => string,
 ): string | undefined {
   const state = acceptanceState(row, task);
   switch (state) {
     case "accepted":
-      return `accepted by ${nameOf(row!.by)}`;
+      return `accepted by ${nameOf(row!.by)}${viaWords(row!.via)}`;
     case "accepted-before-reopening":
-      return `accepted by ${nameOf(row!.by)} before reopening`;
+      return `accepted by ${nameOf(row!.by)}${viaWords(row!.via)} before reopening`;
     case "not-accepted":
       return "done · not accepted";
     case "none":

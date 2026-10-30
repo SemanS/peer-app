@@ -1,6 +1,11 @@
 import {
   WS_METHODS,
+  type PeerAcceptanceVia,
+  type PeerHandoffDelivery,
+  type PeerHandoffDeliveryState,
   type PeerHandoffPackage,
+  type PeerReviewSignal,
+  type PeerTestReport,
   type PeerHandoffOutcome,
   type PeerHandoffStatus,
   type PeerHandoffPlace,
@@ -15,6 +20,7 @@ import {
   createEnvironmentRpcCommand,
   createEnvironmentRpcQueryAtomFamily,
 } from "../state/runtime.ts";
+import type { DependentsGroup } from "./readiness.ts";
 export function createPeerHandoffAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ) {
@@ -215,3 +221,242 @@ export const inputState = (input: Pick<HandoffInput, "readVersion" | "currentVer
     : input.currentVersion === input.readVersion
       ? "current"
       : "changed";
+
+/**
+ * A review policy's signals in words, for the settings section and the review page's Needs
+ * attention: what in the Hub's facts asks for a person.
+ */
+export const REVIEW_SIGNAL_WORDS: Readonly<Record<PeerReviewSignal, string>> = {
+  "no-report": "The task has no test report",
+  failed: "The newest test report has a failed item",
+  unowned: "An unverified item has neither an owner nor a task",
+  "not-delivered": "The change is not shared: delivery absent, none or local",
+  "open-overlap": "The session has an open overlap",
+  "owner-call": "An owner's call is pending or declined",
+};
+
+/** What the decision line offers: Mark done, Reopen with a note, Withdraw acceptance. */
+export type DecisionAction = "done" | "reopen" | "withdraw";
+
+/**
+ * The review page's first line: the decision the policy asks of the person ("Accept 1.1? 2
+ * signals: not-delivered, unowned"), or that none is asked ("Accepted by policy v3 · waiting to
+ * land", "Accepted by Ana"), with the actions that sit on it. Whether the person may take them is
+ * the page's to decide (`mayAccept`).
+ */
+export interface DecisionLine {
+  readonly kind: "ask" | "accepted-by-policy" | "accepted" | "done";
+  readonly text: string;
+  readonly signals: ReadonlyArray<PeerReviewSignal>;
+  readonly actions: ReadonlyArray<DecisionAction>;
+}
+
+/** A current acceptance as the decision line reads it: the package's, the status's or the task's. */
+export interface DecisionAcceptance {
+  readonly by: string;
+  readonly via?: PeerAcceptanceVia | undefined;
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The decision line of a package. `acceptance` is the task's current acceptance (the package's
+ * own by default; pass null when it was withdrawn or given before reopening); `status` the task's
+ * (review by default).
+ */
+export function decisionLine(
+  pkg: Pick<PeerHandoffPackage, "task" | "key" | "policy" | "acceptance">,
+  acceptance: DecisionAcceptance | null | undefined = pkg.acceptance,
+  options: {
+    readonly status?: "open" | "review" | "done";
+    readonly nameOf?: (email: string) => string;
+  } = {},
+): DecisionLine {
+  const status = options.status ?? "review";
+  const nameOf = options.nameOf ?? ((email: string) => email);
+  const signals = pkg.policy?.signals ?? [];
+  if (acceptance !== null && acceptance !== undefined) {
+    if (acceptance.via === "policy") {
+      const version = pkg.policy === undefined ? "" : ` v${pkg.policy.version}`;
+      return {
+        kind: "accepted-by-policy",
+        text: `Accepted by policy${version}${status === "review" ? " · waiting to land" : ""}`,
+        signals,
+        actions: ["withdraw"],
+      };
+    }
+    return {
+      kind: "accepted",
+      text: `Accepted by ${nameOf(acceptance.by)}`,
+      signals,
+      actions: ["withdraw"],
+    };
+  }
+  if (status === "done") return { kind: "done", text: "Done", signals, actions: [] };
+  const name = pkg.key ?? pkg.task;
+  const said =
+    signals.length > 0
+      ? ` ${plural(signals.length, "signal", "signals")}: ${signals.join(", ")}`
+      : pkg.policy === undefined
+        ? ""
+        : " No signals";
+  return { kind: "ask", text: `Accept ${name}?${said}`, signals, actions: ["done", "reopen"] };
+}
+
+/** Counts of a report's items by where their claim comes from. */
+export interface VerifiedCounts {
+  /** Passed items Peer saw the session run. */
+  readonly seen: number;
+  /** Passed items only their author reports. */
+  readonly authorReported: number;
+  readonly failed: number;
+  /** Unverified items a dependent task covers. */
+  readonly leftToTasks: number;
+  /** Unverified items a person answers for. */
+  readonly owned: number;
+  /** Unverified items with neither owner nor task. */
+  readonly needsOwner: number;
+}
+
+/**
+ * The Verified chip: "6 author-reported · 1 left to a task · 1 needs an owner", counted by
+ * provenance from the newest report's items. `attention` when nothing was reported, an item
+ * failed or one needs an owner.
+ */
+export function verifiedChip(report: Pick<PeerTestReport, "items"> | undefined): {
+  readonly text: string;
+  readonly counts: VerifiedCounts | undefined;
+  readonly attention: boolean;
+} {
+  if (report === undefined) return { text: "No test report", counts: undefined, attention: true };
+  const counts: VerifiedCounts = {
+    seen: 0,
+    authorReported: 0,
+    failed: 0,
+    leftToTasks: 0,
+    owned: 0,
+    needsOwner: 0,
+  };
+  const add = (key: keyof VerifiedCounts) => {
+    (counts as { -readonly [K in keyof VerifiedCounts]: number })[key] += 1;
+  };
+  for (const item of report.items) {
+    if (item.kind === "fail") add("failed");
+    else if (item.kind === "pass") add(item.seen === undefined ? "authorReported" : "seen");
+    else if (item.task !== undefined) add("leftToTasks");
+    else if (item.owner !== undefined) add("owned");
+    else add("needsOwner");
+  }
+  const parts = [
+    counts.seen > 0 ? `${counts.seen} seen run by Peer` : "",
+    counts.authorReported > 0 ? `${counts.authorReported} author-reported` : "",
+    counts.failed > 0 ? `${counts.failed} failed` : "",
+    counts.leftToTasks > 0
+      ? `${counts.leftToTasks} left to ${counts.leftToTasks === 1 ? "a task" : "tasks"}`
+      : "",
+    counts.owned > 0 ? `${counts.owned} with an owner` : "",
+    counts.needsOwner > 0
+      ? `${counts.needsOwner} ${counts.needsOwner === 1 ? "needs" : "need"} an owner`
+      : "",
+  ].filter((part) => part !== "");
+  return {
+    text: parts.length === 0 ? "No items" : parts.join(" · "),
+    counts,
+    attention: counts.failed > 0 || counts.needsOwner > 0,
+  };
+}
+
+/** How the Delivered chip names a computer: its label from the environment id the fact carries. */
+export interface DeliveryNames {
+  readonly computer: (environment: string) => string;
+}
+
+/** "PR #12" for a GitHub pull request url, the url otherwise. */
+export const pullRequestName = (url: string) => {
+  const number = /\/pull\/(\d+)(?:[/?#]|$)/u.exec(url)?.[1];
+  return number === undefined ? url : `PR #${number}`;
+};
+
+const short = (id: string) => id.slice(0, 8);
+
+/**
+ * The Delivered chip: the state and where ("shared · feature/x, PR #12", "none · 2 files
+ * untracked, Slavo's Mac"), and on which computer Peer saw it (`observed`, "as Peer saw it on
+ * Slavo's Mac"). A package without the fact says "not observed".
+ */
+export function deliveredChip(
+  delivery: PeerHandoffDelivery | undefined,
+  names: DeliveryNames,
+): {
+  readonly state: PeerHandoffDeliveryState | "not-observed";
+  readonly text: string;
+  readonly observed: string | null;
+  readonly attention: boolean;
+} {
+  if (delivery === undefined)
+    return { state: "not-observed", text: "not observed", observed: null, attention: true };
+  const computer = names.computer(delivery.environment);
+  const { evidence } = delivery;
+  const pulls = (evidence.pullRequests ?? []).map(pullRequestName);
+  const changes = (evidence.changes ?? []).map(short);
+  const where = (...parts: ReadonlyArray<string | undefined>) =>
+    parts.filter((part): part is string => part !== undefined && part !== "").join(", ");
+  let detail: string;
+  switch (delivery.state) {
+    case "none": {
+      const untracked = evidence.untracked?.length ?? 0;
+      const uncommitted = evidence.uncommitted?.length ?? 0;
+      detail = where(
+        untracked > 0 ? `${plural(untracked, "file", "files")} untracked` : undefined,
+        uncommitted > 0
+          ? untracked > 0
+            ? `${uncommitted} uncommitted`
+            : `${plural(uncommitted, "file", "files")} uncommitted`
+          : undefined,
+        untracked + uncommitted === 0 ? "uncommitted changes" : undefined,
+        computer,
+      );
+      break;
+    }
+    case "local":
+      detail = where(evidence.branch, ...changes, "not pushed", computer);
+      break;
+    case "shared":
+      detail = where(evidence.branch, ...(evidence.bookmarks ?? []), ...changes, ...pulls);
+      break;
+    case "landed":
+      detail = where(
+        ...pulls,
+        pulls.length === 0 && evidence.commit !== undefined ? short(evidence.commit) : undefined,
+      );
+      break;
+  }
+  return {
+    state: delivery.state,
+    text: detail === "" ? delivery.state : `${delivery.state} · ${detail}`,
+    observed: `as Peer saw it on ${computer}`,
+    attention: delivery.state === "none" || delivery.state === "local",
+  };
+}
+
+/**
+ * The Provides chip: the session's plan `provides` lines, else the brief's outcome, and who waits
+ * for the task with what else each waits for (`dependentsReadiness`).
+ */
+export function providesChip(
+  planLines: ReadonlyArray<string>,
+  briefOutcome: string | null | undefined,
+  readiness: ReadonlyArray<Pick<DependentsGroup, "line">>,
+): {
+  readonly source: "plan" | "brief" | "none";
+  readonly lines: ReadonlyArray<string>;
+  readonly waiting: ReadonlyArray<string>;
+} {
+  const plan = planLines.map((line) => line.trim()).filter((line) => line !== "");
+  const outcome = briefOutcome?.trim() ?? "";
+  return {
+    source: plan.length > 0 ? "plan" : outcome !== "" ? "brief" : "none",
+    lines: plan.length > 0 ? plan : outcome !== "" ? [outcome] : [],
+    waiting: readiness.map((group) => group.line),
+  };
+}

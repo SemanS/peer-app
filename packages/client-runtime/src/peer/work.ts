@@ -32,6 +32,7 @@ export {
   type WorkOpen,
 } from "./needsYou.ts";
 import type {
+  PeerAcceptanceVia,
   PeerHubStatus,
   PeerLocalAgent,
   ProjectIconColor,
@@ -99,6 +100,11 @@ export interface WorkTaskNode {
   readonly done: boolean;
   /** The Hub has it in review: a handoff waits for a person. */
   readonly inReview?: boolean;
+  /**
+   * In review with a current acceptance (not one given before it was reopened): who gave it, a
+   * person or the project's review policy. It waits on nobody but its own landing.
+   */
+  readonly accepted?: PeerAcceptanceVia | undefined;
   /** What the task's threads add up to: blocked beats working beats the rest. */
   readonly status: PeerWorkStatus;
   readonly threads: ReadonlyArray<WorkThreadNode>;
@@ -250,6 +256,7 @@ export function rollup(threads: ReadonlyArray<WorkThreadNode>, done: boolean): P
 export type TaskStateKind =
   | "done"
   | "review"
+  | "accepted"
   | "approval"
   | "input"
   | "working"
@@ -269,6 +276,7 @@ export interface TaskState {
 const TASK_STATE_LABEL: Readonly<Record<Exclude<TaskStateKind, "waiting">, string>> = {
   done: "Done",
   review: "Ready for review",
+  accepted: "Accepted",
   approval: "Needs your approval",
   input: "Needs your answer",
   working: "In progress",
@@ -294,6 +302,9 @@ export const TASK_STATES_NEEDING_YOU: ReadonlySet<TaskStateKind> = new Set([
  * ownership): "Ready for your review". One that asks someone else is no state of the person's:
  * what their own chats wait for comes first, and otherwise the task waits on that person,
  * "Ready for Slavo's review", under In progress.
+ *
+ * A task in review with an acceptance (`accepted`, by a lead or by the project's review policy)
+ * asks nobody: after what the person's own chats wait for, its state is `accepted`.
  */
 export function taskState(
   task: WorkTaskNode,
@@ -306,8 +317,9 @@ export function taskState(
     waitingOn: undefined,
   });
   if (task.done || task.status === "done") return state("done");
-  const askedElsewhere = task.inReview === true && route !== undefined && !route.forMe;
-  if (task.inReview === true && !askedElsewhere) {
+  const accepted = task.inReview === true && task.accepted !== undefined;
+  const askedElsewhere = task.inReview === true && !accepted && route !== undefined && !route.forMe;
+  if (task.inReview === true && !accepted && !askedElsewhere) {
     return route === undefined || route.audience === "everyone"
       ? state("review")
       : { kind: "review", label: "Ready for your review", waitingOn: undefined };
@@ -321,6 +333,7 @@ export function taskState(
   )
     return state("approval");
   if (waitingMine.length > 0) return state("input");
+  if (accepted) return state("accepted");
   if (askedElsewhere) return waitingForReview(route);
   if (live.some((thread) => thread.status === "working")) return state("working");
   const waiting = live.find((thread) => !thread.mine && thread.status === "blocked");
@@ -633,6 +646,17 @@ function projectTree(input: {
       ? { ...node, keepsContext: true }
       : node;
   const tree = taskTree(work.tasks);
+  // A task in review with a current acceptance waits on nobody (`WorkTaskNode.accepted`).
+  const acceptedVia = new Map(
+    (status.acceptance?.accepted ?? [])
+      .filter(
+        (row) =>
+          row.workspace === workspace.slug &&
+          row.project === state.project.id &&
+          row.beforeReopening !== true,
+      )
+      .map((row) => [row.task, row.via ?? "person"] as const),
+  );
   const taskNodes = new Map<string, WorkTaskNode>();
   for (const task of work.tasks) {
     const context = contextNode(status, workspace.slug, state, `task:${task.id}`);
@@ -646,6 +670,7 @@ function projectTree(input: {
       title: task.title,
       done: task.status === "done",
       inReview: task.status === "review",
+      accepted: task.status === "review" ? acceptedVia.get(task.id) : undefined,
       status: rollup(threads, task.status === "done"),
       threads,
       removable:
@@ -1325,8 +1350,8 @@ export const TASK_COLUMNS: ReadonlyArray<{ readonly id: TaskColumn; readonly tit
 
 /**
  * Where a task's state puts it: what waits on the person under Needs you (a review, an approval
- * or an answer, whatever its chats do), work in progress or a colleague's chat waiting on its
- * owner under In progress, then Paused and Not started. A done task leaves the board (null): the
+ * or an answer, whatever its chats do), work in progress, a colleague's chat waiting on its
+ * owner or an accepted task waiting to land under In progress, then Paused and Not started. A done task leaves the board (null): the
  * board counts them in a line, the list has them under Done.
  */
 export function taskColumn(state: TaskState): TaskColumn | null {
@@ -1339,6 +1364,7 @@ export function taskColumn(state: TaskState): TaskColumn | null {
       return "needs";
     case "working":
     case "waiting":
+    case "accepted":
       return "working";
     case "paused":
       return "paused";
@@ -1815,6 +1841,14 @@ export function taskWhy(
       return { text: "Done", at: card.updatedAt };
     case "review":
       return handoffLine("A handoff waits for your review");
+    case "accepted":
+      return {
+        text:
+          task.accepted === "policy"
+            ? "Accepted by policy · waiting to land"
+            : "Accepted · waiting to land",
+        at: card.updatedAt,
+      };
     case "approval":
     case "input": {
       const chat = live.find((thread) => thread.mine && thread.status === "blocked");

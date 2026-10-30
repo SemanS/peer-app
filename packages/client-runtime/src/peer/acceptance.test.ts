@@ -141,6 +141,19 @@ describe("acceptance words", () => {
     ).toEqual(["withdrawn", "accepted"]);
   });
 
+  it("says an acceptance the review policy gave apart from a person's", () => {
+    const policy = { ...row, via: "policy" as const };
+    expect(acceptedLine(policy, "review", name, clock)).toBe("Accepted by Ana via policy · 10:00");
+    expect(
+      historyLine(
+        { kind: "accepted", by: ANA, at: "2026-10-28T10:00:00Z", via: "policy" },
+        name,
+        clock,
+      ),
+    ).toBe("Accepted by Ana via policy · 10:00");
+    expect(teamAcceptanceFact(policy, "review", name)).toBe("accepted by Ana via policy");
+  });
+
   it("gives the Team page a fact for accepted and for done without acceptance", () => {
     expect(teamAcceptanceFact(row, "done", name)).toBe("accepted by Ana");
     expect(teamAcceptanceFact(row, "open", name)).toBe("accepted by Ana before reopening");

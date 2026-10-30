@@ -18,6 +18,7 @@ import {
   overlapTopic,
   type NeedsYouEnvironment,
 } from "./needsYou.ts";
+import { ALL_PROJECTS, buildWorkTree, taskCards } from "./work.ts";
 
 const HERE = EnvironmentId.make("env-here");
 const KIRKWOOD_T3 = ProjectId.make("t3-kirkwood");
@@ -690,4 +691,55 @@ it("names leased resources and patterns without treating them as files", () => {
       files: ["resource:deploy", "pattern:migrations/**", "src/a.ts"],
     }),
   ).toBe("Resource deploy · Pattern migrations/** · src/a.ts");
+});
+
+describe("Needs you: accepted handoffs", () => {
+  function inReview(accepted?: { via?: "person" | "policy"; beforeReopening?: boolean }) {
+    const project = kirkwood();
+    const tasks = project.work.tasks.map((candidate) =>
+      candidate.id === "str" ? { ...candidate, status: "review" as const } : candidate,
+    );
+    return {
+      ...status({ ...project, work: { ...project.work, tasks } }),
+      acceptance: {
+        accepted:
+          accepted === undefined
+            ? []
+            : [
+                {
+                  workspace: "acme",
+                  project: "kirkwood",
+                  task: "str",
+                  by: "slavo@acme.test",
+                  at: "2026-10-03T11:30:00Z",
+                  statusThen: "review",
+                  ...accepted,
+                },
+              ],
+      },
+    };
+  }
+  const cardOf = (hub: PeerHubStatus) => {
+    const tree = buildWorkTree({ status: hub, localThreads: [], now: NOW });
+    const card = taskCards(tree, { scope: ALL_PROJECTS, mine: false, query: "" }).find(
+      (candidate) => candidate.kind === "task" && candidate.task.id === "str",
+    );
+    if (card?.kind !== "task") throw new Error("no card for STR");
+    return card;
+  };
+
+  it("lists a handoff for review until it is accepted, by policy or by a lead", () => {
+    expect(cardOf(inReview()).column).toBe("needs");
+    const byPolicy = cardOf(inReview({ via: "policy" }));
+    expect(byPolicy.task.accepted).toBe("policy");
+    expect(byPolicy.state.label).toBe("Accepted");
+    expect(byPolicy.column).toBe("working");
+    expect(byPolicy.action).toBeUndefined();
+    // An older Hub says no `via`: a person gave it.
+    expect(cardOf(inReview({})).task.accepted).toBe("person");
+  });
+
+  it("lists it again when the acceptance was given before the task was reopened", () => {
+    expect(cardOf(inReview({ via: "policy", beforeReopening: true })).column).toBe("needs");
+  });
 });

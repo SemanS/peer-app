@@ -17,7 +17,13 @@ import {
   outcomeText,
   handoffRevision,
   shortenedNote,
+  decisionLine,
+  deliveredChip,
+  providesChip,
+  pullRequestName,
+  verifiedChip,
 } from "./handoff.ts";
+import type { PeerHandoffDelivery, PeerTestReportItem } from "@t3tools/contracts";
 const p = Schema.decodeUnknownSync(PeerHandoffPackage)(fixture);
 describe("reviewer facts", () => {
   it("offers any own harness, hides done/other people's work and shows earlier contexts", () => {
@@ -152,5 +158,159 @@ describe("the task context moved on", () => {
       "Resolver cache task context",
     );
     expect(inputState({ readVersion: 2, currentVersion: null })).toBe("gone");
+  });
+});
+
+describe("the review page's decision line", () => {
+  const pkg = { task: "t-11", key: "1.1" } as const;
+  const policy = (signals: ReadonlyArray<"not-delivered" | "unowned">, accepted = false) => ({
+    mode: "auto" as const,
+    version: 3,
+    signals,
+    accepted,
+  });
+
+  it("asks the person with the signals named, and offers Mark done and Reopen", () => {
+    const line = decisionLine({ ...pkg, policy: policy(["not-delivered", "unowned"]) });
+    expect(line.text).toBe("Accept 1.1? 2 signals: not-delivered, unowned");
+    expect(line.kind).toBe("ask");
+    expect(line.actions).toEqual(["done", "reopen"]);
+    expect(decisionLine({ ...pkg, policy: { ...policy([]), mode: "ask" } }).text).toBe(
+      "Accept 1.1? No signals",
+    );
+    // A package from an older Hub has no policy: the question alone.
+    expect(decisionLine(pkg).text).toBe("Accept 1.1?");
+  });
+
+  it("says nobody is asked when the policy accepted it, and offers Withdraw", () => {
+    const line = decisionLine({
+      ...pkg,
+      policy: policy([], true),
+      acceptance: { by: "ana@acme.test", at: "2026-10-30T09:00:00Z", via: "policy" },
+    });
+    expect(line).toEqual({
+      kind: "accepted-by-policy",
+      text: "Accepted by policy v3 · waiting to land",
+      signals: [],
+      actions: ["withdraw"],
+    });
+  });
+
+  it("names the lead of a hand-made acceptance, and reads the current one over the package's", () => {
+    const nameOf = (email: string) => (email === "ana@acme.test" ? "Ana" : email);
+    expect(decisionLine(pkg, { by: "ana@acme.test" }, { status: "done", nameOf }).text).toBe(
+      "Accepted by Ana",
+    );
+    const withdrawn = decisionLine(
+      { ...pkg, acceptance: { by: "ana@acme.test", at: "x", via: "policy" } },
+      null,
+    );
+    expect(withdrawn.kind).toBe("ask");
+    expect(decisionLine(pkg, null, { status: "done" })).toEqual({
+      kind: "done",
+      text: "Done",
+      signals: [],
+      actions: [],
+    });
+  });
+});
+
+describe("the review page's chips", () => {
+  const item = (overrides: Partial<PeerTestReportItem>): PeerTestReportItem => ({
+    kind: "pass",
+    text: "check",
+    ...overrides,
+  });
+
+  it("counts Verified by provenance", () => {
+    const chip = verifiedChip({
+      items: [
+        ...Array.from({ length: 6 }, () => item({})),
+        item({ kind: "unverified", task: "3.1" }),
+        item({ kind: "unverified" }),
+      ],
+    });
+    expect(chip.text).toBe("6 author-reported · 1 left to a task · 1 needs an owner");
+    expect(chip.attention).toBe(true);
+    const clean = verifiedChip({
+      items: [
+        item({ seen: { failed: false, at: "2026-10-30T09:00:00Z" } }),
+        item({}),
+        item({ kind: "unverified", owner: "ben@acme.test" }),
+      ],
+    });
+    expect(clean.text).toBe("1 seen run by Peer · 1 author-reported · 1 with an owner");
+    expect(clean.attention).toBe(false);
+    expect(verifiedChip({ items: [item({ kind: "fail" })] }).text).toBe("1 failed");
+    expect(verifiedChip(undefined)).toEqual({
+      text: "No test report",
+      counts: undefined,
+      attention: true,
+    });
+  });
+
+  const names = { computer: (env: string) => (env === "env-mac" ? "Slavo's Mac" : env) };
+  const delivery = (
+    state: PeerHandoffDelivery["state"],
+    evidence: PeerHandoffDelivery["evidence"],
+    vcs: PeerHandoffDelivery["vcs"] = "git",
+  ): PeerHandoffDelivery => ({
+    state,
+    evidence,
+    observedAt: "2026-10-30T09:00:00Z",
+    environment: "env-mac",
+    vcs,
+  });
+
+  it("says Delivered with where, and on which computer Peer saw it", () => {
+    const none = deliveredChip(
+      delivery("none", { untracked: ["a.ts", "b.ts"], branch: "feature/x" }),
+      names,
+    );
+    expect(none.text).toBe("none · 2 files untracked, Slavo's Mac");
+    expect(none.observed).toBe("as Peer saw it on Slavo's Mac");
+    expect(none.attention).toBe(true);
+    expect(
+      deliveredChip(delivery("none", { untracked: ["a.ts"], uncommitted: ["c.ts"] }), names).text,
+    ).toBe("none · 1 file untracked, 1 uncommitted, Slavo's Mac");
+    expect(deliveredChip(delivery("local", { branch: "feature/x" }), names).text).toBe(
+      "local · feature/x, not pushed, Slavo's Mac",
+    );
+    const shared = deliveredChip(
+      delivery("shared", {
+        branch: "feature/x",
+        pullRequests: ["https://github.com/acme/app/pull/12"],
+      }),
+      names,
+    );
+    expect(shared.text).toBe("shared · feature/x, PR #12");
+    expect(shared.attention).toBe(false);
+    expect(
+      deliveredChip(
+        delivery("shared", { bookmarks: ["peer/1.1"], changes: ["kxqpmnzswtyvlrou"] }, "jj"),
+        names,
+      ).text,
+    ).toBe("shared · peer/1.1, kxqpmnzs");
+    expect(deliveredChip(delivery("landed", { commit: "0123456789abcdef" }), names).text).toBe(
+      "landed · 01234567",
+    );
+    expect(deliveredChip(undefined, names)).toEqual({
+      state: "not-observed",
+      text: "not observed",
+      observed: null,
+      attention: true,
+    });
+    expect(pullRequestName("https://example.test/mr/4")).toBe("https://example.test/mr/4");
+  });
+
+  it("says Provides from the plan, else the brief, with who waits", () => {
+    const waiting = [{ line: "3.1, 3.2 · ready when 1.2 also lands" }, { line: "5.1 · ready" }];
+    expect(providesChip(["SurveyLock type", " "], "Locks surveys", waiting)).toEqual({
+      source: "plan",
+      lines: ["SurveyLock type"],
+      waiting: ["3.1, 3.2 · ready when 1.2 also lands", "5.1 · ready"],
+    });
+    expect(providesChip([], "Locks surveys", []).lines).toEqual(["Locks surveys"]);
+    expect(providesChip([], null, []).source).toBe("none");
   });
 });

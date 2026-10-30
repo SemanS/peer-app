@@ -5,6 +5,7 @@ import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import type { AgentNeed } from "./needsYou.ts";
 import {
   openKey,
+  taskColumn,
   taskState,
   TASK_STATES_NEEDING_YOU,
   type WorkTaskNode,
@@ -107,6 +108,25 @@ describe("taskState", () => {
     expect(taskState(task([thread({ key: "a", status: "idle" })])).label).toBe("Paused");
     expect(taskState(task([thread({ key: "a", status: "done" })])).label).toBe("Paused");
     expect(taskState(task([])).label).toBe("Not started");
+  });
+
+  it("reads a task in review with an acceptance as accepted, which waits on nobody", () => {
+    const idle = thread({ key: "a", status: "idle" });
+    const byPolicy = taskState(task([idle], { inReview: true, accepted: "policy" }));
+    expect(byPolicy).toEqual({ kind: "accepted", label: "Accepted", waitingOn: undefined });
+    expect(TASK_STATES_NEEDING_YOU.has(byPolicy.kind)).toBe(false);
+    expect(taskColumn(byPolicy)).toBe("working");
+    // Whom the review would have asked no longer matters.
+    const route = { audience: "owner", names: ["Ana"], forMe: false } as const;
+    expect(
+      taskState(task([idle], { inReview: true, accepted: "person" }), new Map(), route).kind,
+    ).toBe("accepted");
+    // What the person's own chat waits for still comes first; a done task is done.
+    const waiting = thread({ key: "b", status: "blocked" });
+    expect(taskState(task([waiting], { inReview: true, accepted: "policy" })).kind).toBe("input");
+    expect(taskState(task([idle], { done: true, accepted: "policy" })).kind).toBe("done");
+    // An acceptance outside review (the field unset) changes nothing.
+    expect(taskState(task([idle], { inReview: true })).kind).toBe("review");
   });
 
   it("names the states that wait on the person", () => {

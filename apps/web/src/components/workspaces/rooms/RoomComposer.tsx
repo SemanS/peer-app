@@ -6,7 +6,7 @@ import {
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { BotIcon, XIcon } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { randomUUID } from "../../../lib/utils";
 import { serverEnvironment } from "../../../state/server";
@@ -65,6 +65,12 @@ export function RoomComposer({
   const [caret, setCaret] = useState(0);
   const [picked, setPicked] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
+
+  // A line chosen in the diff opens the composer on it, ready for the words.
+  const line = draft.anchor === undefined ? undefined : anchorText(draft.anchor);
+  useEffect(() => {
+    if (line !== undefined) input.current?.focus();
+  }, [line]);
 
   const recipients = recipientsOf(choices, draft.selected);
   const chosen = chosenKeys(draft);

@@ -44,13 +44,13 @@ export const runQueues = () => {
   };
   return {
     add: (run: string, heard: Heard) => {
-      queues.set(run, (queues.get(run) ?? new Map<string, Heard>()).set(heard.ref, heard));
+      const queue = queues.get(run) ?? new Map<string, Heard>();
+      if (!queue.has(heard.ref)) queue.set(heard.ref, heard);
+      queues.set(run, queue);
     },
     remove: (run: string | undefined, ref: string) => {
       if (run !== undefined) queues.get(run)?.delete(ref);
     },
-    /** A run's first prompt carried it. */
-    prompted: tell,
     /** A session has it, or answered it: it leaves the queue and is not told again. */
     settle: (run: string | undefined, ref: string) => {
       if (run === undefined) return;
@@ -58,7 +58,9 @@ export const runQueues = () => {
       if (heard !== undefined) tell(run, heard);
       queues.get(run)?.delete(ref);
     },
-    wasTold: (run: string, ref: string) => told.get(run)?.has(ref) === true,
+    /** A session of the run has it, or its first prompt carried it. */
+    wasTold: (run: string, ref: string) =>
+      told.get(run)?.has(ref) === true || queues.get(run)?.get(ref)?.promptedAt !== undefined,
     /** The run that holds a message here, in its queue or told, if any. */
     runOf: (workspace: string, project: string, ref: string) =>
       [...queues, ...told].find(([, queue]) => {

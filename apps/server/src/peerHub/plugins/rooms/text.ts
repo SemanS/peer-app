@@ -31,6 +31,11 @@ export interface Heard {
   readonly owner: string;
   readonly text: string;
   readonly anchor?: PeerRoomAnchor | undefined;
+  /**
+   * When a started run's first prompt carried it. Typing proves nothing (a trust dialog eats the
+   * prompt), so it stays queued: a working step does not repeat it, an idle session is woken with it.
+   */
+  readonly promptedAt?: number | undefined;
 }
 
 export const refOf = (task: string, seq: number) => `${task}:${seq}`;

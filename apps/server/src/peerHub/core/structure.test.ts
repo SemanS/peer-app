@@ -48,7 +48,7 @@ const CEILINGS: Readonly<Record<string, number>> = {
   handoff: 1728,
   jujutsu: 2354,
   memory: 3_430,
-  rooms: 2230,
+  rooms: 2261,
   slack: 1_369,
 };
 

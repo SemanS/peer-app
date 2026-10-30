@@ -40,12 +40,21 @@ describe("what a run was told", () => {
     assert.strictEqual(queues.runOf("acme", "app", "vl-7:12"), "run_1");
   });
 
-  it("includes a first prompt, and goes when its delivery leaves the work list", () => {
+  it("keeps a first prompt's message queued until its delivery leaves the work list", () => {
     const queues = runQueues();
-    queues.prompted("run_1", heard(12));
+    queues.add("run_1", heard(12, { promptedAt: 5 }));
     assert.isTrue(queues.wasTold("run_1", "vl-7:12"));
+    assert.deepStrictEqual(refs(queues.of("run_1")), ["vl-7:12"]);
     queues.prune("acme", inboxOf([]));
     assert.isFalse(queues.wasTold("run_1", "vl-7:12"));
+    assert.deepStrictEqual(queues.of("run_1"), []);
+  });
+
+  it("is not overwritten by a later read's offer, so a prompted message stays marked", () => {
+    const queues = runQueues();
+    queues.add("run_1", heard(12, { promptedAt: 5 }));
+    queues.add("run_1", heard(12));
+    assert.strictEqual(queues.of("run_1")[0]?.promptedAt, 5);
   });
 
   it("does not count a message taken back out of the queue", () => {

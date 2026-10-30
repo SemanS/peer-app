@@ -7,6 +7,7 @@
  *
  * @module peerHub/plugins/rooms/hooks
  */
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 
 import type {
@@ -17,6 +18,9 @@ import type {
 } from "../../core/plugin.ts";
 import type { Rooms } from "./Rooms.ts";
 import { reminderText, START_LINE, stepText } from "./text.ts";
+
+/** An agent still booting is idle too: its typed prompt gets this long to arrive before a wake. */
+const PROMPT_SETTLES_MS = 30_000;
 
 /** What the plugin keeps per session (`session.local("rooms")`). */
 export interface Local {
@@ -46,14 +50,24 @@ const reminded = (ref: string) => `r:${ref}`;
 const seqOf = (ref: string) => Number(ref.slice(ref.lastIndexOf(":") + 1));
 
 export const roomHooks = (rooms: Rooms["Service"]) => {
-  /** What waits for the session, still holds and fits a step, marked as offered. */
-  const offer = (session: PeerSessionView) =>
+  /**
+   * What waits for the session, still holds and fits a step, marked as offered. A first prompt's
+   * message waits for the session to sit idle unanswered: either the prompt was lost and this is
+   * how it hears, or it read it and stopped, and this is its one reminder.
+   */
+  const offer = (session: PeerSessionView, waking: boolean) =>
     Effect.gen(function* () {
       const own = localOf(session);
       const told = toldOf(session);
+      const now = yield* Clock.currentTimeMillis;
       const candidates = rooms
         .waiting(session.run)
-        .filter((heard) => !told.has(heard.ref) && !own.offering.has(heard.ref));
+        .filter(
+          ({ ref, promptedAt }) =>
+            !told.has(ref) &&
+            !own.offering.has(ref) &&
+            (promptedAt === undefined || (waking && now - promptedAt >= PROMPT_SETTLES_MS)),
+        );
       if (candidates.length === 0 || own.checking) return null;
       own.checking = true;
       const step = stepText(
@@ -68,7 +82,7 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
   const notice = (ctx: PeerHookContext) =>
     Effect.gen(function* () {
       const own = localOf(ctx.session);
-      const offered = yield* offer(ctx.session);
+      const offered = yield* offer(ctx.session, ctx.waking === true);
       if (offered !== null) return offered;
       if (own.remind.size === 0) return null;
       const told = toldOf(ctx.session);
@@ -86,7 +100,7 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
   };
   return {
     startLine: Effect.succeed(START_LINE),
-    sessionStart: (ctx) => offer(ctx.session),
+    sessionStart: (ctx) => offer(ctx.session, false),
     notices: [{ wakes: true, landing: true, read: notice }],
     delivery: ({ session, refs, state }) =>
       Effect.gen(function* () {

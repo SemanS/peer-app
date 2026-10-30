@@ -226,8 +226,11 @@ const make = Effect.gen(function* () {
         })
         .pipe(Effect.ignore),
     queuedRun: (item) => queues.runOf(workspace, item.project, refOf(item.task, item.message.seq)),
-    prompted: (item, run) =>
-      Effect.map(heardOf(workspace, item, "own", me), (heard) => queues.prompted(run, heard)),
+    prompted: (item, run, kind) =>
+      Effect.gen(function* () {
+        const promptedAt = yield* Clock.currentTimeMillis;
+        queues.add(run, { ...(yield* heardOf(workspace, item, kind, me)), promptedAt });
+      }),
     told: (item, run) => queues.wasTold(run, refOf(item.task, item.message.seq)),
     startedAt,
     later: (ms) => {

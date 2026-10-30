@@ -190,7 +190,7 @@ const depsOf = (over: Partial<FollowDeps> & { readonly runs?: ReadonlyArray<Here
     fail: (_item, reason) => note(`fail ${reason}`),
     record: (_item, run) => note(`record ${run}`),
     queuedRun: () => undefined,
-    prompted: (_item, run) => note(`prompted ${run}`),
+    prompted: (_item, run, kind) => note(`prompted ${run} ${kind}`),
     told: () => false,
     startedAt: 0,
     later: (ms) => note(`later ${ms}`),
@@ -248,7 +248,7 @@ describe("act", () => {
     Effect.gen(function* () {
       const { deps, log } = depsOf();
       yield* act(deps, itemOf(own(delivery("passed"))));
-      assert.deepStrictEqual(log, ["take -", "review", "prompted run_9", "record run_9"]);
+      assert.deepStrictEqual(log, ["take -", "review", "prompted run_9 own", "record run_9"]);
     }),
   );
 
@@ -264,7 +264,7 @@ describe("act", () => {
     Effect.gen(function* () {
       const { deps, log } = depsOf();
       yield* act(deps, itemOf(passed(delivery("passed", { by: BOB }))));
-      assert.deepStrictEqual(log, ["take -", "start", "prompted run_8", "record run_8"]);
+      assert.deepStrictEqual(log, ["take -", "start", "prompted run_8 passed", "record run_8"]);
     }),
   );
 
@@ -377,7 +377,7 @@ describe("act", () => {
       const { deps, log } = depsOf();
       yield* act(deps, itemOf(own(delivery("passed"))));
       yield* act(deps, itemOf(own(delivery("taken"))));
-      assert.deepStrictEqual(log, ["take -", "review", "prompted run_9", "record run_9"]);
+      assert.deepStrictEqual(log, ["take -", "review", "prompted run_9 own", "record run_9"]);
     }),
   );
 

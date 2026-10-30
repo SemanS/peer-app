@@ -131,8 +131,8 @@ export interface FollowDeps {
   readonly record: (item: PeerRoomInboxItem, run: string) => Effect.Effect<void>;
   /** The run that holds this message here, queued or told, if any. */
   readonly queuedRun: (item: PeerRoomInboxItem) => string | undefined;
-  /** The run's first prompt carries it, so its sessions are not told it again. */
-  readonly prompted: (item: PeerRoomInboxItem, run: string) => Effect.Effect<void>;
+  /** The run's first prompt carries it: queued all the same, as a prompt can be lost. */
+  readonly prompted: (item: PeerRoomInboxItem, run: string, kind: HeardKind) => Effect.Effect<void>;
   /** A session of the run has been told this, as far as this Peer remembers. */
   readonly told: (item: PeerRoomInboxItem, run: string) => boolean;
   /** When this Peer started. */
@@ -174,7 +174,7 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
           onFailure: (error) => deps.fail(item, error.detail),
           onSuccess: ({ run, typed }) =>
             typed
-              ? Effect.andThen(deps.prompted(item, run), deps.record(item, run))
+              ? Effect.andThen(deps.prompted(item, run, kind), deps.record(item, run))
               : deps
                   .queue(item, run, kind)
                   .pipe(Effect.andThen(deps.record(item, run)), Effect.andThen(deps.wake)),
@@ -191,9 +191,11 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
         return yield* deps.wake;
       case "wait":
         return yield* deps.later(decision.ms);
-      case "lost":
+      case "lost": {
+        const told = deps.told(item, decision.run);
         yield* deps.unqueue(item, decision.run);
-        return yield* deps.fail(item, deps.told(item, decision.run) ? SESSION_ENDED : NOT_RUNNING);
+        return yield* deps.fail(item, told ? SESSION_ENDED : NOT_RUNNING);
+      }
       case "take-queue":
         yield* deps.take(item, decision.run);
         return yield* deps.queue(item, decision.run, kind);

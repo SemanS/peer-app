@@ -67,6 +67,12 @@ export function decide(
 /** A failed start says this; the Hub keeps it and the room shows it. */
 export const NO_CHECKOUT = "This computer has no checkout of the project.";
 
+/** A start that made a run; `typed` is false when its agent runs but its prompt never reached it. */
+export interface Started {
+  readonly run: string;
+  readonly typed: boolean;
+}
+
 export interface FollowDeps {
   readonly me: string;
   readonly runsHere: (item: PeerRoomInboxItem) => Effect.Effect<ReadonlyArray<HereRun>>;
@@ -76,7 +82,11 @@ export interface FollowDeps {
     run: string | undefined,
   ) => Effect.Effect<void, PeerHubError>;
   readonly fail: (item: PeerRoomInboxItem, reason: string) => Effect.Effect<void>;
-  /** The agent has it in its first prompt: `heard`, which also records the run a start made. */
+  /** Records on a taken delivery the run a start made, which ends "may not have started". */
+  readonly record: (item: PeerRoomInboxItem, run: string) => Effect.Effect<void>;
+  /** The run whose queue holds this message here, if any. */
+  readonly queuedRun: (item: PeerRoomInboxItem) => string | undefined;
+  /** The agent has it in its first prompt. */
   readonly heard: (item: PeerRoomInboxItem, run: string) => Effect.Effect<void>;
   /** Puts the message in the run's queue, for its notice and its next session's start. */
   readonly queue: (item: PeerRoomInboxItem, run: string, kind: HeardKind) => Effect.Effect<void>;
@@ -84,10 +94,10 @@ export interface FollowDeps {
   readonly wake: Effect.Effect<void>;
   /** Continues a detached run; the reason it did not start. */
   readonly continueRun: (item: PeerRoomInboxItem, run: string) => Effect.Effect<string | null>;
-  /** Starts a review session; the run it made. */
-  readonly review: (item: PeerRoomInboxItem) => Effect.Effect<string, PeerHubError>;
-  /** Starts a working run for a passed-on message; the run it made. */
-  readonly start: (item: PeerRoomInboxItem) => Effect.Effect<string, PeerHubError>;
+  /** Starts a review session. */
+  readonly review: (item: PeerRoomInboxItem) => Effect.Effect<Started, PeerHubError>;
+  /** Starts a working run for a passed-on message. */
+  readonly start: (item: PeerRoomInboxItem) => Effect.Effect<Started, PeerHubError>;
 }
 
 /** Carries one delivery as far as this read can; a Hub that refuses `take` ends it here. */
@@ -97,13 +107,24 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
       (target) => target.kind === "agent" && same(target.email, deps.me),
     );
     if (delivery === undefined) return;
+    // A start whose run the Hub did not take yet: its agent runs, so this is all there is to do.
+    const unrecorded = delivery.run === undefined ? deps.queuedRun(item) : undefined;
+    if (delivery.state === "taken" && unrecorded !== undefined)
+      return yield* deps.record(item, unrecorded);
     const decision = decide(item.message, delivery, yield* deps.runsHere(item), deps.me);
     const kind = kindOf(item.message, delivery, deps.me);
-    const started = (run: Effect.Effect<string, PeerHubError>) =>
-      run.pipe(
+    // The agent exists from here on: a failed prompt must not read as a failed start, or Try
+    // again would start a second one. It hears the message as any session of the run does.
+    const started = (start: Effect.Effect<Started, PeerHubError>) =>
+      start.pipe(
         Effect.matchEffect({
           onFailure: (error) => deps.fail(item, error.detail),
-          onSuccess: (id) => deps.heard(item, id),
+          onSuccess: ({ run, typed }) =>
+            typed
+              ? Effect.andThen(deps.record(item, run), deps.heard(item, run))
+              : deps
+                  .queue(item, run, kind)
+                  .pipe(Effect.andThen(deps.record(item, run)), Effect.andThen(deps.wake)),
         }),
       );
     switch (decision.do) {

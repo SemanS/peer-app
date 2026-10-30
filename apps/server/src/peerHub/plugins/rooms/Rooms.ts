@@ -33,13 +33,12 @@ import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import type { PeerSessionView } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
-import { projectKey } from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { roomDiff } from "./client/diff.ts";
 import { runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
-import { checkoutOf, roomStarts, runCapacity } from "./client/start.ts";
+import { capacityOf, checkoutOf, openRuns, roomStarts } from "./client/start.ts";
 import { act, type FollowDeps, type HereRun } from "./follow.ts";
 import { roomsHub, type Place, type PostBody } from "./client/hub.ts";
 import { refOf, type Heard, type HeardKind } from "./text.ts";
@@ -80,31 +79,6 @@ const make = Effect.gen(function* () {
     task: item.task,
   });
 
-  /** What carries a run of this computer: shared only where its thread is on a shared instance. */
-  const capacityOf = (workspace: string, project: string, run: string) =>
-    Effect.gen(function* () {
-      const { persisted } = yield* state.read;
-      return runCapacity(
-        persisted.runs?.[run],
-        persisted.sharedInstances[projectKey(workspace, project)] ?? [],
-        (yield* work.latestPass)?.threads ?? [],
-      );
-    });
-
-  /** The person's open runs on the task kept on this computer, newest first. */
-  const openRuns = (place: Place) =>
-    Effect.map(state.read, ({ persisted }) =>
-      Object.values(persisted.runs ?? {})
-        .filter(
-          (run) =>
-            run.workspace === place.workspace &&
-            run.project === place.project &&
-            run.task === place.task &&
-            run.endedAt === undefined,
-        )
-        .toSorted((a, b) => b.startedAt.localeCompare(a.startedAt)),
-    );
-
   const runsHere = (workspace: string, item: PeerRoomInboxItem) =>
     Effect.gen(function* () {
       const live = new Set(
@@ -117,7 +91,7 @@ const make = Effect.gen(function* () {
             : [],
         ),
       );
-      const open = yield* openRuns(placeOf(workspace, item));
+      const open = yield* openRuns(state, placeOf(workspace, item));
       const known: ReadonlyArray<HereRun> = open.map((run) => ({
         id: run.id,
         live: live.has(run.id),
@@ -170,6 +144,16 @@ const make = Effect.gen(function* () {
           reason: reason.slice(0, 300),
         })
         .pipe(Effect.ignore),
+    record: (item, run) =>
+      hub
+        .move(placeOf(workspace, item), item.message.seq, me, {
+          move: "take",
+          environment: state.environmentId,
+          run,
+          expect: "taken",
+        })
+        .pipe(Effect.ignore),
+    queuedRun: (item) => queues.runOf(workspace, item.project, refOf(item.task, item.message.seq)),
     heard: (item, run) =>
       hub
         .move(placeOf(workspace, item), item.message.seq, me, {
@@ -242,8 +226,8 @@ const make = Effect.gen(function* () {
       });
       const { project } = yield* state.project(place.workspace, place.project);
       const capacities: Record<string, PeerRoomCapacity> = {};
-      for (const run of yield* openRuns(place))
-        capacities[run.id] = yield* capacityOf(place.workspace, place.project, run.id);
+      for (const run of yield* openRuns(state, place))
+        capacities[run.id] = yield* capacityOf(state, work, place.workspace, place.project, run.id);
       return {
         ...answer,
         hasCheckout: (yield* checkoutOf(state, place.workspace, project)) !== undefined,
@@ -284,7 +268,7 @@ const make = Effect.gen(function* () {
       hub.withdraw(place, seq).pipe(after(place.workspace)),
     setReach: (input: PeerRoomsSetReachInput) =>
       Effect.gen(function* () {
-        const capacity = yield* capacityOf(input.workspace, input.project, input.run);
+        const capacity = yield* capacityOf(state, work, input.workspace, input.project, input.run);
         return yield* hub.reach(input.workspace, input.project, input.run, {
           reach: input.reach,
           capacity,

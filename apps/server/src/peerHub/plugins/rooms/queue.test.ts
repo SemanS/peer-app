@@ -54,6 +54,14 @@ describe("the inbox read", () => {
     assert.lengthOf(queues.of("run_1"), 1);
   });
 
+  it("finds the run that holds a message, in its own place only", () => {
+    const queues = runQueues();
+    queues.add("run_1", heard(12));
+    assert.strictEqual(queues.runOf("acme", "app", "vl-7:12"), "run_1");
+    assert.isUndefined(queues.runOf("acme", "web", "vl-7:12"));
+    assert.isUndefined(queues.runOf("acme", "app", "vl-7:13"));
+  });
+
   it("forgets a workspace, or all of them, and what the person left", () => {
     const queues = runQueues();
     queues.add("run_1", heard(1));

@@ -43,6 +43,12 @@ export const runQueues = () => {
     remove: (run: string | undefined, ref: string) => {
       if (run !== undefined) queues.get(run)?.delete(ref);
     },
+    /** The run whose queue holds a message, if any. */
+    runOf: (workspace: string, project: string, ref: string) =>
+      [...queues].find(([, queue]) => {
+        const heard = queue.get(ref);
+        return heard?.workspace === workspace && heard.project === project;
+      })?.[0],
     /** The messages waiting for a run, oldest first. */
     of: (run: string | undefined) =>
       run === undefined ? [] : [...(queues.get(run)?.values() ?? [])],

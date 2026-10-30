@@ -101,13 +101,15 @@ const depsOf = (over: Partial<FollowDeps> & { readonly runs?: ReadonlyArray<Here
     runsHere: () => Effect.succeed(over.runs ?? []),
     take: (_item, run) => note(`take ${run ?? "-"}`),
     fail: (_item, reason) => note(`fail ${reason}`),
+    record: (_item, run) => note(`record ${run}`),
+    queuedRun: () => undefined,
     heard: (_item, run) => note(`heard ${run}`),
     queue: (_item, run, kind) => note(`queue ${run} ${kind}`),
     unqueue: (_item, run) => note(`unqueue ${run}`),
     wake: note("wake"),
     continueRun: (_item, run) => Effect.as(note(`continue ${run}`), null),
-    review: () => Effect.as(note("review"), "run_9"),
-    start: () => Effect.as(note("start"), "run_8"),
+    review: () => Effect.as(note("review"), { run: "run_9", typed: true }),
+    start: () => Effect.as(note("start"), { run: "run_8", typed: true }),
     ...over,
   };
   return { deps, log };
@@ -156,7 +158,7 @@ describe("act", () => {
     Effect.gen(function* () {
       const { deps, log } = depsOf();
       yield* act(deps, itemOf(own(delivery("passed"))));
-      assert.deepStrictEqual(log, ["take -", "review", "heard run_9"]);
+      assert.deepStrictEqual(log, ["take -", "review", "record run_9", "heard run_9"]);
     }),
   );
 
@@ -164,7 +166,7 @@ describe("act", () => {
     Effect.gen(function* () {
       const { deps, log } = depsOf();
       yield* act(deps, itemOf(passed(delivery("passed", { by: BOB }))));
-      assert.deepStrictEqual(log, ["take -", "start", "heard run_8"]);
+      assert.deepStrictEqual(log, ["take -", "start", "record run_8", "heard run_8"]);
     }),
   );
 
@@ -201,7 +203,7 @@ describe("act", () => {
       const { deps, log } = depsOf();
       yield* act(deps, itemOf(own(delivery("passed"))));
       yield* act(deps, itemOf(own(delivery("taken"))));
-      assert.deepStrictEqual(log, ["take -", "review", "heard run_9"]);
+      assert.deepStrictEqual(log, ["take -", "review", "record run_9", "heard run_9"]);
     }),
   );
 
@@ -212,6 +214,55 @@ describe("act", () => {
       assert.deepStrictEqual(log, ["queue run_1 passed", "wake"]);
     }),
   );
+
+  describe("when the agent starts but its prompt could not be typed", () => {
+    const unread = { run: "run_9", typed: false };
+
+    it.effect("keeps the delivery taken with its run, and queues the message for that run", () =>
+      Effect.gen(function* () {
+        const { deps, log } = depsOf({ review: () => Effect.succeed(unread) });
+        yield* act(deps, itemOf(own(delivery("passed"))));
+        assert.deepStrictEqual(log, ["take -", "queue run_9 own", "record run_9", "wake"]);
+      }),
+    );
+
+    it.effect("does the same for a working run, and neither fails nor says heard", () =>
+      Effect.gen(function* () {
+        const { deps, log } = depsOf({ start: () => Effect.succeed(unread) });
+        yield* act(deps, itemOf(passed(delivery("passed", { by: BOB }))));
+        assert.deepStrictEqual(log, ["take -", "queue run_9 passed", "record run_9", "wake"]);
+      }),
+    );
+
+    it.effect("records the run again at the next read if the Hub did not take it", () =>
+      Effect.gen(function* () {
+        const { deps, log } = depsOf({ queuedRun: () => "run_9" });
+        yield* act(deps, itemOf(own(delivery("taken"))));
+        assert.deepStrictEqual(log, ["record run_9"]);
+      }),
+    );
+
+    it.effect("never starts a second agent: Try again finds the run the start made", () =>
+      Effect.gen(function* () {
+        const made: HereRun = { id: "run_9", live: true };
+        const { deps, log } = depsOf({ runs: [made] });
+        yield* act(deps, itemOf(own(delivery("passed"))));
+        assert.deepStrictEqual(log, ["take run_9", "queue run_9 own", "wake"]);
+        const starting: HereRun = { id: "run_9", live: false };
+        const later = depsOf({ runs: [starting] });
+        yield* act(later.deps, itemOf(own(delivery("passed"))));
+        assert.deepStrictEqual(later.log, ["take run_9", "queue run_9 own", "continue run_9"]);
+      }),
+    );
+
+    it.effect("a live session hears it once the Hub lists the run", () =>
+      Effect.gen(function* () {
+        const { deps, log } = depsOf({ runs: [live] });
+        yield* act(deps, itemOf(own(delivery("taken", { run: "run_1" }))));
+        assert.deepStrictEqual(log, ["queue run_1 own", "wake"]);
+      }),
+    );
+  });
 
   it.effect("ignores a delivery of someone else", () =>
     Effect.gen(function* () {

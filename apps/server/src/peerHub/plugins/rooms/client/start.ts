@@ -21,6 +21,7 @@ import * as Schema from "effect/Schema";
 
 import type * as PeerPlugins from "../../../core/plugins/PeerPlugins.ts";
 import type * as PeerState from "../../../core/state/PeerState.ts";
+import { projectKey } from "../../../core/state/PeerState.ts";
 import type * as PeerWork from "../../../core/work/PeerWork.ts";
 import { NO_CHECKOUT } from "../follow.ts";
 import { passedRunPrompt, reviewRoomPrompt, type Heard } from "../text.ts";
@@ -70,6 +71,40 @@ export function runCapacity(
     : "personal";
 }
 
+/** What carries a run of this computer. */
+export const capacityOf = (
+  state: PeerState.PeerState["Service"],
+  work: PeerWork.PeerWork["Service"],
+  workspace: string,
+  project: string,
+  run: string,
+) =>
+  Effect.gen(function* () {
+    const { persisted } = yield* state.read;
+    return runCapacity(
+      persisted.runs?.[run],
+      persisted.sharedInstances[projectKey(workspace, project)] ?? [],
+      (yield* work.latestPass)?.threads ?? [],
+    );
+  });
+
+/** The person's open runs on the task kept on this computer, newest first. */
+export const openRuns = (
+  state: PeerState.PeerState["Service"],
+  place: { readonly workspace: string; readonly project: string; readonly task: string },
+) =>
+  Effect.map(state.read, ({ persisted }) =>
+    Object.values(persisted.runs ?? {})
+      .filter(
+        (run) =>
+          run.workspace === place.workspace &&
+          run.project === place.project &&
+          run.task === place.task &&
+          run.endedAt === undefined,
+      )
+      .toSorted((a, b) => b.startedAt.localeCompare(a.startedAt)),
+  );
+
 export const roomStarts = (
   state: PeerState.PeerState["Service"],
   work: PeerWork.PeerWork["Service"],
@@ -88,7 +123,7 @@ export const roomStarts = (
       return { project, task, checkout };
     });
   return {
-    /** A session with role `review` on the person's capacity; the run it made. */
+    /** A session with role `review` on the person's capacity. */
     review: (workspace: string, item: PeerRoomInboxItem, me: string, heard: Heard) =>
       Effect.gen(function* () {
         const { project, task, checkout } = yield* placeOf(workspace, item);
@@ -104,10 +139,12 @@ export const roomStarts = (
           harness,
           prompt: reviewRoomPrompt(heard),
         });
-        if (started.promptError !== undefined) return yield* refusal(started.promptError);
-        return started.run ?? started.thread;
+        return {
+          run: started.run ?? started.thread,
+          typed: started.promptError === undefined,
+        };
       }),
-    /** A working run its owner's Pass on starts; the run it made. */
+    /** A working run its owner's Pass on starts. */
     work: (workspace: string, item: PeerRoomInboxItem, me: string, heard: Heard) =>
       Effect.gen(function* () {
         const { project, task, checkout } = yield* placeOf(workspace, item);
@@ -138,8 +175,7 @@ export const roomStarts = (
             }),
         );
         yield* work.refresh().pipe(state.lock.withPermits(1));
-        if (started.promptError !== undefined) return yield* refusal(started.promptError);
-        return run;
+        return { run, typed: started.promptError === undefined };
       }),
   };
 };

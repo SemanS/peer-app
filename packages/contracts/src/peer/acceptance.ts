@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 
-import { TrimmedNonEmptyString } from "../baseSchemas.ts";
+import { NonNegativeInt, TrimmedNonEmptyString } from "../baseSchemas.ts";
 
 /**
  * Acceptance on the wire: a lead's (or an admin's) acceptance of a task's delivered work, kept by
@@ -26,6 +26,14 @@ export const PEER_ACCEPTANCE_LIMITS = { noteChars: 300, opChars: 64 } as const;
 export const PEER_ACCEPTANCE_EVENT_KINDS = ["accepted", "withdrawn"] as const;
 
 /**
+ * How an acceptance was given: by a lead's (or an admin's) own move (`person`, what an older Hub
+ * means by leaving it out), or by the project's review policy in the name of the lead who set it
+ * (`policy`).
+ */
+export const PeerAcceptanceVia = Schema.Literals(["person", "policy"]);
+export type PeerAcceptanceVia = typeof PeerAcceptanceVia.Type;
+
+/**
  * A task's current acceptance: who gave it (a verified address), when, their note, and the task's
  * status when it was given (`review` or `done`). Whether the task was reopened after it is the
  * Hub's `beforeReopening`, on the task's acceptance and its summary.
@@ -35,6 +43,7 @@ export const PeerAcceptance = Schema.Struct({
   at: Schema.String,
   note: Schema.optional(Schema.String),
   statusThen: Schema.String,
+  via: Schema.optional(PeerAcceptanceVia),
 });
 export type PeerAcceptance = typeof PeerAcceptance.Type;
 
@@ -44,6 +53,7 @@ export const PeerAcceptanceEvent = Schema.Struct({
   by: Schema.String,
   at: Schema.String,
   note: Schema.optional(Schema.String),
+  via: Schema.optional(PeerAcceptanceVia),
 });
 export type PeerAcceptanceEvent = typeof PeerAcceptanceEvent.Type;
 
@@ -73,6 +83,7 @@ export const PeerAcceptanceSummary = Schema.Struct({
   at: Schema.String,
   statusThen: Schema.String,
   beforeReopening: BeforeReopening,
+  via: Schema.optional(PeerAcceptanceVia),
 });
 export type PeerAcceptanceSummary = typeof PeerAcceptanceSummary.Type;
 
@@ -108,3 +119,77 @@ export const PeerAcceptanceInput = Schema.Struct({
   ),
 });
 export type PeerAcceptanceInput = typeof PeerAcceptanceInput.Type;
+
+/**
+ * What raises a review policy's signal, each from a fact the Hub already holds: the task has no
+ * test report; the newest has a failed item; it has an unverified item with neither owner nor
+ * task; the package's delivery is absent, `none` or `local`; the session has an open overlap; the
+ * session has an owner's call pending or declined.
+ */
+export const PEER_REVIEW_SIGNALS = [
+  "no-report",
+  "failed",
+  "unowned",
+  "not-delivered",
+  "open-overlap",
+  "owner-call",
+] as const;
+export const PeerReviewSignal = Schema.Literals(PEER_REVIEW_SIGNALS);
+export type PeerReviewSignal = typeof PeerReviewSignal.Type;
+
+/** A project's review policy: a person reviews every handoff (`ask`), or a clean one is accepted (`auto`). */
+export const PeerReviewPolicyMode = Schema.Literals(["ask", "auto"]);
+export type PeerReviewPolicyMode = typeof PeerReviewPolicyMode.Type;
+
+/**
+ * A project's review policy as the Hub keeps it (row `rp:`, `GET`/`PUT
+ * /v1/workspaces/{slug}/acceptance/{project}/policy`): its mode, its version (0 while nobody set
+ * one: `ask`), and who set it when. Under `auto` an agent's handoff that passes the landing guard
+ * and raises no signal is accepted via policy in `updatedBy`'s name; the task stays in review.
+ */
+export const PeerReviewPolicy = Schema.Struct({
+  mode: PeerReviewPolicyMode,
+  version: Schema.Number,
+  updatedAt: Schema.optional(Schema.String),
+  updatedBy: Schema.optional(Schema.String),
+});
+export type PeerReviewPolicy = typeof PeerReviewPolicy.Type;
+
+/** What a project has before anyone sets a policy: a person reviews every handoff. */
+export const PEER_DEFAULT_REVIEW_POLICY: PeerReviewPolicy = { mode: "ask", version: 0 };
+
+export const PeerReviewPolicyPlace = Schema.Struct({
+  workspace: TrimmedNonEmptyString,
+  project: TrimmedNonEmptyString,
+});
+export type PeerReviewPolicyPlace = typeof PeerReviewPolicyPlace.Type;
+
+/**
+ * A project's review policy as the settings section reads it. `available` is false on a Hub that
+ * keeps no review policy yet; `policy` is then the default and nothing can be saved.
+ */
+export const PeerProjectReviewPolicy = Schema.Struct({
+  workspace: Schema.String,
+  project: Schema.String,
+  available: Schema.Boolean,
+  policy: PeerReviewPolicy,
+});
+export type PeerProjectReviewPolicy = typeof PeerProjectReviewPolicy.Type;
+
+/** A lead or an admin saves a mode from the version they read (compare-and-set). */
+export const PeerSetReviewPolicyInput = Schema.Struct({
+  ...PeerReviewPolicyPlace.fields,
+  mode: PeerReviewPolicyMode,
+  version: NonNegativeInt,
+});
+export type PeerSetReviewPolicyInput = typeof PeerSetReviewPolicyInput.Type;
+
+/**
+ * `saved` with the policy as it is now, or `stale` (409 `stale_policy`): someone saved since, and
+ * `policy` is what is stored now. A member's save is refused as an error (403).
+ */
+export const PeerSetReviewPolicyResult = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("saved"), policy: PeerReviewPolicy }),
+  Schema.Struct({ kind: Schema.Literal("stale"), policy: PeerReviewPolicy }),
+]);
+export type PeerSetReviewPolicyResult = typeof PeerSetReviewPolicyResult.Type;

@@ -65,6 +65,8 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // Ending a run changes the team's shared work; continuing one starts an agent on this environment.
   [WS_METHODS.peerHubEndRun]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerHubContinueRun]: AuthOrchestrationOperateScope,
+  // A review policy accepts handoffs in the name of the lead who set it.
+  [WS_METHODS.peerAcceptanceSetReviewPolicy]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;

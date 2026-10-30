@@ -5,10 +5,15 @@ import { AuthOrchestrationOperateScope, AuthOrchestrationReadScope } from "../au
 import { AcceptanceRpcScopes, PEER_ACCEPTANCE_METHODS } from "./acceptance.rpc.ts";
 import {
   PEER_ACCEPTANCE_PLUGIN,
+  PEER_DEFAULT_REVIEW_POLICY,
   PeerAcceptanceInput,
   PeerAcceptanceStatus,
+  PeerProjectReviewPolicy,
+  PeerSetReviewPolicyInput,
+  PeerSetReviewPolicyResult,
   PeerTaskAcceptance,
 } from "./acceptance.ts";
+import { CLIENT_GUARDED_RPC_SCOPES } from "../clientRpcPermissions.ts";
 import { PeerHandoffPackage } from "./handoff.ts";
 import { PEER_PLUGIN_IDS } from "./plugin.ts";
 import { peerPluginStatusFields } from "./registry.ts";
@@ -17,6 +22,9 @@ import { PEER_RPC_SCOPES, PEER_WS_METHODS } from "./rpcRegistry.ts";
 const decodeTask = Schema.decodeUnknownSync(PeerTaskAcceptance);
 const decodeInput = Schema.decodeUnknownSync(PeerAcceptanceInput);
 const decodeStatus = Schema.decodeUnknownSync(PeerAcceptanceStatus);
+const decodeRead = Schema.decodeUnknownSync(PeerProjectReviewPolicy);
+const decodeSet = Schema.decodeUnknownSync(PeerSetReviewPolicyInput);
+const decodeSetResult = Schema.decodeUnknownSync(PeerSetReviewPolicyResult);
 
 const place = { workspace: "acme", project: "pay", task: "vl-7" };
 
@@ -88,10 +96,79 @@ describe("acceptance wire", () => {
       [PEER_ACCEPTANCE_METHODS.peerAcceptanceView]: AuthOrchestrationReadScope,
       [PEER_ACCEPTANCE_METHODS.peerAcceptanceAccept]: AuthOrchestrationOperateScope,
       [PEER_ACCEPTANCE_METHODS.peerAcceptanceWithdraw]: AuthOrchestrationOperateScope,
+      [PEER_ACCEPTANCE_METHODS.peerAcceptanceReviewPolicy]: AuthOrchestrationReadScope,
+      [PEER_ACCEPTANCE_METHODS.peerAcceptanceSetReviewPolicy]: AuthOrchestrationOperateScope,
     });
     for (const method of Object.values(PEER_ACCEPTANCE_METHODS)) {
       expect(Object.values(PEER_WS_METHODS)).toContain(method);
       expect(PEER_RPC_SCOPES).toHaveProperty(method);
     }
+  });
+
+  it("says how an acceptance was given, and reads an older Hub's as given by a person", () => {
+    const summary = {
+      ...place,
+      by: "ana@acme.test",
+      at: "2026-10-28T10:00:00Z",
+      statusThen: "review",
+    };
+    expect(decodeStatus({ accepted: [summary] }).accepted[0]?.via).toBeUndefined();
+    expect(decodeStatus({ accepted: [{ ...summary, via: "policy" }] }).accepted[0]?.via).toBe(
+      "policy",
+    );
+    const view = decodeTask({
+      ...place,
+      current: {
+        by: "ana@acme.test",
+        at: "2026-10-28T10:00:00Z",
+        statusThen: "review",
+        via: "policy",
+      },
+      history: [
+        { kind: "accepted", by: "ana@acme.test", at: "2026-10-28T10:00:00Z", via: "policy" },
+      ],
+    });
+    expect(view.current?.via).toBe("policy");
+    expect(view.history[0]?.via).toBe("policy");
+  });
+
+  it("reads a project's review policy, and saves one from the version read", () => {
+    expect(
+      decodeRead({
+        workspace: "acme",
+        project: "pay",
+        available: false,
+        policy: PEER_DEFAULT_REVIEW_POLICY,
+      }).policy,
+    ).toEqual({ mode: "ask", version: 0 });
+    expect(decodeSet({ workspace: "acme", project: "pay", mode: "auto", version: 2 }).mode).toBe(
+      "auto",
+    );
+    expect(() =>
+      decodeSet({ workspace: "acme", project: "pay", mode: "sometimes", version: 2 }),
+    ).toThrow();
+    expect(() =>
+      decodeSet({ workspace: "acme", project: "pay", mode: "auto", version: -1 }),
+    ).toThrow();
+    const stored = {
+      mode: "auto",
+      version: 3,
+      updatedAt: "2026-10-30T09:00:00Z",
+      updatedBy: "ana@acme.test",
+    };
+    expect(decodeSetResult({ kind: "stale", policy: stored })).toEqual({
+      kind: "stale",
+      policy: stored,
+    });
+  });
+
+  it("guards the policy's save on the client, not its read", () => {
+    expect(CLIENT_GUARDED_RPC_SCOPES).toHaveProperty(
+      PEER_ACCEPTANCE_METHODS.peerAcceptanceSetReviewPolicy,
+      AuthOrchestrationOperateScope,
+    );
+    expect(CLIENT_GUARDED_RPC_SCOPES).not.toHaveProperty(
+      PEER_ACCEPTANCE_METHODS.peerAcceptanceReviewPolicy,
+    );
   });
 });

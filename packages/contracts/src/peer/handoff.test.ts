@@ -43,6 +43,56 @@ describe("handoff wire", () => {
     expect(p).toEqual(older);
     expect(decodePackage(fixture).report?.unowned).toEqual(["iPhone layout of the task page"]);
   });
+  it("decodes a package and a summary without delivery or policy as before", () => {
+    const p = decodePackage(fixture);
+    expect(p.delivery).toBeUndefined();
+    expect(p.policy).toBeUndefined();
+    const summary = decodeSummary({
+      project: "app",
+      task: "krk-335",
+      author: "ana@acme.test",
+      number: 2,
+      composedAt: "2026-10-08T14:32:11Z",
+      contextVersion: 7,
+      pullRequests: 1,
+      source: "agent",
+    });
+    expect(summary.delivery).toBeUndefined();
+    expect(summary.policy).toBeUndefined();
+  });
+  it("carries the delivery Peer observed and the policy's evaluation", () => {
+    const delivery = {
+      state: "none",
+      evidence: { untracked: ["types/concurrency.ts"], branch: "feature/x", future: true },
+      observedAt: "2026-10-30T09:12:00Z",
+      environment: "env-mac",
+      vcs: "git",
+    };
+    const policy = {
+      mode: "auto",
+      version: 2,
+      signals: ["not-delivered", "unowned"],
+      accepted: false,
+    };
+    const p = decodePackage({
+      ...fixture,
+      delivery,
+      policy,
+      acceptance: { by: "ana@acme.test", at: "2026-10-30T09:12:00Z", via: "policy" },
+    });
+    expect(p.delivery).toEqual({
+      ...delivery,
+      evidence: { untracked: ["types/concurrency.ts"], branch: "feature/x" },
+    });
+    expect(p.policy).toEqual(policy);
+    expect(p.acceptance?.via).toBe("policy");
+    expect(() =>
+      decodePackage({ ...fixture, delivery: { ...delivery, state: "pushed" } }),
+    ).toThrow();
+    expect(() =>
+      decodePackage({ ...fixture, policy: { ...policy, signals: ["vibes"] } }),
+    ).toThrow();
+  });
   it("authorizes the four surfaces separately", () => {
     expect(HandoffRpcScopes).toEqual({
       [PEER_HANDOFF_METHODS.peerHandoffRead]: AuthOrchestrationReadScope,

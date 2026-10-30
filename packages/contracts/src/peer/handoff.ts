@@ -1,4 +1,7 @@
 import * as Schema from "effect/Schema";
+
+import { PeerAcceptanceVia, PeerReviewPolicyMode, PeerReviewSignal } from "./acceptance.ts";
+
 export const PeerHandoffTarget = Schema.Literals(["description", "comment", "none"]);
 export type PeerHandoffTarget = typeof PeerHandoffTarget.Type;
 export const PeerHandoffReport = Schema.Struct({
@@ -18,8 +21,66 @@ export const PeerHandoffAcceptance = Schema.Struct({
   by: Schema.String,
   at: Schema.String,
   note: Schema.optional(Schema.String),
+  /** `policy` when the project's review policy accepted it in the lead's name; absent from an older Hub. */
+  via: Schema.optional(PeerAcceptanceVia),
 });
 export type PeerHandoffAcceptance = typeof PeerHandoffAcceptance.Type;
+/**
+ * Whether a handed-off change is reachable by others, as Peer observed it from git or Jujutsu on
+ * the author's computer at `peer review` (never from the agent's words): `none` (a reported file
+ * is untracked or has uncommitted changes), `local` (committed, not pushed), `shared` (a pushed
+ * branch, an open pull request, or a Jujutsu change pushed to a remote) or `landed` (a merged pull
+ * request or a change on trunk).
+ */
+export const PEER_HANDOFF_DELIVERY_STATES = ["none", "local", "shared", "landed"] as const;
+export const PeerHandoffDeliveryState = Schema.Literals(PEER_HANDOFF_DELIVERY_STATES);
+export type PeerHandoffDeliveryState = typeof PeerHandoffDeliveryState.Type;
+
+/** What the app sends and the Hub keeps of a delivery's evidence: at most 20 paths per file state, 10 pull requests. */
+export const PEER_HANDOFF_DELIVERY_LIMITS = { paths: 20, pullRequests: 10, ids: 20 } as const;
+
+/**
+ * The delivery's evidence, bounded: the reported files untracked or with uncommitted changes
+ * (`none`), the branch, the commit, Jujutsu change ids and bookmarks, and pull request urls.
+ */
+export const PeerHandoffDeliveryEvidence = Schema.Struct({
+  untracked: Schema.optional(Schema.Array(Schema.String)),
+  uncommitted: Schema.optional(Schema.Array(Schema.String)),
+  branch: Schema.optional(Schema.String),
+  commit: Schema.optional(Schema.String),
+  changes: Schema.optional(Schema.Array(Schema.String)),
+  bookmarks: Schema.optional(Schema.Array(Schema.String)),
+  pullRequests: Schema.optional(Schema.Array(Schema.String)),
+});
+export type PeerHandoffDeliveryEvidence = typeof PeerHandoffDeliveryEvidence.Type;
+
+/**
+ * The delivery fact of a handoff: its state and evidence, when Peer observed it (`observedAt`), on
+ * which computer (`environment`, the environment id the label is read from) and from which
+ * version control (`vcs`). Sent in the `peer review` body as `delivery` to a Hub whose `handoff`
+ * schema is 3 or later, kept on the package and in the handoff summary of the status.
+ */
+export const PeerHandoffDelivery = Schema.Struct({
+  state: PeerHandoffDeliveryState,
+  evidence: PeerHandoffDeliveryEvidence,
+  observedAt: Schema.String,
+  environment: Schema.String,
+  vcs: Schema.Literals(["git", "jj"]),
+});
+export type PeerHandoffDelivery = typeof PeerHandoffDelivery.Type;
+
+/**
+ * The review policy as the Hub evaluated it on an agent's handoff: its mode and version, the
+ * signals it raised (in both modes) and whether it accepted the task in the same move.
+ */
+export const PeerHandoffPolicy = Schema.Struct({
+  mode: PeerReviewPolicyMode,
+  version: Schema.Number,
+  signals: Schema.Array(PeerReviewSignal),
+  accepted: Schema.Boolean,
+});
+export type PeerHandoffPolicy = typeof PeerHandoffPolicy.Type;
+
 export const PeerHandoffPackage = Schema.Struct({
   number: Schema.Number,
   project: Schema.String,
@@ -74,6 +135,10 @@ export const PeerHandoffPackage = Schema.Struct({
    * leaves it out, and an older app drops it on decoding.
    */
   acceptance: Schema.optional(PeerHandoffAcceptance),
+  /** The delivery Peer observed at `peer review`. Absent from an older app or Hub: "not observed". */
+  delivery: Schema.optional(PeerHandoffDelivery),
+  /** The review policy's evaluation of an agent's handoff. Absent from a person's handoff and an older Hub. */
+  policy: Schema.optional(PeerHandoffPolicy),
 });
 export type PeerHandoffPackage = typeof PeerHandoffPackage.Type;
 export const PeerHandoffSummary = Schema.Struct({
@@ -85,6 +150,10 @@ export const PeerHandoffSummary = Schema.Struct({
   contextVersion: Schema.NullOr(Schema.Number),
   pullRequests: Schema.Number,
   source: Schema.Literals(["agent", "person"]),
+  /** The package's delivery, as on the package; absent from an older Hub. */
+  delivery: Schema.optional(PeerHandoffDelivery),
+  /** The package's policy evaluation, as on the package; absent from an older Hub. */
+  policy: Schema.optional(PeerHandoffPolicy),
 });
 export type PeerHandoffSummary = typeof PeerHandoffSummary.Type;
 export const PeerHandoffOutcome = Schema.Struct({

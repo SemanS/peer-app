@@ -2,7 +2,8 @@
  * What a session hears of its room (design D7). A message is offered once per session: it counts as
  * told when its model has it (Peer Mod's proof), or, where no such proof exists, when a hook carried
  * it. An offer that was dropped is offered again, and so is one a Peer restart forgot, which is safe
- * because `heard` follows only model input. `hooks.delivery` does no I/O: it queues the move.
+ * because `heard` follows only model input. A message is checked with the Hub as it is offered (a
+ * step with nothing to offer asks nothing). `hooks.delivery` does no I/O: it queues the move.
  *
  * @module peerHub/plugins/rooms/hooks
  */
@@ -23,6 +24,8 @@ export interface Local {
   readonly offering: Set<string>;
   /** Heard, with nothing said in the room since. */
   readonly unanswered: Set<string>;
+  /** A step is checking its messages with the Hub: a step beside it says nothing. */
+  checking: boolean;
   /** Due at the next notice: the one reminder. */
   readonly remind: Set<string>;
   /** What it was told, where core keeps no told set for it. */
@@ -32,6 +35,7 @@ export interface Local {
 export const localOf = (session: PeerSessionView) =>
   session.local<Local>("rooms", () => ({
     offering: new Set(),
+    checking: false,
     unanswered: new Set(),
     remind: new Set(),
     told: new Set(),
@@ -42,23 +46,29 @@ const reminded = (ref: string) => `r:${ref}`;
 const seqOf = (ref: string) => Number(ref.slice(ref.lastIndexOf(":") + 1));
 
 export const roomHooks = (rooms: Rooms["Service"]) => {
-  /** What waits for the session and fits a step, marked as offered. */
-  const offer = (session: PeerSessionView): PeerHookText | null => {
-    const own = localOf(session);
-    const told = toldOf(session);
-    const step = stepText(
-      rooms
+  /** What waits for the session, still holds and fits a step, marked as offered. */
+  const offer = (session: PeerSessionView) =>
+    Effect.gen(function* () {
+      const own = localOf(session);
+      const told = toldOf(session);
+      const candidates = rooms
         .waiting(session.run)
-        .filter((heard) => !told.has(heard.ref) && !own.offering.has(heard.ref)),
-    );
-    if (step === null) return null;
-    for (const ref of step.refs) own.offering.add(ref);
-    return step;
-  };
+        .filter((heard) => !told.has(heard.ref) && !own.offering.has(heard.ref));
+      if (candidates.length === 0 || own.checking) return null;
+      own.checking = true;
+      const step = stepText(
+        yield* rooms
+          .tellable(session.run, candidates)
+          .pipe(Effect.ensuring(Effect.sync(() => void (own.checking = false)))),
+      );
+      if (step === null) return null;
+      for (const ref of step.refs) own.offering.add(ref);
+      return step satisfies PeerHookText;
+    });
   const notice = (ctx: PeerHookContext) =>
-    Effect.sync((): PeerHookText | null => {
+    Effect.gen(function* () {
       const own = localOf(ctx.session);
-      const offered = offer(ctx.session);
+      const offered = yield* offer(ctx.session);
       if (offered !== null) return offered;
       if (own.remind.size === 0) return null;
       const told = toldOf(ctx.session);
@@ -76,7 +86,7 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
   };
   return {
     startLine: Effect.succeed(START_LINE),
-    sessionStart: (ctx) => Effect.sync(() => offer(ctx.session)),
+    sessionStart: (ctx) => offer(ctx.session),
     notices: [{ wakes: true, landing: true, read: notice }],
     delivery: ({ session, refs, state }) =>
       Effect.gen(function* () {

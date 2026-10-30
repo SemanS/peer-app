@@ -7,13 +7,11 @@
  * @module peerHub/plugins/rooms/Rooms
  */
 import {
-  PEER_ROOMS_STATUS_LIMITS as LIMITS,
   PeerHubError,
   type PeerRoomCapacity,
   type PeerRoomDiff,
   type PeerRoomInbox,
   type PeerRoomInboxItem,
-  type PeerRoomNeed,
   type PeerRoomRead,
   type PeerRoomsDeclineInput,
   type PeerRoomsPassInput,
@@ -22,7 +20,6 @@ import {
   type PeerRoomsReadInput,
   type PeerRoomsSeenInput,
   type PeerRoomsSetReachInput,
-  type PeerRoomsStatus,
   type PeerRoomsWithdrawInput,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -39,8 +36,9 @@ import * as PeerState from "../../core/state/PeerState.ts";
 import { projectKey } from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
-import { clip } from "../../peerText.ts";
 import { roomDiff } from "./client/diff.ts";
+import { runQueues, tellable } from "./client/queue.ts";
+import { statusOf } from "./client/status.ts";
 import { checkoutOf, roomStarts, runCapacity } from "./client/start.ts";
 import { act, type FollowDeps, type HereRun } from "./follow.ts";
 import { roomsHub, type Place, type PostBody } from "./client/hub.ts";
@@ -55,17 +53,6 @@ type Job =
       readonly run: string | undefined;
     };
 
-const needOf = (workspace: string, item: PeerRoomInboxItem): PeerRoomNeed => ({
-  workspace,
-  project: item.project,
-  task: item.task,
-  seq: item.message.seq,
-  author: item.message.author.email,
-  ...(item.message.author.run === undefined ? {} : { agent: true }),
-  text: clip(item.message.text, LIMITS.text),
-  at: item.message.at,
-});
-
 const make = Effect.gen(function* () {
   const state = yield* PeerState.PeerState;
   const status = yield* PeerStatus.PeerStatus;
@@ -76,7 +63,7 @@ const make = Effect.gen(function* () {
   const inboxes = yield* Ref.make<ReadonlyMap<string, PeerRoomInbox>>(new Map());
   const jobs = yield* Queue.unbounded<Job>();
   /** Run → its messages not yet confirmed heard, in arrival order. */
-  const queues = new Map<string, Map<string, Heard>>();
+  const queues = runQueues();
   const starts = roomStarts(state, work, plugins);
 
   const emailOf = Effect.flatMap(state.email, (email) =>
@@ -151,6 +138,8 @@ const make = Effect.gen(function* () {
   ): Effect.Effect<Heard> =>
     Effect.map(work.taskName(workspace, item.project, item.task), (taskName) => ({
       ref: refOf(item.task, item.message.seq),
+      workspace,
+      project: item.project,
       kind,
       seq: item.message.seq,
       task: item.task,
@@ -191,13 +180,10 @@ const make = Effect.gen(function* () {
         .pipe(Effect.ignore),
     queue: (item, run, kind) =>
       Effect.gen(function* () {
-        const queue = queues.get(run) ?? new Map<string, Heard>();
-        const heard = yield* heardOf(workspace, item, kind, me);
-        queue.set(heard.ref, heard);
-        queues.set(run, queue);
+        queues.add(run, yield* heardOf(workspace, item, kind, me));
       }),
     unqueue: (item, run) =>
-      Effect.sync(() => void queues.get(run)?.delete(refOf(item.task, item.message.seq))),
+      Effect.sync(() => queues.remove(run, refOf(item.task, item.message.seq))),
     wake: agents.wake,
     continueRun: (item, run) =>
       Effect.map(
@@ -221,6 +207,7 @@ const make = Effect.gen(function* () {
       if (email === null) return;
       const inbox = yield* hub.inbox(workspace, state.environmentId);
       yield* Ref.update(inboxes, (current) => new Map(current).set(workspace, inbox));
+      queues.prune(workspace, inbox);
       yield* status.publish;
       const deps = followDeps(workspace, email);
       yield* Effect.forEach(inbox.work, (item) => act(deps, item), { discard: true });
@@ -276,18 +263,7 @@ const make = Effect.gen(function* () {
 
   return {
     /** The plugin's status slice, read from memory. */
-    status: Effect.map(Ref.get(inboxes), (read): PeerRoomsStatus => {
-      const all = [...read];
-      const needs = (list: (inbox: PeerRoomInbox) => ReadonlyArray<PeerRoomInboxItem>) =>
-        all
-          .flatMap(([workspace, inbox]) => list(inbox).map((item) => needOf(workspace, item)))
-          .slice(0, LIMITS.items);
-      return {
-        waiting: needs((inbox) => inbox.waiting),
-        mentions: needs((inbox) => inbox.mentions),
-        seqs: Object.fromEntries(all.map(([workspace, inbox]) => [workspace, inbox.seqs])),
-      };
-    }),
+    status: Effect.map(Ref.get(inboxes), statusOf),
     read: roomRead,
     post: (input: PeerRoomsPostInput) => {
       const { workspace, project, task, ...body } = input;
@@ -340,13 +316,27 @@ const make = Effect.gen(function* () {
           nameOf: (email) => state.nameOf(place.workspace, email),
         });
       }),
-    /** The messages waiting for a run, oldest first. */
-    waiting: (run: string | undefined) =>
-      run === undefined ? [] : [...(queues.get(run)?.values() ?? [])],
-    /** Reading the room says what waits; a heard or answered message leaves its run's queue. */
-    settled: (run: string | undefined, ref: string) => {
-      if (run !== undefined) queues.get(run)?.delete(ref);
-    },
+    waiting: queues.of,
+    /** What a step may tell now, as the Hub says of each message. */
+    tellable: (run: string | undefined, candidates: ReadonlyArray<Heard>) =>
+      Effect.flatMap(state.email, (me) =>
+        me === null
+          ? Effect.succeed<ReadonlyArray<Heard>>([])
+          : tellable({
+              queues,
+              run,
+              candidates,
+              me,
+              read: ({ workspace, project, task, seq }) =>
+                hub
+                  .read({ workspace, project, task }, { after: seq - 1, limit: 1 })
+                  .pipe(
+                    Effect.map(({ messages }) => messages.find((message) => message.seq === seq)),
+                  ),
+            }),
+      ),
+    /** A heard or answered message leaves its run's queue. */
+    settled: queues.remove,
     /** `hooks.delivery` must not do I/O: the plugin's `run` sends the move. */
     queueHeard: (session: PeerSessionView, ref: string) => {
       const [task, seq] = [
@@ -379,7 +369,7 @@ const make = Effect.gen(function* () {
     forget: (workspace?: string) =>
       Effect.gen(function* () {
         yield* Queue.clear(jobs);
-        if (workspace === undefined) queues.clear();
+        queues.forget(workspace);
         yield* Ref.update(inboxes, (current) => {
           const next = new Map(workspace === undefined ? [] : current);
           if (workspace !== undefined) next.delete(workspace);
@@ -387,9 +377,12 @@ const make = Effect.gen(function* () {
         });
       }),
     keep: (workspaces: ReadonlyArray<string>) =>
-      Ref.update(
-        inboxes,
-        (current) => new Map([...current].filter(([slug]) => workspaces.includes(slug))),
+      Effect.andThen(
+        Effect.sync(() => queues.keep(workspaces)),
+        Ref.update(
+          inboxes,
+          (current) => new Map([...current].filter(([slug]) => workspaces.includes(slug))),
+        ),
       ),
   };
 });

@@ -9,6 +9,8 @@ import type { Heard } from "./text.ts";
 
 const heard = (seq: number, text = "Why?"): Heard => ({
   ref: `vl-7:${seq}`,
+  workspace: "acme",
+  project: "app",
   kind: "passed",
   seq,
   task: "vl-7",
@@ -19,11 +21,16 @@ const heard = (seq: number, text = "Why?"): Heard => ({
 });
 
 /** The hooks over a stand-in service: a run's queue, and what it was told to send. */
-const hooksOf = (waiting: Heard[]) => {
+const hooksOf = (
+  waiting: Heard[],
+  tellable: (candidates: ReadonlyArray<Heard>) => ReadonlyArray<Heard> = (all) => all,
+) => {
   const queued: string[] = [];
   let wakes = 0;
   const rooms = {
     waiting: () => waiting,
+    tellable: (_run: string | undefined, candidates: ReadonlyArray<Heard>) =>
+      Effect.succeed(tellable(candidates)),
     settled: (_run: string | undefined, ref: string) => {
       const at = waiting.findIndex((one) => one.ref === ref);
       if (at >= 0) waiting.splice(at, 1);
@@ -79,6 +86,27 @@ describe("the room's notice", () => {
       const { hooks } = hooksOf([heard(12)]);
       const said = yield* hooks.sessionStart(ctxOf(sessionOf()));
       assert.deepStrictEqual(refsOf(said), ["vl-7:12"]);
+    }),
+  );
+});
+
+describe("a message that ended meanwhile", () => {
+  it.effect("is not told when the Hub says its delivery ended", () =>
+    Effect.gen(function* () {
+      const { hooks } = hooksOf([heard(12), heard(13)], (all) =>
+        all.filter((one) => one.seq !== 12),
+      );
+      assert.deepStrictEqual(refsOf(yield* read(hooks, sessionOf())), ["vl-7:13"]);
+    }),
+  );
+
+  it.effect("says nothing, and offers nothing, when none still holds", () =>
+    Effect.gen(function* () {
+      const { hooks } = hooksOf([heard(12)], () => []);
+      const session = sessionOf();
+      assert.isNull(yield* read(hooks, session));
+      assert.strictEqual(localOf(session).offering.size, 0);
+      assert.isNull(yield* hooks.sessionStart(ctxOf(session)));
     }),
   );
 });

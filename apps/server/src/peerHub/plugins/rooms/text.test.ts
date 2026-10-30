@@ -4,6 +4,8 @@ import { heardText, reminderText, stepText, STEP_MAX, type Heard } from "./text.
 
 const heard = (over: Partial<Heard> = {}): Heard => ({
   ref: "vl-7:12",
+  workspace: "acme",
+  project: "app",
   kind: "own",
   seq: 12,
   task: "vl-7",

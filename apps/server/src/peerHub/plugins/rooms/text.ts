@@ -20,6 +20,8 @@ export type HeardKind = "own" | "passed" | "team";
 export interface Heard {
   /** What `session.told` keeps of it: `<task>:<seq>`. */
   readonly ref: string;
+  readonly workspace: string;
+  readonly project: string;
   readonly kind: HeardKind;
   readonly seq: number;
   readonly task: string;

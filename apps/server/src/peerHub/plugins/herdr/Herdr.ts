@@ -154,12 +154,24 @@ const make = Effect.gen(function* () {
    * while the agent waits, and the status is published often.
    */
   const asked = new Map<string, string | undefined>();
+  const ASKS_TAIL_BYTES = 16 * 1024;
   const asksOf = (agent: HerdrAgentState) =>
     Effect.gen(function* () {
       if (agent.status !== "blocked") return undefined;
       const key = `${agent.paneId}\u0000${agent.completionSeq ?? ""}`;
       if (asked.has(key)) return asked.get(key);
-      const words = yield* sessions.asking(agent.paneId);
+      // The transcript herdr's session names, as the agent view reads it; else what the hooks know of the pane.
+      const path = yield* transcriptPathOf(agent, DateTime.toEpochMillis(yield* DateTime.now));
+      const words =
+        path === null
+          ? yield* sessions.asking(agent.paneId)
+          : AgentTranscript.waitingWords(
+              AgentTranscript.transcriptEntries(
+                yield* Effect.tryPromise(() =>
+                  AgentTranscript.readTranscriptTail(path, ASKS_TAIL_BYTES),
+                ).pipe(Effect.orElseSucceed(() => [] as string[])),
+              ),
+            );
       const asks = words === undefined ? undefined : words.slice(0, 300);
       if (asked.size >= 64) asked.clear();
       asked.set(key, asks);
@@ -187,6 +199,24 @@ const make = Effect.gen(function* () {
     };
   });
 
+  /**
+   * The transcript of a Claude agent, found once by the session herdr or the hooks name and
+   * remembered (`transcripts`); null when there is none to read, rechecked after a while.
+   */
+  const transcriptPathOf = (agent: HerdrAgentState, now: number) =>
+    Effect.gen(function* () {
+      const session = sessionOf(agent);
+      if (session === undefined || agent.agent !== "claude") return null;
+      const key = session.id ?? session.path ?? "";
+      const known = transcripts.get(key);
+      if (known !== undefined && (known.path !== null || now - known.at < 10_000)) {
+        return known.path;
+      }
+      const path = yield* Effect.promise(() => AgentTranscript.findClaudeTranscript(session));
+      transcripts.set(key, { path, at: now });
+      return path;
+    });
+
   /** A herdr agent as its view shows it: its transcript when Peer can read it, else its terminal. */
   const agentView = (agentId: string) =>
     Effect.gen(function* () {
@@ -205,19 +235,7 @@ const make = Effect.gen(function* () {
         ...(agent.branch === undefined ? {} : { branch: agent.branch }),
         ...(agent.vcs === undefined ? {} : { vcs: agent.vcs }),
       } satisfies PeerAgentView;
-      const session = sessionOf(agent);
-      const now = DateTime.toEpochMillis(yield* DateTime.now);
-      let path: string | null = null;
-      if (session !== undefined && agent.agent === "claude") {
-        const key = session.id ?? session.path ?? "";
-        const known = transcripts.get(key);
-        if (known !== undefined && (known.path !== null || now - known.at < 10_000)) {
-          path = known.path;
-        } else {
-          path = yield* Effect.promise(() => AgentTranscript.findClaudeTranscript(session));
-          transcripts.set(key, { path, at: now });
-        }
-      }
+      const path = yield* transcriptPathOf(agent, DateTime.toEpochMillis(yield* DateTime.now));
       if (path !== null) {
         const transcriptPath = path;
         const lines = yield* Effect.tryPromise(() =>

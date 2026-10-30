@@ -41,6 +41,7 @@ export const PEER_PLUGIN_IDS = [
   "openspec",
   "test-reports",
   "roles",
+  "rooms",
   "acceptance",
   "settings",
 ] as const;

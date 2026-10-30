@@ -119,6 +119,8 @@ export type PeerRolesStartReviewInput = typeof PeerRolesStartReviewInput.Type;
 
 export const PeerRolesStartReviewResult = Schema.Struct({
   thread: Schema.String,
+  /** The run Peer created for it. */
+  run: Schema.optional(Schema.String),
   paneId: Schema.String,
   terminalId: Schema.String,
   promptError: Schema.optional(Schema.String),

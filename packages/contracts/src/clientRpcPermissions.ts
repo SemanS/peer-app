@@ -60,6 +60,13 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerRolesSet]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRolesClear]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRolesStartReview]: AuthOrchestrationOperateScope,
+  // A room's message may start an agent, on this environment or a colleague's.
+  [WS_METHODS.peerRoomsPost]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerRoomsSeen]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerRoomsPass]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerRoomsDecline]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerRoomsWithdraw]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerRoomsSetReach]: AuthOrchestrationOperateScope,
   // Resuming an ended agent runs its CLI headless on this environment.
   [WS_METHODS.peerSettleSetResume]: AuthOrchestrationOperateScope,
   // Ending a run changes the team's shared work; continuing one starts an agent on this environment.

@@ -547,9 +547,10 @@ export async function runRooms(kit: RoomsKit): Promise<ReadonlyArray<string>> {
   // A first prompt lost to whatever held the pane: the session is woken with the message.
   bob.losePrompts(true);
   const lostPrompt = await bob.post("lost-prompt", LOST_PROMPT, [bob.email]);
+  // The pane exists before its prompt is typed, so losing stops only once the prompt was lost.
   const secondStart = await attempt(
-    "Peer starts a second agent",
-    () => bob.starts.length === 2,
+    "Peer starts a second agent and types its prompt",
+    () => bob.starts[1]?.promptLost === true,
     30_000,
   );
   bob.losePrompts(false);

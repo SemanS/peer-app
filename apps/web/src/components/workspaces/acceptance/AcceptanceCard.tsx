@@ -11,7 +11,7 @@ import type { TaskSlotProps } from "../slots.types";
 import { acceptanceCard, acceptanceFacts } from "./acceptance.logic";
 import { openAcceptanceDialog } from "./acceptanceDialog";
 
-const ACTION_LABEL = { accept: "Accept…", withdraw: "Withdraw…" } as const;
+const ACTION_LABEL = { accept: "Accept…", withdraw: "Withdraw acceptance…" } as const;
 
 /**
  * A task's acceptance on its page: who accepted it and when, with their note, every acceptance

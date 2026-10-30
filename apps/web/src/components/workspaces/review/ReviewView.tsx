@@ -10,6 +10,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { FileTextIcon } from "lucide-react";
 import { useId, useState } from "react";
 
+import { useStableCallback } from "../../../hooks/useStableCallback";
 import { newMessageId } from "../../../lib/utils";
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
@@ -27,6 +28,7 @@ import { useWorkData } from "../useWorkData";
 import { failureMessage } from "../WorkspaceAccess";
 import type { WorkTaskNode } from "../workTree.logic";
 import { HandoffChatContext, type HandoffChat } from "./HandoffChat";
+import { ReviewDecisionContext, type ReviewDecision } from "./ReviewDecision";
 import { handoffChat, reopenTarget, reviewState } from "./review.logic";
 import { withFinally } from "~/lib/withFinally";
 
@@ -70,69 +72,134 @@ export function ReviewView({
               : reviewState(task, needOf, taskOwnership(node, task, area?.name ?? null).review)
           }
         />
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {status === null || environmentId === null ? (
-            <p role="status" className="px-6 py-6 text-sm text-muted-foreground">
-              Connecting…
-            </p>
-          ) : hubTask === undefined || task === undefined ? (
-            <p className="px-6 py-6 text-sm text-muted-foreground">
-              This task is no longer on the project.
-            </p>
-          ) : (
-            <div className="flex min-h-full min-w-0 flex-col px-4 py-5 sm:px-7">
-              <div className="flex min-w-0 flex-col gap-5">
-                <div className="flex max-w-3xl flex-col gap-6">
-                  <h1 className="text-lg font-semibold tracking-tight text-foreground [overflow-wrap:anywhere]">
-                    {hubTask.title}
-                  </h1>
-                  <HandoffChatContext value={chat}>
-                    {plugins.map(({ id, taskReview: Section }) =>
-                      Section === undefined ? null : (
-                        <Section
-                          key={id}
-                          environmentId={environmentId}
-                          status={status}
-                          workspace={workspace}
-                          project={project}
-                          scope={`task:${taskId}`}
-                          contextText={null}
-                        />
-                      ),
-                    )}
-                  </HandoffChatContext>
-                  {noReviewSections(plugins) ? (
-                    <p className="text-sm text-muted-foreground">
-                      Turn on Handoff or GitHub in Settings → Peer → Coordination & plugins to see
-                      the package and the pull requests here.
-                    </p>
-                  ) : null}
-                  <ReviewTimeline
-                    environmentId={environmentId}
-                    status={status}
-                    workspace={workspace}
-                    project={project}
-                    task={taskId}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-        {environmentId === null || hubTask === undefined || task === undefined ? null : (
-          <div className="max-h-[55dvh] shrink-0 overflow-y-auto border-t border-border bg-background px-4 py-3 sm:px-7">
-            <ReviewActions
-              environmentId={environmentId}
-              workspace={workspace}
-              project={project}
-              task={task}
-              chat={chat}
-              done={hubTask.status === "done"}
-            />
+        {status === null ||
+        environmentId === null ||
+        hubTask === undefined ||
+        task === undefined ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {status === null || environmentId === null ? (
+              <p role="status" className="px-6 py-6 text-sm text-muted-foreground">
+                Connecting…
+              </p>
+            ) : (
+              <p className="px-6 py-6 text-sm text-muted-foreground">
+                This task is no longer on the project.
+              </p>
+            )}
           </div>
+        ) : (
+          <ReviewBody
+            environmentId={environmentId}
+            status={status}
+            plugins={plugins}
+            workspace={workspace}
+            project={project}
+            task={task}
+            title={hubTask.title}
+            done={hubTask.status === "done"}
+            chat={chat}
+          />
         )}
       </div>
     </SidebarInset>
+  );
+}
+
+/**
+ * The review of a task that is on the project: what the plugins show of it, with the page's two
+ * ways on offered to a decision line one of them draws, and the bar at the bottom.
+ */
+function ReviewBody({
+  environmentId,
+  status,
+  plugins,
+  workspace,
+  project,
+  task,
+  title,
+  done,
+  chat,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly status: PeerHubStatus;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
+  readonly workspace: string;
+  readonly project: string;
+  readonly task: WorkTaskNode;
+  readonly title: string;
+  readonly done: boolean;
+  readonly chat: HandoffChat | null;
+}) {
+  const actions = useReviewActions({ environmentId, workspace, project, task });
+  const [claims, setClaims] = useState(0);
+  // A decision line's effect depends on it, so it keeps one identity.
+  const claim = useStableCallback(() => {
+    setClaims((count) => count + 1);
+    return () => setClaims((count) => count - 1);
+  });
+  const decision: ReviewDecision = {
+    markDone: () => void actions.markDone(),
+    reopen: actions.startReopen,
+    reopenLabel: actions.reopenLabel,
+    busy: actions.busy,
+    done,
+    claim,
+  };
+  return (
+    <>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex min-h-full min-w-0 flex-col px-4 py-5 sm:px-7">
+          <div className="flex min-w-0 flex-col gap-5">
+            <div className="flex max-w-3xl flex-col gap-6">
+              <h1 className="text-lg font-semibold tracking-tight text-foreground [overflow-wrap:anywhere]">
+                {title}
+              </h1>
+              <HandoffChatContext value={chat}>
+                <ReviewDecisionContext value={decision}>
+                  {plugins.map(({ id, taskReview: Section }) =>
+                    Section === undefined ? null : (
+                      <Section
+                        key={id}
+                        environmentId={environmentId}
+                        status={status}
+                        workspace={workspace}
+                        project={project}
+                        scope={`task:${task.id}`}
+                        contextText={null}
+                      />
+                    ),
+                  )}
+                </ReviewDecisionContext>
+              </HandoffChatContext>
+              {noReviewSections(plugins) ? (
+                <p className="text-sm text-muted-foreground">
+                  Turn on Handoff or GitHub in Settings → Peer → Coordination & plugins to see the
+                  package and the pull requests here.
+                </p>
+              ) : null}
+              <ReviewTimeline
+                environmentId={environmentId}
+                status={status}
+                workspace={workspace}
+                project={project}
+                task={task.id}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="max-h-[55dvh] shrink-0 overflow-y-auto border-t border-border bg-background px-4 py-3 sm:px-7">
+        <ReviewActionsBar
+          actions={actions}
+          workspace={workspace}
+          project={project}
+          task={task}
+          chat={chat}
+          done={done}
+          decisionShown={claims > 0}
+        />
+      </div>
+    </>
   );
 }
 
@@ -156,8 +223,33 @@ export function ReviewActions({
   readonly chat: HandoffChat | null;
   readonly done: boolean;
 }) {
+  const actions = useReviewActions({ environmentId, workspace, project, task });
+  return (
+    <ReviewActionsBar
+      actions={actions}
+      workspace={workspace}
+      project={project}
+      task={task}
+      chat={chat}
+      done={done}
+      decisionShown={false}
+    />
+  );
+}
+
+/** The state and the moves of a review's decision: marking done, and reopening with a note. */
+function useReviewActions({
+  environmentId,
+  workspace,
+  project,
+  task,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly workspace: string;
+  readonly project: string;
+  readonly task: WorkTaskNode;
+}) {
   const formId = useId();
-  const navigate = useNavigate();
   const { threads } = useWorkData();
   const updateTask = useAtomCommand(serverEnvironment.peerHubUpdateTask, { reportFailure: false });
   const startTurn = useAtomCommand(threadEnvironment.startTurn, { reportFailure: false });
@@ -298,6 +390,68 @@ export function ReviewActions({
     );
   };
 
+  const hasRecipient = recipient !== null;
+  const startReopen = () => {
+    if (hasRecipient) setWriting(true);
+    else void reopenWithoutNote();
+  };
+
+  return {
+    formId,
+    writing,
+    setWriting,
+    note,
+    setNote,
+    busy,
+    message,
+    recipient,
+    markDone,
+    reopen,
+    reopenWithoutNote,
+    startReopen,
+    reopenLabel: !hasRecipient
+      ? "Reopen task"
+      : note.trim() === ""
+        ? "Reopen with a note…"
+        : "Continue note…",
+  };
+}
+
+/**
+ * The bar at the bottom of a review: the note being written, Mark done and Reopen unless a
+ * decision line above offers them, the original chat and the task context.
+ */
+function ReviewActionsBar({
+  actions,
+  workspace,
+  project,
+  task,
+  chat,
+  done,
+  decisionShown,
+}: {
+  readonly actions: ReturnType<typeof useReviewActions>;
+  readonly workspace: string;
+  readonly project: string;
+  readonly task: WorkTaskNode;
+  readonly chat: HandoffChat | null;
+  readonly done: boolean;
+  readonly decisionShown: boolean;
+}) {
+  const navigate = useNavigate();
+  const {
+    formId,
+    writing,
+    setWriting,
+    note,
+    setNote,
+    busy,
+    message,
+    recipient,
+    markDone,
+    reopen,
+    reopenWithoutNote,
+  } = actions;
   return (
     <section aria-label="Review decision" className="flex flex-col gap-3">
       {writing ? (
@@ -352,17 +506,25 @@ export function ReviewActions({
           </>
         ) : (
           <>
-            <Button disabled={busy || done} onClick={() => void markDone()}>
-              {done ? "Done" : "Mark task done"}
-            </Button>
-            {recipient === null ? (
-              <Button variant="outline" disabled={busy} onClick={() => void reopenWithoutNote()}>
-                Reopen task
-              </Button>
-            ) : (
-              <Button variant="outline" disabled={busy} onClick={() => setWriting(true)}>
-                {note.trim() === "" ? "Reopen with a note…" : "Continue note…"}
-              </Button>
+            {decisionShown ? null : (
+              <>
+                <Button disabled={busy || done} onClick={() => void markDone()}>
+                  {done ? "Done" : "Mark task done"}
+                </Button>
+                {recipient === null ? (
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => void reopenWithoutNote()}
+                  >
+                    Reopen task
+                  </Button>
+                ) : (
+                  <Button variant="outline" disabled={busy} onClick={() => setWriting(true)}>
+                    {note.trim() === "" ? "Reopen with a note…" : "Continue note…"}
+                  </Button>
+                )}
+              </>
             )}
             {chat === null ? null : (
               <Button variant="outline" onClick={chat.open}>
@@ -387,7 +549,7 @@ export function ReviewActions({
           </Button>
         )}
       </div>
-      {!writing && recipient === null ? (
+      {!writing && recipient === null && !decisionShown ? (
         <p className="text-sm text-muted-foreground">
           No agent of yours is available on this task. Reopening only changes its status; no message
           will be sent.

@@ -111,10 +111,14 @@ function pullRequestLabel(pr: PeerWorkPullRequest): string {
     .join(" ");
 }
 
-/** "#2 waiting for review, #1 earlier" while in review; "Earlier: #2, #1" after. */
+/**
+ * "#2 waiting for review, #1 earlier" while in review, "#2 accepted" once accepted in review;
+ * "Earlier: #2, #1" after.
+ */
 function handoffsLine(
   summaries: HandoffSummaries,
   inReview: boolean,
+  accepted: boolean,
   status: PeerHubStatus,
   workspace: string,
 ): string {
@@ -127,7 +131,7 @@ function handoffsLine(
       : `#${summary.number}`;
   if (!inReview) return `Earlier: ${[latest, ...earlier].map(name).join(", ")}`;
   return [
-    `${name(latest)} waiting for review`,
+    `${name(latest)} ${accepted ? "accepted" : "waiting for review"}`,
     earlier.length === 0 ? undefined : `${earlier.map(name).join(", ")} earlier`,
   ]
     .filter((part) => part !== undefined)
@@ -197,7 +201,13 @@ export function detailRows(input: {
       : [
           {
             label: "Handoffs",
-            value: handoffsLine(input.summaries, task.inReview === true, status, input.workspace),
+            value: handoffsLine(
+              input.summaries,
+              task.inReview === true,
+              task.accepted !== undefined,
+              status,
+              input.workspace,
+            ),
             mono: false,
           },
         ]),

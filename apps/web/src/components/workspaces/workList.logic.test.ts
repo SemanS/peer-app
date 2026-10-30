@@ -165,6 +165,15 @@ describe("stateText", () => {
     expect(stateOf(task("ord-5", []))).toBe("Not started");
   });
 
+  it("says who accepted a handoff that waits only to land", () => {
+    expect(stateOf(task("ord-2", [chat("a")], { inReview: true, accepted: "policy" }))).toBe(
+      "Accepted by policy",
+    );
+    expect(stateOf(task("ord-3", [chat("a")], { inReview: true, accepted: "person" }))).toBe(
+      "Accepted",
+    );
+  });
+
   it("says why a task is done when only its pull requests made it so", () => {
     const merged = task("ord-8", [chat("a", { delivery: "merged" })], { status: "done" });
     expect(stateOf(merged)).toBe("Done · PR merged");
@@ -186,6 +195,7 @@ describe("taskStateTone and COLUMN_STATE", () => {
     expect(taskStateTone("done")).toBe("delivery");
     expect(taskStateTone("paused")).toBe("neutral");
     expect(taskStateTone("new")).toBe("neutral");
+    expect(taskStateTone("accepted")).toBe("delivery");
   });
 
   it("gives each column the tone of the states it holds", () => {

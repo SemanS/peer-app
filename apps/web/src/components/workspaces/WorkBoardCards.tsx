@@ -27,7 +27,7 @@ import {
 } from "./workBoard.logic";
 import { ownerCallCard } from "./ownership/ownerDecision.logic";
 import { taskOverlap } from "./workGroups.logic";
-import { chatsLabel, taskStateTone } from "./workList.logic";
+import { chatsLabel, stateText, taskStateTone } from "./workList.logic";
 import { personName, type WorkThreadNode } from "./workTree.logic";
 import { progressLabel } from "./taskTree.logic";
 import { workPrimaryTarget } from "./workNavigation.logic";
@@ -63,6 +63,7 @@ const STATE_DOT: Readonly<Record<TaskStateKind, string>> = {
   waiting: "border-info",
   paused: "border-muted-foreground/60 bg-muted-foreground/60",
   new: "border-muted-foreground/70",
+  accepted: "border-success",
   done: "border-success bg-success",
 };
 
@@ -196,7 +197,11 @@ export function TaskCardView({
     card.state.kind === "input" ||
     card.state.kind === "paused" ||
     ((card.state.kind === "review" || card.state.kind === "waiting") && handoff !== undefined);
-  const showState = card.state.kind === "waiting" || (card.column === "needs" && !showDetail);
+  // An accepted task sits among work in progress; its card says it waits only to land.
+  const showState =
+    card.state.kind === "waiting" ||
+    card.state.kind === "accepted" ||
+    (card.column === "needs" && !showDetail);
   const area = compact ? card.area : null;
   // A group's items stay in their own columns; the group says how far they are.
   const progress = progressLabel(card.task);
@@ -230,7 +235,7 @@ export function TaskCardView({
         <div className="flex flex-col gap-2 text-sm leading-relaxed">
           {showState ? (
             <p className={cn("font-medium", TONE_TEXT[taskStateTone(card.state.kind)])}>
-              {card.state.label}
+              {stateText(card)}
             </p>
           ) : null}
           {showDetail ? (

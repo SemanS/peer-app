@@ -4,6 +4,7 @@ import { AcceptanceCard } from "./AcceptanceCard";
 import { AcceptanceDialogs } from "./AcceptanceDialogs";
 import { acceptanceMenu } from "./taskMenu";
 import { AcceptedBadge } from "./AcceptedBadge";
+import { ReviewPolicySection } from "./ReviewPolicySection";
 import { teamTaskFacts } from "./acceptance.logic";
 
 /**
@@ -11,7 +12,8 @@ import { teamTaskFacts } from "./acceptance.logic";
  * page shows who accepted it and when with the history of acceptances and withdrawals, and offers
  * Accept… or Withdraw… to leads and admins (also in the task's menu, and Accept… on the row of a
  * task in review); the task's card gets an Accepted mark and the Team page "accepted by Ana", or
- * "done · not accepted". It stops no move.
+ * "done · not accepted". It stops no move. A project's Coordination tab carries its review policy:
+ * a person reviews every handoff, or a clean one is accepted by policy.
  */
 export const acceptanceWebPlugin: PeerWebPlugin = {
   id: "acceptance",
@@ -21,4 +23,5 @@ export const acceptanceWebPlugin: PeerWebPlugin = {
   taskBadges: AcceptedBadge,
   taskSections: AcceptanceCard,
   teamTaskFacts,
+  projectSettings: ReviewPolicySection,
 };

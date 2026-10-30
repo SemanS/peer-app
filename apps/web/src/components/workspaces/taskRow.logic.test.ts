@@ -106,6 +106,12 @@ describe("taskRowModel: the words", () => {
     ).toBe("3 chats");
   });
 
+  it("reads an accepted handoff as no one's wait, with no Review chip", () => {
+    const accepted = model(task([thread("a")], { inReview: true, accepted: "policy" }));
+    expect(accepted.state).toMatchObject({ kind: "accepted", label: "Accepted" });
+    expect(accepted.chip).toBeUndefined();
+  });
+
   it("reads review before anything its chats do", () => {
     const handedOff = task([thread("a", { status: "working" })], { inReview: true });
     expect(model(handedOff).state).toMatchObject({ kind: "review", label: "Ready for review" });
@@ -250,6 +256,8 @@ describe("what the row looks like", () => {
     expect(taskStateLook("done")).toEqual({ tone: "delivery", hollow: false });
     expect(taskStateLook("paused")).toEqual({ tone: "neutral", hollow: false });
     expect(taskStateLook("new")).toEqual({ tone: "neutral", hollow: true });
+    // Accepted, waiting only to land: done's colour, hollow until it lands.
+    expect(taskStateLook("accepted")).toEqual({ tone: "delivery", hollow: true });
   });
 
   it("names the route a task's page is highlighted by", () => {

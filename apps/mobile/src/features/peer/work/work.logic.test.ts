@@ -14,6 +14,7 @@ import {
   homeWorkSubtitle,
   mergeWorkEnvironments,
   mobileWork,
+  taskStateWords,
   workCardAction,
   workEmptyText,
   workGroups,
@@ -374,5 +375,26 @@ describe("the phone's Work", () => {
     expect(workEmptyText([environment(LAPTOP, computer(LAPTOP, [], { workspaces: [] }))], [])).toBe(
       "Join or create a workspace on web or desktop to work with your team.",
     );
+  });
+});
+
+describe("a task's state on the phone", () => {
+  const task = (overrides: Partial<Parameters<typeof taskStateWords>[0]> = {}) => ({
+    done: false,
+    inReview: false,
+    accepted: undefined,
+    ...overrides,
+  });
+
+  it("reads an accepted handoff as waiting to land, not as a review to decide", () => {
+    expect(taskStateWords(task({ inReview: true }), true)).toBe("In review · decide");
+    expect(taskStateWords(task({ inReview: true, accepted: "policy" }), true)).toBe(
+      "Accepted by policy · waiting to land",
+    );
+    expect(taskStateWords(task({ inReview: true, accepted: "person" }))).toBe(
+      "Accepted · waiting to land",
+    );
+    expect(taskStateWords(task({ done: true, inReview: true, accepted: "policy" }))).toBe("Done");
+    expect(taskStateWords(task())).toBe("Open");
   });
 });

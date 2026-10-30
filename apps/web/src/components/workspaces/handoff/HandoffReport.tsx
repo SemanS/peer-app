@@ -12,7 +12,6 @@ import {
   shortenedNote,
 } from "@t3tools/client-runtime/peer/handoff";
 import { handoffReportLine } from "@t3tools/client-runtime/peer/test-reports";
-import { handoffAcceptanceLine } from "@t3tools/client-runtime/peer/acceptance";
 import type { PeerHandoffPackage } from "@t3tools/contracts";
 import {
   ChevronRightIcon,
@@ -24,7 +23,7 @@ import {
   ShieldQuestionIcon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useContext, useEffect, useState, type ReactNode } from "react";
 
 import { cn } from "../../../lib/utils";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
@@ -35,15 +34,12 @@ import { Button, InlineButton } from "../../ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../../ui/collapsible";
 import { TONE_SURFACE } from "../signals";
 import { contextComparison } from "../contextCompare.logic";
-import { handoffPresentation } from "./handoffPresentation";
-
-const SECTION_TITLE = {
-  State: "Reported status",
-  Provides: "What changed",
-  Decisions: "Decisions",
-  Blockers: "Needs attention",
-  Next: "Next step",
-} as const;
+import { ReviewDecisionContext } from "../review/ReviewDecision";
+import {
+  reviewPresentation,
+  type ReviewFacts,
+  type ReviewPresentation,
+} from "./handoffPresentation";
 
 function ReportLines({
   lines,
@@ -67,20 +63,20 @@ function ReportLines({
   );
 }
 
-function ReportSection({
+function NoteSection({
   section,
   mine,
   author,
   onOpenChat,
 }: {
-  readonly section: NonNullable<PeerHandoffPackage["context"]>["sections"][number];
+  readonly section: ReviewPresentation["notes"][number];
   readonly mine: boolean;
   readonly author: string;
   readonly onOpenChat: (() => void) | undefined;
 }) {
   return (
     <section className="flex min-w-0 flex-col gap-2">
-      <h4 className="text-sm font-semibold text-foreground">{SECTION_TITLE[section.name]}</h4>
+      <h4 className="text-sm font-semibold text-foreground">{section.title}</h4>
       <ReportLines lines={section.lines} />
       {section.shortened ? (
         <p className="text-xs leading-relaxed text-muted-foreground">
@@ -96,13 +92,16 @@ function ReportSection({
 
 /**
  * The task's newest test report as the Hub put it in the package, apart from the author's own
- * account above: its result and counts, and the unverified items nobody answers for yet.
+ * account: its result and counts, then each item with where its claim comes from when the page
+ * read the report itself.
  */
 function TestReportLine({
   report,
+  items,
   nameOf,
 }: {
   readonly report: PeerHandoffPackage["report"];
+  readonly items: ReviewPresentation["evidence"];
   readonly nameOf: (email: string) => string;
 }) {
   const line = handoffReportLine(report);
@@ -124,68 +123,172 @@ function TestReportLine({
           <p className="text-xs text-muted-foreground">
             Report {report.number} by {nameOf(report.author)}
             {report.role === "review" ? " · review session" : ""},{" "}
-            {formatRelativeTimeLabel(report.at)}. The task’s page shows each item and whether Peer
-            saw it run.
+            {formatRelativeTimeLabel(report.at)}.
+            {items === null ? " The task’s page shows each item and whether Peer saw it run." : ""}
           </p>
         </>
+      )}
+      {items === null || items.length === 0 ? null : (
+        <ul className="flex flex-col gap-1.5 pt-1">
+          {items.map((item) => (
+            <li key={item.key} className="flex min-w-0 flex-col text-sm leading-relaxed">
+              <span className="text-foreground [overflow-wrap:anywhere]">
+                {ITEM_KIND[item.kind]} {item.text}
+              </span>
+              <span
+                className={cn(
+                  "text-xs",
+                  item.attention ? "text-warning-foreground" : "text-muted-foreground",
+                )}
+              >
+                {item.mark}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
 }
 
-/** The acceptance the Hub joined to the package, when a lead gave one; nothing otherwise. */
-function AcceptanceLine({
-  acceptance,
-  nameOf,
+const ITEM_KIND = { pass: "Passed:", fail: "Failed:", unverified: "Unverified:" } as const;
+
+const ACTION_LABEL = { done: "Mark task done", withdraw: "Withdraw acceptance…" } as const;
+
+/**
+ * The page's first line: the decision the policy asks of the person, or that none is asked, with
+ * the actions that sit on it. Mark done and Reopen come from the review page; on a page that has
+ * none (the task's context), the line only says where the task stands.
+ */
+function DecisionRow({
+  decision,
+  onWithdrawAcceptance,
 }: {
-  readonly acceptance: PeerHandoffPackage["acceptance"];
-  readonly nameOf: (email: string) => string;
+  readonly decision: NonNullable<ReviewPresentation["decision"]>;
+  readonly onWithdrawAcceptance: (() => void) | undefined;
 }) {
-  const line = handoffAcceptanceLine(acceptance, nameOf);
-  if (line === null) return null;
+  const page = useContext(ReviewDecisionContext);
+  const actions = decision.actions.filter((action) =>
+    action === "withdraw" ? onWithdrawAcceptance !== undefined : page !== null,
+  );
+  const claim = page?.claim;
+  const offersPageActions = actions.some((action) => action !== "withdraw");
+  useEffect(
+    () => (claim !== undefined && offersPageActions ? claim() : undefined),
+    [claim, offersPageActions],
+  );
   return (
-    <p aria-label="Acceptance" className="text-sm text-success-foreground">
-      {line}
-    </p>
+    <section
+      aria-label="Decision"
+      className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2"
+    >
+      <p
+        className={cn(
+          "min-w-0 flex-1 basis-60 text-base font-semibold [overflow-wrap:anywhere]",
+          decision.kind === "ask"
+            ? decision.signals.length > 0
+              ? "text-warning-foreground"
+              : "text-foreground"
+            : "text-success-foreground",
+        )}
+      >
+        {decision.text}
+      </p>
+      {actions.length === 0 ? null : (
+        <div className="flex flex-wrap gap-2">
+          {actions.map((action) =>
+            action === "reopen" ? (
+              <Button
+                key={action}
+                size="sm"
+                variant="outline"
+                disabled={page!.busy}
+                onClick={page!.reopen}
+              >
+                {page!.reopenLabel}
+              </Button>
+            ) : action === "done" ? (
+              <Button
+                key={action}
+                size="sm"
+                disabled={page!.busy || page!.done}
+                onClick={page!.markDone}
+              >
+                {page!.done ? "Done" : ACTION_LABEL.done}
+              </Button>
+            ) : (
+              <Button key={action} size="sm" variant="outline" onClick={onWithdrawAcceptance}>
+                {ACTION_LABEL.withdraw}
+              </Button>
+            ),
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** One of the three facts under the decision: its name, what it says, and where it comes from. */
+function FactChip({
+  label,
+  attention,
+  children,
+}: {
+  readonly label: string;
+  readonly attention: boolean;
+  readonly children: ReactNode;
+}) {
+  return (
+    <section
+      aria-label={label}
+      className="flex min-w-0 flex-col gap-1 rounded-lg border border-border p-3"
+    >
+      <h4 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        {attention ? (
+          <CircleAlertIcon aria-hidden className="size-3.5 shrink-0 text-warning-foreground" />
+        ) : (
+          <CircleCheckIcon aria-hidden className="size-3.5 shrink-0 text-success-foreground" />
+        )}
+        {label}
+      </h4>
+      {children}
+    </section>
   );
 }
 
 export function HandoffReport({
   pkg,
+  facts,
   mine,
   busy,
-  nameOf,
   contextWarning,
   onCompare,
   onOpenPull,
   onOpenChat,
   onWithdraw,
+  onWithdrawAcceptance,
 }: {
   readonly pkg: PeerHandoffPackage;
+  /** What the page knows besides the package, and how it names people and computers. */
+  readonly facts: ReviewFacts;
   readonly mine: boolean;
   readonly busy: boolean;
-  readonly nameOf: (email: string) => string;
   readonly contextWarning: ReactNode;
   readonly onCompare: (scope: string, version: number) => void;
   readonly onOpenPull: (url: string) => void;
   readonly onOpenChat: (() => void) | undefined;
   readonly onWithdraw: () => void;
+  /** Opens the acceptance's withdrawal, where this person may withdraw it. */
+  readonly onWithdrawAcceptance?: (() => void) | undefined;
 }) {
+  const nameOf = facts.nameOf;
+  const view = reviewPresentation(pkg, facts);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const {
-    sections,
-    result,
-    blockers,
-    blockersShortened,
-    next,
-    openOverlaps,
-    changedInputs,
-    pulls,
-  } = handoffPresentation(pkg);
+  const [notesOpen, setNotesOpen] = useState(view.notesOpen);
   const author = nameOf(pkg.author);
-  const resultLines = handoffLines(result?.lines ?? []);
-  const needsAttention = blockers !== undefined || openOverlaps.length > 0;
   const sectionProps = { mine, author, onOpenChat };
+  const evidence = pkg.delivery?.evidence;
+  const paths = [...(evidence?.untracked ?? []), ...(evidence?.uncommitted ?? [])];
 
   return (
     <article
@@ -193,6 +296,9 @@ export function HandoffReport({
       className="min-w-0 overflow-hidden rounded-xl border border-border bg-card"
     >
       <div className="flex flex-col gap-5 p-4 sm:p-6">
+        {view.decision === null ? null : (
+          <DecisionRow decision={view.decision} onWithdrawAcceptance={onWithdrawAcceptance} />
+        )}
         <header className="flex min-w-0 flex-col gap-1.5">
           <h3 className="text-lg leading-snug font-semibold break-words text-foreground">
             {pkg.title}
@@ -210,70 +316,84 @@ export function HandoffReport({
           </p>
         </header>
 
+        <div className="grid min-w-0 gap-2 sm:grid-cols-3">
+          <FactChip label="Verified" attention={view.verified.attention}>
+            <p className="text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
+              {view.verified.text}
+            </p>
+          </FactChip>
+          <FactChip label="Delivered" attention={view.delivered.attention}>
+            <p className="text-sm leading-relaxed text-foreground [overflow-wrap:anywhere]">
+              {view.delivered.text}
+            </p>
+            {view.delivered.observed === null ? null : (
+              <p className="text-xs text-muted-foreground">
+                {view.delivered.observed}
+                {pkg.delivery === undefined
+                  ? ""
+                  : `, ${formatRelativeTimeLabel(pkg.delivery.observedAt)}`}
+              </p>
+            )}
+          </FactChip>
+          <FactChip label="Provides" attention={false}>
+            {view.provides.lines.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No contract or outcome stated.</p>
+            ) : (
+              <ReportLines lines={view.provides.lines} limit={3} />
+            )}
+            {view.provides.waiting.map((line) => (
+              <p key={line} className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                {line}
+              </p>
+            ))}
+          </FactChip>
+        </div>
+
         <section aria-label="What changed" className="flex flex-col gap-3">
+          <h4 className="text-sm font-semibold text-foreground">What changed</h4>
           {pkg.context?.gist ? (
             <p className="line-clamp-3 max-w-prose text-base leading-relaxed text-foreground [overflow-wrap:anywhere]">
               <InlineMarkdown text={pkg.context.gist} />
             </p>
           ) : null}
-          {result === undefined ? (
-            pkg.context?.gist ? null : (
-              <p className="text-sm text-muted-foreground">No result summary was included.</p>
+          {paths.length === 0 ? null : (
+            <p className="font-mono text-xs break-all text-muted-foreground">{paths.join(", ")}</p>
+          )}
+          {(evidence?.changes?.length ?? 0) === 0 ? null : (
+            <p className="text-xs text-muted-foreground">
+              Changes{" "}
+              <span className="font-mono break-all">
+                {evidence!.changes!.map((id) => id.slice(0, 8)).join(", ")}
+              </span>
+            </p>
+          )}
+          {view.pulls.length === 0 ? (
+            mine && onOpenChat !== undefined ? (
+              <div>
+                <Button size="sm" variant="outline" onClick={onOpenChat}>
+                  Open original chat
+                </Button>
+              </div>
+            ) : pkg.context?.gist || paths.length > 0 ? null : (
+              <p className="text-sm text-muted-foreground">No pull request was named.</p>
             )
           ) : (
-            <>
-              <ReportLines lines={result.lines} limit={3} />
-              {resultLines.length > 3 || result.shortened ? (
-                <p className="text-xs text-muted-foreground">More in the full report below.</p>
-              ) : null}
-            </>
+            <div className="flex flex-wrap gap-2">
+              {view.pulls.map((url) => (
+                <Button key={url} size="sm" variant="outline" onClick={() => onOpenPull(url)}>
+                  Open PR #{url.split("/").at(-1)}
+                </Button>
+              ))}
+            </div>
           )}
         </section>
 
-        <div className="flex flex-col gap-1 border-t border-border/60 pt-4">
-          <p className="text-sm font-medium text-foreground">Verification</p>
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            This handoff records {pkg.source === "agent" ? "the agent’s" : "the author’s"} report.
-            Tests and pull request status are not independently verified here.
-          </p>
-        </div>
-        <TestReportLine report={pkg.report} nameOf={nameOf} />
-        <AcceptanceLine acceptance={pkg.acceptance} nameOf={nameOf} />
+        <section aria-label="Evidence" className="flex flex-col gap-2">
+          <TestReportLine report={pkg.report} items={view.evidence} nameOf={nameOf} />
+        </section>
 
         {contextWarning}
-        {changedInputs.length === 0 ? null : (
-          <section
-            aria-label="Changed inputs"
-            className={cn("flex flex-col gap-2 rounded-lg border p-4", TONE_SURFACE.needs)}
-          >
-            <h4 className="text-sm font-semibold text-warning-foreground">
-              Shared inputs changed after the agent read them
-            </h4>
-            <ul className="flex flex-col gap-3">
-              {changedInputs.map((input) => (
-                <li key={input.scope} className="flex flex-wrap items-center gap-2">
-                  <span className="min-w-0 flex-1 basis-48 text-sm break-words text-foreground">
-                    {inputLabel(input)}: read v{input.readVersion}
-                    {input.currentVersion === null
-                      ? ", no longer exists"
-                      : `, now v${input.currentVersion}`}
-                  </span>
-                  {contextComparison(input.readVersion, input.currentVersion ?? undefined) ===
-                  null ? null : (
-                    <Button
-                      size="xs"
-                      variant="warning-outline"
-                      onClick={() => onCompare(input.scope, input.readVersion)}
-                    >
-                      Compare
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-        {needsAttention ? (
+        {view.needsAttention ? (
           <section
             aria-label="Needs attention"
             className={cn("flex flex-col gap-3 rounded-lg border p-4", TONE_SURFACE.needs)}
@@ -282,8 +402,16 @@ export function HandoffReport({
               <TriangleAlertIcon aria-hidden className="size-4 shrink-0" />
               Needs attention
             </h4>
-            {blockers === undefined ? null : <ReportLines lines={blockers.lines} />}
-            {openOverlaps.map((overlap) => (
+            {view.signals.length === 0 ? null : (
+              <ul className="flex flex-col gap-1 text-sm leading-relaxed text-foreground">
+                {view.signals.map(({ signal, words }) => (
+                  <li key={signal}>
+                    {words} <span className="font-mono text-xs">({signal})</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {view.openOverlaps.map((overlap) => (
               <p
                 key={`${overlap.partner}:${overlap.at}:${overlap.files.join(",")}`}
                 className="text-sm leading-relaxed text-foreground"
@@ -300,49 +428,65 @@ export function HandoffReport({
                 )}
               </p>
             ))}
+            {view.changedInputs.length === 0 ? null : (
+              <ul aria-label="Changed inputs" className="flex flex-col gap-3">
+                {view.changedInputs.map((input) => (
+                  <li key={input.scope} className="flex flex-wrap items-center gap-2">
+                    <span className="min-w-0 flex-1 basis-48 text-sm break-words text-foreground">
+                      Changed after the agent read it: {inputLabel(input)}, read v
+                      {input.readVersion}
+                      {input.currentVersion === null
+                        ? ", no longer exists"
+                        : `, now v${input.currentVersion}`}
+                    </span>
+                    {contextComparison(input.readVersion, input.currentVersion ?? undefined) ===
+                    null ? null : (
+                      <Button
+                        size="xs"
+                        variant="warning-outline"
+                        onClick={() => onCompare(input.scope, input.readVersion)}
+                      >
+                        Compare
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
         ) : null}
 
-        {blockersShortened ? (
-          <p role="status" className="text-sm text-warning-foreground">
-            The blocker list was shortened. Check the original chat before reviewing.
-          </p>
-        ) : null}
-
-        {next === undefined ? (
-          <section className="flex flex-col gap-2">
-            <h4 className="text-sm font-semibold text-foreground">Next step</h4>
-            <p className="text-sm leading-relaxed text-foreground">
-              {pulls.length > 0
-                ? "Review the pull request and its checks before marking this task done."
-                : "Review the report below. Open the chat if you need more information."}
-            </p>
-          </section>
-        ) : (
-          <ReportSection section={next} {...sectionProps} />
-        )}
-
-        {pulls.length === 0 ? (
-          mine && onOpenChat !== undefined ? (
-            <div>
-              <Button size="sm" onClick={onOpenChat}>
-                Open original chat
-              </Button>
-            </div>
-          ) : null
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {pulls.map((url, index) => (
-              <Button
-                key={url}
-                size="sm"
-                variant={index === 0 ? "default" : "outline"}
-                onClick={() => onOpenPull(url)}
-              >
-                Open PR #{url.split("/").at(-1)}
-              </Button>
-            ))}
-          </div>
+        {view.notes.length === 0 && (pkg.context?.projectLines.length ?? 0) === 0 ? null : (
+          <Collapsible open={notesOpen} onOpenChange={setNotesOpen}>
+            <CollapsibleTrigger render={<Button variant="ghost" size="sm" />}>
+              <ChevronRightIcon
+                aria-hidden
+                className={cn(
+                  "transition-transform motion-reduce:transition-none",
+                  notesOpen && "rotate-90",
+                )}
+              />
+              {pkg.source === "agent" ? "The agent’s notes" : "The author’s notes"}
+            </CollapsibleTrigger>
+            <CollapsiblePanel>
+              <div className="flex min-w-0 flex-col gap-5 pt-3">
+                {view.notes.map((section) => (
+                  <NoteSection key={section.name} section={section} {...sectionProps} />
+                ))}
+                {view.blockersShortened ? (
+                  <p role="status" className="text-sm text-warning-foreground">
+                    The blocker list was shortened. Check the original chat before reviewing.
+                  </p>
+                ) : null}
+                {(pkg.context?.projectLines.length ?? 0) === 0 ? null : (
+                  <section className="flex flex-col gap-2">
+                    <h4 className="text-sm font-semibold text-foreground">For the project</h4>
+                    <ReportLines lines={pkg.context!.projectLines} />
+                  </section>
+                )}
+              </div>
+            </CollapsiblePanel>
+          </Collapsible>
         )}
       </div>
 
@@ -356,7 +500,7 @@ export function HandoffReport({
                 detailsOpen && "rotate-90",
               )}
             />
-            Full report and coordination
+            Source and coordination
           </CollapsibleTrigger>
           {mine ? (
             <Button size="xs" variant="ghost-muted" disabled={busy} onClick={onWithdraw}>
@@ -377,23 +521,6 @@ export function HandoffReport({
                 {pkg.context === null ? null : `, task context v${pkg.context.version}`}
               </p>
             </section>
-            {pkg.context?.gist ? (
-              <section className="flex min-w-0 flex-col gap-2">
-                <h4 className="text-sm font-semibold text-foreground">Summary</h4>
-                <p className="text-sm leading-relaxed text-foreground">
-                  <InlineMarkdown text={pkg.context.gist} />
-                </p>
-              </section>
-            ) : null}
-            {sections.map((section) => (
-              <ReportSection key={section.name} section={section} {...sectionProps} />
-            ))}
-            {(pkg.context?.projectLines.length ?? 0) === 0 ? null : (
-              <section className="flex flex-col gap-2">
-                <h4 className="text-sm font-semibold text-foreground">For the project</h4>
-                <ReportLines lines={pkg.context!.projectLines} />
-              </section>
-            )}
             {pkg.overlaps.length === 0 ? null : (
               <section className="flex flex-col gap-3">
                 <h4 className="text-sm font-semibold text-foreground">Coordination agreements</h4>
@@ -441,7 +568,7 @@ export function HandoffReport({
                 </dl>
               </section>
             )}
-            {onOpenChat === undefined || !mine || pulls.length === 0 ? null : (
+            {onOpenChat === undefined || !mine || view.pulls.length === 0 ? null : (
               <div>
                 <Button variant="outline" size="sm" onClick={onOpenChat}>
                   Open original chat

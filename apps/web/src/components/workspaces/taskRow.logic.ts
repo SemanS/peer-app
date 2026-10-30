@@ -48,6 +48,7 @@ export interface TaskStateLook {
 
 const LOOK: Readonly<Record<TaskStateKind, TaskStateLook>> = {
   done: { tone: "delivery", hollow: false },
+  accepted: { tone: "delivery", hollow: true },
   review: { tone: "needs", hollow: false },
   approval: { tone: "needs", hollow: false },
   input: { tone: "needs", hollow: false },

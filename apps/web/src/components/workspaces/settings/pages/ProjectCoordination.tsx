@@ -7,6 +7,7 @@ import { OwnersNote, PageSection, SettingsReadError } from "../CapacityCoordinat
 import { DraftSaveBar } from "../DraftBar";
 import type { ProjectPageProps } from "../pageProps";
 import { useOpenPeerSettings } from "../peerSettingsLinks";
+import { HostedProjectSettings } from "../PluginSlots";
 import {
   AgentMemoryList,
   DecidePanel,
@@ -172,6 +173,15 @@ export function ProjectCoordination({ environmentId, status, workspace, state }:
           <MemoryPinNote pinned={knowledge?.harnessMemoryPinned} memory={memory} />
         </PageSection>
       ) : null}
+
+      {/* Saved on their own, not through the draft: the review policy is a Hub row, not a setting. */}
+      <HostedProjectSettings
+        host="coordination"
+        environmentId={environmentId}
+        status={status}
+        workspace={workspace}
+        state={state}
+      />
 
       <DraftSaveBar draft={draft} scope={project.name} label={`${project.name} · Coordination`} />
     </>

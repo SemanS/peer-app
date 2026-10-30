@@ -71,7 +71,8 @@ export function awaitingReviewIds(
   if (node === undefined) return ids;
   for (const area of node.areas) {
     for (const task of area.tasks) {
-      if (task.inReview !== true) continue;
+      // An accepted handoff (by a lead or by the review policy) asks nobody's review.
+      if (task.inReview !== true || task.accepted !== undefined) continue;
       const route = taskOwnership(node, task, area.name).review;
       if (route !== undefined && !route.forMe) continue;
       for (const row of changes) {

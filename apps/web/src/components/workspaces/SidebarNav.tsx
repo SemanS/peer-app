@@ -1,32 +1,15 @@
-import { useAtomValue } from "@effect/atom-react";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import {
-  ActivityIcon,
-  FileTextIcon,
-  InboxIcon,
-  LayoutGridIcon,
-  LightbulbIcon,
-  type LucideIcon,
-  SearchIcon,
-  SlidersHorizontalIcon,
-} from "lucide-react";
+import { FileTextIcon, LightbulbIcon, type LucideIcon } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
-import { openCommandPalette } from "../../commandPaletteBus";
-import { shortcutLabelForCommand } from "../../keybindings";
 import { usePullRequestsSupported } from "../../state/environments";
-import { primaryServerKeybindingsAtom } from "../../state/server";
 import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
-import { Kbd } from "../ui/kbd";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "../ui/sidebar";
 import { projectSignals } from "./ProjectSignals";
-import { DEFAULT_PROJECT_TAB } from "./settings/peerSettings.logic";
-import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
 import { pluginNavRows } from "./sidebarNav.logic";
-import { SignalCount } from "./signals";
 import type { PeerWebPlugin } from "./slots.types";
 import { projectCheckout } from "./useOpenWorkspaceProject";
 import type { WorkProjectNode } from "./workTree.logic";
@@ -88,103 +71,50 @@ function useGo() {
   };
 }
 
-/** Search, Overview and Needs you: the rows that hold for every project. */
-export function TopNav({
-  needs,
-  scope,
-}: {
-  readonly needs: number | null;
-  readonly scope: string;
-}) {
-  const { navigate, go } = useGo();
-  const onWork = useLocation({ select: (location) => location.pathname === "/work" });
-  const needsYou = useLocation({ select: (location) => location.search.view === "needs-you" });
-  const keybindings = useAtomValue(primaryServerKeybindingsAtom);
-  const shortcut = shortcutLabelForCommand(keybindings, "commandPalette.toggle");
-  return (
-    <SidebarMenu aria-label="Peer navigation">
-      <NavRow
-        icon={SearchIcon}
-        label="Search"
-        trailing={shortcut === null ? undefined : <Kbd>{shortcut}</Kbd>}
-        onClick={() => openCommandPalette()}
-      />
-      <NavRow
-        icon={LayoutGridIcon}
-        label="Overview"
-        active={onWork && !needsYou}
-        onClick={() =>
-          go(() => {
-            return navigate({ to: "/work", search: { scope } });
-          })
-        }
-      />
-      <NavRow
-        icon={InboxIcon}
-        label="Needs you"
-        active={onWork && needsYou}
-        trailing={
-          needs === null ? undefined : <SignalCount tone="needs" count={needs} label="need you" />
-        }
-        onClick={() =>
-          go(() => {
-            return navigate({ to: "/work", search: { view: "needs-you", scope } });
-          })
-        }
-      />
-    </SidebarMenu>
-  );
-}
-
 /**
- * The rows under a project's tasks, one per question a person brings: where the work stands now
- * (Current status, once a shared context was written), what agents actually did (Activity), what
- * holds beyond the work (Knowledge), then Pull requests and Project settings. A
- * plugin that is off takes its rows away.
+ * The Knowledge tab of one project: what holds beyond a single task. What a task learned shows on
+ * that task; here is the project's saved knowledge, its current context and its memory.
  */
-export function ProjectNav({
-  environmentId,
+export function ProjectKnowledgeNav({
   status,
   project,
   plugins,
   activeThread,
   sharedContext,
-  onHistory,
-  coreNavigation = true,
 }: {
-  readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly activeThread: string | null;
   readonly sharedContext: boolean;
-  readonly coreNavigation?: boolean;
-  /** Opens the project's Activity; absent while no plugin keeps one. */
-  readonly onHistory: (() => void) | undefined;
 }) {
   const { navigate, go } = useGo();
-  const openSettings = useOpenPeerSettings();
-  const pullRequestsSupported = usePullRequestsSupported();
-  const onPullRequests = useLocation({
-    select: (location) => location.pathname === "/pull-requests",
-  });
-  const slot = { environmentId, status, project, activeThread };
-  const knowledge = projectSignals(status, project, plugins).find(
-    (signal) => signal.id === "knowledge",
-  );
-  const state = status.workspaces
-    .find((workspace) => workspace.slug === project.workspace)
-    ?.projects.find((candidate) => candidate.project.id === project.projectId);
-  const t3ProjectId = state === undefined ? undefined : projectCheckout(state).projectId;
+  const signals = projectSignals(status, project, plugins);
+  const knowledge = signals.find((signal) => signal.id === "knowledge");
+  const memory = signals.find((signal) => signal.id === "memory");
   const contextOpen = `context:${project.workspace}:${project.projectId}:project`;
   return (
-    <SidebarMenu aria-label={`${project.name} navigation`}>
+    <SidebarMenu aria-label={`Knowledge of ${project.name}`}>
+      {knowledge === undefined ? null : (
+        <NavRow
+          icon={LightbulbIcon}
+          label="Saved knowledge"
+          active={activeThread === `knowledge:${project.workspace}:${project.projectId}`}
+          trailing={
+            knowledge.count === null || knowledge.count <= 0 ? undefined : (
+              <Badge variant="knowledge" size="sm">
+                {knowledge.chip?.(knowledge.count) ?? `${knowledge.count}`}
+              </Badge>
+            )
+          }
+          onClick={() => go(() => knowledge.open?.(navigate))}
+        />
+      )}
       {!sharedContext ? null : (
         <NavRow
           icon={FileTextIcon}
-          label="Current status"
+          label="Project context"
           active={activeThread === contextOpen}
-          trailing={<NavCount>v{project.context?.version}</NavCount>}
           onClick={() =>
             go(() =>
               navigate({
@@ -199,31 +129,42 @@ export function ProjectNav({
           }
         />
       )}
-      {onHistory === undefined ? null : (
+      {memory === undefined ? null : (
         <NavRow
-          icon={ActivityIcon}
-          label="Activity"
-          trailing={plugins.map(({ id, historyBadge: Mark }) =>
-            Mark === undefined ? null : <Mark key={id} {...slot} />,
-          )}
-          onClick={onHistory}
+          icon={memory.icon}
+          label={memory.label}
+          onClick={() => go(() => memory.open?.(navigate))}
         />
       )}
-      {!coreNavigation || knowledge === undefined ? null : (
-        <NavRow
-          icon={LightbulbIcon}
-          label="Knowledge"
-          active={activeThread === `knowledge:${project.workspace}:${project.projectId}`}
-          trailing={
-            knowledge.count === null || knowledge.count <= 0 ? undefined : (
-              <Badge variant="knowledge" size="sm">
-                {knowledge.chip?.(knowledge.count) ?? `${knowledge.count}`}
-              </Badge>
-            )
-          }
-          onClick={() => go(() => knowledge.open?.(navigate))}
-        />
-      )}
+    </SidebarMenu>
+  );
+}
+
+/** The Activity tab's rows: where work moves as changes and pull requests. */
+export function ProjectActivityNav({
+  environmentId,
+  status,
+  project,
+  plugins,
+  activeThread,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly status: PeerHubStatus;
+  readonly project: WorkProjectNode;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
+  readonly activeThread: string | null;
+}) {
+  const { navigate, go } = useGo();
+  const pullRequestsSupported = usePullRequestsSupported();
+  const onPullRequests = useLocation({
+    select: (location) => location.pathname === "/pull-requests",
+  });
+  const state = status.workspaces
+    .find((workspace) => workspace.slug === project.workspace)
+    ?.projects.find((candidate) => candidate.project.id === project.projectId);
+  const t3ProjectId = state === undefined ? undefined : projectCheckout(state).projectId;
+  return (
+    <SidebarMenu aria-label={`Activity of ${project.name}`}>
       {pluginNavRows(projectSignals(status, project, plugins)).map(({ id, row }) => (
         <NavRow
           key={id}
@@ -262,20 +203,6 @@ export function ProjectNav({
           }
         />
       ) : null}
-      <NavRow
-        icon={SlidersHorizontalIcon}
-        label="Project settings"
-        onClick={() =>
-          go(() =>
-            openSettings({
-              kind: "project",
-              workspace: project.workspace,
-              projectId: project.projectId,
-              tab: DEFAULT_PROJECT_TAB,
-            }),
-          )
-        }
-      />
     </SidebarMenu>
   );
 }

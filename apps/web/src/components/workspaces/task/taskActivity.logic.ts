@@ -22,10 +22,12 @@ export interface ActivityRow {
   readonly what: string;
 }
 
-/** The events that say what happened to the task; the others are traffic of the agents at work. */
+/**
+ * The events that say what happened to the task; the others are traffic of the agents at work. A
+ * handoff has its own section on the page, so it does not lead here as well.
+ */
 const HEADLINE_KINDS: ReadonlySet<string> = new Set([
   "task-status",
-  "handoff",
   "context-write",
   "keeper",
   "overlap",

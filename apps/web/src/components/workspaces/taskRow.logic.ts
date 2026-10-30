@@ -127,6 +127,16 @@ function chipOf(
   };
 }
 
+/**
+ * The state's words on a row: "Blocked" for work its dependencies hold back, and nothing for a task
+ * that has simply not begun or finished, whose dot already says so.
+ */
+export function rowStateLabel(state: TaskState, blocked: boolean): string | undefined {
+  if (state.kind === "done") return undefined;
+  if (blocked && (state.kind === "new" || state.kind === "paused")) return "Blocked";
+  return state.kind === "new" ? undefined : state.label;
+}
+
 /** What a task row says: its state in words, how many chats it has, and what, if anything, it asks. */
 export interface TaskRowModel {
   readonly state: TaskState;

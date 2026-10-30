@@ -95,7 +95,7 @@ describe("the review page's state pill", () => {
   it("reads Waiting for review while the task's agent still works", () => {
     const working = thread({ key: "working", status: "working" });
     expect(reviewState(task({ inReview: true, status: "working", threads: [working] }))).toEqual({
-      label: "Waiting for review",
+      label: "Ready for review",
       tone: "delivery",
     });
   });
@@ -104,10 +104,10 @@ describe("the review page's state pill", () => {
     const handedOff = task({ inReview: true });
     expect(
       reviewState(handedOff, undefined, { audience: "owner", forMe: false, names: ["Ana"] }),
-    ).toEqual({ label: "Waiting for Ana's review", tone: "team" });
+    ).toEqual({ label: "Ready for Ana's review", tone: "team" });
     expect(
       reviewState(handedOff, undefined, { audience: "owner", forMe: true, names: ["Slavo"] }),
-    ).toEqual({ label: "Waiting for your review", tone: "delivery" });
+    ).toEqual({ label: "Ready for your review", tone: "delivery" });
   });
 
   it("says Done for a done task, whatever its chats do", () => {
@@ -130,7 +130,7 @@ describe("the review page's state pill", () => {
   it("says what a task not in review is doing in the same words", () => {
     expect(reviewState(task())).toEqual({ label: "Not started", tone: "neutral" });
     expect(reviewState(task({ threads: [thread({ key: "idle", status: "idle" })] })).label).toBe(
-      "Waiting to continue",
+      "Paused",
     );
     expect(reviewState(task({ threads: [thread({ key: "busy", status: "working" })] }))).toEqual({
       label: "In progress",

@@ -526,7 +526,7 @@ export function changeRowModel(
   const badges: ChangeBadge[] = [];
   if (changeWorking(row)) badges.push({ id: "working", label: "Working", tone: "info" });
   if (awaitsReview(row, context)) {
-    badges.push({ id: "review", label: "Waiting for your review", tone: "warn" });
+    badges.push({ id: "review", label: "Ready for your review", tone: "warn" });
   }
   if (row.conflict) badges.push({ id: "conflict", label: "Conflict", tone: "warn" });
   if (row.divergent) badges.push({ id: "twoVersions", label: "Two versions", tone: "warn" });
@@ -599,7 +599,7 @@ export function changeInspector(
     : row.divergent
       ? { label: "Two versions", tone: "warn" as const }
       : waiting
-        ? { label: "Waiting for your review", tone: "warn" as const }
+        ? { label: "Ready for your review", tone: "warn" as const }
         : changeWorking(row)
           ? { label: "Working", tone: "info" as const }
           : { label: "Idle", tone: "plain" as const };

@@ -43,7 +43,7 @@ export interface TaskContextCard {
 
 /**
  * The task context as a card: its version, who keeps it and who wrote it last, whether it moved on
- * since the newest handoff read it, and how many findings wait for its keeper. Undefined until an
+ * since the newest handoff read it. Undefined until an
  * agent wrote the first version. `me` is the person's own name.
  */
 export function contextCard(input: {
@@ -79,15 +79,10 @@ export function contextCard(input: {
     handoff !== undefined && read !== null && context.version > read
       ? ` Newer than handoff #${handoff.number}, which read v${read}.`
       : "";
-  const waiting = context.reports.length;
   return {
     version: context.version,
     headline: `Version ${context.version} · ${kept} · ${written}`,
-    note: `The notes every agent on this task reads.${newer}${
-      waiting === 0
-        ? ""
-        : ` ${waiting} ${waiting === 1 ? "finding waits" : "findings wait"} for its keeper.`
-    }`,
+    note: `The notes every agent on this task reads.${newer}`,
   };
 }
 

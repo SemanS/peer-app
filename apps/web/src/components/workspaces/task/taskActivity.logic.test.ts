@@ -140,7 +140,6 @@ describe("activityRows", () => {
     const shown = rows(false);
     expect(shown.rows.map((row) => [row.when, row.what])).toEqual([
       ["40 min", "Ana’s agent updated the task context to v4"],
-      ["2 h", "Claude handed the task off for review"],
       ["10 Oct", "You created the task in Orders"],
     ]);
     expect(shown.expandable).toBe(true);
@@ -152,7 +151,7 @@ describe("activityRows", () => {
     expect(
       rows(
         false,
-        events.filter((e) => e.kind !== "claim" && e.kind !== "context-read"),
+        events.filter((e) => !["claim", "context-read", "handoff"].includes(e.kind)),
       ),
     ).toMatchObject({
       expandable: false,

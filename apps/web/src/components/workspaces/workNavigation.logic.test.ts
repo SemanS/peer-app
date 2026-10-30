@@ -174,7 +174,7 @@ describe("Work summary", () => {
     const base = cards.find((card) => card.kind === "task")!;
     const idle = {
       ...base,
-      state: { kind: "paused" as const, label: "Waiting to continue", waitingOn: undefined },
+      state: { kind: "paused" as const, label: "Paused", waitingOn: undefined },
       column: "paused" as const,
       task: {
         ...base.task,

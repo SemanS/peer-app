@@ -8,6 +8,11 @@ import { cn } from "~/lib/utils";
 const toggleVariants = cva(
   "[&_svg]:-mx-0.5 relative inline-flex shrink-0 cursor-pointer select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg border font-medium text-base text-foreground outline-none transition-shadow before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 aria-disabled:opacity-64 data-pressed:text-accent-foreground sm:text-sm [&_svg:not([class*='opacity-'])]:opacity-80 [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
+    compoundVariants: [
+      // A liquid switch set by its own padding and type, so a narrow one such as the sidebar's
+      // fits its labels. The base's `sm:text-sm` would otherwise win from `sm` up.
+      { class: "px-1.5 text-xs sm:text-xs", size: "compact", variant: "liquid" },
+    ],
     defaultVariants: {
       size: "default",
       variant: "default",

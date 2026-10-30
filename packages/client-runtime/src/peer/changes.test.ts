@@ -327,7 +327,7 @@ describe("rows and inspector", () => {
     expect(view.rewriters).toEqual({ person: "Bob", agent: "Codex", mine: false });
     expect(view.files).toEqual(["loyalty.js"]);
     expect(changeInspector(ORD11, ALL, context).buildsOnIt).toEqual(["ORD-12"]);
-    expect(changeInspector(ORD11, ALL, context).state.label).toBe("Waiting for your review");
+    expect(changeInspector(ORD11, ALL, context).state.label).toBe("Ready for your review");
   });
 
   it("names the two versions of a divergent change", () => {

@@ -40,12 +40,14 @@ import { StateDot } from "../workStatus";
 import type { TaskLauncherProps } from "../slots.types";
 import {
   taskLabel,
+  type WorkContextNode,
   type WorkOpen,
   type WorkProjectNode,
   type WorkTaskNode,
 } from "../workTree.logic";
 import type { TaskWait } from "./task.logic";
 import type { TaskChatRow } from "./taskChats.logic";
+import type { TaskBrief } from "./taskBrief.logic";
 import type { TaskContextCard, TaskDetail } from "./taskDetails.logic";
 
 const WAIT_ICON = {
@@ -222,17 +224,72 @@ export function PersonMark({ name, mine }: { readonly name: string; readonly min
   );
 }
 
-/** The task context in a line or two, against the newest handoff, and the way to its page. */
-export function TaskContextSection({
+function BriefLines({
+  title,
+  lines,
+}: {
+  readonly title: string;
+  readonly lines: ReadonlyArray<string>;
+}) {
+  if (lines.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      <ul className="flex flex-col gap-1.5">
+        {lines.map((line) => (
+          <li key={line} className="text-sm text-muted-foreground [overflow-wrap:anywhere]">
+            {line}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** What the task is: its outcome, what it holds to, and what proves it, as its author wrote them. */
+export function TaskBriefSection({ brief }: { readonly brief: TaskBrief }) {
+  return (
+    <section aria-label="Brief" className="flex flex-col gap-4">
+      <PeerSectionLabel>Brief</PeerSectionLabel>
+      {brief.summary === undefined ? null : (
+        <p className="text-sm whitespace-pre-line text-foreground [overflow-wrap:anywhere]">
+          {brief.summary}
+        </p>
+      )}
+      <BriefLines title="Outcome" lines={brief.outcome} />
+      <BriefLines title="Contract and decisions" lines={brief.contract} />
+      <BriefLines title="Test criteria" lines={brief.criteria} />
+      <BriefLines title="Steps" lines={brief.steps} />
+    </section>
+  );
+}
+
+/**
+ * What the work on this task learned: the context every agent on it reads and what they found for
+ * it. Project-wide knowledge has the sidebar's Knowledge tab.
+ */
+export function TaskKnowledgeSection({
   card,
+  findings,
   onOpen,
 }: {
   readonly card: TaskContextCard | undefined;
+  readonly findings: WorkContextNode["reports"];
   readonly onOpen: () => void;
 }) {
   return (
-    <section aria-label="Task context" className="flex flex-col gap-2.5">
-      <PeerSectionLabel>Task context</PeerSectionLabel>
+    <section aria-label="Knowledge" className="flex flex-col gap-2.5">
+      <PeerSectionLabel>Knowledge</PeerSectionLabel>
+      {findings.length === 0 ? null : (
+        <ul className="flex flex-col gap-2">
+          {findings.map((finding) => (
+            <li key={finding.id} className="text-sm text-foreground [overflow-wrap:anywhere]">
+              {finding.text}
+              <span className="block text-xs text-muted-foreground">{finding.person}’s agent</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {card === undefined ? (
         <p className="text-sm text-muted-foreground">
           Nobody has written the task context yet. The first agent on this task starts it and keeps

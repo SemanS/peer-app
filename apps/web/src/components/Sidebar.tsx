@@ -271,6 +271,7 @@ import { useChatTaskIndex } from "./workspaces/useChatTasks";
 import {
   SidebarViewSwitch,
   useRememberSidebarRoute,
+  useSidebarTab,
   useSidebarView,
 } from "./workspaces/SidebarViewSwitch";
 import { sidebarScopeLine, type SidebarView } from "./workspaces/SidebarViewSwitch.logic";
@@ -281,7 +282,8 @@ import { ALL_PROJECTS } from "./workspaces/workBoard.logic";
 import { ActiveOrganization } from "./workspaces/ActiveOrganization";
 import { WorkScopePicker } from "./workspaces/WorkScopePicker";
 import { WorkPanel } from "./workspaces/WorkPanel";
-import { StableWorkNavigation } from "./workspaces/StableWorkNavigation";
+import { SidebarAttention } from "./workspaces/SidebarAttention";
+import { SidebarTools } from "./workspaces/StableWorkNavigation";
 import { SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "./ui/menu";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
@@ -4335,6 +4337,7 @@ export default function Sidebar() {
 
   // Peer: the team's tasks (Project → Area → Task → Chats) or this computer's chats.
   const [sidebarView, setSidebarView] = useSidebarView();
+  const [sidebarTab, setSidebarTab] = useSidebarTab();
   const scopeLine = sidebarScopeLine(sidebarView, projectScope.scope, projectScope.name);
   useRememberSidebarRoute();
   // Switching views also switches the main area to the view's last screen: Tasks to the Work
@@ -4428,13 +4431,21 @@ export default function Sidebar() {
           <SidebarGroup className="z-[1]">
             <div className="flex flex-col gap-3 pb-4">
               <ActiveOrganization />
-              {projectGroups.length > 0 || peerProjects.length > 0 ? (
-                <WorkScopePicker groups={projectGroups} />
-              ) : null}
-              <StableWorkNavigation scope={projectScope} />
+              <div className="flex min-w-0 items-center gap-1">
+                {projectGroups.length > 0 || peerProjects.length > 0 ? (
+                  <div className="min-w-0 flex-1">
+                    <WorkScopePicker groups={projectGroups} />
+                  </div>
+                ) : (
+                  <div className="flex-1" />
+                )}
+                <SidebarTools scope={projectScope.scope} />
+              </div>
               <SidebarViewSwitch
                 view={sidebarView}
+                tab={sidebarTab}
                 onChange={switchSidebarView}
+                onTab={setSidebarTab}
                 scopeLine={scopeLine}
               />
             </div>
@@ -4531,7 +4542,7 @@ export default function Sidebar() {
             )
           ) : null}
           {!isSearchingThreads && sidebarView === "work" ? (
-            <WorkPanel scope={projectScope.scope} />
+            <WorkPanel scope={projectScope} tab={sidebarTab} />
           ) : null}
           {!isSearchingThreads && sidebarView === "threads" ? (
             <TooltipProvider
@@ -4866,6 +4877,7 @@ export default function Sidebar() {
           ) : null}
         </SidebarGroup>
       </SidebarContent>
+      <SidebarAttention scope={projectScope} />
       <SidebarChromeFooter labelled pullRequests={peerProjects.length === 0} />
     </>
   );

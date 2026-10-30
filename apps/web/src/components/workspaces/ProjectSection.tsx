@@ -1,32 +1,42 @@
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { useLocation, useNavigate } from "@tanstack/react-router";
-import { ChevronRightIcon, CircleCheckIcon, ListChecksIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
-import { Separator } from "../ui/separator";
-import { SidebarMenu, useSidebar } from "../ui/sidebar";
+import { ProjectActions } from "./ProjectActions";
 import { SignalTiles } from "./ProjectSignals";
-import { NavCount, NavRow, ProjectNav } from "./SidebarNav";
-import type { SidebarNavCounts } from "./sidebarNav.logic";
+import { NavCount } from "./SidebarNav";
+import {
+  openAreasByDefault,
+  sidebarTasks,
+  tasksCountLabel,
+  type SidebarArea,
+} from "./sidebarTasks.logic";
 import { TaskRow } from "./TaskRow";
-import { nestProjectTasks } from "./taskTree.logic";
+import type { NestedRow } from "./taskTree.logic";
 import type { PeerWebPlugin } from "./slots.types";
-import { groupTasks, type TaskGroupNode } from "./workGroups.logic";
 import {
   projectCheckout,
   type ProjectCheckout,
   useOpenWorkspaceProject,
 } from "./useOpenWorkspaceProject";
 import type { WorkActions } from "./useWorkActions";
-import { useWorkLayout } from "./workScope";
-import type { AgentNeed, WorkProjectNode } from "./workTree.logic";
+import type { AgentNeed, WorkProjectNode, WorkTaskNode } from "./workTree.logic";
+
+/** Signals another place already holds: a tab of their own, Needs your attention, the project menu. */
+const PLACED_SIGNALS: ReadonlySet<string> = new Set([
+  "overlaps",
+  "knowledge",
+  "memory",
+  "team",
+  "changes",
+]);
 
 /**
- * The open project in the Tasks view: what holds now (its signals, its announcement), its tasks
- * by area under a Tasks row, its done tasks folded under Done, and below them its Knowledge,
- * Activity, Pull requests and Project settings. Chats on no task are in the Chats view.
+ * The open project in the Tasks tab: what holds now (its announcement, what it has in place), then
+ * its areas with what each has done and each task's name and state. Done tasks fold inside their
+ * area. What the rows do not say is on the task's page.
  */
 export function ProjectSection({
   environmentId,
@@ -35,10 +45,8 @@ export function ProjectSection({
   plugins,
   activeThread,
   actions,
-  counts,
   needOf,
-  onHistory,
-  tasksNavigation = true,
+  heading = false,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
@@ -46,20 +54,11 @@ export function ProjectSection({
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly activeThread: string | null;
   readonly actions: WorkActions;
-  readonly counts: SidebarNavCounts;
   /** What each of the person's waiting chats waits for (`needsByOpen`): an approval or an answer. */
   readonly needOf: ReadonlyMap<string, AgentNeed>;
-  /** Opens the project's Activity; absent while no plugin keeps one. */
-  readonly onHistory: (() => void) | undefined;
-  readonly tasksNavigation?: boolean;
+  /** Whether the section heads the sidebar: with the count and what a project offers. */
+  readonly heading?: boolean;
 }) {
-  const navigate = useNavigate();
-  const [layout, setLayout] = useWorkLayout();
-  const onList = useLocation({
-    select: (location) =>
-      location.pathname === "/work" && location.search.view !== "needs-you" && layout === "list",
-  });
-  const { isMobile, setOpenMobile } = useSidebar();
   const state = status.workspaces
     .find((workspace) => workspace.slug === project.workspace)
     ?.projects.find((candidate) => candidate.project.id === project.projectId);
@@ -67,14 +66,15 @@ export function ProjectSection({
   const t3ProjectId = checkout?.projectId;
   const scope = { workspace: project.workspace, projectId: project.projectId };
   const opener = useOpenWorkspaceProject({ environmentId, ...scope, name: project.name });
-  const groups = groupTasks(project);
+  const { areas, total } = sidebarTasks(project);
   const areaNames = project.areas.flatMap((area) => (area.name === null ? [] : [area.name]));
-  const active = groups.filter((group) => !group.done);
-  const done = groups.find((group) => group.done);
   const slot = { environmentId, status, project, activeThread };
-  // An item sits under its parent's row when both are in the group, in the tree's order.
-  const rows = (group: TaskGroupNode) =>
-    nestProjectTasks(project, group.tasks).map(({ item: task, indent }) => (
+  const activeTask = activeThread?.startsWith(`task:${project.workspace}:${project.projectId}:`)
+    ? activeThread.split(":").at(-1)
+    : undefined;
+  const opened = openAreasByDefault(areas, activeTask);
+  const rows = (nested: ReadonlyArray<NestedRow<WorkTaskNode>>) =>
+    nested.map(({ item: task, indent }) => (
       <TaskRow
         key={task.id}
         indent={indent}
@@ -96,132 +96,105 @@ export function ProjectSection({
 
   return (
     <section aria-label={project.name} className="flex flex-col gap-2">
-      {/* What holds now: the signals that open a page as tiles (Knowledge has its own row below),
-          then what plugins show in place. */}
       <SignalTiles
-        status={status}
-        project={project}
-        plugins={plugins.filter(
-          (plugin) => plugin.id !== "knowledge" && (!tasksNavigation || plugin.id !== "ownership"),
-        )}
-        activeThread={activeThread}
-      />
-      {plugins.map(({ id, projectRows: Rows }) =>
-        Rows === undefined ? null : <Rows key={id} {...slot} />,
-      )}
-      <div className="px-2">
-        <Separator />
-      </div>
-      <ProjectNav
-        environmentId={environmentId}
         status={status}
         project={project}
         plugins={plugins}
         activeThread={activeThread}
-        sharedContext={counts.sharedContext}
-        coreNavigation={!tasksNavigation}
-        onHistory={onHistory}
+        show={(signal) => !PLACED_SIGNALS.has(signal.id)}
       />
-      <div className="flex flex-col gap-0.5">
-        {tasksNavigation ? (
-          <SidebarMenu aria-label="Tasks">
-            <NavRow
-              icon={ListChecksIcon}
-              label="Tasks"
-              active={onList}
-              trailing={
-                counts.active === null ? undefined : <NavCount>{counts.active} open</NavCount>
-              }
-              onClick={() => {
-                // Choosing Tasks explicitly selects the list; Overview preserves the saved layout.
-                setLayout("list");
-                if (isMobile) setOpenMobile(false);
-                void navigate({ to: "/work", search: {} });
-              }}
-            />
-          </SidebarMenu>
-        ) : null}
-        <div className="flex flex-col gap-1 pl-1">
-          {checkout !== undefined && checkout.projectId === undefined ? (
-            <NotOpenHere
-              environmentId={environmentId}
-              status={status}
-              plugins={plugins}
-              checkout={checkout}
-              opening={opener.opening}
-              onOpen={() => void opener.open()}
-            />
-          ) : null}
-          {active.length === 0 ? (
-            <p className="px-2 py-0.5 text-xs text-muted-foreground">
-              {done === undefined ? "No tasks yet." : "No open tasks."}
-            </p>
-          ) : null}
-          {active.map((group) => (
-            <AreaGroup key={group.id} group={group}>
-              {rows(group)}
-            </AreaGroup>
-          ))}
+      {plugins.map(({ id, projectRows: Rows }) =>
+        Rows === undefined ? null : <Rows key={id} {...slot} />,
+      )}
+      {heading ? (
+        <div className="flex h-6 min-w-0 items-center gap-2 px-2">
+          <h2 className="min-w-0 flex-1 truncate text-xs font-medium tracking-wide text-muted-foreground uppercase">
+            Areas
+          </h2>
+          {total === 0 ? null : <NavCount>{tasksCountLabel(total)}</NavCount>}
+          <ProjectActions
+            environmentId={environmentId}
+            status={status}
+            project={project}
+            plugins={plugins}
+            activeThread={activeThread}
+          />
         </div>
-        {done === undefined ? null : <DoneGroup group={done}>{rows(done)}</DoneGroup>}
+      ) : null}
+      <div className="flex flex-col gap-1">
+        {checkout !== undefined && checkout.projectId === undefined ? (
+          <NotOpenHere
+            environmentId={environmentId}
+            status={status}
+            plugins={plugins}
+            checkout={checkout}
+            opening={opener.opening}
+            onOpen={() => void opener.open()}
+          />
+        ) : null}
+        {areas.length === 0 ? (
+          <p className="px-2 py-0.5 text-xs text-muted-foreground">No tasks yet.</p>
+        ) : null}
+        {areas.map((area) => (
+          <AreaGroup key={area.id} area={area} defaultOpen={opened.has(area.id)} rows={rows} />
+        ))}
       </div>
     </section>
   );
 }
 
 /**
- * One area of a project's open tasks: its name and count over its tasks, folded by its chevron.
- * A project that names no area lists its tasks without a heading.
+ * One area: its name and how much of it is done, folded by its chevron, then its open tasks and
+ * its done ones behind a row. A project that names no area lists its tasks without a heading.
  */
 function AreaGroup({
-  group,
-  children,
+  area,
+  defaultOpen,
+  rows,
 }: {
-  readonly group: TaskGroupNode;
-  readonly children: ReactNode;
+  readonly area: SidebarArea;
+  readonly defaultOpen: boolean;
+  readonly rows: (nested: ReadonlyArray<NestedRow<WorkTaskNode>>) => ReactNode;
 }) {
-  const [open, setOpen] = useState(true);
-  if (group.title === undefined) {
-    return <ul className="flex flex-col gap-0.5">{children}</ul>;
-  }
+  // Until the person folds it, an area follows the work: it opens when its task opens.
+  const [choice, setChoice] = useState<boolean | null>(null);
+  const [showDone, setShowDone] = useState(false);
+  const open = choice ?? defaultOpen;
+  const body = (
+    <>
+      <ul className="flex flex-col gap-0.5">{rows(area.open)}</ul>
+      {area.finished.length === 0 ? null : (
+        <button
+          type="button"
+          aria-expanded={showDone}
+          className="w-fit rounded-sm px-2 py-1 text-left text-xs text-muted-foreground outline-none hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          onClick={() => setShowDone((value) => !value)}
+        >
+          {showDone ? "Hide done" : `${area.finished.length} done`}
+        </button>
+      )}
+      {showDone ? <ul className="flex flex-col gap-0.5">{rows(area.finished)}</ul> : null}
+    </>
+  );
+  if (area.title === undefined) return body;
   return (
     <div>
       <button
         type="button"
         aria-expanded={open}
-        className="flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left text-xs font-semibold text-secondary-label outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-        onClick={() => setOpen((value) => !value)}
+        className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm text-sidebar-foreground outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        onClick={() => setChoice(!open)}
       >
-        <ChevronRightIcon aria-hidden className={cn("size-3 shrink-0", open && "rotate-90")} />
-        <span className="min-w-0 flex-1 truncate">{group.title}</span>
-        <span className="font-normal text-muted-foreground tabular-nums">{group.tasks.length}</span>
-      </button>
-      {open ? <ul className="flex flex-col gap-0.5">{children}</ul> : null}
-    </div>
-  );
-}
-
-/** The done tasks: a Done row with their count, folded until opened. */
-function DoneGroup({
-  group,
-  children,
-}: {
-  readonly group: TaskGroupNode;
-  readonly children: ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div>
-      <SidebarMenu aria-label="Done tasks">
-        <NavRow
-          icon={CircleCheckIcon}
-          label="Done"
-          expanded={open}
-          trailing={<NavCount>{group.tasks.length}</NavCount>}
-          onClick={() => setOpen((value) => !value)}
+        <ChevronRightIcon
+          aria-hidden
+          className={cn("size-3.5 shrink-0 text-muted-foreground", open && "rotate-90")}
         />
-      </SidebarMenu>
-      {open ? <ul className="flex flex-col gap-0.5 pl-1">{children}</ul> : null}
+        <span className="min-w-0 flex-1 truncate">{area.title}</span>
+        <NavCount>
+          {area.done}/{area.total}
+        </NavCount>
+      </button>
+      {open ? <div className="pl-2">{body}</div> : null}
     </div>
   );
 }

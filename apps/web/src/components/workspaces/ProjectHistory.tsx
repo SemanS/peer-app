@@ -1,41 +1,24 @@
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { ChevronLeftIcon } from "lucide-react";
 
-import { Button } from "../ui/button";
 import type { PeerWebPlugin } from "./slots.types";
 import type { WorkProjectNode } from "./workTree.logic";
 
-/**
- * A project's Activity, one click below its tasks: what changed and how the work went, from the
- * plugins that keep it. The Tasks view shows only what holds now.
- */
+/** What changed in a project and how the work went, from the plugins that keep it. */
 export function ProjectHistory({
   environmentId,
   status,
   project,
   plugins,
   activeThread,
-  onBack,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly activeThread: string | null;
-  readonly onBack: () => void;
 }) {
   return (
-    <section aria-label={`Activity of ${project.name}`} className="flex flex-col gap-3">
-      <div>
-        <Button size="xs" variant="ghost" onClick={onBack}>
-          <ChevronLeftIcon aria-hidden className="size-3.5" />
-          Tasks
-        </Button>
-      </div>
-      <div className="px-2">
-        <h2 className="text-base font-semibold text-sidebar-foreground">Activity</h2>
-        <p className="truncate text-xs text-muted-foreground">{project.name}</p>
-      </div>
+    <>
       {plugins.map(({ id, projectHistory: Section }) =>
         Section === undefined ? null : (
           <Section
@@ -47,6 +30,6 @@ export function ProjectHistory({
           />
         ),
       )}
-    </section>
+    </>
   );
 }

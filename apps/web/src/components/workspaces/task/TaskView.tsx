@@ -14,6 +14,8 @@ import { SidebarInset } from "../../ui/sidebar";
 import { agentLook, TitleInput } from "../marks";
 import { PeerPageHeader, TaskKey } from "../PeerPageHeader";
 import { MoveUnderDialog } from "../MoveUnderDialog";
+import { HandoffChatContext } from "../review/HandoffChat";
+import { handoffChat } from "../review/review.logic";
 import { NewTaskDialog } from "../NewTaskDialog";
 import { TONE_BADGE } from "../signals";
 import {
@@ -43,17 +45,23 @@ import { chatsWithoutRun, runsRevision, taskRunRows } from "./runs.logic";
 import { TaskRuns, useTaskRuns } from "./TaskRuns";
 import {
   DecisionBar,
-  TaskContextSection,
+  TaskBriefSection,
   TaskDetails,
   TaskItems,
+  TaskKnowledgeSection,
   WaitsOnYou,
 } from "./TaskSections";
+import { hasBrief, taskBrief } from "./taskBrief.logic";
 import { taskMenuAction } from "./taskMenu.logic";
 
+/** The context-page sections that are about the task itself, so they live on its page. */
+export const TASK_PAGE_SECTIONS: ReadonlySet<string> = new Set(["handoff", "dependencies"]);
+
 /**
- * A task's page, which its title opens: what state it is in and what waits on the person, its
- * runs (and chats no run covers; a colleague's can only be asked about), the task context, what lately happened, and the
- * details behind a fold. The primary action follows the state. A task with items lists them, and an
+ * A task's page, which its title opens, and the one place for all that belongs to it: its state and
+ * what waits on the person, its brief, its runs (and chats no run covers; a colleague's can only be
+ * asked about), handoff, dependencies, tests, knowledge, what lately happened, and the details
+ * behind a fold. The primary action follows the state. A task with items lists them, and an
  * agent started on a group (or a task worked by its parts) gets its open items; an item nobody
  * decided how to run asks that first and starts nothing.
  */
@@ -181,6 +189,8 @@ function TaskBody({
   const initialPrompt = launchPrompt(found.project, taskNode);
   const items = taskItems(found.project, taskNode, needs);
   const progress = progressLabel(taskNode);
+  const brief = taskBrief(hubTask?.description);
+  const handoff = handoffChat(taskNode);
   const runs = useTaskRuns({
     environmentId,
     workspace,
@@ -433,6 +443,7 @@ function TaskBody({
 
       <div className="flex flex-wrap items-start gap-10">
         <div className="flex min-w-0 flex-[999_1_32rem] flex-col gap-8">
+          {hasBrief(brief) ? <TaskBriefSection brief={brief} /> : null}
           {preparing && onTask === 0 ? null : (
             <TaskRuns
               environmentId={environmentId}
@@ -467,10 +478,35 @@ function TaskBody({
                   }
             }
           />
-          <TaskContextSection card={model.context} onOpen={openContext} />
+          <HandoffChatContext
+            value={
+              handoff === null
+                ? null
+                : { title: handoff.title, open: () => actions.open(handoff.open) }
+            }
+          >
+            {plugins.map(({ id, taskContext: Section }) =>
+              Section === undefined || !TASK_PAGE_SECTIONS.has(id) ? null : (
+                <Section
+                  key={id}
+                  environmentId={environmentId}
+                  status={status}
+                  workspace={workspace}
+                  project={project}
+                  scope={`task:${taskId}`}
+                  contextText={null}
+                />
+              ),
+            )}
+          </HandoffChatContext>
           {plugins.map(({ id, taskSections: Section }) =>
             Section === undefined ? null : <Section key={id} {...slot} />,
           )}
+          <TaskKnowledgeSection
+            card={model.context}
+            findings={taskNode.context?.reports ?? []}
+            onOpen={openContext}
+          />
           <TaskActivity
             environmentId={environmentId}
             status={status}

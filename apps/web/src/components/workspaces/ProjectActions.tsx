@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { NewTaskDialog } from "./NewTaskDialog";
 import { projectActionItems } from "./slots.logic";
 import type { PeerWebPlugin } from "./slots.types";
@@ -13,7 +14,7 @@ import { projectCheckout } from "./useOpenWorkspaceProject";
 import type { WorkProjectNode } from "./workTree.logic";
 
 /**
- * What a project's header offers by name: a "New task" button, and a "More" menu with the actions
+ * What the head of a project's tasks offers: New task, and a "More" menu with the actions
  * the active plugins add (Request a teammate…, Notify agents…) and a chat without a task. The
  * menu's dialogs mount here, outside the menu, so they outlive it closing.
  */
@@ -42,15 +43,28 @@ export function ProjectActions({
   const items = projectActionItems(plugins, slot);
   const opened = items.find((item) => item.key === dialog);
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex gap-1.5">
-        <Button className="min-w-0 flex-1" onClick={() => setAdding(true)}>
-          <PlusIcon aria-hidden />
-          New task
-        </Button>
+    <>
+      <span className="flex shrink-0 items-center">
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size="icon-xs"
+                variant="ghost-muted"
+                aria-label="New task"
+                onClick={() => setAdding(true)}
+              />
+            }
+          >
+            <PlusIcon aria-hidden />
+          </TooltipTrigger>
+          <TooltipPopup side="top">New task</TooltipPopup>
+        </Tooltip>
         <Menu>
           <MenuTrigger
-            render={<Button variant="ghost" size="icon" aria-label="More project actions" />}
+            render={
+              <Button size="icon-xs" variant="ghost-muted" aria-label="More project actions" />
+            }
           >
             <MoreHorizontalIcon aria-hidden />
           </MenuTrigger>
@@ -88,7 +102,7 @@ export function ProjectActions({
             </MenuItem>
           </MenuPopup>
         </Menu>
-      </div>
+      </span>
       {adding ? (
         <NewTaskDialog
           environmentId={environmentId}
@@ -100,6 +114,6 @@ export function ProjectActions({
       {opened === undefined ? null : (
         <opened.action.Dialog {...slot} onClose={() => setDialog(null)} />
       )}
-    </div>
+    </>
   );
 }

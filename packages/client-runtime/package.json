@@ -47,6 +47,10 @@
       "types": "./src/peer/requests.ts",
       "default": "./src/peer/requests.ts"
     },
+    "./peer/taskTitle": {
+      "types": "./src/peer/taskTitle.ts",
+      "default": "./src/peer/taskTitle.ts"
+    },
     "./peer/work": {
       "types": "./src/peer/work.ts",
       "default": "./src/peer/work.ts"

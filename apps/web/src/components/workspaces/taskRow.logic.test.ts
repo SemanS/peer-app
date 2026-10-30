@@ -1,4 +1,4 @@
-import { TASK_STATES_NEEDING_YOU } from "@t3tools/client-runtime/peer/work";
+import { TASK_STATES_NEEDING_YOU, type TaskState } from "@t3tools/client-runtime/peer/work";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -8,6 +8,7 @@ import {
   taskRowTarget,
   taskStateLook,
   type TaskRowTarget,
+  rowStateLabel,
 } from "./taskRow.logic";
 import {
   openKey,
@@ -81,12 +82,12 @@ describe("taskRowModel: the words", () => {
     const ana = thread("ana", { mine: false, person: "Ana", status: "blocked", open: undefined });
     const cases: ReadonlyArray<readonly [string, WorkTaskNode, ReadonlyMap<string, AgentNeed>?]> = [
       ["Done", task([thread("a")], { done: true })],
-      ["Waiting for review", task([thread("a")], { inReview: true })],
+      ["Ready for review", task([thread("a")], { inReview: true })],
       ["Needs your approval", task([waiting]), needs([[waiting, "approval"]])],
       ["Needs your answer", task([waiting])],
       ["In progress", task([thread("a", { status: "working" })])],
-      ["Waiting on Ana", task([ana])],
-      ["Waiting to continue", task([thread("a")])],
+      ["Blocked on Ana", task([ana])],
+      ["Paused", task([thread("a")])],
       ["Not started", task([])],
     ];
     expect(cases.map(([, node, needOf]) => model(node, needOf).state.label)).toEqual(
@@ -107,7 +108,7 @@ describe("taskRowModel: the words", () => {
 
   it("reads review before anything its chats do", () => {
     const handedOff = task([thread("a", { status: "working" })], { inReview: true });
-    expect(model(handedOff).state).toMatchObject({ kind: "review", label: "Waiting for review" });
+    expect(model(handedOff).state).toMatchObject({ kind: "review", label: "Ready for review" });
   });
 
   it("passes the overlap the task is in on, as its suffix", () => {
@@ -128,8 +129,8 @@ describe("taskRowModel: a review asks its owner", () => {
       review: { audience: "owner", forMe, names: forMe ? ["You"] : ["Ana"] },
     });
 
-  it("is the person's to do when it asks them: Waiting for your review, with the Review chip", () => {
-    expect(review(true).state).toMatchObject({ kind: "review", label: "Waiting for your review" });
+  it("is the person's to do when it asks them: Ready for your review, with the Review chip", () => {
+    expect(review(true).state).toMatchObject({ kind: "review", label: "Ready for your review" });
     expect(review(true).chip).toMatchObject({ label: "Review", target: { kind: "review" } });
     expect(review(true).target).toEqual(review(true).chip?.target);
     expect(taskRowTarget(inReview, scope).kind).toBe("task");
@@ -138,7 +139,7 @@ describe("taskRowModel: a review asks its owner", () => {
   it("is Ana's when it asks her: the task waits on her, and the person gets no chip", () => {
     expect(review(false).state).toMatchObject({
       kind: "waiting",
-      label: "Waiting for Ana's review",
+      label: "Ready for Ana's review",
     });
     expect(review(false).chip).toBeUndefined();
     expect(review(false).target).toEqual(taskRowTarget(inReview, scope));
@@ -146,7 +147,7 @@ describe("taskRowModel: a review asks its owner", () => {
   });
 
   it("asks everyone when no route is passed, as before ownership", () => {
-    expect(model(inReview).state.label).toBe("Waiting for review");
+    expect(model(inReview).state.label).toBe("Ready for review");
   });
 });
 
@@ -269,5 +270,27 @@ describe("taskRowModel: an unsettled item", () => {
       model(task([waiting], { unsettled: true }), needs([[waiting, "input"]])).chip?.label,
     ).toBe("Answer");
     expect(model(task([], { unsettled: true, done: true })).chip).toBeUndefined();
+  });
+});
+
+describe("rowStateLabel", () => {
+  const state = (kind: TaskState["kind"], label: string = kind) => ({
+    kind,
+    label,
+    waitingOn: undefined,
+  });
+
+  it("says Blocked for work its dependencies hold back", () => {
+    expect(rowStateLabel(state("new"), true)).toBe("Blocked");
+    expect(rowStateLabel(state("paused"), true)).toBe("Blocked");
+  });
+
+  it("keeps a state that says more than Blocked", () => {
+    expect(rowStateLabel(state("review", "Ready for review"), true)).toBe("Ready for review");
+  });
+
+  it("leaves words out where the dot says it", () => {
+    expect(rowStateLabel(state("new"), false)).toBeUndefined();
+    expect(rowStateLabel(state("done"), true)).toBeUndefined();
   });
 });

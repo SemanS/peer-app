@@ -6,23 +6,27 @@ import type {
   ProjectId,
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronRightIcon, EllipsisIcon, PlusIcon } from "lucide-react";
+import { EllipsisIcon, PlusIcon } from "lucide-react";
 import { taskOwnership } from "@t3tools/client-runtime/peer/work";
-import { useId, useState } from "react";
+import { taskShortTitle } from "@t3tools/client-runtime/peer/taskTitle";
+import { useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { TaskChats } from "./ThreadCard";
 import { TitleInput } from "./marks";
 import { MoveUnderDialog } from "./MoveUnderDialog";
 import { NewTaskDialog } from "./NewTaskDialog";
 import type { PeerWebPlugin } from "./slots.types";
 import { TONE_TEXT } from "./signals";
-import { pullRequestsByThread, type ChatPullRequest } from "./taskChats.logic";
-import { taskRouteKey, taskRowModel, taskRowTarget, type TaskRowTarget } from "./taskRow.logic";
-import { kindChange, progressLabel, servesTree } from "./taskTree.logic";
-import { runsChip } from "./task/runs.logic";
+import {
+  rowStateLabel,
+  taskRouteKey,
+  taskRowModel,
+  taskRowTarget,
+  type TaskRowTarget,
+} from "./taskRow.logic";
+import { kindChange, servesTree } from "./taskTree.logic";
 import {
   below,
   type MenuPosition,
@@ -31,7 +35,7 @@ import {
   type WorkActions,
 } from "./useWorkActions";
 import { StateDot } from "./workStatus";
-import { taskOverlap } from "./workGroups.logic";
+import { taskBlocked } from "./dependencies/dependencies.logic";
 import { chosenArea, taskMenuItems } from "./workMenus.logic";
 import {
   taskLabel,
@@ -40,14 +44,11 @@ import {
   type WorkTaskNode,
 } from "./workTree.logic";
 
-const NO_PULL_REQUESTS: ReadonlyMap<string, ReadonlyArray<ChatPullRequest>> = new Map();
-
 /**
- * One task of a project, in two lines. The first is its key and title, which open it; the second
- * its state in words (the same as the board's and the task's page), the overlap it is in, and how
- * many chats it has. A chip says what to do only while the task waits on the person, and does
- * that one thing. The chevron alone shows the task's chats; a double click or F2 renames it. An item
- * of a task tree is indented under the row of its parent.
+ * One task of a project: its state's dot, its key and short name, which open it, and under them its
+ * state in words once there is one to say. Runs, chats and what the task asks are on its page and in
+ * Needs your attention. A double click or F2 renames it. An item of a task tree is indented under
+ * the row of its parent.
  */
 export function TaskRow({
   environmentId,
@@ -85,15 +86,10 @@ export function TaskRow({
   readonly indent?: number;
 }) {
   const navigate = useNavigate();
-  // One two-line row per task until its chevron is opened: its chats are a click away.
-  const [expanded, setExpanded] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [treeDialog, setTreeDialog] = useState<"add-under" | "move-under" | null>(null);
   const tree = servesTree(project);
-  const progress = progressLabel(task);
-  const runs = runsChip(task.runs);
-  const chatsId = useId();
   const label = taskLabel(task);
   const taskArea = tasks.find((t) => t.id === task.id)?.area;
   const model = taskRowModel({
@@ -101,22 +97,15 @@ export function TaskRow({
     scope,
     needOf,
     review: taskOwnership(project, task, taskArea ?? null).review,
-    overlap: taskOverlap(
-      status,
-      { workspace: scope.workspace, projectId: scope.projectId, tasks },
-      task.id,
-    ),
   });
-  const { chip, overlap, target } = model;
-  const hasChats = task.threads.length > 0;
+  const { target } = model;
+  const blocked = taskBlocked(status, scope.workspace, projectState, task.id);
+  const stateLabel = rowStateLabel(model.state, blocked);
   const active = activeThread === taskRouteKey(scope, task.id);
   const RequestDialog = plugins.find(
     (plugin) => plugin.requestTeammate !== undefined,
   )?.requestTeammate;
   const canRequest = RequestDialog !== undefined && projectState !== undefined;
-  const pullRequests = expanded
-    ? pullRequestsByThread(projectState?.work.threads ?? [])
-    : NO_PULL_REQUESTS;
 
   const go = (to: TaskRowTarget) => {
     if (to.kind === "chat") actions.open(to.open);
@@ -188,15 +177,15 @@ export function TaskRow({
   const title = (
     <>
       {task.key ? (
-        <span className="shrink-0 font-mono text-2xs text-muted-foreground">{task.key}</span>
+        <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{task.key}</span>
       ) : null}
       <span
         className={cn(
-          "min-w-0 truncate text-sm font-medium",
+          "min-w-0 truncate text-sm",
           task.done ? "text-muted-foreground" : "text-sidebar-foreground",
         )}
       >
-        {task.title}
+        {taskShortTitle(task.title)}
       </span>
     </>
   );
@@ -208,7 +197,7 @@ export function TaskRow({
     >
       <div
         className={cn(
-          "group/task relative flex min-w-0 items-start gap-0.5 rounded-lg pr-1",
+          "group/task relative flex min-w-0 items-center gap-2 rounded-lg pr-1 pl-2",
           active ? "bg-sidebar-row-active" : "hover:bg-sidebar-row-hover",
         )}
         onKeyDown={(event) => {
@@ -216,12 +205,6 @@ export function TaskRow({
           if (event.key === "F2") {
             event.preventDefault();
             setRenaming(true);
-          } else if (event.key === "ArrowRight" && hasChats && !expanded) {
-            event.preventDefault();
-            setExpanded(true);
-          } else if (event.key === "ArrowLeft" && expanded) {
-            event.preventDefault();
-            setExpanded(false);
           }
         }}
         onContextMenu={(event) => {
@@ -229,21 +212,7 @@ export function TaskRow({
           void showMenu({ x: event.clientX, y: event.clientY });
         }}
       >
-        {hasChats ? (
-          <Button
-            size="icon-micro"
-            variant="ghost-muted"
-            className="mt-1.5 ml-1 shrink-0"
-            aria-label={`${expanded ? "Hide" : "Show"} chats of ${task.key ?? task.title}`}
-            aria-expanded={expanded}
-            aria-controls={expanded ? chatsId : undefined}
-            onClick={() => setExpanded((value) => !value)}
-          >
-            <ChevronRightIcon className={cn("size-3", expanded && "rotate-90")} />
-          </Button>
-        ) : (
-          <span aria-hidden className="ml-1 w-5 shrink-0" />
-        )}
+        <StateDot tone={model.look.tone} hollow={model.look.hollow} />
         <div
           className="flex min-w-0 flex-1 flex-col gap-0.5 py-1.5"
           onDoubleClick={(event) => {
@@ -263,78 +232,26 @@ export function TaskRow({
           ) : target === undefined ? (
             <div className="flex min-w-0 items-baseline gap-1.5">{title}</div>
           ) : (
-            <button
-              type="button"
-              aria-current={active ? "page" : undefined}
-              className="flex min-w-0 items-baseline gap-1.5 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={() => go(target)}
-            >
-              {title}
-            </button>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-current={active ? "page" : undefined}
+                    className="flex min-w-0 items-baseline gap-1.5 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    onClick={() => go(target)}
+                  />
+                }
+              >
+                {title}
+              </TooltipTrigger>
+              <TooltipPopup side="right">{task.title}</TooltipPopup>
+            </Tooltip>
           )}
-          <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-xs whitespace-nowrap">
-            <StateDot tone={model.look.tone} hollow={model.look.hollow} />
-            <span className={cn("shrink-0", TONE_TEXT[model.look.tone])}>{model.state.label}</span>
-            {progress === null ? null : (
-              <>
-                <span aria-hidden className="shrink-0 text-muted-foreground">
-                  ·
-                </span>
-                <span className="shrink-0 text-muted-foreground tabular-nums">{progress}</span>
-              </>
-            )}
-            {overlap === undefined ? null : (
-              <>
-                <span aria-hidden className="shrink-0 text-muted-foreground">
-                  ·
-                </span>
-                <button
-                  type="button"
-                  className={cn(
-                    "min-w-0 truncate rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                    TONE_TEXT.coordination,
-                  )}
-                  onClick={() =>
-                    void navigate({
-                      to: "/overlap/$workspace/$project/$overlap",
-                      params: {
-                        workspace: scope.workspace,
-                        project: scope.projectId,
-                        overlap: overlap.id,
-                      },
-                    })
-                  }
-                  onDoubleClick={(event) => event.stopPropagation()}
-                >
-                  {overlap.label}
-                </button>
-              </>
-            )}
-            <span aria-hidden className="shrink-0 text-muted-foreground">
-              ·
-            </span>
-            <span className="shrink-0 text-muted-foreground">{model.chats}</span>
-            {runs === undefined ? null : (
-              <>
-                <span aria-hidden className="shrink-0 text-muted-foreground">
-                  ·
-                </span>
-                <span className="shrink-0 text-muted-foreground tabular-nums">{runs}</span>
-              </>
-            )}
-          </span>
+          {stateLabel === undefined ? null : (
+            <span className={cn("truncate text-xs", TONE_TEXT[model.look.tone])}>{stateLabel}</span>
+          )}
         </div>
-        {chip === undefined ? null : (
-          <Button
-            size="xs"
-            variant="warning-outline"
-            className="my-auto shrink-0"
-            aria-label={`${chip.label} ${label}`}
-            onClick={() => go(chip.target)}
-          >
-            {chip.label}
-          </Button>
-        )}
         {/* Out of the way until the row is hovered or focused, so the title keeps its width. */}
         <span className="pointer-events-none absolute top-0 right-1 mt-1.5 flex h-5 shrink-0 items-center opacity-0 group-hover/task:pointer-events-auto group-hover/task:static group-hover/task:opacity-100 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:static has-[:focus-visible]:opacity-100 max-md:pointer-events-auto max-md:static max-md:opacity-100">
           {plugins.map(({ id, taskActions: Actions }) =>
@@ -377,20 +294,6 @@ export function TaskRow({
           </Button>
         </span>
       </div>
-      {expanded && hasChats ? (
-        <TaskChats
-          id={chatsId}
-          scope={scope}
-          task={task}
-          tasks={tasks}
-          plugins={plugins}
-          activeThread={activeThread}
-          actions={actions}
-          needOf={needOf}
-          pullRequests={pullRequests}
-          onOpenTask={() => go(taskRowTarget(task, scope))}
-        />
-      ) : null}
       {treeDialog === "add-under" ? (
         <NewTaskDialog
           environmentId={environmentId}

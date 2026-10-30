@@ -69,7 +69,7 @@ describe("taskState", () => {
     expect(taskState(task([working], { done: true })).kind).toBe("done");
     expect(taskState(task([working], { status: "done" })).kind).toBe("done");
     const review = taskState(task([working], { inReview: true }));
-    expect(review).toEqual({ kind: "review", label: "Waiting for review", waitingOn: undefined });
+    expect(review).toEqual({ kind: "review", label: "Ready for review", waitingOn: undefined });
   });
 
   it("tells an approval from an answer for your own waiting chat", () => {
@@ -92,7 +92,7 @@ describe("taskState", () => {
     const ana = thread({ key: "a", mine: false, person: "Ana", status: "blocked" });
     expect(taskState(task([ana]))).toEqual({
       kind: "waiting",
-      label: "Waiting on Ana",
+      label: "Blocked on Ana",
       waitingOn: "Ana",
     });
     expect(taskState(task([ana, thread({ key: "b", status: "working" })])).kind).toBe("working");
@@ -104,12 +104,8 @@ describe("taskState", () => {
   });
 
   it("is paused with chats and none at work, not started without chats", () => {
-    expect(taskState(task([thread({ key: "a", status: "idle" })])).label).toBe(
-      "Waiting to continue",
-    );
-    expect(taskState(task([thread({ key: "a", status: "done" })])).label).toBe(
-      "Waiting to continue",
-    );
+    expect(taskState(task([thread({ key: "a", status: "idle" })])).label).toBe("Paused");
+    expect(taskState(task([thread({ key: "a", status: "done" })])).label).toBe("Paused");
     expect(taskState(task([])).label).toBe("Not started");
   });
 

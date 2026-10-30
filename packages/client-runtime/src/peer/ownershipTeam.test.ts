@@ -633,11 +633,11 @@ describe("areas and tasks", () => {
       ),
     );
     expect(states).toEqual({
-      "ORD-7": ["Slavo", "Waiting for your review"],
+      "ORD-7": ["Slavo", "Ready for your review"],
       "ORD-9": ["Bob", "In progress"],
-      "ORD-11": ["Ana", "Waiting for Ana's review"],
+      "ORD-11": ["Ana", "Ready for Ana's review"],
       "ORD-15": ["Bob", "In progress"],
-      "ORD-12": ["Cyril", "Waiting on Cyril"],
+      "ORD-12": ["Cyril", "Blocked on Cyril"],
       "ORD-14": [null, "In progress"],
     });
   });

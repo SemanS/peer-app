@@ -268,7 +268,7 @@ describe("taskPageModel", () => {
       hub: hubTask({ status: "review" }),
       status: status({ handoffs: [summary(1, 300, 2), summary(2, 120, 3)] }),
     });
-    expect(built.state).toMatchObject({ kind: "review", label: "Waiting for review" });
+    expect(built.state).toMatchObject({ kind: "review", label: "Ready for review" });
     expect(built.tone).toBe("needs");
     expect(built.primary).toEqual({ kind: "review", label: "Review handoff #2" });
     expect(built.offerStart).toBe(true);
@@ -367,7 +367,7 @@ describe("taskPageModel", () => {
         ],
       }),
     });
-    expect(built.state).toMatchObject({ kind: "waiting", label: "Waiting on Ana" });
+    expect(built.state).toMatchObject({ kind: "waiting", label: "Blocked on Ana" });
     expect(built.waits).toEqual([]);
     expect(built.chats[0]).toMatchObject({
       mine: false,
@@ -458,7 +458,7 @@ describe("taskPageModel", () => {
     });
   });
 
-  it("names the writer once when it is the keeper, and counts notes that wait for the keeper", () => {
+  it("names the writer once when it is the keeper, and raises no notice for its findings", () => {
     const report = { id: "r", person: "Ana", text: "found it", at: ago(MIN) };
     const built = model(
       taskNode([], {
@@ -469,9 +469,7 @@ describe("taskPageModel", () => {
       }),
     );
     expect(built.context?.headline).toBe("Version 4 · kept by your agent · updated 40 min ago");
-    expect(built.context?.note).toBe(
-      "The notes every agent on this task reads. 2 findings wait for its keeper.",
-    );
+    expect(built.context?.note).toBe("The notes every agent on this task reads.");
   });
 
   it("says when nobody keeps the context and when a person brought a version back", () => {
@@ -698,14 +696,14 @@ describe("taskPageModel: a review asks its owner", () => {
 
   it("is the person's to do when they own the task: the review is a wait of theirs and the primary action", () => {
     const built = review(SLAVO);
-    expect(built.state).toMatchObject({ kind: "review", label: "Waiting for your review" });
+    expect(built.state).toMatchObject({ kind: "review", label: "Ready for your review" });
     expect(built.primary).toMatchObject({ kind: "review" });
     expect(built.waits.map((wait) => wait.kind)).toEqual(["review"]);
   });
 
   it("is Ana's when she owns it: the page says so, and the review is no wait of the person's", () => {
     const built = review(ANA);
-    expect(built.state).toMatchObject({ kind: "waiting", label: "Waiting for Ana's review" });
+    expect(built.state).toMatchObject({ kind: "waiting", label: "Ready for Ana's review" });
     expect(built.tone).toBe("working");
     expect(built.hollow).toBe(true);
     expect(built.waits).toEqual([]);
@@ -724,7 +722,7 @@ describe("taskPageModel: a review asks its owner", () => {
 
   it("asks everyone while ownership is not known, as before", () => {
     const built = model(handedOff(), { hub: hubTask({ status: "review" }) });
-    expect(built.state).toMatchObject({ kind: "review", label: "Waiting for review" });
+    expect(built.state).toMatchObject({ kind: "review", label: "Ready for review" });
     expect(built.waits.map((wait) => wait.kind)).toEqual(["review"]);
   });
 });

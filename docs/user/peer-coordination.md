@@ -417,25 +417,34 @@ workspace…**, which whoever shared the project from Peer and the workspace's o
 For a project only on this computer it offers **Share with <workspace>…** instead: after you confirm,
 the project moves under that workspace in the menu, its members see it and it gets team tasks.
 
-The Tasks view starts with **Search** (the command palette), **Overview** (the Work board) and
-**Needs you** with its count (see [Needs you](#needs-you-and-phone-alerts)). With one project,
-**New task** adds a task, and **More** holds **Request a teammate…**, **Notify agents…** and **New
-chat without a task**; a plugin that is turned off takes its item away. A new task needs only what
-needs doing: an area and a tracker issue such as `KRK-812` are optional (a chat whose branch names
-the issue joins the task), Enter creates it, **Create and start chat** also opens a chat on it, and
-**Create more** keeps the window open for the next one. Below come what holds now in
-the project (its signals as tiles, such as Overlaps and Memory, and its active announcement) and
-**Tasks**, with the number of active tasks and the project's tasks by area, two lines each: key and title, then the task's state and how many chats it has. A chip (**Review**, **Answer** or **Approve**) appears only while the task waits on you; the title opens the task's page, the chevron shows your chats with their agents' state, and a colleague's chats are counted in one line. **Done**
-folds the finished tasks under their own count, and no count adds done tasks to active ones. Under a
-rule are **Knowledge** ("N to keep", with **Shared context** beside it once an agent wrote one),
-**Activity** (what already happened: the catch-up of what changed, settled overlaps, earlier
-announcements, metrics, with "N new" for what changed while you were away), **Pull requests** (the
-project's, where the environment supports them) and **Project settings**. With all projects, each
-project is a card that counts its active tasks and what needs you, followed by its signals. A
-project no workspace shares has no team tasks; its chats are in Chats.
+**Search** (the command palette) and **Overview** (the Work board) sit beside the project button. The
+sidebar's tabs each have one purpose: **Tasks**, **Knowledge** and **Activity**, with Chats by the
+icon next to them.
+
+**Tasks** shows the project's areas, each with how much of it is done. With one OpenSpec change open,
+its name stands under the project's and its sections are the areas. A task shows its key, a short name
+and its state; hover it for the full text, which stays as written on the task's page. Finished tasks
+fold inside their area. **+** at the head of the areas adds a task, and **More** holds **Request a
+teammate…**, **Notify agents…** and **New chat without a task**; a plugin that is turned off takes its
+item away. A new task needs only what needs doing: an area and a tracker issue such as `KRK-812` are
+optional (a chat whose branch names the issue joins the task), Enter creates it, **Create and start
+chat** also opens a chat on it, and **Create more** keeps the window open for the next one.
+
+**Knowledge** is what holds beyond one task: saved knowledge ("N to keep"), the project context and
+Memory. What a task learned is on that task's page. **Activity** is what moved: **Changes**, **Pull
+requests** where the environment supports them, open overlaps, and the catch-up of what changed. The
+project button holds **People and owners** and **Project settings**.
+
+**Needs your attention** at the foot of the sidebar lists what waits for your decision or review, in
+any tab (see [Needs you](#needs-you-and-phone-alerts)); it is gone when nothing does. With all projects,
+Tasks lists each project with what needs you. A project no workspace shares has no team tasks; its
+chats are in Chats.
+
+A task's page holds everything about it: its brief with outcome, contract and test criteria, runs,
+handoff, dependencies, tests and what agents found.
 
 **Overview** opens the **Work board**: one card per task of the chosen
-projects in the columns **Needs you**, **In progress**, **Paused** and **Not started**, with
+projects in the columns **Needs your attention**, **In progress**, **Paused** and **Not started**, with
 **Everyone** or **Mine**, a search and a list layout. A task waiting for your review, approval or
 answer is under Needs you whatever its chats do; one whose chat waits for a colleague stays under In
 progress, marked **Waiting on** that person. A column with no card is one line under the board, with
@@ -1174,7 +1183,7 @@ without acceptance shows none of it and changes nothing.
 
 ## Needs you and Phone alerts
 
-**Needs you** in the Tasks view of the sidebar on web and desktop counts, and the Overview's first column lists, your agents waiting for an approval or an answer (including on your other computer), team requests addressed to you, overlaps that need a decision and changed inputs blocking a handoff. The count and the column are the same list. An **Inputs changed** card opens its task context, which shows the versions the agent read and the current ones; the agent must update its inputs before handoff.
+**Needs your attention** at the foot of the sidebar on web and desktop and the Overview's first column list your agents waiting for an approval or an answer (including on your other computer), team requests addressed to you, and overlaps that need a decision. The count and the column are the same list. Changed inputs are the agent's to update before a handoff, so they appear on the task context, with the versions the agent read and the current ones, and on the phone's Needs you.
 
 On mobile, open **Needs you** from the Home list or **Settings → Peer workspaces**. Review a request and choose a computer to **Accept request and start agent**. A computer explains anything blocking startup. Accepted requests remain under **Recently accepted**; acceptance does not confirm that an agent started. Check herdr before starting another agent when startup was not confirmed. For an unanswered overlap, use **Ask again** or **Close it yourself**. Answer a blocked herdr agent in herdr (mobile shows the command to attach a terminal on that computer); mobile can show its recent work.
 

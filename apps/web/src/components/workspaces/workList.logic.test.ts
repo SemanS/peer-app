@@ -161,7 +161,7 @@ describe("stateText", () => {
   };
 
   it("reads the state's words", () => {
-    expect(stateOf(task("ord-1", [chat("a")], { inReview: true }))).toBe("Waiting for review");
+    expect(stateOf(task("ord-1", [chat("a")], { inReview: true }))).toBe("Ready for review");
     expect(stateOf(task("ord-5", []))).toBe("Not started");
   });
 

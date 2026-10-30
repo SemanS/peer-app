@@ -278,7 +278,7 @@ describe("the owner on a task's card", () => {
       });
     };
     await render(CYRIL);
-    expect(words(renderer!.root)).toContain("Waiting for Bob's review");
+    expect(words(renderer!.root)).toContain("Ready for Bob's review");
     expect(button("Review")).toBeUndefined();
     await act(async () => renderer!.unmount());
     await render(BOB);

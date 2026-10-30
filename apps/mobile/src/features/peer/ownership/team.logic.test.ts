@@ -222,7 +222,7 @@ describe("the areas", () => {
   });
 
   it("says a review that asks someone else is a review, not a task that waits on them", () => {
-    // ORD-11 reads "Waiting for Ana's review" to Slavo; the area still says in review.
+    // ORD-11 reads "Ready for Ana's review" to Slavo; the area still says in review.
     const payments = teamOf({
       tasks: TASKS.filter((task) => task.area !== "Payments" || task.id === "ord-11"),
     });

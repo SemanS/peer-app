@@ -1,14 +1,19 @@
 import { needsByOpen } from "@t3tools/client-runtime/peer/work";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { useLocation } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import { FileTextIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Button } from "../ui/button";
-import { ProjectActions } from "./ProjectActions";
+import { SidebarMenu } from "../ui/sidebar";
 import { ProjectHistory } from "./ProjectHistory";
 import { ProjectSection } from "./ProjectSection";
-import { isLocalScope } from "./projectScope.logic";
+import { SignalTiles } from "./ProjectSignals";
+import { isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
 import { ShareProject } from "./ShareProject";
+import { NavRow, ProjectActivityNav, ProjectKnowledgeNav } from "./SidebarNav";
+import type { SidebarTab } from "./SidebarViewSwitch.logic";
+import { useLocalProject } from "./StableWorkNavigation";
 import { useOpenScopedChats } from "./useOpenScopedChats";
 import { sidebarNav } from "./sidebarNav.logic";
 import { WorkSectionLabel, WorkHereContext } from "./marks";
@@ -20,57 +25,76 @@ import { ALL_PROJECTS, inScope, projectScopeKey } from "./workBoard.logic";
 import type { WorkProjectNode } from "./workTree.logic";
 
 /**
- * The sidebar's Tasks view, for the project the project button names (`scope`, which the root
- * checked against the projects there are). Search, Overview and Needs you lead; with all projects
- * the view groups tasks and navigation under expandable project headings; with one it shows its
- * Knowledge, Activity, Pull requests and Project settings. A project no workspace shares has no
- * team tasks, and the view says so.
+ * The team's work in the sidebar, for the project the project button names (`scope`, which the root
+ * checked against the projects there are). Each tab has a purpose of its own: Tasks is the work by
+ * area, Knowledge what holds beyond one task, Activity what moved. With all projects, Tasks groups
+ * the work under expandable project headings. A project no workspace shares has no team tasks, and
+ * the view says so.
  */
-export function WorkPanel({ scope }: { readonly scope: string }) {
+export function WorkPanel({
+  scope: resolved,
+  tab,
+}: {
+  readonly scope: ResolvedProjectScope;
+  readonly tab: SidebarTab;
+}) {
   const { environmentId, status, plugins, tree, here, needs, actions, activeThread } =
     useWorkData();
+  const scope = resolved.scope;
   const local = isLocalScope(scope);
   const current = tree.find((project) => projectScopeKey(project) === scope);
-  // The project whose Activity shows; choosing another project leaves it.
-  const [historyOf, setHistoryOf] = useState<string | null>(null);
-  const keepsHistory = plugins.some((plugin) => plugin.projectHistory !== undefined);
-  // What the rows count: the project in scope, or every project; a local project has no tasks.
   const counts = sidebarNav(
     tree.filter((project) => inScope(scope, project)),
     needs,
   );
   // What each of your waiting chats waits for, so a task's row tells an approval from an answer.
   const needOf = needsByOpen(needs);
-  const historyProject = tree.find(
-    (project) =>
-      !local &&
-      projectScopeKey(project) === historyOf &&
-      (scope === ALL_PROJECTS || scope === historyOf),
-  );
-  const showingHistory = environmentId !== null && status !== null && historyProject !== undefined;
 
   return (
     <WorkHereContext.Provider value={here}>
       <div className="flex flex-col gap-5 pb-6">
-        {environmentId !== null && status !== null && current !== undefined && !showingHistory ? (
-          <ProjectActions
-            key={projectScopeKey(current)}
-            environmentId={environmentId}
-            status={status}
-            project={current}
-            plugins={plugins}
-            activeThread={activeThread}
-          />
-        ) : null}
-        {showingHistory ? (
-          <ProjectHistory
-            environmentId={environmentId}
-            status={status}
-            project={historyProject}
-            plugins={plugins}
-            activeThread={activeThread}
-            onBack={() => setHistoryOf(null)}
-          />
+        {tab !== "tasks" ? (
+          environmentId === null || status === null ? (
+            <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
+          ) : local ? (
+            <LocalProjectTab scope={resolved} tab={tab} />
+          ) : current === undefined ? (
+            <p className="px-2 text-xs leading-relaxed text-muted-foreground">
+              Choose a project to see its {tab === "knowledge" ? "knowledge" : "activity"}.
+            </p>
+          ) : tab === "knowledge" ? (
+            <ProjectKnowledgeNav
+              status={status}
+              project={current}
+              plugins={plugins}
+              activeThread={activeThread}
+              sharedContext={counts.sharedContext}
+            />
+          ) : (
+            <section aria-label="Activity" className="flex flex-col gap-3">
+              <ProjectActivityNav
+                environmentId={environmentId}
+                status={status}
+                project={current}
+                plugins={plugins}
+                activeThread={activeThread}
+              />
+              <SignalTiles
+                status={status}
+                project={current}
+                plugins={plugins}
+                activeThread={activeThread}
+                show={(signal) => signal.id === "overlaps"}
+              />
+              <ProjectHistory
+                environmentId={environmentId}
+                status={status}
+                project={current}
+                plugins={plugins}
+                activeThread={activeThread}
+              />
+            </section>
+          )
         ) : (
           <>
             {environmentId === null || status === null ? null : (
@@ -125,12 +149,7 @@ export function WorkPanel({ scope }: { readonly scope: string }) {
                       plugins={plugins}
                       activeThread={activeThread}
                       actions={actions}
-                      counts={sidebarNav([project], needs)}
                       needOf={needOf}
-                      tasksNavigation={false}
-                      onHistory={
-                        keepsHistory ? () => setHistoryOf(projectScopeKey(project)) : undefined
-                      }
                     />
                   </ProjectDisclosure>
                 ))}
@@ -144,9 +163,8 @@ export function WorkPanel({ scope }: { readonly scope: string }) {
                 plugins={plugins}
                 activeThread={activeThread}
                 actions={actions}
-                counts={counts}
                 needOf={needOf}
-                onHistory={keepsHistory ? () => setHistoryOf(projectScopeKey(current)) : undefined}
+                heading
               />
             )}
             {environmentId !== null && status?.signedIn && status.workspaces.length > 0 ? (
@@ -156,6 +174,34 @@ export function WorkPanel({ scope }: { readonly scope: string }) {
         )}
       </div>
     </WorkHereContext.Provider>
+  );
+}
+
+/** What a project no workspace shares has under Knowledge and Activity. */
+function LocalProjectTab({
+  scope,
+  tab,
+}: {
+  readonly scope: ResolvedProjectScope;
+  readonly tab: SidebarTab;
+}) {
+  const navigate = useNavigate();
+  const { context } = useLocalProject(scope);
+  if (tab !== "knowledge" || context === undefined) {
+    return (
+      <p className="px-2 text-xs leading-relaxed text-muted-foreground">
+        A project shared with a workspace keeps its {tab} here.
+      </p>
+    );
+  }
+  return (
+    <SidebarMenu aria-label="Project knowledge">
+      <NavRow
+        icon={FileTextIcon}
+        label="Project context"
+        onClick={() => void navigate({ to: "/context/$workspace/$project/$scope", ...context })}
+      />
+    </SidebarMenu>
   );
 }
 

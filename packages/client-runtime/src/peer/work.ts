@@ -260,7 +260,7 @@ export type TaskStateKind =
 /** A task's state as every Work view says it, in words. */
 export interface TaskState {
   readonly kind: TaskStateKind;
-  /** "Waiting for review", "Needs your answer", "Waiting on Ana"… */
+  /** "Ready for review", "Needs your answer", "Blocked on Ana"… */
   readonly label: string;
   /** Whom a colleague's waiting chat waits on, for `waiting`. */
   readonly waitingOn: string | undefined;
@@ -268,11 +268,11 @@ export interface TaskState {
 
 const TASK_STATE_LABEL: Readonly<Record<Exclude<TaskStateKind, "waiting">, string>> = {
   done: "Done",
-  review: "Waiting for review",
+  review: "Ready for review",
   approval: "Needs your approval",
   input: "Needs your answer",
   working: "In progress",
-  paused: "Waiting to continue",
+  paused: "Paused",
   new: "Not started",
 };
 
@@ -291,9 +291,9 @@ export const TASK_STATES_NEEDING_YOU: ReadonlySet<TaskStateKind> = new Set([
  * tells an approval from an answer; without it a waiting chat of yours reads as an answer.
  *
  * A review asks the person only when `route` says so (it asks everyone without one, as before
- * ownership): "Waiting for your review". One that asks someone else is no state of the person's:
+ * ownership): "Ready for your review". One that asks someone else is no state of the person's:
  * what their own chats wait for comes first, and otherwise the task waits on that person,
- * "Waiting for Slavo's review", under In progress.
+ * "Ready for Slavo's review", under In progress.
  */
 export function taskState(
   task: WorkTaskNode,
@@ -310,7 +310,7 @@ export function taskState(
   if (task.inReview === true && !askedElsewhere) {
     return route === undefined || route.audience === "everyone"
       ? state("review")
-      : { kind: "review", label: "Waiting for your review", waitingOn: undefined };
+      : { kind: "review", label: "Ready for your review", waitingOn: undefined };
   }
   const live = task.threads.filter((thread) => !thread.stale);
   const waitingMine = live.filter((thread) => thread.mine && thread.status === "blocked");
@@ -325,7 +325,7 @@ export function taskState(
   if (live.some((thread) => thread.status === "working")) return state("working");
   const waiting = live.find((thread) => !thread.mine && thread.status === "blocked");
   if (waiting !== undefined)
-    return { kind: "waiting", label: `Waiting on ${waiting.person}`, waitingOn: waiting.person };
+    return { kind: "waiting", label: `Blocked on ${waiting.person}`, waitingOn: waiting.person };
   return state(task.threads.length > 0 ? "paused" : "new");
 }
 
@@ -335,7 +335,7 @@ function waitingForReview(route: ReviewRoute): TaskState {
     route.audience === "leads" && route.names.length !== 1 ? "a lead" : route.names[0];
   return {
     kind: "waiting",
-    label: `Waiting for ${reviewer ?? "someone"}'s review`,
+    label: `Ready for ${reviewer ?? "someone"}'s review`,
     waitingOn: reviewer,
   };
 }
@@ -1310,15 +1310,16 @@ export function projectCounts(
 /**
  * The Work board and list by task, as the web shows them: one card per task, in the column its
  * `taskState` puts it in. What waits on the person besides tasks (a teammate's request, an overlap
- * to decide, inputs that changed) stays under Needs you as its own card. The cards by thread above
+ * to decide) stays under Needs you as its own card; inputs that changed are the agents' to re-read,
+ * nothing a person decides, so they make no card here. The cards by thread above
  * stay for the phone and the sidebar until they follow; `needs` is Needs you's id in both.
  */
 export type TaskColumn = "needs" | "working" | "paused" | "new";
 
 export const TASK_COLUMNS: ReadonlyArray<{ readonly id: TaskColumn; readonly title: string }> = [
-  { id: "needs", title: "Needs you" },
+  { id: "needs", title: "Needs your attention" },
   { id: "working", title: "In progress" },
-  { id: "paused", title: "Waiting to continue" },
+  { id: "paused", title: "Paused" },
   { id: "new", title: "Not started" },
 ];
 
@@ -1476,6 +1477,14 @@ function taskUpdatedAt(project: WorkProjectNode, task: WorkTaskNode): string | u
  * Your chats and agents on no task that wait for your approval or answer, one card each. One on a
  * task is that task's state already ("Needs your approval"), and a finished turn waits on nobody.
  */
+/** What waits on a person besides tasks and chats: what asks for a decision, no agent's upkeep. */
+function personNeedCards(
+  tree: ReadonlyArray<WorkProjectNode>,
+  needs: ReadonlyArray<NeedsYouItem>,
+): ReadonlyArray<NeedCard> {
+  return needCards(tree, needs).filter((card) => card.kind !== "stale");
+}
+
 function chatNeedCards(
   tree: ReadonlyArray<WorkProjectNode>,
   needs: ReadonlyArray<NeedsYouItem>,
@@ -1653,7 +1662,7 @@ export function taskCards(
   const scoped = tree.filter((project) => inScope(input.scope, project));
   return [
     ...scoped.flatMap((project) => projectTaskCards(project, needOf)),
-    ...needCards(scoped, needs),
+    ...personNeedCards(scoped, needs),
     ...chatNeedCards(scoped, needs),
   ]
     .filter(
@@ -1686,7 +1695,7 @@ export function taskCounts(
   const counts = { needs: 0, working: 0, paused: 0, new: 0, active: 0, done: 0 };
   for (const card of [
     ...projectTaskCards(project, needsByOpen(needs)),
-    ...needCards([project], needs),
+    ...personNeedCards([project], needs),
     ...chatNeedCards([project], needs),
   ]) {
     if (mine && !taskCardIsMine(card, me)) continue;

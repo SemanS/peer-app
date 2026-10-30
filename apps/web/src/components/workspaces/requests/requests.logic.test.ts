@@ -161,7 +161,7 @@ describe("the tasks a request can name", () => {
       ),
     ).toEqual([
       { id: "a", title: "Allergen check", label: "ORD-5 · Allergen check", state: "Not started" },
-      { id: "c", title: "Task c", label: "Task c", state: "Waiting for review" },
+      { id: "c", title: "Task c", label: "Task c", state: "Ready for review" },
     ]);
   });
 
@@ -207,11 +207,11 @@ describe("the tasks a request can name", () => {
         (option) => option.state,
       );
     // Bob owns it, so the review is his; for Cyril the task waits on Bob.
-    expect(states("bob@acme.test")).toEqual(["Waiting for your review"]);
-    expect(states("cyril@acme.test")).toEqual(["Waiting for Bob's review"]);
+    expect(states("bob@acme.test")).toEqual(["Ready for your review"]);
+    expect(states("cyril@acme.test")).toEqual(["Ready for Bob's review"]);
     // Without ownership (the plugin off) a review asks everyone, as before.
     expect(taskOptions(inArea([task("c", { inReview: true })])).map((o) => o.state)).toEqual([
-      "Waiting for review",
+      "Ready for review",
     ]);
   });
 

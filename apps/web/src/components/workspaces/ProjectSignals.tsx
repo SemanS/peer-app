@@ -73,15 +73,21 @@ export function SignalTiles({
   project,
   plugins,
   activeThread = null,
+  show,
 }: {
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly activeThread?: string | null;
+  /** Which signals this place shows; a tab shows the ones that belong to it. */
+  readonly show?: (signal: ProjectSignal) => boolean;
 }) {
   const navigate = useNavigate();
   const tiles = projectSignals(status, project, plugins).filter(
-    (signal) => signal.open !== undefined && (signal.count === null || signal.count > 0),
+    (signal) =>
+      (show === undefined || show(signal)) &&
+      signal.open !== undefined &&
+      (signal.count === null || signal.count > 0),
   );
   if (tiles.length === 0) return null;
   return (

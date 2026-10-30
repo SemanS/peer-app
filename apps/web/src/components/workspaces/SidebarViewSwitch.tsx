@@ -1,18 +1,31 @@
 import { useLocation } from "@tanstack/react-router";
 import * as Schema from "effect/Schema";
+import { MessagesSquareIcon } from "lucide-react";
 import { useEffect } from "react";
 
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { usePrimaryEnvironment } from "../../state/environments";
 import { useUiStateStore } from "../../uiStateStore";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
-import { SIDEBAR_VIEW_LABELS, type SidebarView } from "./SidebarViewSwitch.logic";
+import {
+  SIDEBAR_TABS,
+  sidebarSwitchChoice,
+  sidebarSwitchValue,
+  type SidebarTab,
+  type SidebarView,
+} from "./SidebarViewSwitch.logic";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 import { sidebarViewForLocation } from "./sidebarRoutes.logic";
 
-export type { SidebarView } from "./SidebarViewSwitch.logic";
+export type { SidebarTab, SidebarView } from "./SidebarViewSwitch.logic";
 
 const StoredView = Schema.NullOr(Schema.Literals(["work", "threads"]));
+const StoredTab = Schema.Literals(["tasks", "knowledge", "activity"]);
+
+/** Which tab of the team's work the sidebar shows, remembered on this computer. */
+export function useSidebarTab(): readonly [SidebarTab, (tab: SidebarTab) => void] {
+  return useLocalStorage("peer:sidebar-tab", "tasks", StoredTab);
+}
 
 /** The chosen view; until someone chooses, Tasks for people in a workspace, Chats otherwise. */
 export function useSidebarView(): readonly [SidebarView, (view: SidebarView) => void] {
@@ -41,17 +54,21 @@ export function useRememberSidebarRoute(): void {
 }
 
 /**
- * Tasks (the team's work, Project → Area → Task) or Chats (this computer's threads), and under
- * it one line saying which project they show.
+ * Tasks, Knowledge and Activity (the team's work, each with a purpose of its own) and, by its icon,
+ * Chats (this computer's threads).
  */
 export function SidebarViewSwitch({
   view,
+  tab,
   onChange,
+  onTab,
   scopeLine,
 }: {
   readonly view: SidebarView;
+  readonly tab: SidebarTab;
   readonly onChange: (view: SidebarView) => void;
-  /** `sidebarScopeLine`: "Team tasks in ‹project›", "Your chats in all projects". */
+  readonly onTab: (tab: SidebarTab) => void;
+  /** `sidebarScopeLine`: "Work in ‹project›", "Your chats in all projects". */
   readonly scopeLine: string;
 }) {
   return (
@@ -60,17 +77,22 @@ export function SidebarViewSwitch({
         className="w-full"
         aria-label="Sidebar view"
         variant="liquid"
-        value={[view]}
+        size="compact"
+        value={[sidebarSwitchValue(view, tab)]}
         onValueChange={(next) => {
-          const value = next[0];
-          if (value === "work" || value === "threads") onChange(value);
+          const choice = sidebarSwitchChoice(next[0]);
+          if (choice === undefined) return;
+          if (choice.tab !== undefined) onTab(choice.tab);
+          onChange(choice.view);
         }}
       >
-        <Toggle className="flex-1" value="work">
-          {SIDEBAR_VIEW_LABELS.work}
-        </Toggle>
-        <Toggle className="flex-1" value="threads">
-          {SIDEBAR_VIEW_LABELS.threads}
+        {SIDEBAR_TABS.map((candidate) => (
+          <Toggle key={candidate.id} className="min-w-0 flex-auto" value={candidate.id}>
+            <span className="truncate">{candidate.label}</span>
+          </Toggle>
+        ))}
+        <Toggle className="shrink-0" value="chats" aria-label="Chats">
+          <MessagesSquareIcon aria-hidden />
         </Toggle>
       </ToggleGroup>
       <p className="sr-only">{scopeLine}</p>

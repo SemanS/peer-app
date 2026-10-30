@@ -34,7 +34,8 @@ function ToggleGroup({
           : "*:pointer-coarse:after:min-h-auto",
         variant === "liquid"
           ? cn(
-              "gap-1 rounded-full border border-foreground/8 bg-input/25 p-1",
+              "rounded-full border border-foreground/8 bg-input/25 p-1",
+              size === "compact" ? "gap-0.5" : "gap-1",
               orientation === "vertical" && "flex-col rounded-2xl",
             )
           : variant === "navigation"

@@ -388,7 +388,7 @@ describe("taskColumn", () => {
     expect(taskColumn(state("approval"))).toBe("needs");
     expect(taskColumn(state("input"))).toBe("needs");
     expect(taskColumn(state("working"))).toBe("working");
-    expect(taskColumn({ kind: "waiting", label: "Waiting on Ana", waitingOn: "Ana" })).toBe(
+    expect(taskColumn({ kind: "waiting", label: "Blocked on Ana", waitingOn: "Ana" })).toBe(
       "working",
     );
     expect(taskColumn(state("paused"))).toBe("paused");
@@ -401,9 +401,9 @@ describe("taskColumn", () => {
 
   it("titles the columns as the board does, Needs you first", () => {
     expect(TASK_COLUMNS.map((column) => column.title)).toEqual([
-      "Needs you",
+      "Needs your attention",
       "In progress",
-      "Waiting to continue",
+      "Paused",
       "Not started",
     ]);
   });
@@ -437,7 +437,7 @@ describe("taskCards", () => {
       project("ordering", [task("ord-7", [chat("a", { status: "working" })], { inReview: true })]),
     ];
     const card = onlyTask(taskCards(tree, everyone), "ORD-7");
-    expect(card.state.label).toBe("Waiting for review");
+    expect(card.state.label).toBe("Ready for review");
     expect(card.column).toBe("needs");
   });
 
@@ -454,7 +454,7 @@ describe("taskCards", () => {
     const cards = taskCards(tree, everyone);
     expect(inColumn(cards, "needs")).toEqual(["ORD-3"]);
     expect(inColumn(cards, "working").toSorted()).toEqual(["ORD-2", "ORD-6"]);
-    expect(onlyTask(cards, "ORD-6").state.label).toBe("Waiting on Eva");
+    expect(onlyTask(cards, "ORD-6").state.label).toBe("Blocked on Eva");
     expect(inColumn(cards, "paused")).toEqual(["REC-2"]);
     expect(inColumn(cards, "new")).toEqual(["ORD-5"]);
   });
@@ -538,7 +538,7 @@ describe("taskCards", () => {
     expect(onlyTask(taskCards(tree, everyone), "ORD-2").action).toBeUndefined();
   });
 
-  it("keeps request, overlap and stale cards under Needs you beside the tasks that wait", () => {
+  it("keeps what a person decides under Needs you and leaves changed inputs to the agents", () => {
     const tree = [
       project("booking", [
         task("bkg-1", [chat("a", { status: "blocked" })]),
@@ -548,12 +548,12 @@ describe("taskCards", () => {
     ];
     const cards = taskCards(tree, { ...everyone, needs: [request, overlap, stale] });
     expect(inColumn(cards, "needs").toSorted()).toEqual(
-      ["BKG-1", request.key, overlap.key, stale.key].toSorted(),
+      ["BKG-1", request.key, overlap.key].toSorted(),
     );
     expect(inColumn(cards, "working")).toEqual(["BKG-2"]);
     expect(cards.find((card) => card.kind === "request")?.task?.key).toBe("BKG-1");
     expect(cards.find((card) => card.kind === "overlap")?.project.projectId).toBe("hub");
-    expect(cards.find((card) => card.kind === "stale")?.project.projectId).toBe("booking");
+    expect(cards.some((card) => card.kind === "stale")).toBe(false);
   });
 
   it("scopes to one project and keeps the cards that concern it", () => {
@@ -677,7 +677,7 @@ describe("taskCards", () => {
       expect(find("orders")).toEqual(["ORD-1", "ORD-2", "ORD-4"]);
       expect(find("no area")).toEqual(["ORD-5", "ORD-6"]);
       expect(find("ana")).toEqual(["ORD-2"]);
-      expect(find("waiting for review")).toEqual(["ORD-4"]);
+      expect(find("ready for review")).toEqual(["ORD-4"]);
     });
 
     it("finds a request by its sender", () => {
@@ -712,9 +712,9 @@ describe("taskCounts", () => {
     });
   });
 
-  it("counts requests, overlaps and stale inputs under Needs you, but not as tasks", () => {
+  it("counts what a person decides under Needs you, but not as tasks", () => {
     const counts = taskCounts(booking, false, [request, stale]);
-    expect(counts.needs).toBe(4);
+    expect(counts.needs).toBe(3);
     expect(counts.active).toBe(5);
   });
 

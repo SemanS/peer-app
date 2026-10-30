@@ -33,6 +33,7 @@ import { confirmed, reportFailure } from "./workFeedback";
 import { STATUS_LABEL, StatusGlyph } from "./workStatus";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 import { PeerCoordTimeline } from "./PeerCoordTimeline";
+import { TASK_PAGE_SECTIONS } from "./task/TaskView";
 import { HandoffChatContext, type HandoffChat } from "./review/HandoffChat";
 import { handoffChat } from "./review/review.logic";
 import { usePeerPlugins } from "./slots";
@@ -409,7 +410,8 @@ export function WorkContextView({
                   {environmentId === null || status === null ? null : (
                     <HandoffChatContext value={chat}>
                       {plugins.map(({ id, taskContext: Section }) =>
-                        Section === undefined ? null : (
+                        Section === undefined ||
+                        (task !== undefined && TASK_PAGE_SECTIONS.has(id)) ? null : (
                           <Section
                             key={id}
                             environmentId={environmentId}
@@ -464,7 +466,7 @@ export function WorkContextView({
                   })
                 }
               />
-              {context === undefined ? null : <Reports context={context} />}
+              {context === undefined || task !== undefined ? null : <Findings context={context} />}
               {environmentId === null || status === null ? null : (
                 <ContextAgents
                   environmentId={environmentId}
@@ -503,42 +505,25 @@ function keeperLine(context: WorkContextNode): string {
     .join(" · ");
 }
 
-/** What the work's agents found that the context's keeper has not decided yet. */
-function Reports({ context }: { readonly context: WorkContextNode }) {
+/** What agents found on work no task holds; a task's own findings are on its page. */
+function Findings({ context }: { readonly context: WorkContextNode }) {
+  if (context.reports.length === 0) return null;
   return (
-    <section aria-label="For the team" className="flex flex-col gap-2.5">
-      <PeerSectionLabel
-        after={
-          context.reports.length === 0 ? undefined : (
-            <Badge variant="knowledge" size="sm">
-              {context.reports.length} waiting
-            </Badge>
-          )
-        }
-      >
-        For the team
-      </PeerSectionLabel>
-      {context.reports.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Nothing waits for the keeper. What the work&apos;s agents find goes to the agent keeping
-          it until it incorporates or dismisses it.
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {context.reports.map((report) => (
-            <li
-              key={report.id}
-              className="flex flex-col gap-1 rounded-xl border border-border bg-card px-3.5 py-3"
-            >
-              <p className="text-sm text-foreground">{report.text}</p>
-              <p className="text-xs text-muted-foreground">
-                {report.person}’s agent · {formatRelativeTimeLabel(report.at)} · waits for the
-                keeper
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
+    <section aria-label="Findings" className="flex flex-col gap-2.5">
+      <PeerSectionLabel>Findings</PeerSectionLabel>
+      <ul className="flex flex-col gap-2">
+        {context.reports.map((report) => (
+          <li
+            key={report.id}
+            className="flex flex-col gap-1 rounded-xl border border-border bg-card px-3.5 py-3"
+          >
+            <p className="text-sm text-foreground">{report.text}</p>
+            <p className="text-xs text-muted-foreground">
+              {report.person}’s agent · {formatRelativeTimeLabel(report.at)}
+            </p>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

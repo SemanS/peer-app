@@ -1,21 +1,75 @@
+import { useAtomValue } from "@effect/atom-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { FileTextIcon } from "lucide-react";
+import { LayoutGridIcon, SearchIcon } from "lucide-react";
 import { PEER_LOCAL_WORKSPACE } from "@t3tools/contracts";
-import { SidebarMenu, useSidebar } from "../ui/sidebar";
-import { NavRow, TopNav } from "./SidebarNav";
-import { projectSignals } from "./ProjectSignals";
+
+import { openCommandPalette } from "../../commandPaletteBus";
+import { shortcutLabelForCommand } from "../../keybindings";
+import { primaryServerKeybindingsAtom } from "../../state/server";
+import { Button } from "../ui/button";
+import { useSidebar } from "../ui/sidebar";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { chatScopeKeys, isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
-import { sidebarNav } from "./sidebarNav.logic";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 import { useWorkData } from "./useWorkData";
-import { ALL_PROJECTS, inScope, projectScopeKey } from "./workBoard.logic";
 
-export function StableWorkNavigation({ scope }: { readonly scope: ResolvedProjectScope }) {
-  const { status: primaryStatus, threads, tree, plugins, needs, activeThread } = useWorkData();
+/** Search and the board: what holds for every project, beside the project they start from. */
+export function SidebarTools({ scope }: { readonly scope: string }) {
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
-  const pathname = useLocation({ select: (location) => location.pathname });
-  const project = tree.find((project) => projectScopeKey(project) === scope.scope);
+  const onBoard = useLocation({
+    select: (location) => location.pathname === "/work" && location.search.view !== "needs-you",
+  });
+  const keybindings = useAtomValue(primaryServerKeybindingsAtom);
+  const shortcut = shortcutLabelForCommand(keybindings, "commandPalette.toggle");
+  return (
+    <div className="flex shrink-0 items-center" role="navigation" aria-label="Peer navigation">
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              size="icon-xs"
+              variant="ghost-muted"
+              aria-label="Search"
+              onClick={() => openCommandPalette()}
+            />
+          }
+        >
+          <SearchIcon aria-hidden />
+        </TooltipTrigger>
+        <TooltipPopup side="bottom">
+          {shortcut === null ? "Search" : `Search ${shortcut}`}
+        </TooltipPopup>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              size="icon-xs"
+              variant="ghost-muted"
+              aria-label="Overview"
+              aria-current={onBoard ? "page" : undefined}
+              onClick={() => {
+                if (isMobile) setOpenMobile(false);
+                void navigate({ to: "/work", search: { scope } });
+              }}
+            />
+          }
+        >
+          <LayoutGridIcon aria-hidden />
+        </TooltipTrigger>
+        <TooltipPopup side="bottom">Overview</TooltipPopup>
+      </Tooltip>
+    </div>
+  );
+}
+
+/**
+ * What a project no workspace shares has of Peer: the chats and overlaps that wait on the person,
+ * and the coordination record of its one Peer project, when there is one.
+ */
+export function useLocalProject(scope: ResolvedProjectScope) {
+  const { status: primaryStatus, threads } = useWorkData();
   const local = isLocalScope(scope.scope);
   const targetEnvironment = local ? scope.refs?.[0]?.environmentId : undefined;
   const targetStatus = usePeerHubStatus(targetEnvironment ?? null);
@@ -31,8 +85,9 @@ export function StableWorkNavigation({ scope }: { readonly scope: ResolvedProjec
     ).values(),
   ];
   const localIds = new Set(localProjects.map((entry) => entry.id));
-  const count = local
-    ? threads.filter(
+  const needs = !local
+    ? 0
+    : threads.filter(
         (thread) =>
           keys?.has(`${thread.environmentId}:${thread.projectId}`) &&
           thread.deletedAt === null &&
@@ -42,59 +97,20 @@ export function StableWorkNavigation({ scope }: { readonly scope: ResolvedProjec
       ).length +
       (status?.coordination.overlaps.filter(
         (overlap) => overlap.state === "open" && localIds.has(overlap.project),
-      ).length ?? 0)
-    : scope.scope === ALL_PROJECTS
-      ? needs.length
-      : sidebarNav(
-          tree.filter((item) => inScope(scope.scope, item)),
-          needs,
-        ).needs;
-  const core =
-    status === null || project === undefined
-      ? []
-      : projectSignals(status, project, plugins).filter(
-          (signal) => signal.id === "knowledge" || signal.id === "team",
-        );
-  const open = (action: () => unknown) => {
-    if (isMobile) setOpenMobile(false);
-    void action();
+      ).length ?? 0);
+  const only = local && localProjects.length === 1 ? localProjects[0] : undefined;
+  return {
+    needs,
+    context:
+      only === undefined
+        ? undefined
+        : {
+            params: {
+              workspace: PEER_LOCAL_WORKSPACE,
+              project: only.id,
+              scope: "project-aggregate",
+            },
+            search: { environmentId: targetEnvironment },
+          },
   };
-  return (
-    <div className="flex flex-col gap-1">
-      <TopNav needs={count} scope={scope.scope} />
-      {core.length === 0 && localProjects.length !== 1 ? null : (
-        <SidebarMenu aria-label="Project destinations">
-          {core.map((signal) => (
-            <NavRow
-              key={signal.id}
-              icon={signal.icon}
-              label={signal.label}
-              active={activeThread === `${signal.id}:${project!.workspace}:${project!.projectId}`}
-              onClick={() => open(() => signal.open?.(navigate))}
-            />
-          ))}
-          {local && localProjects.length === 1 ? (
-            <NavRow
-              icon={FileTextIcon}
-              label="Current status"
-              active={pathname.startsWith("/context/")}
-              onClick={() =>
-                open(() =>
-                  navigate({
-                    to: "/context/$workspace/$project/$scope",
-                    params: {
-                      workspace: PEER_LOCAL_WORKSPACE,
-                      project: localProjects[0]!.id,
-                      scope: "project-aggregate",
-                    },
-                    search: { environmentId: targetEnvironment },
-                  }),
-                )
-              }
-            />
-          ) : null}
-        </SidebarMenu>
-      )}
-    </div>
-  );
 }

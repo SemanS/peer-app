@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { taskShortTitle } from "@t3tools/client-runtime/peer/taskTitle";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronsUpDownIcon, PlusIcon, Share2Icon, ShieldIcon } from "lucide-react";
 
@@ -29,6 +30,8 @@ import {
 import { useOrganizationStatus } from "./ActiveOrganization";
 import { usePeerHub, useProjectScope } from "./projectScope";
 import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
+import { projectSignals } from "./ProjectSignals";
+import { sidebarTasks } from "./sidebarTasks.logic";
 import { ProjectMark, projectColor } from "./signals";
 import {
   actionsForScope,
@@ -117,14 +120,10 @@ export function WorkScopePicker({
       >
         <ScopeMark current={current} marks={marks} className={compact ? "size-4" : "size-7"} />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          {compact ? null : (
-            <span className="truncate text-2xs font-medium text-muted-foreground">
-              {lines.where}
-            </span>
-          )}
           <span className="truncate text-sm font-semibold text-sidebar-foreground">
             {lines.name}
           </span>
+          {compact ? null : <ScopeSubtitle scope={current.scope} fallback={lines.where} />}
         </span>
         <ChevronsUpDownIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
       </MenuTrigger>
@@ -141,6 +140,18 @@ export function WorkScopePicker({
         />
       </MenuPopup>
     </Menu>
+  );
+}
+
+/** Under the project's name: the change its open work belongs to, else where the project lives. */
+function ScopeSubtitle({ scope, fallback }: { readonly scope: string; readonly fallback: string }) {
+  const { tree } = useWorkData();
+  const project = tree.find((candidate) => projectScopeKey(candidate) === scope);
+  const change = project === undefined ? undefined : sidebarTasks(project).change;
+  return (
+    <span className="truncate text-xs text-muted-foreground">
+      {change === undefined ? fallback : taskShortTitle(change)}
+    </span>
   );
 }
 
@@ -178,7 +189,7 @@ function ProjectMenuBody({
   readonly current: ResolvedProjectScope;
   readonly onChange: (scope: string) => void;
 }) {
-  const { environmentId, status, tree, needs, actions } = useWorkData();
+  const { environmentId, status, tree, needs, actions, plugins } = useWorkData();
   const navigate = useNavigate();
   const openSettings = useOpenPeerSettings();
   const files = useFileContextMenu(environmentId);
@@ -196,6 +207,11 @@ function ProjectMenuBody({
   };
   const folder = menu?.folder;
   const coordination = menu?.kind === "workspace" ? menu.coordination : null;
+  const scoped = tree.find((project) => projectScopeKey(project) === current.scope);
+  const team =
+    status === null || scoped === undefined
+      ? undefined
+      : projectSignals(status, scoped, plugins).find((signal) => signal.id === "team");
   return (
     <>
       <MenuRadioGroup value={current.scope} onValueChange={(value) => onChange(String(value))}>
@@ -263,6 +279,17 @@ function ProjectMenuBody({
                 <Badge variant="outline" size="control">
                   {coordination.action.label}
                 </Badge>
+              </MenuItem>
+            )}
+            {team === undefined ? null : (
+              <MenuItem
+                inset
+                onClick={() => {
+                  leave();
+                  void team.open?.(navigate);
+                }}
+              >
+                People and owners
               </MenuItem>
             )}
             <MenuItem

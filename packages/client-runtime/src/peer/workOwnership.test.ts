@@ -181,7 +181,7 @@ describe("a task in review asks its owner", () => {
   it("is in the owner's Needs you and not in anybody else's, who still see it in review", () => {
     const bob = onlyTask(reviewBoard(BOB), "VL9");
     expect(bob.column).toBe("needs");
-    expect(bob.state.label).toBe("Waiting for your review");
+    expect(bob.state.label).toBe("Ready for your review");
     expect(bob.action).toMatchObject({ label: "Review", target: { kind: "review", task: "vl9" } });
 
     // Bob owns VL9 by its own row, which comes before Payments, whose owner is Ana.
@@ -190,7 +190,7 @@ describe("a task in review asks its owner", () => {
       expect(other.column, email).toBe("working");
       expect(other.state, email).toEqual({
         kind: "waiting",
-        label: "Waiting for Bob's review",
+        label: "Ready for Bob's review",
         waitingOn: "Bob",
       });
       expect(other.action, email).toBeUndefined();
@@ -205,34 +205,32 @@ describe("a task in review asks its owner", () => {
     expect(ana).toMatchObject({
       column: "needs",
       owner: { name: "Ana", throughArea: "Payments" },
-      state: { label: "Waiting for your review" },
+      state: { label: "Ready for your review" },
     });
     // Not the lead's, either: the project's leads are asked only where nobody owns the task.
     expect(onlyTask(reviewBoard(EVA, ownedByArea), "VL9")).toMatchObject({
       column: "working",
-      state: { label: "Waiting for Ana's review" },
+      state: { label: "Ready for Ana's review" },
     });
   });
 
   it("asks the project's leads where nobody owns the task", () => {
     expect(onlyTask(reviewBoard(EVA, NO_OWNERS), "VL9")).toMatchObject({
       column: "needs",
-      state: { label: "Waiting for your review" },
+      state: { label: "Ready for your review" },
       review: { audience: "leads", forMe: true, names: ["Eva"] },
     });
     for (const email of [ANA, BOB, CYRIL]) {
       const card = onlyTask(reviewBoard(email, NO_OWNERS), "VL9");
       expect(card.column, email).toBe("working");
-      expect(card.state.label, email).toBe("Waiting for Eva's review");
+      expect(card.state.label, email).toBe("Ready for Eva's review");
       expect(card.owner, email).toBeUndefined();
     }
   });
 
   it("names several leads as a lead, and asks each of them", () => {
     const leads = { ...NO_OWNERS, leads: [EVA, CYRIL] };
-    expect(onlyTask(reviewBoard(ANA, leads), "VL9").state.label).toBe(
-      "Waiting for a lead's review",
-    );
+    expect(onlyTask(reviewBoard(ANA, leads), "VL9").state.label).toBe("Ready for a lead's review");
     expect(inColumn(reviewBoard(CYRIL, leads), "needs")).toEqual(["VL9"]);
     expect(inColumn(reviewBoard(EVA, leads), "needs")).toEqual(["VL9"]);
   });
@@ -241,7 +239,7 @@ describe("a task in review asks its owner", () => {
     for (const email of [ANA, BOB, EVA]) {
       const card = onlyTask(reviewBoard(email, { ...NO_OWNERS, leads: [] }), "VL9");
       expect(card.column, email).toBe("needs");
-      expect(card.state.label, email).toBe("Waiting for review");
+      expect(card.state.label, email).toBe("Ready for review");
       expect(card.review?.audience, email).toBe("everyone");
     }
   });
@@ -262,7 +260,7 @@ describe("a task in review asks its owner", () => {
     for (const email of [ANA, BOB, EVA]) {
       const card = onlyTask(reviewBoard(email, null), "VL9");
       expect(card.column, email).toBe("needs");
-      expect(card.state.label, email).toBe("Waiting for review");
+      expect(card.state.label, email).toBe("Ready for review");
       expect(card.owner, email).toBeUndefined();
       expect(card.review, email).toEqual({ audience: "everyone", forMe: true, names: [] });
       expect(card.action?.label, email).toBe("Review");
@@ -282,7 +280,7 @@ describe("a task in review asks its owner", () => {
     expect(ana.column).toBe("needs");
     expect(ana.action).toMatchObject({ label: "Answer" });
     // Bob is asked for the review, which comes first.
-    expect(onlyTask(board(BOB), "VL9").state.label).toBe("Waiting for your review");
+    expect(onlyTask(board(BOB), "VL9").state.label).toBe("Ready for your review");
   });
 
   it("counts a review under Needs you for the person it asks only", () => {
@@ -322,7 +320,7 @@ describe("a view that words a task's state itself", () => {
       expect(taskState(node!, new Map(), review), email).toEqual(card.state);
       expect(owner, email).toEqual(card.owner);
       // Without the route it reads as before ownership: every review asks the person.
-      expect(taskState(node!).label, email).toBe("Waiting for review");
+      expect(taskState(node!).label, email).toBe("Ready for review");
     }
   });
 

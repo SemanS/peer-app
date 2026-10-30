@@ -8,7 +8,7 @@ import {
   TicketIcon,
   type LucideIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import { usePrimaryEnvironment } from "../../../state/environments";
 import { useEnvironmentQuery } from "../../../state/query";
@@ -46,6 +46,9 @@ import {
   type UsageTile,
   type UsageTileId,
 } from "./workspaceUsage.logic";
+
+/** A computer's first reports reach the Hub seconds after sharing goes on, later than the switch's own read. */
+const REPORT_SETTLE_MS = [5000, 20000];
 
 const TILE_ICONS: Readonly<Record<UsageTileId, LucideIcon>> = {
   tickets: TicketIcon,
@@ -310,6 +313,13 @@ function UsageContent({
           },
         }),
   );
+  const [sharingChanges, setSharingChanges] = useState(0);
+  const refreshAfterReports = useEffectEvent(() => query.refresh());
+  useEffect(() => {
+    if (sharingChanges === 0) return undefined;
+    const timers = REPORT_SETTLE_MS.map((ms) => setTimeout(refreshAfterReports, ms));
+    return () => timers.forEach(clearTimeout);
+  }, [sharingChanges]);
   const state = usagePageState({
     signedIn,
     member: workspace !== undefined,
@@ -407,7 +417,10 @@ function UsageContent({
         environmentId={environmentId}
         workspace={slug}
         reported={sharingHasReported(overview?.byUser ?? [], email)}
-        onChanged={query.refresh}
+        onChanged={() => {
+          query.refresh();
+          setSharingChanges((count) => count + 1);
+        }}
       />
     </>
   );

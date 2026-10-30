@@ -23,8 +23,10 @@ vi.mock("../../../state/server", () => ({
     peerHandoffWithdraw: "withdraw",
     peerHandoffSetTarget: "setTarget",
     peerHandoffRead: (query: unknown) => query,
+    peerAcceptanceAccept: { permissionAtom: () => "acceptance-permission" },
   },
 }));
+vi.mock("@effect/atom-react", () => ({ useAtomValue: () => true }));
 vi.mock("../../../state/use-atom-command", () => ({
   useAtomCommand: (atom: string) => (atom === "withdraw" ? hub.withdraw : vi.fn()),
 }));
@@ -224,5 +226,33 @@ describe("the test report in a handoff", () => {
     await show(true);
     expect(words(renderer!.root)).toContain("Receipt totals in cents");
     expect(words(section())).toContain("No test report was filed.");
+  });
+});
+
+describe("the decision on a handoff", () => {
+  const section = (label: string) =>
+    renderer!.root.find((node) => node.type === "section" && node.props["aria-label"] === label);
+
+  it("opens with the decision and the policy's signals, the agent's blockers folded under its notes", async () => {
+    hub.packages = [
+      {
+        ...PACKAGE,
+        key: "VL7",
+        source: "agent",
+        policy: { mode: "ask", version: 2, signals: ["not-delivered"], accepted: false },
+        context: {
+          ...PACKAGE.context!,
+          sections: [{ name: "Blockers", shortened: false, lines: ["VL8 is a separate task"] }],
+        },
+      },
+    ];
+    await show(true);
+    expect(words(section("Decision"))).toBe("Accept VL7? 1 signal: not-delivered");
+    expect(words(section("Needs attention"))).toContain(
+      "The change is not shared: delivery absent, none or local",
+    );
+    expect(words(section("Needs attention"))).not.toContain("VL8 is a separate task");
+    expect(words(section("Delivered"))).toContain("not observed");
+    expect(button("The agent’s notes")).toBeDefined();
   });
 });

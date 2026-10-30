@@ -1,3 +1,6 @@
+import { useAtomValue } from "@effect/atom-react";
+import { activePlugin } from "@t3tools/client-runtime/peer/plugins";
+import { orderedReports, testReportsRevision } from "@t3tools/client-runtime/peer/test-reports";
 import { useNavigate } from "@tanstack/react-router";
 import { useContext, useState } from "react";
 import { ArrowUpRightIcon, PackageCheckIcon, TriangleAlertIcon } from "lucide-react";
@@ -5,7 +8,10 @@ import type {
   EnvironmentId,
   PeerHandoffPackage,
   PeerHandoffPlace,
+  PeerHubStatus,
+  PeerPlansView,
   PeerProjectState,
+  PeerTestReport,
   PeerTask,
   PeerWorkContext,
   PeerWorkThread,
@@ -46,6 +52,10 @@ import { PeerSectionLabel } from "../PeerPageHeader";
 import { HandoffChatContext } from "../review/HandoffChat";
 import { NestedRowTitle, SettingsRowError } from "../PeerSettingsRows";
 import { HandoffReport } from "./HandoffReport";
+import { reviewFactsFrom } from "./handoffPresentation";
+import { acceptanceFacts } from "../acceptance/acceptance.logic";
+import { openAcceptanceDialog } from "../acceptance/acceptanceDialog";
+import { usePlansView } from "../plans/usePlansView";
 import { failureMessage } from "../WorkspaceAccess";
 import { usePeerPluginControl } from "../usePeerPluginControl";
 import type {
@@ -288,8 +298,17 @@ function ContextMovedBanner({
   );
 }
 
+/** What only the review page reads for a package: the task's test reports and its plans. */
+interface ReviewReads {
+  readonly reports: ReadonlyArray<PeerTestReport> | undefined;
+  readonly plans: PeerPlansView | undefined;
+}
+
 /** Connects the report to this environment's links, context comparisons and original chat. */
 function HandoffPackageView({
+  environmentId,
+  status,
+  reads,
   pkg,
   state,
   workspace,
@@ -301,6 +320,9 @@ function HandoffPackageView({
   onContextPage,
   onWithdraw,
 }: {
+  readonly environmentId: EnvironmentId;
+  readonly status: PeerHubStatus;
+  readonly reads: ReviewReads | undefined;
   readonly pkg: PeerHandoffPackage;
   readonly state: PeerProjectState;
   readonly workspace: string;
@@ -322,6 +344,21 @@ function HandoffPackageView({
   const moved = contextMovedOn(pkg, current);
   const chat = useContext(HandoffChatContext);
   const project = state.project.id;
+  const allowed = useAtomValue(
+    serverEnvironment.peerAcceptanceAccept.permissionAtom(environmentId),
+  );
+  const acceptance = activePlugin(status, "acceptance")
+    ? acceptanceFacts(status, { workspace, project, task: pkg.task }, allowed)
+    : undefined;
+  const facts = reviewFactsFrom({
+    pkg,
+    status,
+    workspace,
+    state,
+    nameOf,
+    reports: reads?.reports,
+    plans: reads?.plans,
+  });
   const openContext = (scope: string) =>
     void navigate({
       to: "/context/$workspace/$project/$scope",
@@ -336,9 +373,14 @@ function HandoffPackageView({
   return (
     <HandoffReport
       pkg={pkg}
+      facts={facts}
       mine={mine}
       busy={busy}
-      nameOf={nameOf}
+      onWithdrawAcceptance={
+        acceptance?.actions.includes("withdraw") === true
+          ? () => openAcceptanceDialog({ kind: "withdraw", environmentId, ...acceptance.place })
+          : undefined
+      }
       onCompare={compareContext}
       onOpenPull={(url) => void openLink(url)}
       onOpenChat={chat?.open}
@@ -383,6 +425,9 @@ export function HandoffSection(props: TaskContextSlotProps) {
         />
       </div>
       <HandoffPackages
+        environmentId={environmentId}
+        status={status}
+        reads={undefined}
         data={data}
         value={value}
         workspace={place.workspace}
@@ -403,11 +448,37 @@ export function HandoffReview(props: TaskContextSlotProps) {
   const { environmentId, status } = props;
   const { value, task, place, data, latest, current, deliveries, withdraw, busy, error } =
     useHandoffPackages(props);
+  const taskId = task?.id ?? "";
+  const reportsPlace = { workspace: place.workspace, project: place.projectId, task: taskId };
+  const reports = useEnvironmentQuery(
+    task !== undefined && activePlugin(status, "test-reports")
+      ? serverEnvironment.peerTestsList({
+          environmentId,
+          input: reportsPlace,
+          revision: testReportsRevision(status, reportsPlace),
+        })
+      : null,
+  );
+  const plans = usePlansView({
+    environmentId,
+    status,
+    workspace: place.workspace,
+    project: place.projectId,
+    task: task?.id,
+  });
   if (!task || !value) return null;
   return (
-    <section aria-label="Handoff package" className="flex flex-col gap-3">
-      <h2 className="text-base font-semibold text-foreground">Decision brief</h2>
+    <section aria-label="Review" className="flex flex-col gap-3">
       <HandoffPackages
+        environmentId={environmentId}
+        status={status}
+        reads={{
+          reports:
+            reports.data === null || reports.data === undefined
+              ? undefined
+              : orderedReports(reports.data),
+          plans: plans.view,
+        }}
         data={data}
         value={value}
         workspace={place.workspace}
@@ -433,6 +504,9 @@ export function HandoffReview(props: TaskContextSlotProps) {
 }
 
 function HandoffPackages({
+  environmentId,
+  status,
+  reads,
   data,
   value,
   workspace,
@@ -443,6 +517,9 @@ function HandoffPackages({
   onContextPage,
   onWithdraw,
 }: {
+  readonly environmentId: EnvironmentId;
+  readonly status: PeerHubStatus;
+  readonly reads: ReviewReads | undefined;
   readonly data: ReturnType<typeof useHandoffPackages>["data"];
   readonly value: PeerProjectState;
   readonly workspace: string;
@@ -467,6 +544,9 @@ function HandoffPackages({
       {data.data.map((pkg) => (
         <HandoffPackageView
           key={pkg.author}
+          environmentId={environmentId}
+          status={status}
+          reads={reads}
           pkg={pkg}
           state={value}
           workspace={workspace}

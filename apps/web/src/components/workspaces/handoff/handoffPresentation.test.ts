@@ -1,7 +1,14 @@
-import type { PeerHandoffPackage } from "@t3tools/contracts";
+import type {
+  PeerHandoffPackage,
+  PeerHubStatus,
+  PeerPlansView,
+  PeerProjectState,
+  PeerTask,
+  PeerTestReport,
+} from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { handoffPresentation } from "./handoffPresentation";
+import { handoffPresentation, reviewFactsFrom, reviewPresentation } from "./handoffPresentation";
 
 const PACKAGE: PeerHandoffPackage = {
   number: 2,
@@ -128,5 +135,261 @@ describe("the handoff summary", () => {
     });
 
     expect(shown.pulls).toEqual([url]);
+  });
+});
+
+const names: Record<string, string> = { "ana@example.test": "Ana", "slavo@example.test": "Slavo" };
+const nameOf = (email: string) => names[email] ?? email;
+const FACTS = { nameOf, computer: () => "Ana’s Mac" };
+
+const REPORT: PeerTestReport = {
+  project: "app",
+  task: "intake",
+  author: "ana@example.test",
+  number: 3,
+  result: "mixed",
+  summary: "",
+  role: "author",
+  at: "2026-10-22T07:50:00Z",
+  items: [
+    ...Array.from({ length: 6 }, (_, index) => ({ kind: "pass" as const, text: `check ${index}` })),
+    { kind: "unverified", text: "iPhone layout", task: "t31" },
+    { kind: "unverified", text: "Screen reader" },
+  ],
+};
+
+describe("the review page as a decision page", () => {
+  it("asks for the decision with the policy's signals in words, before any prose", () => {
+    const view = reviewPresentation(
+      {
+        ...PACKAGE,
+        key: "1.1",
+        policy: { mode: "ask", version: 2, signals: ["not-delivered", "unowned"], accepted: false },
+        delivery: {
+          state: "none",
+          evidence: { untracked: ["a.ts", "b.ts"] },
+          observedAt: PACKAGE.composedAt,
+          environment: "env-ana",
+          vcs: "git",
+        },
+        context: {
+          version: 1,
+          updatedAt: PACKAGE.composedAt,
+          gist: null,
+          sections: [
+            {
+              name: "Blockers",
+              shortened: false,
+              lines: ["SurveyConflictError (1.2) is a separate task"],
+            },
+            { name: "Next", shortened: false, lines: ["Wire the import into 3.1"] },
+          ],
+          projectLines: [],
+        },
+      },
+      { ...FACTS, report: REPORT },
+      (id) => (id === "t31" ? "3.1" : id),
+    );
+
+    expect(view.decision).toMatchObject({
+      kind: "ask",
+      text: "Accept 1.1? 2 signals: not-delivered, unowned",
+      actions: ["done", "reopen"],
+    });
+    expect(view.verified.text).toBe("6 author-reported · 1 left to a task · 1 needs an owner");
+    expect(view.delivered.text).toBe("none · 2 files untracked, Ana’s Mac");
+    expect(view.evidence?.map((item) => item.mark).slice(-2)).toEqual([
+      "left to 3.1",
+      "needs an owner",
+    ]);
+    // The agent's blocker is its own note, under the disclosure that starts closed.
+    expect(view.notesOpen).toBe(false);
+    expect(view.notes.map((note) => note.title)).toEqual(["Blockers the agent named", "Next"]);
+    // Needs attention holds Peer's facts only: here the signals.
+    expect(view.signals.map((entry) => entry.signal)).toEqual(["not-delivered", "unowned"]);
+    expect(view.needsAttention).toBe(true);
+  });
+
+  it("says nobody is asked once the policy accepted it, and offers to withdraw that", () => {
+    const view = reviewPresentation(
+      {
+        ...PACKAGE,
+        policy: { mode: "auto", version: 3, signals: [], accepted: true },
+      },
+      { ...FACTS, acceptance: { by: "slavo@example.test", via: "policy" } },
+    );
+    expect(view.decision).toMatchObject({
+      kind: "accepted-by-policy",
+      text: "Accepted by policy v3 · waiting to land",
+      actions: ["withdraw"],
+    });
+    expect(view.needsAttention).toBe(false);
+  });
+
+  it("follows the status over the package once an acceptance was withdrawn", () => {
+    const pkg = { ...PACKAGE, acceptance: { by: "slavo@example.test", at: PACKAGE.composedAt } };
+    expect(reviewPresentation(pkg, FACTS).decision?.text).toBe("Accepted by Slavo");
+    expect(reviewPresentation(pkg, { ...FACTS, acceptance: null }).decision?.kind).toBe("ask");
+  });
+
+  it("states no decision on a done task and opens the agent's notes", () => {
+    const view = reviewPresentation(PACKAGE, { ...FACTS, acceptance: null, status: "done" });
+    expect(view.decision).toBeNull();
+    expect(view.notesOpen).toBe(true);
+  });
+
+  it("falls back to the package's report counts and says a missing delivery was not observed", () => {
+    const view = reviewPresentation(
+      {
+        ...PACKAGE,
+        report: {
+          number: 1,
+          result: "pass",
+          author: "ana@example.test",
+          role: "author",
+          at: PACKAGE.composedAt,
+          passed: 2,
+          failed: 0,
+          unverified: 0,
+          unowned: [],
+        },
+      },
+      FACTS,
+    );
+    expect(view.verified).toMatchObject({
+      text: "pass, 2 passed, 0 failed, 0 unverified",
+      attention: false,
+    });
+    expect(view.evidence).toBeNull();
+    expect(view.delivered.text).toBe("not observed");
+    expect(reviewPresentation(PACKAGE, FACTS).verified.text).toBe("No test report");
+  });
+
+  it("keeps changed inputs and open overlaps under Needs attention", () => {
+    const view = reviewPresentation(
+      {
+        ...PACKAGE,
+        inputs: [{ scope: "task:x", readVersion: 1, currentVersion: 2 }],
+        overlaps: [{ state: "open", files: ["a.ts"], partner: null, at: PACKAGE.composedAt }],
+      },
+      FACTS,
+    );
+    expect(view.changedInputs).toHaveLength(1);
+    expect(view.openOverlaps).toHaveLength(1);
+    expect(view.needsAttention).toBe(true);
+  });
+});
+
+describe("what the review page adds to a package", () => {
+  const task = (id: string, status: PeerTask["status"], description?: string): PeerTask => ({
+    id,
+    key: id,
+    title: id,
+    status,
+    createdAt: "",
+    updatedAt: "",
+    createdBy: "ana@example.test",
+    ...(description === undefined ? {} : { description }),
+  });
+  const state = {
+    project: { id: "app", name: "App", role: "member", members: [] },
+    work: {
+      tasks: [
+        task("intake", "review", "Import PDFs\n- Outcome: text PDFs import as receipts"),
+        task("1.2", "open"),
+        task("3.1", "open"),
+        task("5.1", "open"),
+      ],
+      threads: [],
+    },
+  } as unknown as PeerProjectState;
+  const status = (accepted?: { via?: "policy"; beforeReopening?: boolean }) =>
+    ({
+      environmentId: "env-here",
+      email: "slavo@example.test",
+      handoff: { target: "none", projectTargets: {}, summaries: [], deliveries: [] },
+      acceptance: {
+        accepted:
+          accepted === undefined
+            ? []
+            : [
+                {
+                  workspace: "acme",
+                  project: "app",
+                  task: "intake",
+                  by: "slavo@example.test",
+                  at: PACKAGE.composedAt,
+                  statusThen: "review",
+                  ...accepted,
+                },
+              ],
+      },
+      dependencies: [
+        {
+          workspace: "acme",
+          available: true,
+          projects: { app: { "3.1": ["intake", "1.2"], "5.1": ["intake"] } },
+        },
+      ],
+    }) as unknown as PeerHubStatus;
+  const input = (hub: PeerHubStatus, plans?: PeerPlansView) => ({
+    pkg: PACKAGE,
+    status: hub,
+    workspace: "acme",
+    state,
+    nameOf,
+    plans,
+  });
+
+  it("names who waits, the brief's outcome without a plan, and the acceptance as the status says it", () => {
+    const facts = reviewFactsFrom(input(status({ via: "policy" })));
+    expect(facts.dependents?.map((group) => group.line)).toEqual([
+      "3.1 · ready when 1.2 also lands",
+      "5.1 · ready",
+    ]);
+    expect(facts.briefOutcome).toBe("text PDFs import as receipts");
+    expect(facts.planLines).toEqual([]);
+    expect(facts.acceptance).toEqual({ by: "slavo@example.test", via: "policy" });
+    expect(facts.status).toBe("review");
+    expect(facts.computer("env-here")).toBe("this computer");
+    expect(facts.computer("env-other")).toBe("Ana’s computer");
+  });
+
+  it("reads an acceptance given before reopening as none, and none at all without acceptance", () => {
+    expect(reviewFactsFrom(input(status({ beforeReopening: true }))).acceptance).toBeNull();
+    const { acceptance: _off, ...withoutAcceptance } = status();
+    expect(
+      reviewFactsFrom(input(withoutAcceptance as unknown as PeerHubStatus)).acceptance,
+    ).toBeUndefined();
+  });
+
+  it("takes the provides lines of the author's newest plan on the task", () => {
+    const plan = (email: string, updatedAt: string, contract: string) => ({
+      project: "app",
+      session: "s",
+      email,
+      environment: "env",
+      task: "intake",
+      label: "",
+      seq: 1,
+      version: 1,
+      changes: [],
+      maybes: [],
+      uses: [],
+      provides: [{ name: "importPdf", path: "src/import.ts", contract }],
+      declaredAt: updatedAt,
+      updatedAt,
+      live: false,
+    });
+    const plans = {
+      plans: [
+        plan("ana@example.test", "2026-10-22T07:00:00Z", "old"),
+        plan("ana@example.test", "2026-10-22T07:30:00Z", "returns a receipt"),
+        plan("bob@example.test", "2026-10-22T07:40:00Z", "not Ana's"),
+      ],
+    } as unknown as PeerPlansView;
+    expect(reviewFactsFrom(input(status(), plans)).planLines).toEqual([
+      "importPdf (src/import.ts): returns a receipt",
+    ]);
   });
 });

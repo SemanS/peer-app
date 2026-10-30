@@ -14,6 +14,7 @@ import { workspaceConnections } from "../../../state/workspace";
 import { useNavigationThreadShells } from "../../../state/entities";
 import { serverEnvironment } from "../../../state/server";
 import { threadHasUnseenCompletion } from "../../threads/threadListV2";
+import { roomNeedsAcross } from "../rooms/rooms.logic";
 
 const last = new Map<string, PeerHubStatus>();
 const environmentsAtom = Atom.make((get) => {
@@ -91,8 +92,11 @@ export function useNeedsYou() {
       ),
     [environments, threads, now, memoize],
   );
+  const rooms = useMemo(() => roomNeedsAcross(environments), [environments]);
   return {
     items,
+    rooms,
+    count: items.length + rooms.length,
     errors: snapshot.errors,
     environments,
     now,

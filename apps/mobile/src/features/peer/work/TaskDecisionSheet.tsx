@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useNavigation } from "@react-navigation/native";
+import { activePlugin } from "@t3tools/client-runtime/peer/plugins";
 import type { WorkTaskNode } from "@t3tools/client-runtime/peer/work";
 import {
   isAtomCommandInterrupted,
@@ -22,6 +23,7 @@ import { taskStateWords } from "./work.logic";
 import { GitHubTaskPullRequests } from "../github/GitHubTaskPullRequests";
 import { PeerHandoff } from "../handoff/PeerHandoff";
 import { OpenSpecTaskPreparation } from "../openspec/OpenSpecTaskPreparation";
+import { RoomTaskRow } from "../rooms/RoomTaskRow";
 import { TaskRuns } from "./TaskRuns";
 
 /** Task evidence and the existing review commands, accessible without leaving the phone. */
@@ -223,6 +225,16 @@ export function TaskDecisionSheet({
               disabled={busy}
               onBusyChange={setBusy}
             />
+            {activePlugin(status, "rooms") ? (
+              <RoomTaskRow
+                environmentId={environmentId}
+                status={status}
+                workspace={workspace}
+                project={project}
+                task={task}
+                onOpen={onClose}
+              />
+            ) : null}
             <TaskRuns
               environmentId={environmentId}
               status={status}

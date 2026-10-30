@@ -13,6 +13,7 @@ import {
 } from "./features/peer/needs-you/needsYouLinking";
 import { NeedsYouRouteScreen } from "./features/peer/needs-you/NeedsYouRouteScreen";
 import { NeedsYouAgentRouteScreen } from "./features/peer/needs-you/NeedsYouAgentRouteScreen";
+import { RoomRouteScreen } from "./features/peer/rooms/RoomRouteScreen";
 import { WorkRouteScreen } from "./features/peer/work/WorkRouteScreen";
 import {
   createPathConfigForStaticNavigation,
@@ -777,6 +778,11 @@ const RootStackConfig = createWorkspaceStackNavigator({
       screen: NeedsYouAgentRouteScreen,
       linking: NEEDS_YOU_AGENT_PATH,
       options: { ...GLASS_HEADER_OPTIONS, title: "Agent" },
+    }),
+    Room: createNativeStackScreen({
+      screen: RoomRouteScreen,
+      linking: "room/:environmentId/:workspace/:project/:task",
+      options: { ...GLASS_HEADER_OPTIONS, title: "Room" },
     }),
     Work: createNativeStackScreen({
       screen: WorkRouteScreen,

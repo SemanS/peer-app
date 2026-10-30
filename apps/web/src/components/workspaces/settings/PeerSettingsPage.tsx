@@ -78,6 +78,7 @@ export function PeerSettingsPage({
   description,
   mark,
   badge,
+  askLast = false,
   children,
 }: {
   readonly title: string;
@@ -85,6 +86,8 @@ export function PeerSettingsPage({
   /** Before the title: the workspace's mark on its General page. */
   readonly mark?: ReactNode;
   readonly badge?: RoleBadge | undefined;
+  /** "Ask an agent" under the page, where its everyday actions come first. */
+  readonly askLast?: boolean;
   readonly children?: ReactNode;
 }) {
   return (
@@ -96,10 +99,11 @@ export function PeerSettingsPage({
           leading={mark}
           meta={badge === undefined ? undefined : <RoleBadgePill badge={badge} />}
         />
-        <AskAgentOfThisPage />
+        {askLast ? null : <AskAgentOfThisPage />}
       </div>
       <ProposalsBanner />
       {children}
+      {askLast ? <AskAgentOfThisPage /> : null}
     </PeerSettingsFrame>
   );
 }

@@ -3,7 +3,6 @@ import type { PeerTask, PeerWorkspaceRole, PeerWorkspaceState } from "@t3tools/c
 
 import {
   invitationScope,
-  inviteTaskChoices,
   inviter,
   limitActions,
   limitWords,
@@ -103,21 +102,6 @@ describe("who invites to which projects", () => {
     expect(inviter(acme("owner", []))?.as).toBe("admin");
     // A member who leads nothing does not invite.
     expect(inviter(acme("member", []))).toBeNull();
-  });
-
-  it("offers the named projects' open and in-review tasks, naming the project when there are two", () => {
-    expect(inviteTaskChoices(acme("member"), ["webshop"])).toEqual([
-      { id: "vl7", project: "webshop", label: "VL7 Split payments" },
-      { id: "vl8", project: "webshop", label: "VL8 Refund copy" },
-    ]);
-    expect(
-      inviteTaskChoices(acme("admin"), ["webshop", "billing"]).map((choice) => choice.label),
-    ).toEqual([
-      "Webshop · VL7 Split payments",
-      "Webshop · VL8 Refund copy",
-      "Billing · BL1 Invoices",
-    ]);
-    expect(inviteTaskChoices(acme("admin"), [])).toEqual([]);
   });
 
   it("says what an invitation to named projects hands over, and what became of its task", () => {

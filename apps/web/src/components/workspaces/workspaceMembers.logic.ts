@@ -54,26 +54,6 @@ export interface TaskChoice {
   readonly label: string;
 }
 
-/** The open and in-review tasks of the named projects, in their order there. */
-export function inviteTaskChoices(
-  workspace: Pick<PeerWorkspaceState, "projects">,
-  named: ReadonlyArray<string>,
-): ReadonlyArray<TaskChoice> {
-  const projects = workspace.projects.filter(({ project }) => named.includes(project.id));
-  return projects.flatMap(({ project, work }) =>
-    work.tasks
-      .filter((task) => task.status !== "done")
-      .map((task) => {
-        const title = task.key === undefined ? task.title : `${task.key} ${task.title}`;
-        return {
-          id: task.id,
-          project: project.id,
-          label: projects.length > 1 ? `${project.name} · ${title}` : title,
-        };
-      }),
-  );
-}
-
 const listed = (names: ReadonlyArray<string>) =>
   names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 

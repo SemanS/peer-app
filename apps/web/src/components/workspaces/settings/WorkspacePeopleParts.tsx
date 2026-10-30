@@ -15,7 +15,6 @@ import { Checkbox } from "../../ui/checkbox";
 import { Dialog, DialogHeader, DialogPopup, DialogTitle } from "../../ui/dialog";
 import { Input } from "../../ui/input";
 import { Radio, RadioGroup } from "../../ui/radio-group";
-import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../../ui/select";
 import { toastManager } from "../../ui/toast";
 import {
   PeerDialogBody,
@@ -24,12 +23,13 @@ import {
   PeerStackedField,
 } from "../PeerDialog";
 import { hubFailure } from "../WorkspaceAccess";
-import { inviter, inviteTaskChoices } from "../workspaceMembers.logic";
+import { inviter } from "../workspaceMembers.logic";
+import { InviteWorkFields, ProjectAccessFields } from "./people/AccessFields";
+import { NO_WORK, workGroups, type ProjectAccess, type WorkPick } from "./people/people.logic";
 import {
   INVITE_LIMIT,
   INVITE_NOTE,
   INVITE_ROLES,
-  inviteLabel,
   inviteRefusal,
   invalidText,
   invitedTitle,
@@ -44,15 +44,11 @@ import {
   type NamingProject,
 } from "./workspacePeople.logic";
 
-/** The task select's choice for an invitation that hands over no task. */
-const NO_TASK = "none";
-
 /**
- * Invites people by address with a role (design artboard 15). Several addresses go one after the
- * other; the ones the Hub refuses stay in the field with the Hub's reason, the others are done.
- * The invitation may name projects, which the person will be on and no other, and one of their
- * tasks that waits for them. A lead who is no admin invites members to the projects they lead, so
- * names at least one; an admin who names none invites to the whole workspace, as before.
+ * Invites people in one form: who, their role, the projects they work in and, for one project, the
+ * work they will own. Several addresses go one after the other; the ones the Hub refuses stay in
+ * the field with the Hub's reason, the others are done. A lead who is no admin invites members to
+ * the projects they lead, so names at least one; an admin may give every project instead.
  */
 export function InviteDialog({
   environmentId,
@@ -72,30 +68,31 @@ export function InviteDialog({
   const [role, setRole] = useState<InviteRole>("member");
   const who = inviter(workspace);
   const lead = who?.as === "lead";
-  const [projects, setProjects] = useState<ReadonlyArray<string>>(() =>
-    lead && who.projects.length === 1 ? who.projects.map((project) => project.id) : [],
-  );
-  const [task, setTask] = useState<string | null>(null);
-  const tasks = inviteTaskChoices(workspace, projects);
-  const chosenTask = tasks.some((choice) => choice.id === task) ? task : null;
-  const toggleProject = (id: string, on: boolean) =>
-    setProjects((current) =>
-      on
-        ? [...current.filter((entry) => entry !== id), id]
-        : current.filter((entry) => entry !== id),
-    );
+  const choices = who?.projects ?? [];
+  const [access, setAccess] = useState<ProjectAccess>(() => ({
+    mode: "selected",
+    projects: choices.length === 1 ? [choices[0]!.id] : [],
+  }));
+  const projects = role === "member" && access.mode === "selected" ? access.projects : [];
+  const [entire, setEntire] = useState(true);
+  const [pick, setPick] = useState<WorkPick>(NO_WORK);
+  const onlyProject = projects.length === 1 ? projects[0] : undefined;
+  const onlyState = workspace.projects.find(({ project }) => project.id === onlyProject);
+  const groups = onlyState === undefined ? [] : workGroups(onlyState.work);
+  const handed = entire || onlyProject === undefined ? NO_WORK : pick;
+  const hasWork = handed.areas.length > 0 || handed.tasks.length > 0;
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<ReadonlyArray<{ address: string; message: string }>>([]);
   const addresses = parseAddresses(text);
   const tooMany = addresses.valid.length > INVITE_LIMIT;
-  // A task goes to one person, and a lead's invitation names one of their projects at least.
-  const taskForMany = chosenTask !== null && addresses.valid.length > 1;
-  const needsProject = lead && projects.length === 0;
+  // Work goes to one person, and selected access names one project at least.
+  const workForMany = hasWork && addresses.valid.length > 1;
+  const needsProject = role === "member" && access.mode === "selected" && projects.length === 0;
   const ready =
     addresses.valid.length > 0 &&
     addresses.invalid.length === 0 &&
     !tooMany &&
-    !taskForMany &&
+    !workForMany &&
     !needsProject;
   const previews = useInvitePreviews(
     environmentId,
@@ -123,7 +120,8 @@ export function InviteDialog({
           email: address,
           role: lead ? "member" : role,
           ...(projects.length === 0 ? {} : { projects: [...projects] }),
-          ...(chosenTask === null ? {} : { task: chosenTask }),
+          ...(handed.areas.length === 0 ? {} : { areas: [...handed.areas] }),
+          ...(handed.tasks.length === 0 ? {} : { tasks: [...handed.tasks] }),
         },
       });
       const failure = hubFailure(result);
@@ -167,7 +165,7 @@ export function InviteDialog({
       <DialogPopup>
         <DialogHeader>
           <div className="pe-6">
-            <DialogTitle>Invite to {workspace.name}</DialogTitle>
+            <DialogTitle>Invite people</DialogTitle>
           </div>
         </DialogHeader>
         <PeerDialogBody>
@@ -179,71 +177,19 @@ export function InviteDialog({
               void submit();
             }}
           >
-            <PeerStackedField label="Email addresses" htmlFor={fieldId}>
+            <PeerStackedField label="Email address" htmlFor={fieldId}>
               <Input
                 id={fieldId}
                 type="text"
                 autoFocus
                 autoComplete="off"
-                placeholder="colleague@example.com"
+                placeholder="name@company.com"
                 value={text}
                 disabled={busy}
                 aria-invalid={addresses.invalid.length > 0 || tooMany}
                 onChange={(event) => setText(event.target.value)}
               />
             </PeerStackedField>
-            {who === null || who.projects.length === 0 ? null : (
-              <fieldset className="flex flex-col gap-2.5">
-                <legend className="pb-2 text-sm font-medium text-foreground">Projects</legend>
-                <p className="text-sm text-muted-foreground">
-                  {lead
-                    ? "They will be on the projects you tick, and no other."
-                    : "They will be on the projects you tick, and no other. Tick none to invite them to the whole workspace."}
-                </p>
-                {who.projects.map((project) => (
-                  <label
-                    key={project.id}
-                    className="flex cursor-pointer items-center gap-2.5 text-sm text-foreground"
-                  >
-                    <Checkbox
-                      checked={projects.includes(project.id)}
-                      disabled={busy}
-                      onCheckedChange={(on) => toggleProject(project.id, on)}
-                    />
-                    {project.name}
-                  </label>
-                ))}
-              </fieldset>
-            )}
-            {projects.length === 0 || tasks.length === 0 ? null : (
-              <div className="flex flex-col gap-2">
-                <span id={`${formId}-task`} className="text-sm font-medium text-foreground">
-                  Task
-                </span>
-                <Select
-                  value={chosenTask ?? NO_TASK}
-                  disabled={busy}
-                  onValueChange={(value) =>
-                    setTask(value === null || value === NO_TASK ? null : value)
-                  }
-                >
-                  <SelectTrigger size="sm" aria-labelledby={`${formId}-task`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectPopup>
-                    <SelectItem value={NO_TASK}>No task</SelectItem>
-                    {tasks.map((choice) => (
-                      <SelectItem key={choice.id} value={choice.id}>
-                        {choice.label}
-                      </SelectItem>
-                    ))}
-                  </SelectPopup>
-                </Select>
-                <span className="text-sm text-muted-foreground">
-                  It becomes theirs when they join, unless somebody else owns it by then.
-                </span>
-              </div>
-            )}
             {lead ? null : (
               <div className="flex flex-col gap-2">
                 <span id={`${formId}-role`} className="text-sm font-medium text-foreground">
@@ -272,9 +218,34 @@ export function InviteDialog({
                 </RadioGroup>
               </div>
             )}
-            {taskForMany ? (
+            {role === "admin" || who === null ? null : (
+              <ProjectAccessFields
+                value={access}
+                projects={choices}
+                fixed={lead}
+                disabled={busy}
+                onChange={setAccess}
+              />
+            )}
+            {onlyProject === undefined ? null : (
+              <InviteWorkFields
+                groups={groups}
+                entire={entire}
+                pick={pick}
+                disabled={busy}
+                onEntireChange={setEntire}
+                onPickChange={setPick}
+              />
+            )}
+            {projects.length > 1 ? (
+              <p className="text-sm text-muted-foreground">
+                Pick one project to assign areas or tasks now. You can assign more on their page
+                after they join.
+              </p>
+            ) : null}
+            {workForMany ? (
               <PeerDialogMessage tone="error">
-                A task goes to one person. Invite one address with it.
+                Assigned work goes to one person. Invite one address with it.
               </PeerDialogMessage>
             ) : null}
             {reaches.map((reach) => (
@@ -322,7 +293,7 @@ export function InviteDialog({
             Cancel
           </Button>
           <Button type="submit" form={formId} disabled={busy || !ready}>
-            {busy ? "Inviting…" : inviteLabel(role)}
+            {busy ? "Sending…" : "Send invitation"}
           </Button>
         </PeerDialogFooter>
       </DialogPopup>

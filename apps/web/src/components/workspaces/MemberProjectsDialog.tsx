@@ -1,15 +1,15 @@
 import { useState } from "react";
 
 import { Button } from "../ui/button";
-import { Checkbox } from "../ui/checkbox";
 import { Dialog, DialogHeader, DialogPopup, DialogTitle } from "../ui/dialog";
 import { PeerDialogBody, PeerDialogFooter, PeerDialogMessage } from "./PeerDialog";
+import { ProjectAccessFields } from "./settings/people/AccessFields";
+import { accessOf, limitOf } from "./settings/people/people.logic";
 import type { ProjectChoice } from "./workspaceMembers.logic";
 
 /**
- * An admin changes the projects a member is on, and no other: ticks more or fewer, or lifts the
- * limit, which puts them on every project open to the workspace's members. A project of the limit
- * the admin is not on stays in the list by its id, so saving keeps it.
+ * Where a member works: every project open to the team, or the ones ticked. The projects of a limit
+ * the admin is not on stay in the list by their ids, so saving keeps them.
  */
 export function MemberProjectsDialog({
   name,
@@ -22,26 +22,16 @@ export function MemberProjectsDialog({
 }: {
   readonly name: string;
   readonly projects: ReadonlyArray<ProjectChoice>;
-  /** What they are on now; null for a member without a limit. */
+  /** What they are on now; null for a member on every project. */
   readonly limit: ReadonlyArray<string> | null;
   readonly busy: boolean;
   readonly error: string | null;
-  /** The projects to keep them on, or null to lift the limit. */
+  /** The projects to keep them on, or null for every project. */
   readonly onSave: (projects: ReadonlyArray<string> | null) => void;
   readonly onCancel: () => void;
 }) {
-  const [picked, setPicked] = useState<ReadonlyArray<string>>(limit ?? []);
-  const known = new Set(projects.map((project) => project.id));
-  const choices = [
-    ...projects,
-    ...(limit ?? []).filter((id) => !known.has(id)).map((id) => ({ id, name: id })),
-  ];
-  const toggle = (id: string, on: boolean) =>
-    setPicked((current) =>
-      on
-        ? [...current.filter((entry) => entry !== id), id]
-        : current.filter((entry) => entry !== id),
-    );
+  const [access, setAccess] = useState(() => accessOf(limit));
+  const empty = access.mode === "selected" && access.projects.length === 0;
   return (
     <Dialog
       open
@@ -52,41 +42,24 @@ export function MemberProjectsDialog({
       <DialogPopup>
         <DialogHeader>
           <div className="pe-6">
-            <DialogTitle>Projects of {name}</DialogTitle>
+            <DialogTitle>Project access for {name}</DialogTitle>
           </div>
         </DialogHeader>
         <PeerDialogBody>
-          <fieldset className="flex flex-col gap-2.5">
-            <legend className="pb-2 text-sm text-muted-foreground">
-              {`${name} is on the projects you tick, and no other. Lift the limit to put them on every project open to the workspace's members.`}
-            </legend>
-            {choices.map((project) => (
-              <label
-                key={project.id}
-                className="flex cursor-pointer items-center gap-2.5 text-sm text-foreground"
-              >
-                <Checkbox
-                  checked={picked.includes(project.id)}
-                  disabled={busy}
-                  onCheckedChange={(on) => toggle(project.id, on)}
-                />
-                {project.name}
-              </label>
-            ))}
-          </fieldset>
+          <ProjectAccessFields
+            value={access}
+            projects={projects}
+            disabled={busy}
+            onChange={setAccess}
+          />
           {error === null ? null : <PeerDialogMessage tone="error">{error}</PeerDialogMessage>}
         </PeerDialogBody>
         <PeerDialogFooter>
           <Button variant="outline" disabled={busy} onClick={onCancel}>
             Cancel
           </Button>
-          {limit === null ? null : (
-            <Button variant="outline" disabled={busy} onClick={() => onSave(null)}>
-              Lift the limit
-            </Button>
-          )}
-          <Button disabled={busy || picked.length === 0} onClick={() => onSave(picked)}>
-            {busy ? "Saving…" : limit === null ? "Limit to these projects" : "Save"}
+          <Button disabled={busy || empty} onClick={() => onSave(limitOf(access))}>
+            {busy ? "Saving…" : "Save"}
           </Button>
         </PeerDialogFooter>
       </DialogPopup>

@@ -1,4 +1,4 @@
-import { EnvironmentId, type PeerInvitation, type PeerWorkspaceState } from "@t3tools/contracts";
+import { EnvironmentId, type PeerWorkspaceState } from "@t3tools/contracts";
 import { act, type ReactNode } from "react";
 import { create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -67,7 +67,6 @@ vi.mock("../../ui/select", () => ({
   ),
 }));
 
-import { WorkspaceInvitations } from "./WorkspaceInvitations";
 import { InviteDialog } from "./WorkspacePeopleParts";
 
 const ENV = EnvironmentId.make("env-here");
@@ -98,12 +97,13 @@ const acme = (role: "member" | "admin") =>
       {
         project: { id: "webshop", name: "Webshop", role: "lead" },
         work: {
+          areas: [],
           tasks: [task("vl7", "open", "Split payments"), task("vl9", "done", "Old receipts")],
         },
       },
       {
         project: { id: "billing", name: "Billing", role: "member" },
-        work: { tasks: [task("bl1", "open", "Invoices")] },
+        work: { areas: [], tasks: [task("bl1", "open", "Invoices")] },
       },
     ],
   }) as unknown as PeerWorkspaceState;
@@ -119,11 +119,6 @@ const tick = async (name: string) => {
   const box = label.findByProps({ "data-checkbox": true });
   await act(async () => box.props.onCheckedChange(true));
 };
-const taskSelect = () => renderer!.root.findAllByProps({ "data-select": true })[0];
-const options = () =>
-  taskSelect()!
-    .findAll((node) => node.props["data-option"] !== undefined)
-    .map((node) => words(node));
 
 async function openDialog(role: "member" | "admin") {
   await act(async () => {
@@ -155,13 +150,11 @@ afterEach(async () => {
 });
 
 describe("the invitation form", () => {
-  it("lists only the projects a lead leads, with no role to choose, and sends the task picked", async () => {
+  it("lists only the projects a lead leads, with no role to choose and no every-project choice", async () => {
     await openDialog("member");
     expect(checkboxes()).toEqual(["Webshop"]);
     expect(words(renderer!.root)).not.toContain("Role");
-    // Her one project is ticked already, so its open tasks are offered; a done one is not.
-    expect(options()).toEqual(["No task", "VL7 Split payments"]);
-    await act(async () => taskSelect()!.props["data-change"]("vl7"));
+    expect(words(renderer!.root)).not.toContain("All projects");
     await type("cyril@freelance.example");
     await submit();
     expect(mocks.command).toHaveBeenCalledWith({
@@ -171,72 +164,17 @@ describe("the invitation form", () => {
         email: "cyril@freelance.example",
         role: "member",
         projects: ["webshop"],
-        task: "vl7",
       },
     });
   });
 
-  it("lets an admin name any project, or none for the whole workspace", async () => {
+  it("waits for a project while access is selected", async () => {
     await openDialog("admin");
-    expect(checkboxes()).toEqual(["Webshop", "Billing"]);
-    expect(taskSelect()).toBeUndefined();
-    await type("dan@acme.test");
-    await submit();
-    expect(mocks.command).toHaveBeenLastCalledWith({
-      environmentId: ENV,
-      input: { workspace: "acme", email: "dan@acme.test", role: "member" },
-    });
-
-    await openDialog("admin");
-    await tick("Billing");
-    expect(options()).toEqual(["No task", "BL1 Invoices"]);
-    await tick("Webshop");
-    expect(options()).toEqual([
-      "No task",
-      "Webshop · VL7 Split payments",
-      "Billing · BL1 Invoices",
-    ]);
-  });
-
-  it("hands a task to one person only", async () => {
-    await openDialog("member");
-    await act(async () => taskSelect()!.props["data-change"]("vl7"));
-    await type("cyril@freelance.example, dana@freelance.example");
-    expect(words(renderer!.root)).toContain("A task goes to one person.");
+    await type("cyril@freelance.example");
     await submit();
     expect(mocks.command).not.toHaveBeenCalled();
-  });
-});
-
-describe("an invitation's row", () => {
-  const invitation = (extra: Partial<PeerInvitation>): PeerInvitation => ({
-    email: "cyril@freelance.example",
-    role: "member",
-    invitedBy: "ana@acme.test",
-    invitedAt: "2026-10-27T12:00:00Z",
-    expiresAt: "2026-11-10T12:00:00Z",
-    status: "pending",
-    ...extra,
-  });
-
-  it("says which projects it limits them to and the task that waits", async () => {
-    await act(async () => {
-      renderer = create(
-        <WorkspaceInvitations
-          environmentId={ENV}
-          workspace={acme("admin")}
-          invitations={[
-            invitation({ projects: ["webshop"], task: "vl7" }),
-            invitation({ email: "dan@acme.test" }),
-          ]}
-          onChanged={() => {}}
-        />,
-      );
-    });
-    const rows = renderer!.root.findAllByType("li").map((row) => words(row));
-    expect(rows.find((row) => row.includes("cyril"))).toContain(
-      "On Webshop only · VL7 waits for them",
-    );
-    expect(rows.find((row) => row.includes("dan@"))).not.toContain("only");
+    await tick("Billing");
+    await submit();
+    expect(mocks.command.mock.calls[0]![0].input.projects).toEqual(["billing"]);
   });
 });

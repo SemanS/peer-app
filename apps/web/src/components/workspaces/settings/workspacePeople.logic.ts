@@ -20,20 +20,16 @@ export const INVITE_ROLES: ReadonlyArray<{
   readonly title: string;
   readonly description: (workspaceName: string) => string;
 }> = [
-  { id: "member", title: "Member", description: () => "Works in the projects they’re added to." },
+  { id: "member", title: "Member", description: () => "Can work on assigned projects" },
   {
     id: "admin",
     title: "Admin",
-    description: (workspaceName) =>
-      `Also manages ${workspaceName}’s people, projects, capacity and integrations.`,
+    description: () => "Can manage people and projects",
   },
 ];
 
 export const INVITE_NOTE =
   "They get an email with the invitation, which expires after 14 days. The role applies as soon as they join.";
-
-export const inviteLabel = (role: InviteRole): string =>
-  role === "admin" ? "Invite as admin" : "Invite as member";
 
 /** The most addresses one invite takes, so a pasted list cannot send a flood of mail. */
 export const INVITE_LIMIT = 20;

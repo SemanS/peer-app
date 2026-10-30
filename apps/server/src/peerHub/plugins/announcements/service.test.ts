@@ -237,12 +237,20 @@ describe("announcement service", () => {
       yield* Effect.promise(() => fixture.register("one"));
       const agents = yield* PeerAgents.pipe(Effect.provide(core));
       yield* agents.attach(fixture.broker);
-      return { service, hub, reply, failures };
+      return { service, hub, reply, failures, session: fixture.broker.sessionViews()[0]! };
     });
 
   it.effect("never asks the Hub about a local session's workspace", () =>
     Effect.gen(function* () {
-      const { service, failures } = yield* periodicRead(PEER_LOCAL_WORKSPACE, "local-abc");
+      const { service, failures, session } = yield* periodicRead(PEER_LOCAL_WORKSPACE, "local-abc");
+      expect(
+        yield* service.start({
+          session,
+          event: "session-start",
+          source: "startup",
+          remainingMs: 1200,
+        }),
+      ).toBeNull();
       yield* TestClock.adjust("301 seconds");
       yield* service.tick;
       yield* service.tick;

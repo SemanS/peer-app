@@ -307,6 +307,7 @@ const make = Effect.gen(function* () {
     tick,
     start: (ctx: PeerHookContext) =>
       Effect.gen(function* () {
+        if (!belongs(ctx.session)) return null;
         if (
           cache.entry(ctx.session.workspace).answer === undefined ||
           clock.currentTimeMillisUnsafe() - cache.entry(ctx.session.workspace).at > 60000

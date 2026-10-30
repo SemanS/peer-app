@@ -7,12 +7,17 @@
  *
  * @module peerHub/plugins/acceptance/Acceptance
  */
-import type {
-  PeerAcceptanceInput,
-  PeerAcceptancePlace,
-  PeerAcceptanceSummary,
+import {
+  PEER_DEFAULT_REVIEW_POLICY,
   PeerHubError,
-  PeerTaskAcceptance,
+  type PeerAcceptanceInput,
+  type PeerAcceptancePlace,
+  type PeerAcceptanceSummary,
+  type PeerProjectReviewPolicy,
+  type PeerReviewPolicyPlace,
+  type PeerSetReviewPolicyInput,
+  type PeerSetReviewPolicyResult,
+  type PeerTaskAcceptance,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -39,6 +44,20 @@ export class Acceptance extends Context.Service<
     readonly withdraw: (
       input: PeerAcceptanceInput,
     ) => Effect.Effect<PeerTaskAcceptance, PeerHubError>;
+    /**
+     * A project's review policy, read from the Hub; `available: false` with the default (`ask`)
+     * on a Hub that keeps none.
+     */
+    readonly reviewPolicy: (
+      place: PeerReviewPolicyPlace,
+    ) => Effect.Effect<PeerProjectReviewPolicy, PeerHubError>;
+    /**
+     * A lead or an admin saves a mode from the version read; `stale` with what is stored now when
+     * someone saved since. A Hub that keeps no policy refuses it.
+     */
+    readonly setReviewPolicy: (
+      input: PeerSetReviewPolicyInput,
+    ) => Effect.Effect<PeerSetReviewPolicyResult, PeerHubError>;
     /** What this computer knows of a task's acceptance, without asking the Hub. */
     readonly known: (place: PeerAcceptancePlace) => PeerTaskAcceptance | undefined;
     /** Reads a workspace again soon; a burst reads it once. */
@@ -121,7 +140,31 @@ const make = Effect.gen(function* () {
         ),
       );
 
+  const onProject = (p: PeerReviewPolicyPlace) => state.project(p.workspace, p.project);
+
   return Acceptance.of({
+    reviewPolicy: (p) =>
+      onProject(p).pipe(
+        Effect.andThen(hub.policy(p)),
+        Effect.map((policy) => ({
+          workspace: p.workspace,
+          project: p.project,
+          available: policy !== null,
+          policy: policy ?? PEER_DEFAULT_REVIEW_POLICY,
+        })),
+      ),
+    setReviewPolicy: (input) =>
+      onProject(input).pipe(
+        Effect.andThen(hub.setPolicy(input)),
+        Effect.filterOrFail(
+          (result) => result !== null,
+          () =>
+            new PeerHubError({
+              detail: "This Peer Hub does not keep a review policy yet.",
+              refused: true,
+            }),
+        ),
+      ),
     view: (p) =>
       member(p).pipe(
         Effect.andThen(read(p.workspace)),
@@ -154,6 +197,7 @@ const make = Effect.gen(function* () {
                   at: current.at,
                   statusThen: current.statusThen,
                   beforeReopening: beforeReopening === true,
+                  ...(current.via === undefined ? {} : { via: current.via }),
                 },
               ],
         )

@@ -1,15 +1,25 @@
+// @effect-diagnostics nodeBuiltinImport:off - a policy save's operation id.
 /**
  * The Hub's `acceptance` routes (design D4), below `/v1/workspaces/{slug}/acceptance`: the caller's
  * projects' acceptances (`GET`), a lead's acceptance of a task (`POST …/{project}/{task}`) and its
  * withdrawal (`DELETE …/{project}/{task}`), each with an `op` and an optional note. A task that is
- * still open answers `409 not_delivered`; every other refusal fails as the Hub words it.
+ * still open answers `409 not_delivered`; every other refusal fails as the Hub words it. A project's
+ * review policy (`GET`/`PUT …/{project}/policy`, `acceptance` revision 2) is read by its members and
+ * saved by a lead or an admin from the version read; `409 stale_policy` names the stored one.
  *
  * @module peerHub/plugins/acceptance/client/hub
  */
+import * as NodeCrypto from "node:crypto";
+
 import {
   PeerAcceptanceEvent,
+  PeerAcceptanceVia,
   PeerHubError,
+  PeerReviewPolicy,
   type PeerAcceptanceInput,
+  type PeerReviewPolicyPlace,
+  type PeerSetReviewPolicyInput,
+  type PeerSetReviewPolicyResult,
   type PeerTaskAcceptance,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -23,6 +33,7 @@ const Current = Schema.Struct({
   at: Schema.String,
   note: Schema.optional(Schema.String),
   statusThen: Schema.String,
+  via: Schema.optional(PeerAcceptanceVia),
 });
 
 /**
@@ -53,6 +64,7 @@ const currentOf = (row: typeof Current.Type) => ({
   at: row.at,
   ...(row.note === undefined ? {} : { note: row.note }),
   statusThen: row.statusThen,
+  ...(row.via === undefined ? {} : { via: row.via }),
 });
 
 /** An entry as the plugin keeps it: the current acceptance or null, and the history oldest first. */
@@ -65,7 +77,13 @@ export function taskOf(
     current: entry.acceptance === null ? null : currentOf(entry.acceptance),
     beforeReopening: entry.acceptance !== null && entry.beforeReopening,
     history: [...entry.history]
-      .map(({ kind, by, at, note }) => ({ kind, by, at, ...(note === undefined ? {} : { note }) }))
+      .map(({ kind, by, at, note, via }) => ({
+        kind,
+        by,
+        at,
+        ...(note === undefined ? {} : { note }),
+        ...(via === undefined ? {} : { via }),
+      }))
       .sort((a, b) => a.at.localeCompare(b.at)),
   };
 }
@@ -73,7 +91,20 @@ export function taskOf(
 export const NOT_DELIVERED =
   "This task is not delivered yet: a lead accepts a task once it is in review or done.";
 
+/** A policy as the Hub answers it; `signals`, `changed` and `replayed` are dropped. */
+const policyOf = (row: PeerReviewPolicy): PeerReviewPolicy => ({
+  mode: row.mode,
+  version: row.version,
+  ...(row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt }),
+  ...(row.updatedBy === undefined ? {} : { updatedBy: row.updatedBy }),
+});
+const decodeStale = Schema.decodeUnknownOption(Schema.Struct({ policy: PeerReviewPolicy }));
+const policyPath = (project: string) => `/acceptance/${encodeURIComponent(project)}/policy`;
+const newOp = () => NodeCrypto.randomBytes(12).toString("hex");
+
 export function hubCalls(client: PeerHubClient.PeerHubClient["Service"]) {
+  /** Whether the Hub keeps review policies, as its catalog says (`acceptance` 2). */
+  const keepsPolicy = Effect.map(client.features, ({ acceptance = 0 }) => acceptance >= 2);
   const write = (method: "POST" | "DELETE", input: PeerAcceptanceInput) =>
     client
       .request<typeof Written, { readonly notDelivered: true } | null>(Written, {
@@ -122,6 +153,46 @@ export function hubCalls(client: PeerHubClient.PeerHubClient["Service"]) {
                 ),
           ),
         ),
+    keepsPolicy,
+    /** A project's review policy; null from a Hub that keeps none. */
+    policy: (place: PeerReviewPolicyPlace) =>
+      Effect.gen(function* () {
+        if (!(yield* keepsPolicy)) return null;
+        const answer = yield* client.request(PeerReviewPolicy, {
+          workspace: place.workspace,
+          path: policyPath(place.project),
+          unsupported,
+        });
+        return answer === null ? null : policyOf(answer);
+      }),
+    /**
+     * Saves a mode from the version read: `saved`, or `stale` with what is stored now; null from a
+     * Hub that keeps none. A member's save fails as the Hub words it (403).
+     */
+    setPolicy: (input: PeerSetReviewPolicyInput) =>
+      Effect.gen(function* () {
+        if (!(yield* keepsPolicy)) return null;
+        const answer = yield* client.request<
+          typeof PeerReviewPolicy,
+          { readonly stale: PeerReviewPolicy } | null
+        >(PeerReviewPolicy, {
+          workspace: input.workspace,
+          path: policyPath(input.project),
+          method: "PUT",
+          body: { mode: input.mode, version: input.version, op: newOp() },
+          timeoutMs: 6000,
+          unsupported,
+          conflict: (code, details) => {
+            if (code !== "stale_policy") return undefined;
+            const stale = decodeStale(details);
+            return stale._tag === "Some" ? { stale: policyOf(stale.value.policy) } : undefined;
+          },
+        });
+        if (answer === null) return null;
+        return "stale" in answer
+          ? ({ kind: "stale", policy: answer.stale } satisfies PeerSetReviewPolicyResult)
+          : ({ kind: "saved", policy: policyOf(answer) } satisfies PeerSetReviewPolicyResult);
+      }),
     accept: (input: PeerAcceptanceInput) => write("POST", input),
     withdraw: (input: PeerAcceptanceInput) => write("DELETE", input),
   };

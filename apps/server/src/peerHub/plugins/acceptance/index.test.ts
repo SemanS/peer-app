@@ -1,3 +1,4 @@
+// @effect-diagnostics preferSchemaOverJson:off - the bodies the Hub was sent.
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
@@ -272,4 +273,102 @@ describe("acceptance text", () => {
       statusThen: "review",
     });
   });
+
+  it("keeps whether a person or the policy gave an acceptance", () => {
+    const row = taskOf(
+      VL7_PLACE,
+      acceptedEntry({
+        acceptance: { ...acceptedEntry().acceptance, via: "policy" },
+        history: [{ seq: 1, kind: "accepted", by: ANA, at: "2026-10-28T10:00:00Z", via: "policy" }],
+      }),
+    );
+    assert.strictEqual(row.current?.via, "policy");
+    assert.strictEqual(row.history[0]?.via, "policy");
+    assert.isUndefined(taskOf(VL7_PLACE, acceptedEntry()).current?.via);
+  });
+
+  it.effect("reads a project's review policy, and saves one from the version read", () =>
+    run(
+      Effect.gen(function* () {
+        const stored = { mode: "ask", version: 0 } as Record<string, unknown>;
+        const POLICY = `${LIST}/pay/policy`;
+        const peer = yield* ready({
+          revision: 2,
+          route: (url, method) => {
+            if (url !== POLICY) return undefined;
+            if (method !== "PUT") return [200, { ...stored, signals: ["no-report"] }];
+            const body = JSON.parse(peer.hub.calls.at(-1)!.body) as Record<string, unknown>;
+            if (body.version !== stored.version)
+              return [
+                409,
+                {
+                  error: {
+                    code: "stale_policy",
+                    message: "The policy changed.",
+                    details: { version: stored.version, policy: stored },
+                  },
+                },
+              ];
+            Object.assign(stored, {
+              mode: body.mode,
+              version: (stored.version as number) + 1,
+              updatedAt: "2026-10-30T10:00:00Z",
+              updatedBy: ANA,
+            });
+            return [200, { ...stored, changed: true }];
+          },
+        });
+        const place = { workspace: "acme", project: "pay" };
+        assert.deepStrictEqual(yield* peer.rpc[methods.peerAcceptanceReviewPolicy](place), {
+          ...place,
+          available: true,
+          policy: { mode: "ask", version: 0 },
+        });
+        const saved = yield* peer.rpc[methods.peerAcceptanceSetReviewPolicy]({
+          ...place,
+          mode: "auto",
+          version: 0,
+        });
+        assert.deepStrictEqual(saved, {
+          kind: "saved",
+          policy: { mode: "auto", version: 1, updatedAt: "2026-10-30T10:00:00Z", updatedBy: ANA },
+        });
+        const sent = writes(peer.hub, "PUT")[0]!;
+        assert.strictEqual(sent.url, POLICY);
+        assert.strictEqual(sent.body.mode, "auto");
+        assert.strictEqual(sent.body.version, 0);
+        assert.match(String(sent.body.op), /^[0-9a-f]{24}$/);
+        // A second lead saving from the version both read is told what is stored now.
+        const stale = yield* peer.rpc[methods.peerAcceptanceSetReviewPolicy]({
+          ...place,
+          mode: "ask",
+          version: 0,
+        });
+        assert.strictEqual(stale.kind, "stale");
+        assert.strictEqual(stale.policy.version, 1);
+        assert.strictEqual(stale.policy.mode, "auto");
+      }),
+    ),
+  );
+
+  it.effect("on a Hub without review policies, reads the default and saves nothing", () =>
+    run(
+      Effect.gen(function* () {
+        const peer = yield* ready({ revision: 1 });
+        const place = { workspace: "acme", project: "pay" };
+        assert.deepStrictEqual(yield* peer.rpc[methods.peerAcceptanceReviewPolicy](place), {
+          ...place,
+          available: false,
+          policy: { mode: "ask", version: 0 },
+        });
+        const refused = yield* peer.rpc[methods.peerAcceptanceSetReviewPolicy]({
+          ...place,
+          mode: "auto",
+          version: 0,
+        }).pipe(Effect.result);
+        assert.isTrue(Result.isFailure(refused));
+        assert.isFalse(peer.hub.calls.some((call) => call.url?.endsWith("/policy")));
+      }),
+    ),
+  );
 });

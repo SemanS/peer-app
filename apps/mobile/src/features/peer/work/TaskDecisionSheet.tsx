@@ -21,6 +21,7 @@ import { CurrentContextReport } from "../CurrentContextReport";
 import { GitHubTaskPullRequests } from "../github/GitHubTaskPullRequests";
 import { PeerHandoff } from "../handoff/PeerHandoff";
 import { OpenSpecTaskPreparation } from "../openspec/OpenSpecTaskPreparation";
+import { TaskRuns } from "./TaskRuns";
 
 /** Task evidence and the existing review commands, accessible without leaving the phone. */
 export function TaskDecisionSheet({
@@ -214,6 +215,14 @@ export function TaskDecisionSheet({
               task={task}
               disabled={busy}
               onBusyChange={setBusy}
+            />
+            <TaskRuns
+              environmentId={environmentId}
+              status={status}
+              workspace={workspace}
+              project={project}
+              taskId={taskId}
+              revision={`${task.updatedAt}|${JSON.stringify(task.runs ?? null)}`}
             />
             <CurrentContextReport
               environmentId={environmentId}

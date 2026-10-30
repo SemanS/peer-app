@@ -14,7 +14,12 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeReadlinePromises from "node:readline/promises";
 
-import { PEER_LOCAL_WORKSPACE, type PeerHubError } from "@t3tools/contracts";
+import {
+  PEER_LOCAL_WORKSPACE,
+  type PeerHubError,
+  type PeerHubStatus,
+  type PeerRun,
+} from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
@@ -36,7 +41,9 @@ import * as PeerAdapters from "../peerHub/core/coordination/PeerAdapters.ts";
 import * as PeerCoordination from "../peerHub/core/coordination/PeerCoordination.ts";
 import * as PeerHubClient from "../peerHub/core/hub/PeerHubClient.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
+import * as PeerStatus from "../peerHub/core/status/PeerStatus.ts";
 import * as PeerWork from "../peerHub/core/work/PeerWork.ts";
+import * as PeerRuns from "../peerHub/core/work/runs.ts";
 import { matchRepositories } from "../peerHub/core/state/remotes.ts";
 import * as PeerWorkspaces from "../peerHub/core/workspaces/PeerWorkspaces.ts";
 import { readProjects, registerFolder } from "../peerHub/headless/HeadlessProjects.ts";
@@ -50,6 +57,7 @@ import { type OneShotIo, outcome } from "./peerCoreIo.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
 import * as PeerCoreMenu from "./peerCoreMenu.ts";
 import * as PeerCoreOpenSpec from "./peerCoreOpenSpec.ts";
+import * as PeerCoreRuns from "./peerCoreRuns.ts";
 import * as PeerCoreTree from "./peerCoreTree.ts";
 import * as PeerCoreShare from "./peerCoreShare.ts";
 import * as PeerCoreTasks from "./peerCoreTasks.ts";
@@ -319,6 +327,41 @@ const statusCommand = Command.make("status", { ...authLocationFlags }).pipe(
   ),
 );
 
+/** What a command that writes `peer-hub.json` says beside the Peer app. */
+const appRefusal = (owner: Owner) =>
+  Effect.fail(
+    fail(
+      `peer core: the Peer app runs here (pid ${owner.pid}): do this in the app, or quit it first.`,
+    ),
+  );
+
+/**
+ * The runs where they are kept now: the broker that owns the socket, else this process
+ * (design D5). Asked at each use, since Peer may start or stop while a menu is open.
+ */
+const runsAccess = (stateDir: string) =>
+  ownerOf(stateDir).pipe(
+    Effect.map((owner): PeerCoreRuns.RunsAccess<PeerRuns.PeerRuns> =>
+      owner === null ? PeerCoreRuns.localRuns : PeerCoreRuns.socketRuns(coordSocketPath(stateDir)),
+    ),
+  );
+
+/** A folder on this computer that is a checkout of the project: recorded, or shared from here. */
+const checkoutOf = (stateDir: string, workspace: string, project: string) =>
+  Effect.gen(function* () {
+    const state = yield* PeerState.PeerState;
+    const { persisted } = yield* state.read;
+    for (const [key, root] of Object.entries(persisted.localCheckouts ?? {}))
+      if (key.startsWith(`${workspace}/${project}/`) && NodeFS.existsSync(root)) return root;
+    // A folder shared from this computer is its project's checkout too.
+    for (const folder of yield* Effect.promise(() => readProjects(stateDir))) {
+      const place = yield* state.placeOf(folder.workspaceRoot, { bindByRemote: false });
+      if (place !== null && place.workspace === workspace && place.project === project)
+        return folder.workspaceRoot;
+    }
+    return null;
+  });
+
 /**
  * The one-shot commands write `peer-hub.json`, which a running broker keeps in memory. The Peer
  * app is the person's to quit, so beside it they are refused; Peer Core runs in the background for
@@ -333,10 +376,7 @@ const pauseCore = (
   Effect.gen(function* () {
     const owner = yield* ownerOf(config.stateDir);
     if (owner === null) return;
-    if (owner.kind === "app")
-      return yield* fail(
-        `peer core: the Peer app runs here (pid ${owner.pid}): do this in the app, or quit it first.`,
-      );
+    if (owner.kind === "app") return yield* appRefusal(owner);
     const socket = coordSocketPath(config.stateDir);
     const handedOver =
       (yield* Effect.promise(() => requestHandover(socket))) &&
@@ -438,6 +478,8 @@ type MenuServices =
   | PeerState.PeerState
   | PeerHubClient.PeerHubClient
   | PeerWork.PeerWork
+  | PeerRuns.PeerRuns
+  | PeerStatus.PeerStatus
   | Effect.Services<ReturnType<typeof PeerCoreEditor.connectEditor>>;
 
 /** Takes a project out of its workspace, and forgets what was imported into it here. */
@@ -451,241 +493,291 @@ const unshareProject = (stateDir: string, workspace: string, project: string) =>
     );
   }).pipe(hubFailure);
 
-/** The menu after signing in, each step the command of the same name. */
-const runMenu = (stateDir: string) =>
+/**
+ * The menu after signing in, each step the command of the same name. Beside the Peer app (`app`)
+ * it writes nothing to `peer-hub.json`, which the app keeps in memory: the status is what the app
+ * last saved, Start a task asks the Hub directly and its run goes through the app's socket, and
+ * every other step that writes is refused as its command is.
+ */
+const runMenu = (stateDir: string, app: Owner | null = null) =>
+  Effect.gen(function* () {
+    const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
+    const status =
+      app === null ? workspaces.sync.pipe(hubFailure) : (yield* PeerStatus.PeerStatus).publish;
+    const steps = yield* menuSteps(stateDir, status);
+    if (app !== null)
+      yield* Console.log(
+        "The Peer app runs here: Start a task works beside it; the other steps that change this computer's Peer are the app's.",
+      );
+    return yield* PeerCoreMenu.menu<MenuServices>(
+      menuAsk,
+      app === null ? steps : besideApp(steps, app),
+      terminalIo,
+    );
+  });
+
+/** The menu's steps beside the Peer app: Start a task asks the Hub itself; writing steps refuse. */
+const besideApp = (
+  steps: PeerCoreMenu.MenuSteps<MenuServices>,
+  app: Owner,
+): PeerCoreMenu.MenuSteps<MenuServices> => {
+  const refuse = appRefusal(app);
+  const hub = Effect.gen(function* () {
+    const client = yield* PeerHubClient.PeerHubClient;
+    return { client, ...(yield* client.session) };
+  });
+  return {
+    ...steps,
+    join: () => refuse,
+    founding: () => refuse,
+    create: () => refuse,
+    share: () => refuse,
+    invite: () => refuse,
+    unshare: () => refuse,
+    openspec: () => refuse,
+    connectEditor: () => refuse,
+    disconnectEditor: () => refuse,
+    startTask: (input) =>
+      Effect.gen(function* () {
+        const { client, hubUrl, session } = yield* hub;
+        const task = yield* client.api.createTask(hubUrl, session, input.workspace, input.project, {
+          title: input.title,
+          ...(input.parent === undefined ? {} : { parent: input.parent }),
+        });
+        yield* Console.log(
+          `Created ${task.key ?? task.id} · ${task.title} in ${input.workspace}/${input.project}.`,
+        );
+        if (input.take) yield* steps.takeTask(input.workspace, input.project, task.id);
+        yield* Console.log(
+          "Your agents in the project see it with peer tasks, and Peer tells them who works on what.",
+        );
+      }).pipe(hubFailure),
+    settleTask: (workspace, project, task, executable) =>
+      Effect.gen(function* () {
+        const { client, hubUrl, session } = yield* hub;
+        yield* client.api.updateTask(hubUrl, session, workspace, project, task, {
+          executable,
+          unsettled: false,
+        });
+      }).pipe(hubFailure),
+  };
+};
+
+const menuSteps = (
+  stateDir: string,
+  status: Effect.Effect<PeerHubStatus, CliError.UserError, MenuServices>,
+) =>
   Effect.gen(function* () {
     const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
     const state = yield* PeerState.PeerState;
-    const status = workspaces.sync.pipe(hubFailure);
-    return yield* PeerCoreMenu.menu<MenuServices>(
-      menuAsk,
-      {
-        status,
-        home: NodeOS.homedir(),
-        version: peerVersion(),
-        here: Effect.gen(function* () {
-          const checkout = yield* PeerCoreBind.repositoryRoot(process.cwd());
-          if (checkout === null) return null;
-          const place = yield* state.placeOf(checkout.root, { bindByRemote: false });
-          if (place !== null && place.workspace !== PEER_LOCAL_WORKSPACE)
-            return {
+    const steps: PeerCoreMenu.MenuSteps<MenuServices> = {
+      status,
+      home: NodeOS.homedir(),
+      version: peerVersion(),
+      here: Effect.gen(function* () {
+        const checkout = yield* PeerCoreBind.repositoryRoot(process.cwd());
+        if (checkout === null) return null;
+        const place = yield* state.placeOf(checkout.root, { bindByRemote: false });
+        if (place !== null && place.workspace !== PEER_LOCAL_WORKSPACE)
+          return {
+            root: checkout.root,
+            state: "connected" as const,
+            workspace: place.workspace,
+            project: place.project,
+            openspec: NodeFS.existsSync(NodePath.join(checkout.root, "openspec", "changes")),
+          };
+        const remote = yield* Effect.promise(() => PeerState.remoteOf(checkout.remoteRoot));
+        const { persisted } = yield* state.read;
+        const match =
+          remote === null
+            ? undefined
+            : matchRepositories(
+                remote,
+                persisted.workspaces.map((w) => w.manifest),
+              )[0];
+        return match === undefined
+          ? { root: checkout.root, state: "new" as const }
+          : {
               root: checkout.root,
-              state: "connected" as const,
-              workspace: place.workspace,
-              project: place.project,
-              openspec: NodeFS.existsSync(NodePath.join(checkout.root, "openspec", "changes")),
+              state: "clone" as const,
+              project: `${match.workspace}/${match.project}`,
             };
-          const remote = yield* Effect.promise(() => PeerState.remoteOf(checkout.remoteRoot));
-          const { persisted } = yield* state.read;
-          const match =
-            remote === null
-              ? undefined
-              : matchRepositories(
-                  remote,
-                  persisted.workspaces.map((w) => w.manifest),
-                )[0];
-          return match === undefined
-            ? { root: checkout.root, state: "new" as const }
-            : {
-                root: checkout.root,
-                state: "clone" as const,
-                project: `${match.workspace}/${match.project}`,
-              };
-        }),
-        editors: Effect.gen(function* () {
-          const coordination = (yield* status).coordination;
-          const mcp = yield* (yield* McpConnect.McpClients).connected;
-          const env = yield* HostProcess.Environment;
-          return PeerCoreEditor.EDITORS.map((id) => ({
-            id,
-            title: PeerCoreEditor.editorTitle(id),
-            connected:
-              id === "claude"
-                ? coordination.claudeHooks
-                : id === "codex"
-                  ? (coordination.codexHookHomes ?? []).some((home) => home.installed)
-                  : mcp.includes(id),
-            launchable: (id === "claude" || id === "codex") && onPath(id, env.PATH),
-          }));
-        }).pipe(Effect.orElseSucceed(() => [])),
-        join: (slug) =>
-          PeerCoreJoin.join({ target: slug }, terminalIo).pipe(
-            Effect.flatMap((joined) => PeerCoreJoin.sayNextStep(joined, terminalIo)),
-            hubFailure,
-          ),
-        founding: (slug) =>
-          workspaces
-            .acceptFounding({ slug })
-            .pipe(Effect.andThen(Console.log(`Accepted: ${slug}. You are its owner.`)), hubFailure),
-        create: (name) => PeerCoreMenu.create({ name }, terminalIo).pipe(Effect.asVoid, hubFailure),
-        repositories: Effect.gen(function* () {
-          const found = yield* Effect.promise(() =>
-            PeerCoreMenu.findRepositories(NodeOS.homedir()),
-          );
-          const open: Array<string> = [];
-          for (const dir of found) {
-            const place = yield* state.placeOf(dir, { bindByRemote: false });
-            if (place === null || place.workspace === PEER_LOCAL_WORKSPACE) open.push(dir);
-          }
-          return open;
-        }),
-        share: (path) =>
-          PeerCoreShare.shareFolder(
-            path.replace(/^~(?=$|\/)/, NodeOS.homedir()),
-            process.cwd(),
-          ).pipe(
-            Effect.flatMap(({ folder }) =>
-              PeerCoreShare.share(
-                { folder, named: true, yes: false },
-                shareAsk,
-                terminalIo,
-                registerIn(stateDir),
-              ).pipe(
-                Effect.andThen(state.placeOf(folder, { bindByRemote: false })),
-                Effect.map((place) =>
-                  place === null || place.workspace === PEER_LOCAL_WORKSPACE
-                    ? null
-                    : { workspace: place.workspace, project: place.project },
-                ),
+      }),
+      editors: Effect.gen(function* () {
+        const coordination = (yield* status).coordination;
+        const mcp = yield* (yield* McpConnect.McpClients).connected;
+        const env = yield* HostProcess.Environment;
+        return PeerCoreEditor.EDITORS.map((id) => ({
+          id,
+          title: PeerCoreEditor.editorTitle(id),
+          connected:
+            id === "claude"
+              ? coordination.claudeHooks
+              : id === "codex"
+                ? (coordination.codexHookHomes ?? []).some((home) => home.installed)
+                : mcp.includes(id),
+          launchable: (id === "claude" || id === "codex") && onPath(id, env.PATH),
+        }));
+      }).pipe(Effect.orElseSucceed(() => [])),
+      join: (slug) =>
+        PeerCoreJoin.join({ target: slug }, terminalIo).pipe(
+          Effect.flatMap((joined) => PeerCoreJoin.sayNextStep(joined, terminalIo)),
+          hubFailure,
+        ),
+      founding: (slug) =>
+        workspaces
+          .acceptFounding({ slug })
+          .pipe(Effect.andThen(Console.log(`Accepted: ${slug}. You are its owner.`)), hubFailure),
+      create: (name) => PeerCoreMenu.create({ name }, terminalIo).pipe(Effect.asVoid, hubFailure),
+      repositories: Effect.gen(function* () {
+        const found = yield* Effect.promise(() => PeerCoreMenu.findRepositories(NodeOS.homedir()));
+        const open: Array<string> = [];
+        for (const dir of found) {
+          const place = yield* state.placeOf(dir, { bindByRemote: false });
+          if (place === null || place.workspace === PEER_LOCAL_WORKSPACE) open.push(dir);
+        }
+        return open;
+      }),
+      share: (path) =>
+        PeerCoreShare.shareFolder(path.replace(/^~(?=$|\/)/, NodeOS.homedir()), process.cwd()).pipe(
+          Effect.flatMap(({ folder }) =>
+            PeerCoreShare.share(
+              { folder, named: true, yes: false },
+              shareAsk,
+              terminalIo,
+              registerIn(stateDir),
+            ).pipe(
+              Effect.andThen(state.placeOf(folder, { bindByRemote: false })),
+              Effect.map((place) =>
+                place === null || place.workspace === PEER_LOCAL_WORKSPACE
+                  ? null
+                  : { workspace: place.workspace, project: place.project },
               ),
             ),
-            hubFailure,
           ),
-        invite: (input) =>
-          status.pipe(
-            Effect.flatMap((now) => PeerCoreMenu.invite(input, now, terminalIo)),
-            Effect.asVoid,
-            hubFailure,
-          ),
-        startTask: (input) =>
-          Effect.gen(function* () {
-            const work = yield* PeerWork.PeerWork;
-            const { createdTask: task } = yield* work.createTask({
-              workspace: input.workspace,
-              projectId: input.project,
-              title: input.title,
-              ...(input.parent === undefined ? {} : { parent: input.parent }),
-            });
-            yield* Console.log(
-              `Created ${task.key ?? task.id} · ${task.title} in ${input.workspace}/${input.project}.`,
-            );
-            if (input.take)
-              yield* PeerCoreTasks.takeTask(
-                {
-                  task: task.id,
-                  project: `${input.workspace}/${input.project}`,
-                  cwd: realpathOrSelf(process.cwd()),
-                  canWrite: true,
-                },
-                terminalIo,
-              );
-            yield* Console.log(
-              "Your agents in the project see it with peer tasks, and Peer tells them who works on what.",
-            );
-          }).pipe(hubFailure),
-        settleTask: (workspace, project, task, executable) =>
-          Effect.gen(function* () {
-            const work = yield* PeerWork.PeerWork;
-            yield* work.updateTask({
-              workspace,
-              projectId: project,
-              taskId: task,
-              executable,
-              unsettled: false,
-            });
-          }).pipe(hubFailure),
-        unshare: (workspace, project) => unshareProject(stateDir, workspace, project),
-        takeTask: (workspace, project, task) =>
-          PeerCoreTasks.takeTask(
-            {
-              task,
-              project: `${workspace}/${project}`,
-              cwd: realpathOrSelf(process.cwd()),
-              canWrite: true,
-            },
-            terminalIo,
-          ),
-        checkoutOf: (workspace, project) =>
-          Effect.gen(function* () {
-            const { persisted } = yield* state.read;
-            for (const [key, root] of Object.entries(persisted.localCheckouts ?? {}))
-              if (key.startsWith(`${workspace}/${project}/`) && NodeFS.existsSync(root))
-                return root;
-            // A folder shared from this computer is its project's checkout too.
-            for (const folder of yield* Effect.promise(() => readProjects(stateDir))) {
-              const place = yield* state.placeOf(folder.workspaceRoot, { bindByRemote: false });
-              if (place !== null && place.workspace === workspace && place.project === project)
-                return folder.workspaceRoot;
-            }
-            return null;
-          }),
-        scope: (workspace, project) =>
-          Effect.gen(function* () {
-            const client = yield* PeerHubClient.PeerHubClient;
-            const { hubUrl, session } = yield* client.session;
-            const work = (yield* client.api.work(hubUrl, session, workspace)).projects[project];
-            const view = yield* client.api
-              .taskOwners(hubUrl, session, workspace)
-              .pipe(Effect.option);
-            const owners = Option.isSome(view) ? view.value.projects[project] : undefined;
-            const imported = new Set(
-              Object.values(
-                (yield* Effect.promise(() => PeerCoreOpenSpec.readRecord(stateDir)))[
-                  `${workspace}/${project}`
-                ] ?? {},
-              ).map((entry) => entry.task),
-            );
-            return PeerCoreTasks.projectTree({
-              areas: work?.areas ?? [],
-              tasks: work?.tasks ?? [],
-              ...(owners === undefined
-                ? {}
-                : {
-                    owners: Object.fromEntries(
-                      Object.entries(owners.tasks).map(([id, row]) => [id, row.owner]),
-                    ),
-                    areaOwners: owners.map.areas,
-                  }),
-              imported,
-            });
-          }).pipe(hubFailure),
-        openspec: (target) =>
-          PeerCoreOpenSpec.sync(
-            { ...target, stateDir },
-            (message) => shareAsk.confirm(message, true),
-            terminalIo,
-          ).pipe(hubFailure),
-        openPeer: Effect.gen(function* () {
-          const app = [
-            "/Applications/Peer.app",
-            NodePath.join(NodeOS.homedir(), "Applications", "Peer.app"),
-          ].find((path) => NodeFS.existsSync(path));
-          const platform = yield* HostProcess.Platform;
-          const opener =
-            platform === "darwin" ? "open" : platform === "win32" ? undefined : "xdg-open";
-          const launch = (target: string) =>
-            Effect.sync(() =>
-              NodeChildProcess.spawn(opener!, [target], {
-                detached: true,
-                stdio: "ignore",
-              }).unref(),
-            );
-          if (app !== undefined && opener !== undefined) {
-            yield* launch(app);
-            yield* Console.log("Opening Peer. It coordinates this computer from now on.");
-            return;
-          }
-          if (opener !== undefined) yield* launch(PEER_DOWNLOAD);
-          return yield* fail(
-            `peer core: the Peer app is not installed here${opener === undefined ? "" : "; its download page is open"}: ${PEER_DOWNLOAD}`,
+          hubFailure,
+        ),
+      invite: (input) =>
+        status.pipe(
+          Effect.flatMap((now) => PeerCoreMenu.invite(input, now, terminalIo)),
+          Effect.asVoid,
+          hubFailure,
+        ),
+      startTask: (input) =>
+        Effect.gen(function* () {
+          const work = yield* PeerWork.PeerWork;
+          const { createdTask: task } = yield* work.createTask({
+            workspace: input.workspace,
+            projectId: input.project,
+            title: input.title,
+            ...(input.parent === undefined ? {} : { parent: input.parent }),
+          });
+          yield* Console.log(
+            `Created ${task.key ?? task.id} · ${task.title} in ${input.workspace}/${input.project}.`,
           );
-        }),
-        connectEditor: (id) =>
-          PeerCoreEditor.connectEditor(id, stateDir, terminalIo).pipe(hubFailure),
-        disconnectEditor: (id) => PeerCoreEditor.disconnectEditor(id, terminalIo).pipe(hubFailure),
-      },
-      terminalIo,
-    );
+          if (input.take)
+            yield* PeerCoreTasks.takeTask(
+              {
+                task: task.id,
+                project: `${input.workspace}/${input.project}`,
+                cwd: realpathOrSelf(process.cwd()),
+                canWrite: true,
+              },
+              terminalIo,
+            );
+          yield* Console.log(
+            "Your agents in the project see it with peer tasks, and Peer tells them who works on what.",
+          );
+        }).pipe(hubFailure),
+      settleTask: (workspace, project, task, executable) =>
+        Effect.gen(function* () {
+          const work = yield* PeerWork.PeerWork;
+          yield* work.updateTask({
+            workspace,
+            projectId: project,
+            taskId: task,
+            executable,
+            unsettled: false,
+          });
+        }).pipe(hubFailure),
+      unshare: (workspace, project) => unshareProject(stateDir, workspace, project),
+      takeTask: (workspace, project, task) =>
+        PeerCoreTasks.takeTask(
+          {
+            task,
+            project: `${workspace}/${project}`,
+            cwd: realpathOrSelf(process.cwd()),
+            canWrite: true,
+          },
+          terminalIo,
+        ),
+      checkoutOf: (workspace, project) => checkoutOf(stateDir, workspace, project),
+      createRun: (input) =>
+        runsAccess(stateDir).pipe(Effect.flatMap((access) => access.create(input))),
+      scope: (workspace, project) =>
+        Effect.gen(function* () {
+          const client = yield* PeerHubClient.PeerHubClient;
+          const { hubUrl, session } = yield* client.session;
+          const work = (yield* client.api.work(hubUrl, session, workspace)).projects[project];
+          const view = yield* client.api.taskOwners(hubUrl, session, workspace).pipe(Effect.option);
+          const owners = Option.isSome(view) ? view.value.projects[project] : undefined;
+          const imported = new Set(
+            Object.values(
+              (yield* Effect.promise(() => PeerCoreOpenSpec.readRecord(stateDir)))[
+                `${workspace}/${project}`
+              ] ?? {},
+            ).map((entry) => entry.task),
+          );
+          return PeerCoreTasks.projectTree({
+            areas: work?.areas ?? [],
+            tasks: work?.tasks ?? [],
+            ...(owners === undefined
+              ? {}
+              : {
+                  owners: Object.fromEntries(
+                    Object.entries(owners.tasks).map(([id, row]) => [id, row.owner]),
+                  ),
+                  areaOwners: owners.map.areas,
+                }),
+            imported,
+          });
+        }).pipe(hubFailure),
+      openspec: (target) =>
+        PeerCoreOpenSpec.sync(
+          { ...target, stateDir },
+          (message) => shareAsk.confirm(message, true),
+          terminalIo,
+        ).pipe(hubFailure),
+      openPeer: Effect.gen(function* () {
+        const app = [
+          "/Applications/Peer.app",
+          NodePath.join(NodeOS.homedir(), "Applications", "Peer.app"),
+        ].find((path) => NodeFS.existsSync(path));
+        const platform = yield* HostProcess.Platform;
+        const opener =
+          platform === "darwin" ? "open" : platform === "win32" ? undefined : "xdg-open";
+        const launch = (target: string) =>
+          Effect.sync(() =>
+            NodeChildProcess.spawn(opener!, [target], {
+              detached: true,
+              stdio: "ignore",
+            }).unref(),
+          );
+        if (app !== undefined && opener !== undefined) {
+          yield* launch(app);
+          yield* Console.log("Opening Peer. It coordinates this computer from now on.");
+          return;
+        }
+        if (opener !== undefined) yield* launch(PEER_DOWNLOAD);
+        return yield* fail(
+          `peer core: the Peer app is not installed here${opener === undefined ? "" : "; its download page is open"}: ${PEER_DOWNLOAD}`,
+        );
+      }),
+      connectEditor: (id) =>
+        PeerCoreEditor.connectEditor(id, stateDir, terminalIo).pipe(hubFailure),
+      disconnectEditor: (id) => PeerCoreEditor.disconnectEditor(id, terminalIo).pipe(hubFailure),
+    };
+    return steps;
   });
 
 const registerIn = (stateDir: string) => (path: string, name?: string) =>
@@ -711,7 +803,12 @@ const loginCommand = Command.make("login", {
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
-      yield* pauseCore(config, flags, { restart: true });
+      // The menu for whoever is signed in works beside the Peer app for Start a task: it writes
+      // nothing the app keeps (the run goes through the app's socket). Signing in stays the app's.
+      const owner = yield* ownerOf(config.stateDir);
+      const app =
+        owner?.kind === "app" && Option.isNone(flags.email) && isTerminal() ? owner : null;
+      if (app === null) yield* pauseCore(config, flags, { restart: true });
       const end = yield* Effect.gen(function* () {
         const state = yield* PeerState.PeerState;
         const signedIn = (yield* state.read).persisted.email;
@@ -723,7 +820,7 @@ const loginCommand = Command.make("login", {
             yield* Console.log(`Signed in: ${signedIn}`);
             return undefined;
           }
-          return yield* runMenu(config.stateDir);
+          return yield* runMenu(config.stateDir, app);
         }
         yield* PeerCoreJoin.login(
           {
@@ -781,20 +878,32 @@ const afterMenu = (
     yield* Console.log(
       `Starting ${PeerCoreEditor.editorTitle(launch.editor)} in ${launch.folder}…`,
     );
+    yield* spawnEditor(
+      launch.editor,
+      launch.prompt === undefined ? [] : [launch.prompt],
+      launch.folder,
+      launch.env,
+    );
+  });
+
+/** Runs an editor in this terminal until it exits, with a run's variables when it has a run. */
+const spawnEditor = (
+  editor: string,
+  args: ReadonlyArray<string>,
+  folder: string,
+  env: PeerCoreRuns.RunEnv | undefined,
+) =>
+  Effect.gen(function* () {
     const code = yield* Effect.callback<number>((resume) => {
-      const child = NodeChildProcess.spawn(
-        launch.editor,
-        launch.prompt === undefined ? [] : [launch.prompt],
-        {
-          cwd: launch.folder,
-          stdio: "inherit",
-        },
-      );
+      const child = NodeChildProcess.spawn(editor, [...args], {
+        cwd: folder,
+        stdio: "inherit",
+        env: env === undefined ? process.env : { ...process.env, ...env },
+      });
       child.once("error", () => resume(Effect.succeed(127)));
       child.once("exit", (exit) => resume(Effect.succeed(exit ?? 0)));
     });
-    if (code === 127)
-      return yield* fail(`peer core: could not start ${launch.editor}; is it installed?`);
+    if (code === 127) return yield* fail(`peer core: could not start ${editor}; is it installed?`);
   });
 
 const createCommand = Command.make("create", {
@@ -1050,6 +1159,167 @@ const takeCommand = Command.make("take", {
       ).pipe(Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
     }),
   ),
+);
+
+/**
+ * The runs' tasks as the Hub names them (`KEY · title`), read once for the workspaces they are
+ * on; a task the Hub does not answer for keeps its id.
+ */
+const taskNames = (runs: ReadonlyArray<PeerRun>) =>
+  Effect.gen(function* () {
+    const client = yield* PeerHubClient.PeerHubClient;
+    const names = new Map<string, { readonly label: string; readonly title: string }>();
+    const signedIn = yield* client.session.pipe(Effect.option);
+    if (Option.isSome(signedIn))
+      for (const slug of new Set(runs.map((run) => run.workspace))) {
+        const work = yield* client.api
+          .work(signedIn.value.hubUrl, signedIn.value.session, slug)
+          .pipe(Effect.option);
+        if (Option.isNone(work)) continue;
+        for (const [project, view] of Object.entries(work.value.projects))
+          for (const task of view.tasks)
+            names.set(`${slug}/${project}/${task.id}`, {
+              label: `${task.key ?? task.id} · ${task.title}`,
+              title: task.title,
+            });
+      }
+    const of = (run: Pick<PeerRun, "workspace" | "project" | "task">) =>
+      names.get(`${run.workspace}/${run.project}/${run.task}`);
+    return {
+      titleOf: (run: Pick<PeerRun, "workspace" | "project" | "task">) => of(run)?.label ?? run.task,
+      taskTitle: (run: Pick<PeerRun, "workspace" | "project" | "task">) =>
+        of(run)?.title ?? run.task,
+    };
+  });
+
+/** What every `peer core runs` command needs: where the runs are, who asks, the tasks' names. */
+const runsContext = (stateDir: string) =>
+  Effect.gen(function* () {
+    const access = yield* runsAccess(stateDir);
+    const state = yield* PeerState.PeerState;
+    const email = (yield* state.read).persisted.email?.toLowerCase() ?? null;
+    const names = yield* taskNames(yield* access.list.pipe(Effect.orElseSucceed(() => [])));
+    return { access, email, ...names };
+  });
+
+const runIdArgument = Argument.String("run").pipe(
+  Argument.withDescription("The run's id, as peer core runs lists it."),
+);
+
+const runsEndCommand = Command.make("end", { ...authLocationFlags, id: runIdArgument }).pipe(
+  Command.withDescription(
+    "End one of your runs here (stopped); what its session held is released.",
+  ),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      yield* Effect.gen(function* () {
+        const { access, email, titleOf } = yield* runsContext(config.stateDir);
+        yield* PeerCoreRuns.endRun(access, { id: flags.id, email, titleOf }, terminalIo);
+      }).pipe(Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
+    }),
+  ),
+);
+
+const runsContinueCommand = Command.make("continue", {
+  ...authLocationFlags,
+  id: runIdArgument,
+}).pipe(
+  Command.withDescription(
+    "Start a detached terminal run's agent again, in its project's checkout with the run's variables.",
+  ),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      const relaunch = yield* Effect.gen(function* () {
+        const state = yield* PeerState.PeerState;
+        const { access, email, titleOf, taskTitle } = yield* runsContext(config.stateDir);
+        return yield* PeerCoreRuns.continueRun(
+          access,
+          {
+            id: flags.id,
+            email,
+            titleOf,
+            taskTitle,
+            // The folder this runs in when it is a checkout of the run's project, else the one recorded.
+            checkoutOf: (workspace, project) =>
+              Effect.gen(function* () {
+                const here = yield* PeerCoreBind.repositoryRoot(process.cwd());
+                if (here !== null) {
+                  const place = yield* state.placeOf(here.root, { bindByRemote: false });
+                  if (place?.workspace === workspace && place.project === project) return here.root;
+                }
+                return yield* checkoutOf(config.stateDir, workspace, project);
+              }),
+          },
+          terminalIo,
+        );
+      }).pipe(Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
+      // The run's new token is saved: Peer Core coordinates the agent when no Peer runs here.
+      if ((yield* ownerOf(config.stateDir)) === null) {
+        yield* serveDetached(config, flags, { quiet: true });
+        yield* Console.log(
+          "Peer Core coordinates your agents in the background; peer core stop ends it.",
+        );
+      }
+      yield* spawnEditor(relaunch.editor, relaunch.args, relaunch.folder, relaunch.env);
+    }),
+  ),
+);
+
+const runsAttachCommand = Command.make("attach", { ...authLocationFlags, id: runIdArgument }).pipe(
+  Command.withDescription(
+    "Put the agent session of this shell into a run (run it in the agent's shell).",
+  ),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      yield* Effect.gen(function* () {
+        const { access, titleOf } = yield* runsContext(config.stateDir);
+        yield* PeerCoreRuns.attachRun(
+          access,
+          {
+            id: flags.id,
+            session: process.env.PEER_SESSION || process.env.CODEX_THREAD_ID,
+            titleOf,
+          },
+          terminalIo,
+        );
+      }).pipe(Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
+    }),
+  ),
+);
+
+const runsCommand = Command.make("runs", {
+  ...authLocationFlags,
+  task: Flag.String("task").pipe(
+    Flag.withDescription("Only the runs on this task (its id or key)."),
+    Flag.optional,
+  ),
+  all: Flag.Boolean("all").pipe(Flag.withDescription("Ended runs too."), Flag.withDefault(false)),
+}).pipe(
+  Command.withDescription(
+    "Your agents' runs on this computer: task, agent, runtime, state, sessions and start; end, continue or attach one.",
+  ),
+  Command.withHandler((flags) =>
+    Effect.gen(function* () {
+      const config = yield* resolveConfig(flags);
+      yield* Effect.gen(function* () {
+        const { access, email, titleOf } = yield* runsContext(config.stateDir);
+        yield* PeerCoreRuns.listRuns(
+          access,
+          {
+            email,
+            all: flags.all,
+            titleOf,
+            ...(Option.isSome(flags.task) ? { task: flags.task.value } : {}),
+          },
+          terminalIo,
+        );
+      }).pipe(Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
+    }),
+  ),
+  Command.withSubcommands([runsEndCommand, runsContinueCommand, runsAttachCommand]),
 );
 
 const logoutCommand = Command.make("logout", { ...authLocationFlags }).pipe(
@@ -1497,6 +1767,7 @@ const makePeerCommand = (name: "peer" | "peer-core" | "core") =>
       bindCommand,
       tasksCommand,
       takeCommand,
+      runsCommand,
       editorCommand("connect"),
       editorCommand("disconnect"),
       hooksGroup,

@@ -212,3 +212,48 @@ describe("observe turned off", () => {
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
+
+describe("a run started from a terminal", () => {
+  it.effect("has no view here, and says so", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub({ current: () => [200, {}] });
+      const core = yield* Layer.build(
+        coreLayer(yield* seedState(paymentsSeed(hub.url)), {
+          session: "phs_test",
+          plugins: [ObservePlugin],
+          t3: paymentsT3,
+        }),
+      );
+      const plugins = yield* Effect.gen(function* () {
+        yield* (yield* PeerStatus.PeerStatus).coordinationFrom(() => Effect.succeed(coordination));
+        yield* PeerPlugins.startPlugins;
+        return yield* PeerPlugins.PeerPlugins;
+      }).pipe(Effect.provide(core));
+      const wrap: PeerRpcWrap = {
+        effect: (_method, effect) => effect,
+        stream: (_method, stream) => stream,
+      };
+      const handlers = PeerHub.rpcLayer(wrap).pipe(
+        Layer.provide(
+          Layer.mergeAll(coreRpcStandIns, Layer.succeed(PeerPlugins.PeerPlugins, plugins)),
+        ),
+      );
+      yield* Effect.gen(function* () {
+        const client = yield* RpcTest.makeClient(ObserveRpcGroup);
+        const views = yield* Stream.runCollect(
+          client["peerHub.observeThread"]({
+            workspace: "acme",
+            environment: "ana-laptop",
+            thread: "run_01JBX0000000000000",
+          }),
+        );
+        assert.deepStrictEqual(
+          Array.from(views).map((view) => [view.gone, view.hint]),
+          [[true, "Started from a terminal; no view here"]],
+        );
+        // Nothing went to the Hub's relay for it.
+        assert.isFalse(hub.calls.some((call) => call.url?.includes("/observe/")));
+      }).pipe(Effect.provide(handlers));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});

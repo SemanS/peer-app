@@ -92,7 +92,7 @@ const schemas = {
   ask: Schema.Struct({ work: text, question: text }),
   knowledge: Schema.Struct({ query: optional(text) }),
   task: Schema.Struct({
-    action: optional(Schema.Literals(["list", "add", "set", "remove"])),
+    action: optional(Schema.Literals(["list", "show", "add", "set", "remove"])),
     task: optional(text),
     title: optional(text),
     key: optional(text),
@@ -113,6 +113,7 @@ const schemas = {
   share: Schema.Struct({ workspace: optional(text), name: optional(text) }),
   review: empty,
   done: empty,
+  run: empty,
 };
 const string = { type: "string" };
 const array = { type: "array", items: string, maxItems: 50 };
@@ -199,9 +200,9 @@ const definitions = [
   ["knowledge", "Find decisions and conventions by words or id.", { query: string }, []],
   [
     "task",
-    "Your project's task tree (groups, items), for your person: list, add, set, remove. task, under: key, id or title; under none: a root.",
+    "Your project's task tree (groups, items), for your person: list, show (with runs), add, set, remove. task, under: key, id or title; under none: a root.",
     {
-      action: { type: "string", enum: ["list", "add", "set", "remove"] },
+      action: { type: "string", enum: ["list", "show", "add", "set", "remove"] },
       task: string,
       title: string,
       key: string,
@@ -223,6 +224,7 @@ const definitions = [
   ],
   ["review", "Publish context and hand your task to review.", {}, []],
   ["done", "Finish your task after linked PRs merge.", {}, []],
+  ["run", "Your run: id, task, state, sessions.", {}, []],
 ] as const;
 const decoders = new Map(
   definitions.map(([command]) => [
@@ -357,6 +359,7 @@ export const CORE_AGENT_TOOLS: ReadonlyArray<PeerAgentTool> = definitions.map(
           const fields =
             {
               list: ["flat"],
+              show: ["task"],
               add: ["title", "key", "area", "under", "kind", "executable"],
               set: ["task", "title", "area", "status", "under", "executable", "position"],
               remove: ["task"],
@@ -397,7 +400,7 @@ export const CORE_AGENT_TOOLS: ReadonlyArray<PeerAgentTool> = definitions.map(
                 : ["--executable", input.executable === true ? "yes" : "no"]),
               ...flag("position"),
             ];
-          if (action === "remove") return ["remove", ...plain("task")];
+          if (action === "remove" || action === "show") return [action, ...plain("task")];
           return input.flat === true ? ["list", "--flat"] : ["list"];
         }
         default:

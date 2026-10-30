@@ -77,6 +77,7 @@ import * as PeerState from "../state/PeerState.ts";
 import { projectKey } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import * as PeerWork from "../work/PeerWork.ts";
+import * as PeerRuns from "../work/runs.ts";
 import * as PeerWorkspaces from "../workspaces/PeerWorkspaces.ts";
 import { taskName, taskNamed, tasksOf } from "../work/report.ts";
 import * as PeerLog from "../log/PeerLog.ts";
@@ -235,6 +236,7 @@ const make = Effect.gen(function* () {
   const plugins = yield* PeerPlugins.PeerPlugins;
   const status = yield* PeerStatus.PeerStatus;
   const work = yield* PeerWork.PeerWork;
+  const runs = (yield* PeerRuns.PeerRuns).book;
   const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
   const agents = yield* PeerAgents.PeerAgents;
   const index = yield* PeerIndex.PeerIndex;
@@ -245,8 +247,7 @@ const make = Effect.gen(function* () {
   const runPromise = Effect.runPromiseWith(services);
   const runFork = Effect.runForkWith(services);
   let contextViews: Parameters<PeerCoordination["Service"]["contextViewsFrom"]>[0] | undefined;
-  const { environmentId } = state;
-  const current = state.current;
+  const { environmentId, current } = state;
   const hubApi = client.api;
   const publish = status.publish;
 
@@ -383,6 +384,7 @@ const make = Effect.gen(function* () {
       contextViews === undefined
         ? Promise.reject(new PeerHubError({ detail: "Context archive service is unavailable." }))
         : runPromise(contextViews.discover(input)),
+    runs,
     placeOf: (cwd) => runPromise(state.placeOf(cwd)),
     bindingNotice: (cwd) => runPromise(state.pendingBindingNotice(cwd)),
     branchOf: currentRef,

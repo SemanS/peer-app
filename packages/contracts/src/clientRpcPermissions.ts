@@ -62,6 +62,9 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerRolesStartReview]: AuthOrchestrationOperateScope,
   // Resuming an ended agent runs its CLI headless on this environment.
   [WS_METHODS.peerSettleSetResume]: AuthOrchestrationOperateScope,
+  // Ending a run changes the team's shared work; continuing one starts an agent on this environment.
+  [WS_METHODS.peerHubEndRun]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerHubContinueRun]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;

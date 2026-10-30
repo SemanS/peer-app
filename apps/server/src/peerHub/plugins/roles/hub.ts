@@ -35,14 +35,20 @@ export const rolesHub = (client: PeerHubClient.PeerHubClient["Service"]) => ({
       readonly role: string;
       readonly environment: string;
       readonly setBy: "person" | "agent";
+      /** The session's run, so the role outlives the session's row (design D4). */
+      readonly run?: string;
     },
   ) =>
-    client.request(Schema.Unknown, {
-      workspace,
-      path: sessionPath(project, session),
-      method: "PUT",
-      body,
-      timeoutMs: 4000,
+    // A Hub before revision 2 of roles refuses a role that names a run (400).
+    Effect.flatMap(client.features, (features) => {
+      const { run, ...rest } = body;
+      return client.request(Schema.Unknown, {
+        workspace,
+        path: sessionPath(project, session),
+        method: "PUT",
+        body: run !== undefined && (features.roles ?? 0) >= 2 ? { ...rest, run } : rest,
+        timeoutMs: 4000,
+      });
     }),
 
   /** Whether the session's files changed through the shell while it had the role: no file names. */

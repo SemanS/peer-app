@@ -17,6 +17,7 @@ import type * as CliError from "effect/cli/CliError";
 import { idFromName } from "../peerHub/names.ts";
 import * as PeerWorkspaces from "../peerHub/core/workspaces/PeerWorkspaces.ts";
 import { type OneShotIo, outcome } from "./peerCoreIo.ts";
+import type { CreatedRun, RunEnv, RunRequest } from "./peerCoreRuns.ts";
 import { startOnTree } from "./peerCoreStart.ts";
 import * as Tree from "./peerCoreTree.ts";
 
@@ -508,6 +509,11 @@ export interface MenuSteps<R = never> {
   readonly openPeer: Effect.Effect<void, CliError.UserError, R>;
   readonly connectEditor: (id: string) => Effect.Effect<void, CliError.UserError, R>;
   readonly disconnectEditor: (id: string) => Effect.Effect<void, CliError.UserError, R>;
+  /**
+   * Creates the run an editor started on a task carries (design D6): through the socket of the
+   * broker that owns it, else in this process.
+   */
+  readonly createRun: (input: RunRequest) => Effect.Effect<CreatedRun, CliError.UserError, R>;
 }
 
 /** How the menu ended: with an editor to start in a project, or just closed. */
@@ -517,6 +523,8 @@ export interface MenuEnd {
     readonly folder: string;
     /** The editor's first prompt: the task it starts on. */
     readonly prompt?: string;
+    /** The run's variables (`PEER_RUN`, `PEER_RUN_TOKEN`, `PEER_TASK`) when it starts on a task. */
+    readonly env?: RunEnv;
   };
   /** An editor is connected, so Peer should keep coordinating after the menu. */
   readonly editorsConnected: boolean;

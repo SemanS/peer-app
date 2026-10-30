@@ -46,6 +46,7 @@ function inputManifest(broker: CoordinationBroker, session: LocalSession) {
     workspace: session.workspace,
     project: session.project,
     session: session.id,
+    ...(session.run === undefined ? {} : { run: session.run }),
     recovery: session.inputRecovery ?? "complete",
     imported: session.inputImports ?? [],
     lineage: session.inputLineage ?? [],
@@ -178,7 +179,8 @@ export async function restoreMemory(this: CoordinationBroker, session: LocalSess
     inputs.authority === this.host.contextAuthority?.(session.workspace) &&
     inputs.workspace === session.workspace &&
     inputs.project === session.project &&
-    inputs.session === session.id;
+    // A run's next session continues what its last one read and was told (design D5).
+    (inputs.session === session.id || (session.run !== undefined && inputs.run === session.run));
   if (inputs !== undefined && !bound) {
     session.inputRecovery = "unavailable";
     return 0;

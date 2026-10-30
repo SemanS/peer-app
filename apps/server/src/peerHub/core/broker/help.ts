@@ -93,6 +93,11 @@ const CORE_HELP: { readonly [Name in Exclude<(typeof CORE_COMMANDS)[number], "he
       usage: "done",
       summary: "finish your assigned task only after all linked PRs have merged",
     },
+    run: {
+      name: "run",
+      usage: "run",
+      summary: "your run: its id, task, state and sessions; it outlives this session",
+    },
     log: {
       name: "log",
       usage: "log [--task <key>] [--path <path>]",

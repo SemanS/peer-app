@@ -607,7 +607,7 @@ describe("coordination tool sessions", () => {
               .map((line) => JSON.parse(line));
             assert.equal(removed[0].method, "notifications/prompts/list_changed");
             const catalog = removed[1];
-            assert.lengthOf(catalog.result.tools, 18);
+            assert.lengthOf(catalog.result.tools, 19);
           }),
         [extra],
       );
@@ -656,7 +656,7 @@ describe("coordination tool sessions", () => {
           answers.map((answer) => answer.id),
           [1, 2, 3],
         );
-        assert.lengthOf(answers[1].result.tools, 18);
+        assert.lengthOf(answers[1].result.tools, 19);
         assert.isUndefined(answers[2].result.isError);
         assert.equal(fixture.broker.sessions.size, 0);
       }),

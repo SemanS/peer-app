@@ -22,6 +22,7 @@ import { TONE_TEXT } from "./signals";
 import { pullRequestsByThread, type ChatPullRequest } from "./taskChats.logic";
 import { taskRouteKey, taskRowModel, taskRowTarget, type TaskRowTarget } from "./taskRow.logic";
 import { kindChange, progressLabel, servesTree } from "./taskTree.logic";
+import { runsChip } from "./task/runs.logic";
 import {
   below,
   type MenuPosition,
@@ -91,6 +92,7 @@ export function TaskRow({
   const [treeDialog, setTreeDialog] = useState<"add-under" | "move-under" | null>(null);
   const tree = servesTree(project);
   const progress = progressLabel(task);
+  const runs = runsChip(task.runs);
   const chatsId = useId();
   const label = taskLabel(task);
   const taskArea = tasks.find((t) => t.id === task.id)?.area;
@@ -312,6 +314,14 @@ export function TaskRow({
               ·
             </span>
             <span className="shrink-0 text-muted-foreground">{model.chats}</span>
+            {runs === undefined ? null : (
+              <>
+                <span aria-hidden className="shrink-0 text-muted-foreground">
+                  ·
+                </span>
+                <span className="shrink-0 text-muted-foreground tabular-nums">{runs}</span>
+              </>
+            )}
           </span>
         </div>
         {chip === undefined ? null : (

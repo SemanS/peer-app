@@ -173,6 +173,7 @@ const make = Effect.gen(function* () {
         role,
         environment: state.environmentId,
         setBy,
+        ...(session.run === undefined ? {} : { run: session.run }),
       });
       const row: PeerRoleRow = {
         session: session.id,

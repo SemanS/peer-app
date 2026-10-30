@@ -21,6 +21,7 @@ import * as Runtime from "effect/Runtime";
 
 import * as PeerHubClient from "../peerHub/core/hub/PeerHubClient.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
+import { runCounts } from "../peerHub/core/work/runs.ts";
 import { hubOutcome, type OneShotIo, outcome } from "./peerCoreIo.ts";
 import * as Tree from "./peerCoreTree.ts";
 
@@ -289,7 +290,7 @@ const label = (task: PeerTask) => task.key ?? task.id;
 
 /**
  * The lines of `peer core tasks`: the tree, two spaces a level, a parent's progress after its
- * title, `?` before an item a person has to settle. `--open`/`--mine` keep the executable items
+ * title, `?` before an item a person has to settle, `· n runs` after a task agents have run on. `--open`/`--mine` keep the executable items
  * they match and the items above them; done items go.
  */
 export const taskLines = (input: {
@@ -323,8 +324,11 @@ export const taskLines = (input: {
     const progress =
       task.progress === undefined ? "" : ` ${task.progress.done}/${task.progress.total}`;
     const who = owners === undefined ? "owner unknown" : (owner ?? "nobody");
+    const counted =
+      task.runs === undefined ? 0 : task.runs.running + task.runs.detached + task.runs.ended;
+    const runs = counted === 0 ? "" : ` · ${counted} run${counted === 1 ? "" : "s"}`;
     return [
-      `${"  ".repeat(depth)}${task.unsettled === true ? "? " : ""}${label(task)} · ${task.title}${progress} · ${task.status} · ${area ?? "no area"} · ${who}`,
+      `${"  ".repeat(depth)}${task.unsettled === true ? "? " : ""}${label(task)} · ${task.title}${progress} · ${task.status} · ${area ?? "no area"} · ${who}${runs}`,
       ...below,
     ];
   };
@@ -365,7 +369,12 @@ export const listTasks = (input: TasksInput, io: OneShotIo) =>
     let listed = 0;
     for (const ref of refs) {
       const read = work.get(ref.workspace);
-      const tasks = read?.projects[ref.project] ?? [];
+      // A Hub that predates runs counts none: this computer's own runs stand in for them.
+      const here = runCounts(Object.values(persisted.runs ?? {}), ref.workspace, ref.project);
+      const tasks = (read?.projects[ref.project] ?? []).map((task) => {
+        const counts = here.get(task.id);
+        return task.runs !== undefined || counts === undefined ? task : { ...task, runs: counts };
+      });
       const owners = read?.owners?.[ref.project];
       for (const entry of invited)
         if (entry.workspace === ref.workspace && (entry.project ?? ref.project) === ref.project) {

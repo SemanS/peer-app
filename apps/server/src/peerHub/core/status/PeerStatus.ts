@@ -41,6 +41,7 @@ import { commandAvailable } from "../local.ts";
 import { checkoutState } from "../vcs.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
+import { runCounts } from "../work/runs.ts";
 import {
   projectKey,
   realpathOrSelf,
@@ -169,6 +170,11 @@ const make = Effect.gen(function* () {
       const key = projectKey(workspace.slug, project.id);
       const names = new Map(project.members.map((m) => [m.email, m.name]));
       const work = s.work.get(key);
+      const localRuns = runCounts(
+        Object.values(s.persisted.runs ?? {}),
+        workspace.slug,
+        project.id,
+      );
       const assignments: Record<string, string> = {};
       for (const [thread, assignment] of Object.entries(s.persisted.assignments ?? {})) {
         if (assignment.workspace === workspace.slug && assignment.project === project.id) {
@@ -193,7 +199,13 @@ const make = Effect.gen(function* () {
           sharedCapacity: { enabled: false, instanceIds: [] },
           work: {
             areas: work?.areas ?? project.areas ?? [],
-            tasks: work?.tasks ?? [],
+            // A Hub that counts runs says so per task; until then this computer's own count.
+            tasks: (work?.tasks ?? []).map((task) => {
+              const counts = localRuns.get(task.id);
+              return task.runs !== undefined || counts === undefined
+                ? task
+                : { ...task, runs: counts };
+            }),
             threads: work?.threads ?? [],
             assignments,
           },

@@ -1,5 +1,6 @@
 import * as Schema from "effect/Schema";
 import { PeerGitHubEvidence } from "./github.ts";
+import { PeerRunCounts } from "./runs.ts";
 
 /**
  * Schemas Peer's core and its plugins share: the error every Peer request fails with, and the
@@ -80,6 +81,8 @@ export const PeerTask = Schema.Struct({
   source: Schema.optional(PeerTaskSource),
   /** Over its executable descendants, at any depth, when it has any. */
   progress: Schema.optional(Schema.Struct({ done: Schema.Number, total: Schema.Number })),
+  /** How many of its runs are in each state; absent from a Hub that predates runs. */
+  runs: Schema.optional(PeerRunCounts),
 });
 export type PeerTask = typeof PeerTask.Type;
 

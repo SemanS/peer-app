@@ -6,13 +6,17 @@ import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import type { PeerHubStatus } from "@t3tools/contracts";
+import type { PeerHubStatus, PeerRun } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Runtime from "effect/Runtime";
 
+import { CoordinationBroker } from "../peerHub/core/broker/Broker.ts";
+import { brokerFixture } from "../peerHub/core/broker/testkit.ts";
 import * as PeerAdapters from "../peerHub/core/coordination/PeerAdapters.ts";
+import * as PeerRuns from "../peerHub/core/work/runs.ts";
+import { RunBook } from "../peerHub/core/work/runs.ts";
 import * as PeerHubClient from "../peerHub/core/hub/PeerHubClient.ts";
 import * as PeerPlugins from "../peerHub/core/plugins/PeerPlugins.ts";
 import * as PeerState from "../peerHub/core/state/PeerState.ts";
@@ -31,6 +35,7 @@ import * as McpConnect from "../peerHub/plugins/mcp/connect.ts";
 import * as PeerCoreBind from "./peerCoreBind.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
 import * as PeerCoreMenu from "./peerCoreMenu.ts";
+import * as PeerCoreRuns from "./peerCoreRuns.ts";
 import * as PeerCoreShare from "./peerCoreShare.ts";
 import * as PeerCoreStart from "./peerCoreStart.ts";
 import * as PeerCoreTasks from "./peerCoreTasks.ts";
@@ -1085,6 +1090,7 @@ describe("peer core create, invite and the menu", () => {
             { id: "claude", title: "Claude Code", connected: true, launchable: true },
           ]),
           checkoutOf: () => Effect.succeed(null),
+          createRun: () => Effect.die(new Error("created a run")),
           join: () => Effect.void,
           founding: () => Effect.void,
           create: (name) => Effect.sync(() => void done.push(`create ${name}`)),
@@ -1178,9 +1184,11 @@ describe("peer core create, invite and the menu", () => {
     more: {
       readonly agent?: string;
       readonly editors?: ReadonlyArray<PeerCoreMenu.Editor>;
+      readonly createRun?: PeerCoreMenu.MenuSteps["createRun"];
     } = {},
   ) =>
     Effect.gen(function* () {
+      const runs: Array<PeerCoreRuns.RunRequest> = [];
       const agents: Array<string> = [];
       const took: Array<string> = [];
       const settled: Array<string> = [];
@@ -1227,6 +1235,13 @@ describe("peer core create, invite and the menu", () => {
           repositories: Effect.succeed([]),
           editors: Effect.succeed(more.editors ?? [claudeCode]),
           checkoutOf: () => Effect.succeed(null),
+          createRun:
+            more.createRun ??
+            ((input) =>
+              Effect.sync(() => {
+                runs.push(input);
+                return { id: "run_01TEST", token: "f00d" };
+              })),
           join: () => Effect.void,
           founding: () => Effect.void,
           create: () => Effect.void,
@@ -1248,7 +1263,7 @@ describe("peer core create, invite and the menu", () => {
         },
         io,
       );
-      return { took, settled, offered, agents, lines, end };
+      return { took, settled, offered, agents, lines, end, runs };
     });
 
   it.effect("start a task picks a task in the tree, takes it, and opens the editor on it", () =>
@@ -1269,8 +1284,200 @@ describe("peer core create, invite and the menu", () => {
           editor: "claude",
           folder: "/home/ana/code/pay",
           prompt: 'Work on the Peer task "Cart" (t1).',
+          env: { PEER_RUN: "run_01TEST", PEER_RUN_TOKEN: "f00d", PEER_TASK: "t1" },
         },
       });
+    }),
+  );
+
+  it.effect("start_a_task_creates_a_run_and_passes_it_to_the_editor", () =>
+    Effect.gen(function* () {
+      const { runs, lines, end } = yield* startOn(["t1"]);
+      assert.strictEqual(runs.length, 1);
+      assert.deepStrictEqual(
+        { ...runs[0], requestId: undefined },
+        { workspace: "acme", project: "pay", task: "t1", agent: "claude", requestId: undefined },
+      );
+      assert.match(runs[0]!.requestId, /^menu-/);
+      assert.include(lines, "Run run_01TEST on Cart — Claude Code. peer core runs lists it.");
+      assert.deepStrictEqual(end.launch?.env, {
+        PEER_RUN: "run_01TEST",
+        PEER_RUN_TOKEN: "f00d",
+        PEER_TASK: "t1",
+      });
+      // Each Start a task is a new request: a second one is not taken for a retry of the first.
+      const again = yield* startOn(["t1"]);
+      assert.notStrictEqual(again.runs[0]!.requestId, runs[0]!.requestId);
+      // An area alone gets no run: the agent's first move onto one of its tasks adopts one.
+      const area = yield* startOn(["Checkout"]);
+      assert.deepStrictEqual(area.runs, []);
+      assert.isUndefined(area.end.launch?.env);
+      // A run that cannot be created does not keep the editor from starting on the task.
+      const refused = yield* startOn(["t1"], [], {
+        createRun: () =>
+          Effect.fail(fail("peer core: this Peer does not keep runs yet; update it")),
+      });
+      assert.include(
+        refused.lines,
+        "No run was started: this Peer does not keep runs yet; update it. Claude Code starts without one; Peer gives it a run when it starts on the task.",
+      );
+      assert.deepStrictEqual(refused.end.launch?.env, { PEER_TASK: "t1" });
+    }),
+  );
+
+  it.effect("with_the_app_running_the_run_goes_through_its_socket", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(async () => {
+        const runs = new RunBook(
+          {},
+          {
+            environment: "test",
+            email: () => "ana@acme.test",
+            now: () => Date.parse("2026-10-30T10:00:00Z"),
+            save: async () => undefined,
+          },
+        );
+        const fixture = await brokerFixture(() => ({ runs }));
+        const app = new CoordinationBroker(fixture.broker.host, { kind: "app" });
+        await app.start();
+        return { runs, fixture, app };
+      }),
+      ({ runs, fixture, app }) =>
+        Effect.gen(function* () {
+          const socket = PeerCoreRuns.socketRuns(fixture.broker.host.socketPath);
+          const { lines, end } = yield* startOn(["t1"], [], { createRun: socket.create });
+          // The app's broker created and saved it; this process wrote nothing of its own.
+          const kept = runs.get("run_01TEST") ?? runs.all()[0];
+          assert.isDefined(kept);
+          assert.deepStrictEqual(
+            [kept!.workspace, kept!.project, kept!.task, kept!.agent, kept!.runtime],
+            ["acme", "pay", "t1", "claude", "terminal"],
+          );
+          assert.include(lines, `Run ${kept!.id} on Cart — Claude Code. peer core runs lists it.`);
+          // The token the editor carries is the one the broker attaches its sessions by.
+          assert.strictEqual(end.launch?.env?.PEER_RUN, kept!.id);
+          assert.isTrue(runs.claim(kept!.id, end.launch?.env?.PEER_RUN_TOKEN));
+          // peer core runs reads and ends it through the same socket.
+          const listed = recorder();
+          yield* PeerCoreRuns.listRuns(
+            socket,
+            { email: "ana@acme.test", all: false, titleOf: () => "T1 · Cart" },
+            listed.io,
+          );
+          assert.match(
+            listed.lines[0] ?? "",
+            new RegExp(
+              `^${kept!.id} · T1 · Cart · claude · terminal · detached · 0 sessions · started 2026-10-30 10:00 UTC$`,
+            ),
+          );
+          // A live agent session of the app's joins it from that agent's shell.
+          yield* Effect.promise(() =>
+            app.sessionFor("claude", { session_id: "one", cwd: fixture.root }, undefined),
+          );
+          const attached = recorder();
+          yield* PeerCoreRuns.attachRun(
+            socket,
+            { id: kept!.id, session: "one", titleOf: () => "T1 · Cart" },
+            attached.io,
+          );
+          assert.deepStrictEqual(attached.lines, [
+            `Attached this session to run ${kept!.id} on T1 · Cart.`,
+          ]);
+          assert.strictEqual(app.sessions.get("claude:one")?.run, kept!.id);
+          const stranger = yield* PeerCoreRuns.attachRun(
+            socket,
+            { id: kept!.id, session: "nobody", titleOf: () => "T1 · Cart" },
+            recorder().io,
+          ).pipe(Effect.flip);
+          assert.strictEqual(
+            stranger.message,
+            "peer core: refused: Peer holds no live agent session nobody here.\nNext: run it in the shell of an agent this computer's Peer coordinates.",
+          );
+          // Running, it does not continue; once its session ended, the app's broker mints the token.
+          const live = yield* PeerCoreRuns.continueRun(
+            socket,
+            {
+              id: kept!.id,
+              email: "ana@acme.test",
+              titleOf: () => "T1 · Cart",
+              taskTitle: () => "Cart",
+              checkoutOf: () => Effect.succeed("/home/ana/code/pay"),
+            },
+            recorder().io,
+          ).pipe(Effect.flip);
+          assert.include(
+            live.message,
+            `refused: run ${kept!.id} is running now (session claude:one).`,
+          );
+          yield* Effect.promise(() => runs.detach(kept!.id, "claude:one"));
+          const continued = recorder();
+          const relaunch = yield* PeerCoreRuns.continueRun(
+            socket,
+            {
+              id: kept!.id,
+              email: "ana@acme.test",
+              titleOf: () => "T1 · Cart",
+              taskTitle: () => "Cart",
+              checkoutOf: () => Effect.succeed("/home/ana/code/pay"),
+            },
+            continued.io,
+          );
+          assert.deepStrictEqual(continued.lines, [
+            `Continuing run ${kept!.id} on T1 · Cart — Claude Code, resuming session one.`,
+          ]);
+          assert.deepStrictEqual(
+            [
+              relaunch.editor,
+              relaunch.args,
+              relaunch.folder,
+              relaunch.env.PEER_RUN,
+              relaunch.env.PEER_TASK,
+            ],
+            ["claude", ["--resume", "one"], "/home/ana/code/pay", kept!.id, "t1"],
+          );
+          assert.isTrue(runs.claim(kept!.id, relaunch.env.PEER_RUN_TOKEN));
+          assert.isFalse(runs.claim(kept!.id, end.launch?.env?.PEER_RUN_TOKEN));
+          const ended = recorder();
+          yield* PeerCoreRuns.endRun(
+            socket,
+            { id: kept!.id, email: "ana@acme.test", titleOf: () => "T1 · Cart" },
+            ended.io,
+          );
+          assert.deepStrictEqual(ended.lines, [`Ended run ${kept!.id} on T1 · Cart (stopped).`]);
+          assert.strictEqual(runs.get(kept!.id)?.outcome, "stopped");
+          const late = yield* socket.attach(kept!.id, "one").pipe(Effect.flip);
+          assert.include(late.message, `refused: run ${kept!.id} ended.`);
+        }),
+      ({ fixture, app }) =>
+        Effect.promise(async () => {
+          await app.stop();
+          await fixture.dispose();
+        }),
+    ),
+  );
+
+  it.effect("a_marked_set_gets_one_run_and_says_so", () =>
+    Effect.gen(function* () {
+      const tasks = yield* startOn([["t1", "t6"]]);
+      assert.deepStrictEqual(
+        tasks.runs.map((run) => run.task),
+        ["t1"],
+      );
+      assert.include(
+        tasks.lines,
+        "Run run_01TEST on Cart — Claude Code. peer core runs lists it. The set's other task gets a run of its own as the agent moves to it.",
+      );
+      assert.strictEqual(tasks.end.launch?.env?.PEER_TASK, "t1");
+      // A group first: the run goes to the set's first task, and the group is one of the others.
+      const mixed = yield* startOn([["g2", "t1", "t6"]]);
+      assert.deepStrictEqual(
+        mixed.runs.map((run) => run.task),
+        ["t1"],
+      );
+      assert.include(
+        mixed.lines,
+        "Run run_01TEST on Cart — Claude Code. peer core runs lists it. The set's other 2 scopes get runs of their own as the agent moves to them.",
+      );
     }),
   );
 
@@ -1369,6 +1576,7 @@ describe("peer core create, invite and the menu", () => {
             "",
             "Mark each item done with peer task set <id> --status done as you finish it; peer done finishes the scope you are on.",
           ].join("\n"),
+          env: { PEER_RUN: "run_01TEST", PEER_RUN_TOKEN: "f00d", PEER_TASK: "t1" },
         });
       }),
   );
@@ -1434,6 +1642,7 @@ describe("peer core create, invite and the menu", () => {
           version: undefined,
           scope: () => Effect.succeed(payTree(false)),
           checkoutOf: () => Effect.succeed(checkout),
+          createRun: () => Effect.succeed({ id: "run_01ELSE", token: "beef" }),
           takeTask: (_w: string, project: string, task: string) =>
             Effect.sync(() => void took.push(`${project}/${task}`)),
         } as unknown as PeerCoreMenu.MenuSteps,
@@ -1514,6 +1723,7 @@ describe("peer core create, invite and the menu", () => {
           home: "/home/ana",
           version: undefined,
           checkoutOf: () => Effect.succeed(null),
+          createRun: () => Effect.die(new Error("created a run")),
           here: Effect.succeed(null),
           repositories: Effect.succeed([]),
           editors: Effect.succeed([]),
@@ -1588,6 +1798,7 @@ describe("peer core create, invite and the menu", () => {
           home: "/home/ana",
           version: undefined,
           checkoutOf: () => Effect.succeed(null),
+          createRun: () => Effect.die(new Error("created a run")),
           here: Effect.succeed({
             root: "/home/ana/code/peer",
             state: "connected",
@@ -1695,5 +1906,278 @@ describe("peer core create, invite and the menu", () => {
         if (Result.isFailure(refused)) assert.include(String(refused.failure.message), words);
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("peer core runs", () => {
+  const run = (id: string, more: Partial<PeerRun> = {}): PeerRun => ({
+    id,
+    workspace: "acme",
+    project: "pay",
+    task: "t1",
+    email: "ana@acme.test",
+    environment: "env-1",
+    agent: "claude",
+    runtime: "terminal",
+    startedAt: "2026-10-30T09:00:00Z",
+    state: "detached",
+    sessions: [{ id: "claude:sess-1", from: "2026-10-30T09:00:00Z", to: "2026-10-30T09:30:00Z" }],
+    sessionsBefore: 0,
+    ...more,
+  });
+
+  /** This computer's runs, kept in memory; a continued run resumes its last session unless `fresh`. */
+  const fakeRuns = (runs: Array<PeerRun>, options: { readonly fresh?: boolean } = {}) => {
+    const ended: Array<string> = [];
+    const access: PeerCoreRuns.RunsAccess = {
+      list: Effect.sync(() => runs),
+      create: () => Effect.die(new Error("created a run")),
+      end: (id) =>
+        Effect.sync(() => {
+          const index = runs.findIndex((r) => r.id === id);
+          if (index < 0) return null;
+          ended.push(id);
+          runs[index] = { ...runs[index]!, state: "ended", outcome: "stopped" };
+          return runs[index]!;
+        }),
+      continue: (id) =>
+        Effect.sync(() => {
+          const r = runs.find((candidate) => candidate.id === id)!;
+          const last = r.sessions.at(-1)?.id.split(":");
+          return {
+            env: { PEER_RUN: r.id, PEER_RUN_TOKEN: "new-token", PEER_TASK: r.task },
+            ...(options.fresh === true || last === undefined
+              ? {}
+              : { resume: { agent: last[0]!, session: last[1]! } }),
+          };
+        }),
+      attach: (id) => Effect.sync(() => runs.find((r) => r.id === id)!),
+    };
+    return { access, ended };
+  };
+
+  const names = {
+    titleOf: (r: Pick<PeerRun, "task">) => (r.task === "t1" ? "T1 · Cart" : r.task),
+    taskTitle: (r: Pick<PeerRun, "task">) => (r.task === "t1" ? "Cart" : r.task),
+  };
+  const me = "ana@acme.test";
+
+  it.effect(
+    "runs lists this person's runs here, the ended ones with --all, one task with --task",
+    () =>
+      Effect.gen(function* () {
+        const { access } = fakeRuns([
+          run("run_3", {
+            state: "running",
+            sessions: [{ id: "claude:s3", from: "2026-10-30T11:00:00Z" }],
+            startedAt: "2026-10-30T11:00:00Z",
+          }),
+          run("run_2", { task: "t9", agent: "codex", startedAt: "2026-10-30T10:00:00Z" }),
+          run("run_1", { state: "ended", outcome: "handed-off", sessionsBefore: 20 }),
+          run("run_bob", { email: "bob@acme.test" }),
+        ]);
+        const open = recorder();
+        yield* PeerCoreRuns.listRuns(
+          access,
+          { email: me, all: false, titleOf: names.titleOf },
+          open.io,
+        );
+        assert.deepStrictEqual(open.lines, [
+          "run_3 · T1 · Cart · claude · terminal · running · 1 session · started 2026-10-30 11:00 UTC",
+          "run_2 · t9 · codex · terminal · detached · 1 session · started 2026-10-30 10:00 UTC",
+        ]);
+        const all = recorder();
+        yield* PeerCoreRuns.listRuns(
+          access,
+          { email: me, all: true, task: "T1", titleOf: names.titleOf },
+          all.io,
+        );
+        assert.deepStrictEqual(all.lines, [
+          "run_3 · T1 · Cart · claude · terminal · running · 1 session · started 2026-10-30 11:00 UTC",
+          "run_1 · T1 · Cart · claude · terminal · ended (handed-off) · 21 sessions · started 2026-10-30 09:00 UTC",
+        ]);
+        const none = recorder();
+        yield* PeerCoreRuns.listRuns(
+          access,
+          { email: me, all: false, task: "t7", titleOf: names.titleOf },
+          none.io,
+        );
+        assert.deepStrictEqual(none.lines, [
+          "Runs: none that has not ended on t7 on this computer. --all lists the ended ones too.",
+        ]);
+      }),
+  );
+
+  it.effect(
+    "runs end stops a run of this person's and says so; another's or a missing one is refused",
+    () =>
+      Effect.gen(function* () {
+        const { access, ended } = fakeRuns([
+          run("run_1"),
+          run("run_bob", { email: "bob@acme.test" }),
+        ]);
+        const said = recorder();
+        yield* PeerCoreRuns.endRun(
+          access,
+          { id: "run_1", email: me, titleOf: names.titleOf },
+          said.io,
+        );
+        assert.deepStrictEqual(said.lines, ["Ended run run_1 on T1 · Cart (stopped)."]);
+        assert.deepStrictEqual(ended, ["run_1"]);
+        const again = recorder();
+        yield* PeerCoreRuns.endRun(
+          access,
+          { id: "run_1", email: me, titleOf: names.titleOf },
+          again.io,
+        );
+        assert.deepStrictEqual(again.lines, [
+          "Run run_1 on T1 · Cart has ended already (stopped).",
+        ]);
+        const bob = yield* PeerCoreRuns.endRun(
+          access,
+          { id: "run_bob", email: me, titleOf: names.titleOf },
+          recorder().io,
+        ).pipe(Effect.flip);
+        assert.include(bob.message, "refused: run run_bob is bob@acme.test's.");
+        const missing = yield* PeerCoreRuns.endRun(
+          access,
+          { id: "run_x", email: me, titleOf: names.titleOf },
+          recorder().io,
+        ).pipe(Effect.flip);
+        assert.include(missing.message, "refused: no run run_x on this computer.");
+        assert.deepStrictEqual(ended, ["run_1"]);
+      }),
+  );
+
+  const continueOn = (
+    runs: Array<PeerRun>,
+    id: string,
+    options: { readonly fresh?: boolean; readonly checkout?: string | null } = {},
+  ) =>
+    Effect.gen(function* () {
+      const { access } = fakeRuns(runs, options);
+      const said = recorder();
+      const relaunch = yield* PeerCoreRuns.continueRun(
+        access,
+        {
+          id,
+          email: me,
+          ...names,
+          checkoutOf: () =>
+            Effect.succeed(
+              options.checkout === undefined ? "/home/ana/code/pay" : options.checkout,
+            ),
+        },
+        said.io,
+      ).pipe(Effect.result);
+      return { relaunch, lines: said.lines };
+    });
+
+  it.effect(
+    "runs continue resumes the last session with the run's variables, in the run's checkout",
+    () =>
+      Effect.gen(function* () {
+        const claude = yield* continueOn([run("run_1")], "run_1");
+        assert.deepStrictEqual(Result.getOrThrow(claude.relaunch), {
+          editor: "claude",
+          args: ["--resume", "sess-1"],
+          folder: "/home/ana/code/pay",
+          env: { PEER_RUN: "run_1", PEER_RUN_TOKEN: "new-token", PEER_TASK: "t1" },
+        });
+        assert.deepStrictEqual(claude.lines, [
+          "Continuing run run_1 on T1 · Cart — Claude Code, resuming session sess-1.",
+        ]);
+        const codex = yield* continueOn(
+          [
+            run("run_2", {
+              agent: "codex",
+              sessions: [
+                { id: "codex:th-9", from: "2026-10-30T09:00:00Z", to: "2026-10-30T09:10:00Z" },
+              ],
+            }),
+          ],
+          "run_2",
+        );
+        assert.deepStrictEqual(Result.getOrThrow(codex.relaunch).args, ["resume", "th-9"]);
+        // No session known: the task's prompt, as Start a task gives it.
+        const fresh = yield* continueOn([run("run_3", { sessions: [] })], "run_3");
+        assert.deepStrictEqual(Result.getOrThrow(fresh.relaunch).args, [
+          'Work on the Peer task "Cart" (t1).',
+        ]);
+        // The broker knows no session to resume: the task's prompt, with the run's variables.
+        const unknown = yield* continueOn([run("run_1")], "run_1", { fresh: true });
+        assert.deepStrictEqual(Result.getOrThrow(unknown.relaunch).args, [
+          'Work on the Peer task "Cart" (t1).',
+        ]);
+        assert.deepStrictEqual(unknown.lines, [
+          "Continuing run run_1 on T1 · Cart — Claude Code, on the task's prompt.",
+        ]);
+        assert.strictEqual(Result.getOrThrow(unknown.relaunch).env.PEER_RUN_TOKEN, "new-token");
+      }),
+  );
+
+  it.effect("runs continue refuses what the terminal cannot continue, saying where it can", () =>
+    Effect.gen(function* () {
+      const refusal = (r: PeerRun, options: { readonly checkout?: string | null } = {}) =>
+        continueOn([r], r.id, options).pipe(
+          Effect.map(({ relaunch }) =>
+            Result.isFailure(relaunch) ? relaunch.failure.message.split("\n")[0] : "started",
+          ),
+        );
+      assert.strictEqual(
+        yield* refusal(run("run_h", { runtime: "herdr" })),
+        "peer core: refused: run run_h ran in the Peer app (herdr).",
+      );
+      assert.strictEqual(
+        yield* refusal(run("run_p", { runtime: "peer", thread: "peer:th" })),
+        "peer core: refused: run run_p ran in the Peer app (a Peer thread).",
+      );
+      assert.strictEqual(
+        yield* refusal(run("run_e", { state: "ended", outcome: "done" })),
+        "peer core: refused: run run_e has ended (done).",
+      );
+      assert.strictEqual(
+        yield* refusal(
+          run("run_r", {
+            state: "running",
+            sessions: [{ id: "claude:live", from: "2026-10-30T09:00:00Z" }],
+          }),
+        ),
+        "peer core: refused: run run_r is running now (session claude:live).",
+      );
+      assert.strictEqual(
+        yield* refusal(run("run_c"), { checkout: null }),
+        "peer core: refused: acme/pay has no checkout on this computer.",
+      );
+    }),
+  );
+
+  it.effect("runs attach needs an agent's shell, and a running Peer that holds its session", () =>
+    Effect.gen(function* () {
+      const { access } = fakeRuns([run("run_1")]);
+      const said = recorder();
+      yield* PeerCoreRuns.attachRun(
+        access,
+        { id: "run_1", session: "sess-2", titleOf: names.titleOf },
+        said.io,
+      );
+      assert.deepStrictEqual(said.lines, ["Attached this session to run run_1 on T1 · Cart."]);
+      const bare = yield* PeerCoreRuns.attachRun(
+        access,
+        { id: "run_1", session: undefined, titleOf: names.titleOf },
+        recorder().io,
+      ).pipe(Effect.flip);
+      assert.include(
+        bare.message,
+        "refused: this shell is not an agent's (neither PEER_SESSION nor CODEX_THREAD_ID is set).",
+      );
+      const local = yield* PeerCoreRuns.localRuns
+        .attach("run_1", "sess-2")
+        .pipe(Effect.flip, Effect.provideService(PeerRuns.PeerRuns, {} as never));
+      assert.strictEqual(
+        local.message,
+        "peer core: refused: no Peer runs here, and an agent's session lives in the Peer app or Peer Core.\nNext: open the Peer app or start Peer Core (peer core serve --detach), then repeat it in the agent's shell.",
+      );
+    }),
   );
 });

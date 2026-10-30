@@ -634,6 +634,7 @@ export async function runCli(
       const owing = ownerCallNeeded(moved);
       if (owing !== undefined)
         throw this.ownerCallRefusal(session, command, owing, commandsOn(plugins)("owner"));
+      await this.endRunOf(session, command === "review" ? "handed-off" : "done");
       const notes: string[] = [];
       for (const plugin of plugins.active) {
         const reply = plugin.contributions.commandReply;
@@ -745,6 +746,8 @@ export async function runCli(
             )
             .join("\n");
     }
+    case "run":
+      return this.runCommand(session);
     case "task":
       return taskCommand(this.host, session, parsed, pluginTaskFacts(this.host, plugins, session));
     case "index": {

@@ -315,6 +315,8 @@ export interface PeerSessionView {
   readonly root: string;
   readonly cwd: string;
   readonly task: string | undefined;
+  /** Its run, which outlives the session (`core/work/runs.ts`). */
+  readonly run?: string;
   readonly branch?: string;
   /** `peer:<thread id>` when Peer runs it. */
   readonly thread: string | undefined;

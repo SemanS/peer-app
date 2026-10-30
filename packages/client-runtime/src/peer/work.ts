@@ -122,6 +122,10 @@ export interface WorkTaskNode {
   readonly progress?: { readonly done: number; readonly total: number } | undefined;
   /** How many items sit directly under it. */
   readonly childCount?: number;
+  /** How many of its runs are in each state; absent from a Hub that predates runs. */
+  readonly runs?:
+    | { readonly running: number; readonly detached: number; readonly ended: number }
+    | undefined;
 }
 
 /**
@@ -654,6 +658,7 @@ function projectTree(input: {
       unsettled: task.unsettled === true,
       progress: task.progress,
       childCount: tree.children.get(task.id)?.length ?? 0,
+      runs: task.runs,
     });
   }
   const projectContext = contextNode(status, workspace.slug, state, "project");

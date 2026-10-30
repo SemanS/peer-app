@@ -37,13 +37,14 @@ describe("coordination tool contracts", () => {
       "peer_share",
       "peer_review",
       "peer_done",
+      "peer_run",
     ]);
     expect(
       JSON.stringify(
         tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
       ).length,
-      // 5000 before the task tree's five peer_task fields.
-    ).toBeLessThanOrEqual(5200);
+      // 5000 before the task tree's five peer_task fields, 5200 before peer_run and peer_task show.
+    ).toBeLessThanOrEqual(5350);
     expect(instructions.length).toBeLessThanOrEqual(700);
     expect(tools.every((t) => t.command === t.name.slice(5))).toBe(true);
   });
@@ -61,6 +62,9 @@ describe("coordination tool contracts", () => {
       "APP-1",
       "What changed?",
     ]);
+    // One task's view carries its runs.
+    expect(args("peer_task", { action: "show", task: "APP-1" })).toEqual(["show", "APP-1"]);
+    expect(args("peer_run", {})).toEqual([]);
     expect(args("peer_note", { text: "Ana first", overlap: "ab" })).toEqual([
       "Ana first",
       "--overlap",

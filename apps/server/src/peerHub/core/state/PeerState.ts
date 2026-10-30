@@ -24,6 +24,9 @@ import {
   PeerFounding,
   PeerRemovedWorkspace,
   PeerManifest,
+  PeerRunOutcome,
+  PeerRunRuntime,
+  PeerRunSession,
   PeerWorkspaceRole,
   type EnvironmentId,
   type PeerPluginId,
@@ -59,6 +62,41 @@ export const PersistedWorkspace = Schema.Struct({
   lastSyncAt: Schema.NullOr(Schema.String),
 });
 export type PersistedWorkspace = typeof PersistedWorkspace.Type;
+
+/**
+ * A run as this computer keeps it (`core/work/runs.ts`): the Hub's row without its derived `state`,
+ * and what only this computer knows of it.
+ */
+export const PersistedRun = Schema.Struct({
+  id: Schema.String,
+  workspace: Schema.String,
+  project: Schema.String,
+  task: Schema.String,
+  email: Schema.String,
+  environment: Schema.String,
+  agent: Schema.String,
+  runtime: PeerRunRuntime,
+  thread: Schema.optional(Schema.String),
+  startedAt: Schema.String,
+  endedAt: Schema.optional(Schema.String),
+  outcome: Schema.optional(PeerRunOutcome),
+  sessions: Schema.Array(PeerRunSession),
+  sessionsBefore: Schema.Number,
+  requestId: Schema.optional(Schema.String),
+  /** sha256 of the token its process holds, hex; the token itself is never kept. */
+  tokenHash: Schema.optional(Schema.String),
+  /** Thread keys put on its task before a session of it is known (`herdr:<terminal>`). */
+  keys: Schema.optional(Schema.Array(Schema.String)),
+  /** Its last session's herdr pane: a new session there continues it. */
+  pane: Schema.optional(Schema.String),
+  /** Changed since the Hub last took it. */
+  pending: Schema.optional(Schema.Boolean),
+  /** The task the Hub last took it on, so a move goes to the Hub as one. */
+  hubTask: Schema.optional(Schema.String),
+  /** An assignment from before runs: it stays on this computer. */
+  local: Schema.optional(Schema.Boolean),
+});
+export type PersistedRun = typeof PersistedRun.Type;
 
 export const PersistedState = Schema.Struct({
   hubUrl: Schema.NullOr(Schema.String),
@@ -96,13 +134,18 @@ export const PersistedState = Schema.Struct({
   sharedInstances: Schema.Record(Schema.String, Schema.Array(Schema.String)),
   /** Address → workspaces that person left on this computer; signing in does not rejoin them. */
   leftWorkspaces: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
-  /** This computer's threads (`peer:<thread id>`, `herdr:<terminal id>`) → the task they work on. */
+  /**
+   * This computer's threads (`peer:<thread id>`, `herdr:<terminal id>`) → the task they work on:
+   * written from `runs` (design D3), read by everything that predates runs.
+   */
   assignments: Schema.optional(
     Schema.Record(
       Schema.String,
       Schema.Struct({ workspace: Schema.String, project: Schema.String, task: Schema.String }),
     ),
   ),
+  /** Run id → this computer's runs of agents on tasks; absent until runs first wrote. */
+  runs: Schema.optional(Schema.Record(Schema.String, PersistedRun)),
   /**
    * Tasks an invitation named for the signed-in person, listed first by `peer core tasks` until
    * they are done; `project` is absent when the invitation did not say which.

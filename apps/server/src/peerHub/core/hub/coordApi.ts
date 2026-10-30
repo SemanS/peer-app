@@ -37,6 +37,8 @@ const HubCoordSession = Schema.Struct({
   seenAt: Schema.String,
   /** When its agent last did something; a hub from before activity times has none. */
   activeAt: Schema.optional(Schema.String),
+  /** Its run; absent from Peers and Hubs that predate runs. */
+  run: Schema.optional(Schema.String),
 });
 export type HubCoordSession = typeof HubCoordSession.Type;
 
@@ -161,6 +163,8 @@ export interface ReportedSession {
   readonly label: string;
   readonly agent?: string;
   readonly task?: string;
+  /** Its run (design D4); a Hub before runs ignores it. */
+  readonly run?: string;
   readonly branch?: string;
   readonly status: PeerWorkStatus;
   readonly intent?: string;

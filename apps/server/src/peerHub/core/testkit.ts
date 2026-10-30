@@ -41,6 +41,7 @@ import { PeerPluginRegistry } from "./registry.ts";
 import * as PeerState from "./state/PeerState.ts";
 import * as PeerStatus from "./status/PeerStatus.ts";
 import * as PeerWork from "./work/PeerWork.ts";
+import * as PeerRuns from "./work/runs.ts";
 import * as PeerWorkspaces from "./workspaces/PeerWorkspaces.ts";
 
 export const TEST_ENVIRONMENT = EnvironmentId.make("ana-laptop");
@@ -239,6 +240,7 @@ export const coreLayer = (
     Layer.provideMerge(PeerHubEvents.layer),
     Layer.provideMerge(PeerWork.layer),
     Layer.provideMerge(PeerStatus.layer),
+    Layer.provideMerge(PeerRuns.layer),
     Layer.provideMerge(PeerPlugins.layer),
     Layer.provideMerge(PeerHubClient.layer),
     Layer.provideMerge(PeerState.layer),
@@ -399,6 +401,7 @@ export const coreRpcStandIns = Layer.mergeAll(
   unused(PeerHubClient.PeerHubClient),
   unused(PeerStatus.PeerStatus),
   unused(PeerWork.PeerWork),
+  unused(PeerRuns.PeerRuns),
   unused(PeerWorkspaces.PeerWorkspaces),
   unused(PeerCoordination.PeerCoordination),
   unused(PeerAdapters.PeerAdapters),

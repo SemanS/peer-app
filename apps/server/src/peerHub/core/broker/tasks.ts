@@ -10,13 +10,14 @@ import { isExecutable } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import { plain as fenced } from "../../peerText.ts";
+import { runCounts, stateOf } from "../work/runs.ts";
 import type { PeerBrokerHost, PeerBrokerPlugins } from "./host.ts";
 import { hubWrite, refused, usage } from "./cliContract.ts";
 import type { CommandArguments } from "./cli.ts";
 import { TIMED_OUT, within } from "./sync.ts";
 
 export const TASK_USAGE =
-  'task [list] [--flat] | task add "<title>" [--key <key>] [--area <area>] [--under <task>] [--kind group|task] [--not-executable] | task set <task> [--title "<title>"] [--area <area>] [--status open|review|done] [--under <task>|none] [--executable yes|no] [--position <n>] | task remove <task>';
+  'task [list] [--flat] | task show <task> | task add "<title>" [--key <key>] [--area <area>] [--under <task>] [--kind group|task] [--not-executable] | task set <task> [--title "<title>"] [--area <area>] [--status open|review|done] [--under <task>|none] [--executable yes|no] [--position <n>] | task remove <task>';
 export const TASK_FLAGS = [
   "--key",
   "--area",
@@ -31,7 +32,7 @@ export const TASK_FLAGS = [
 export const TASK_SWITCHES = ["--flat", "--not-executable"];
 export const TASK_HELP = {
   name: "task",
-  usage: 'task [add "<title>" | set <task> | remove <task>]',
+  usage: 'task [show <task> | add "<title>" | set <task> | remove <task>]',
   summary:
     "list or change tasks for your person; --status is administrative, without handoff checks",
 };
@@ -218,6 +219,15 @@ export async function taskCommand(
       if (all.length === 0)
         return `This project has no tasks. Add one with peer task add "<title>".`;
       const said = await facts(all);
+      const counts = runCounts(host.runs?.all() ?? [], workspace, project);
+      const runsOf = (id: string) => {
+        const c = counts.get(id);
+        if (c === undefined) return [];
+        const parts = (["running", "detached", "ended"] as const).flatMap((state) =>
+          c[state] === 0 ? [] : [`${c[state]} ${state}`],
+        );
+        return [`runs: ${parts.join(", ")}`];
+      };
       const rows = flags.has("--flat")
         ? all.map((task) => ({ task, depth: 0, text: line(task) }))
         : treeOrder(all).map(({ task, depth }) => ({ task, depth, text: treeLine(task) }));
@@ -225,8 +235,23 @@ export async function taskCommand(
         `Tasks of ${fenced(project, 80)} (${all.length}):`,
         ...rows.map(
           ({ task, depth, text }) =>
-            `${"  ".repeat(depth + 1)}${[text, ...(said.get(task.id) ?? [])].join(" · ")}`,
+            `${"  ".repeat(depth + 1)}${[text, ...(said.get(task.id) ?? []), ...runsOf(task.id)].join(" · ")}`,
         ),
+      ].join("\n");
+    }
+    case "show": {
+      allowed();
+      if (rest.length !== 1) throw wrong();
+      const task = find(tasks(), rest[0]);
+      const runs = host.runs?.ofTask(workspace, project, task.id) ?? [];
+      return [
+        treeLine(task),
+        ...(runs.length === 0
+          ? ["No run is on this task on this computer yet."]
+          : [
+              "Runs:",
+              ...runs.map((run) => `  ${run.id} · ${run.agent} · ${run.runtime} · ${stateOf(run)}`),
+            ]),
       ].join("\n");
     }
     case "add": {

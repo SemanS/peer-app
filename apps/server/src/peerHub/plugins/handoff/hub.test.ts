@@ -2,7 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { coreLayer, paymentsSeed, seedState, standInHub } from "../../core/testkit.ts";
+import { coreLayer, meAnswer, paymentsSeed, seedState, standInHub } from "../../core/testkit.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import { hubCalls } from "./hub.ts";
 import fixture from "../../../../../../packages/contracts/src/peer/handoff.fixture.json" with { type: "json" };
@@ -57,4 +57,36 @@ it.effect("uses four narrow routes and keeps known refusals distinct from older 
         );
     }
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+it.effect.each([2, 1])(
+  "sends the session's run to a Hub at handoff revision %s only if it takes one",
+  (revision) =>
+    Effect.gen(function* () {
+      const runs = [{ id: "run_A", agent: "claude", runtime: "terminal", state: "ended" }];
+      const hub = yield* standInHub({
+        current: (url) =>
+          url === "/v1/me"
+            ? [200, meAnswer({ handoff: revision })]
+            : [200, { package: { ...fixture, runs }, changed: true }],
+      });
+      const core = yield* Layer.build(
+        coreLayer(yield* seedState(paymentsSeed(hub.url)), { session: "s", plugins: [] }),
+      );
+      const hubClient = yield* PeerHubClient.PeerHubClient.pipe(Effect.provide(core));
+      yield* hubClient.me;
+      const client = hubCalls(hubClient);
+      const place = { workspace: "acme", projectId: "pay", taskId: "krk-1" };
+      const composed = yield* client.compose(place, {
+        environment: "laptop",
+        session: "agent",
+        run: "run_A",
+      });
+      assert.deepStrictEqual(composed.package.runs, runs);
+      assert.strictEqual(
+        hub.calls.at(-1)?.body,
+        revision >= 2
+          ? '{"environment":"laptop","session":"agent","run":"run_A"}'
+          : '{"environment":"laptop","session":"agent"}',
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );

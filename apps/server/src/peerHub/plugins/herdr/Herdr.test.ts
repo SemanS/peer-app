@@ -282,8 +282,12 @@ describe("starting an agent on a task", () => {
         };
         const started = yield* Start.startAgent(input).pipe(Effect.provide(core));
         assert.deepStrictEqual(started, { paneId: "w2:p1", terminalId: "t2" });
-        assert.deepStrictEqual(asked, [
-          "start codex with PEER_TASK=KRK-1",
+        // The agent starts with its run's identity (design D2); PEER_TASK is the task's id.
+        assert.match(
+          asked[0] ?? "",
+          /^start codex with PEER_RUN=run_[0-9A-Z]{20} PEER_RUN_TOKEN=[0-9a-f]{32} PEER_TASK=krk-1$/,
+        );
+        assert.deepStrictEqual(asked.slice(1), [
           "prompt w2:p1: KRK-1: Split payments. Work in your own checkout and coordinate shared changes through Peer.",
         ]);
         // Its thread is on the task, and it works in a worktree beside Ana's checkout.

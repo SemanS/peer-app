@@ -7,44 +7,41 @@ import {
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
 import type * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
-const unsupported = {
-  value: null,
-  when: (_s: number, message: string) => message === "no such route",
-};
+const unsupported = { value: null, when: (_s: number, m: string) => m === "no such route" };
+/** The task's runs a Hub with runs lists in a package (design D4); agents read them as JSON. */
+const S = Schema.String;
+const Runs = Schema.Array(Schema.Struct({ id: S, agent: S, runtime: S, state: S }));
+const Package = Schema.Struct({ ...PeerHandoffPackage.fields, runs: Schema.optional(Runs) });
+type Body =
+  | { environment: string; session: string; run?: string | undefined }
+  | Record<string, never>;
 export function hubCalls(c: PeerHubClient.PeerHubClient["Service"]) {
   const path = (p: PeerHandoffPlace) =>
     `/handoffs/${encodeURIComponent(p.projectId)}/${encodeURIComponent(p.taskId)}`;
+  const refusal = new PeerHubError({
+    detail: "This Peer Hub cannot store handoff packages.",
+    refused: true,
+  });
   const supported = <A>(effect: Effect.Effect<A | null, PeerHubError>) =>
-    effect.pipe(
-      Effect.flatMap((a) =>
-        a === null
-          ? Effect.fail(
-              new PeerHubError({
-                detail: "This Peer Hub cannot store handoff packages.",
-                refused: true,
-              }),
-            )
-          : Effect.succeed(a),
-      ),
-    );
+    effect.pipe(Effect.flatMap((a) => (a === null ? Effect.fail(refusal) : Effect.succeed(a))));
   return {
-    compose: (
-      p: PeerHandoffPlace,
-      body: { environment: string; session: string } | Record<string, never>,
-    ) =>
-      supported(
-        c.request(Schema.Struct({ package: PeerHandoffPackage, changed: Schema.Boolean }), {
-          workspace: p.workspace,
-          path: path(p),
-          method: "POST",
-          body,
-          timeoutMs: 4000,
-          unsupported,
-        }),
+    compose: (p: PeerHandoffPlace, body: Body) =>
+      // A Hub before revision 2 of handoff refuses a package that names a run (400).
+      Effect.flatMap(c.features, ({ handoff = 0 }) =>
+        supported(
+          c.request(Schema.Struct({ package: Package, changed: Schema.Boolean }), {
+            workspace: p.workspace,
+            path: path(p),
+            method: "POST",
+            body: handoff >= 2 || !("run" in body) ? body : { ...body, run: undefined },
+            timeoutMs: 4000,
+            unsupported,
+          }),
+        ),
       ),
     read: (p: PeerHandoffPlace) =>
       supported(
-        c.request(Schema.Struct({ packages: Schema.Array(PeerHandoffPackage) }), {
+        c.request(Schema.Struct({ packages: Schema.Array(Package) }), {
           workspace: p.workspace,
           path: path(p),
           unsupported,

@@ -29,6 +29,7 @@ import type { CommandsOn } from "../index/text.ts";
 import type { PeerIndexEntry, PeerRuntimeProvider, PeerSessionView } from "../plugin.ts";
 import { checkoutKind } from "../vcs.ts";
 import type { CoordinationBroker } from "./Broker.ts";
+import type { RunClaim } from "./runs.ts";
 import { sleepMs } from "./sync.ts";
 
 export interface LocalSession {
@@ -130,6 +131,10 @@ export interface LocalSession {
   /** It was reminded once, at its first change, that its working context was still empty. */
   remindedAtStart: boolean;
   task: string | undefined;
+  /** Its run (`core/work/runs.ts`); while it has one, its task is the run's. */
+  run?: string;
+  /** What its run tells it once, with its next hook's answer (`withRunNotice`). */
+  runNotice?: string;
   /** The Peer thread it runs in (`peer:<thread id>`), once Peer found it. */
   thread: string | undefined;
   /** How often Peer looked for its thread: a thread's session id may be recorded after it starts. */
@@ -237,6 +242,7 @@ export function asHub(this: CoordinationBroker, session: LocalSession): HubCoord
     label: session.label,
     agent: session.agent,
     ...(session.task === undefined ? {} : { task: session.task }),
+    ...(session.run === undefined ? {} : { run: session.run }),
     ...(session.branch === undefined ? {} : { branch: session.branch }),
     status: session.status,
     ...(session.intent === undefined ? {} : { intent: session.intent }),
@@ -262,6 +268,7 @@ export function sessionView(this: CoordinationBroker, session: LocalSession): Pe
     root: session.root,
     cwd: session.cwd,
     task: session.task,
+    ...(session.run === undefined ? {} : { run: session.run }),
     ...(session.branch ? { branch: session.branch } : {}),
     thread: session.thread,
     pane: session.pane,
@@ -321,6 +328,7 @@ export async function sessionFor(
   agent: AgentKind,
   body: Record<string, unknown>,
   pane: string | undefined,
+  claim?: RunClaim,
 ): Promise<LocalSession | null> {
   if (typeof body.session_id !== "string") return null;
   const id = `${agent}:${body.session_id}`;
@@ -328,7 +336,9 @@ export async function sessionFor(
   if (existing !== undefined) return existing;
   const creating = this.creatingSessions.get(id);
   if (creating !== undefined) return creating;
-  const run = this.createSession(agent, body, pane).finally(() => this.creatingSessions.delete(id));
+  const run = this.createSession(agent, body, pane, "hooks", undefined, false, claim).finally(() =>
+    this.creatingSessions.delete(id),
+  );
   this.creatingSessions.set(id, run);
   return run;
 }
@@ -359,6 +369,7 @@ export async function createSession(
   adapter: "hooks" | "mcp" = "hooks",
   explicitThread?: string,
   dormant = false,
+  claim?: RunClaim,
 ): Promise<LocalSession | null> {
   const sid = typeof body.session_id === "string" ? body.session_id : null;
   if (sid === null) return null;
@@ -373,7 +384,7 @@ export async function createSession(
   const place = await this.host.placeOf(cwd);
   await Promise.all(this.checkoutChanges.values());
   if (this.checkoutRevision !== bindingRevision)
-    return this.createSession(agent, body, pane, adapter, explicitThread, dormant);
+    return this.createSession(agent, body, pane, adapter, explicitThread, dormant, claim);
   if (place === null) {
     this.ignoredCwds.set(cwd, Date.now());
     this.record("session.ignored", { session: id, cwd, why: "not in a workspace project" });
@@ -384,12 +395,18 @@ export async function createSession(
   // An agent Peer runs in a thread is on the task its thread was put on, whatever its branch.
   const thread = explicitThread ?? (await this.host.threadOf(sid).catch(() => undefined));
   const now = Date.now();
-  const ownContextPath = NodePath.join(
-    this.host.contextsDir,
-    safePart(place.workspace),
-    safePart(place.project),
-    `${safePart(sid)}.md`,
-  );
+  const claimed = dormant ? undefined : claim;
+  const plan = this.planRun({
+    agent,
+    session: id,
+    ...place,
+    thread,
+    pane,
+    adapter,
+    claim: claimed,
+    texts: [branch, title],
+  });
+  const ownContextPath = await this.contextPathFor(place, sid, dormant ? undefined : plan.id);
   const session: LocalSession = {
     id,
     credential: undefined,
@@ -436,12 +453,8 @@ export async function createSession(
     nudgedAt: 0,
     contextKept: false,
     remindedAtStart: false,
-    task: this.host.taskOf(
-      place.workspace,
-      place.project,
-      [...(thread === undefined ? [] : [thread]), `herdr:${agent}:${sid}`],
-      [branch, title],
-    ),
+    task: plan.task,
+    ...(dormant || plan.id === undefined ? {} : { run: plan.id }),
     thread,
     threadTries: 1,
     threadLastLookedAt: now,
@@ -470,7 +483,7 @@ export async function createSession(
   // An enrollment that began before a binding change must resolve its authority again.
   await Promise.all(this.checkoutChanges.values());
   if (this.checkoutRevision !== bindingRevision)
-    return this.createSession(agent, body, pane, adapter, explicitThread, dormant);
+    return this.createSession(agent, body, pane, adapter, explicitThread, dormant, claim);
   if (dormant) return session;
   const concurrent = this.sessions.get(id);
   if (concurrent !== undefined) return concurrent;
@@ -478,6 +491,7 @@ export async function createSession(
   this.acceptedWakes.delete(id);
   this.dormantSessions.delete(id);
   this.sessions.set(id, session);
+  await this.enterRun(session, plan);
   this.record("session.started", {
     session: id,
     workspace: place.workspace,
@@ -487,6 +501,7 @@ export async function createSession(
     branch: session.branch,
     thread,
     task: session.task,
+    run: session.run,
     transcript: session.transcript,
     remembered,
   });
@@ -552,14 +567,17 @@ export function taskFor(
   runtime: PeerRuntimeProvider | undefined,
 ) {
   const title = session.pane === undefined ? undefined : runtime?.title(session.pane);
-  return this.host.taskOf(
-    session.workspace,
-    session.project,
-    [
-      ...(session.thread === undefined ? [] : [session.thread]),
-      session.runtimeKey ?? `herdr:${session.id}`,
-    ],
-    [session.branch, title],
+  return (
+    this.runTask(session) ??
+    this.host.taskOf(
+      session.workspace,
+      session.project,
+      [
+        ...(session.thread === undefined ? [] : [session.thread]),
+        session.runtimeKey ?? `herdr:${session.id}`,
+      ],
+      [session.branch, title],
+    )
   );
 }
 
@@ -590,6 +608,7 @@ export async function retireSuperseded(this: CoordinationBroker, session: LocalS
   )
     return false;
   await this.release(session);
+  this.leaveRun(session);
   this.sessions.delete(session.id);
   for (const waiter of this.waiters) {
     if (waiter.session !== session.id) continue;

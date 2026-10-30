@@ -28,6 +28,7 @@ import {
 import type { PeerToolContext } from "../plugin.ts";
 import { endingOverlaps } from "./endingOverlaps.ts";
 import type { CoordinationBroker } from "./Broker.ts";
+import { runClaimOf } from "./runs.ts";
 import { carriedText, injectedChars } from "./delivery.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
 import { isLanding } from "./landing.ts";
@@ -144,7 +145,7 @@ export async function hook(
     !this.creatingSessions.has(`${agent}:${String(body.session_id)}`)
   )
     return null;
-  const session = await this.sessionFor(agent, body, pane);
+  const session = await this.sessionFor(agent, body, pane, runClaimOf(headers));
   if (session === null) return this.unplacedAnswer(event, body);
   const mod = headerOf(headers, "x-peer-adapter") === "mod";
   const signature = NodeCrypto.createHash("sha256")
@@ -566,6 +567,7 @@ export async function answerHook(
       for (const queued of session.pending.splice(0))
         if (typeof queued !== "string") await notifyDeliveries(queued.deliveries, "dropped");
       void this.release(session);
+      this.leaveRun(session);
       this.sessions.delete(session.id);
       this.record("session.ended", {
         session: session.id,

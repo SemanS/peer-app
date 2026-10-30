@@ -40,7 +40,7 @@ function failure(error: PeerHubError, filing: boolean): CliError {
   if (error.code === "not_your_session")
     return refused(
       error.detail,
-      "run the command again in a moment: Peer reports your session first.",
+      "run the command again in a moment: Peer reports your session and its run first. If it is refused again, run peer run and tell your person.",
     );
   if (error.status === 400) return usage(error.detail, `run ${FORM}.`);
   if (error.refused === true || error.status === 403 || error.status === 404)
@@ -114,6 +114,7 @@ export const testsCommand = (
             summary: parsed.summary,
             items,
             session: session.id,
+            ...(session.run === undefined ? {} : { run: session.run }),
           })
           .pipe(
             Effect.tapError((error) =>

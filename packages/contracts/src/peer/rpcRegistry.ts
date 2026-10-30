@@ -123,6 +123,7 @@ import {
   TestReportsRpcScopes,
 } from "./test-reports.rpc.ts";
 import { PEER_ROLES_METHODS, RolesRpcGroup, RolesRpcScopes } from "./roles.rpc.ts";
+import { PEER_RUNS_METHODS, RunsRpcGroup, RunsRpcScopes } from "./runs.rpc.ts";
 import {
   AcceptanceRpcGroup,
   AcceptanceRpcScopes,
@@ -606,6 +607,7 @@ export const PEER_WS_METHODS = {
   ...PEER_TEST_REPORTS_METHODS,
   ...PEER_ROLES_METHODS,
   ...PEER_ACCEPTANCE_METHODS,
+  ...PEER_RUNS_METHODS,
 } as const;
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
@@ -643,6 +645,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   TestReportsRpcGroup,
   RolesRpcGroup,
   AcceptanceRpcGroup,
+  RunsRpcGroup,
 );
 
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
@@ -682,6 +685,7 @@ export const PEER_RPC_SCOPES = {
   ...TestReportsRpcScopes,
   ...RolesRpcScopes,
   ...AcceptanceRpcScopes,
+  ...RunsRpcScopes,
 } as const;
 
 /** Peer's streaming methods: clients subscribe to them rather than call them. */

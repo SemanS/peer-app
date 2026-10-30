@@ -99,6 +99,31 @@ describe("peer core tasks as a tree", () => {
     );
   });
 
+  it("says how many runs agents had on a task", () => {
+    const lines = PeerCoreTasks.taskLines({
+      tasks: [
+        task("one", "One", { runs: { running: 1, detached: 0, ended: 0 } }, "2026-10-29T09:01:00Z"),
+        task("two", "Two", { runs: { running: 0, detached: 1, ended: 2 } }, "2026-10-29T09:02:00Z"),
+        task(
+          "none",
+          "None",
+          { runs: { running: 0, detached: 0, ended: 0 } },
+          "2026-10-29T09:03:00Z",
+        ),
+        task("old", "Older Hub", {}, "2026-10-29T09:04:00Z"),
+      ],
+      owners: {},
+      filter: "all",
+      email: null,
+    });
+    assert.deepStrictEqual(lines, [
+      "ONE · One · open · no area · nobody · 1 run",
+      "TWO · Two · open · no area · nobody · 3 runs",
+      "NONE · None · open · no area · nobody",
+      "OLD · Older Hub · open · no area · nobody",
+    ]);
+  });
+
   it("lists the root holding the invitation's task first", () => {
     const lines = PeerCoreTasks.taskLines({
       tasks,

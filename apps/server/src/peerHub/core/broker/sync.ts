@@ -69,6 +69,7 @@ export function reportFor(
       status: s.status,
       ...(s.intent === undefined ? {} : { intent: s.intent }),
       ...(s.task === undefined ? {} : { task: s.task }),
+      ...(s.run === undefined ? {} : { run: s.run }),
       files: s.files,
       claims: s.claims,
       // Its own lines, and those it marked [project] in a shared context it kept: a keeper that
@@ -137,6 +138,7 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
         })
       ) {
         void this.release(session);
+        this.leaveRun(session);
         this.sessions.delete(id);
         this.record("session.expired", { session: id });
         continue;
@@ -163,6 +165,7 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
         session.sharedToldAt = 0;
         session.roster = undefined;
         session.compactedAt = 0;
+        await this.adoptRun(session);
         const name = (t: string | undefined) =>
           t === undefined ? "no task" : this.host.taskName(session.workspace, session.project, t);
         session.pending.push(
@@ -170,6 +173,9 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
         );
       }
     }
+    // Runs that changed go to the Hub at the coordination report's cadence.
+    if ((this.host.runs?.pendingRuns().length ?? 0) > 0)
+      void this.host.runs?.io.push?.().catch(() => undefined);
     const workspaces = new Set<string>([
       ...this.host.workspaces(),
       ...[...this.sessions.values()].map((s) => s.workspace),

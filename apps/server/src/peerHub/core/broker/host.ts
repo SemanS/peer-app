@@ -44,6 +44,7 @@ import type {
   PeerRuntimeProvider,
 } from "../plugin.ts";
 import type { ActivePlugin, ExcludedCommand } from "../plugins/PeerPlugins.ts";
+import type { RunBook } from "../work/runs.ts";
 
 export interface CheckoutPlace {
   readonly workspace: string;
@@ -112,6 +113,9 @@ export interface PeerBrokerHost {
   readonly contextAuthority?: (workspace: string) => string | undefined;
   readonly contextView?: (input: PeerContextViewInput) => Promise<PeerContextView>;
   readonly contextArchive?: (input: PeerContextArchiveInput) => Promise<PeerContextArchive>;
+
+  /** This computer's runs (`core/work/runs.ts`). Absent: sessions run without runs, as before them. */
+  readonly runs?: RunBook;
 
   /** The workspace project a directory belongs to, or null outside them. */
   readonly placeOf: (cwd: string) => Promise<CheckoutPlace | null>;

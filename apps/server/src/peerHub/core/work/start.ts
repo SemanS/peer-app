@@ -25,6 +25,7 @@ import * as PeerState from "../state/PeerState.ts";
 import { safeId } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import * as PeerWork from "./PeerWork.ts";
+import * as PeerRuns from "./runs.ts";
 
 const hubError = (detail: string) => new PeerHubError({ detail });
 
@@ -37,6 +38,7 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
   const plugins = yield* PeerPlugins.PeerPlugins;
   const work = yield* PeerWork.PeerWork;
   const status = yield* PeerStatus.PeerStatus;
+  const runs = yield* PeerRuns.PeerRuns;
   const refreshWork = work.refresh().pipe(state.lock.withPermits(1));
 
   yield* client.session;
@@ -77,6 +79,15 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
     yield* refreshWork;
     yield* status.publish;
   }
+  // The run exists before its agent does, so the agent's first hook proves it with the token.
+  const { run, token } = yield* runs.create({
+    workspace: workspace.slug,
+    project: project.id,
+    task: task.id,
+    agent: input.harness,
+    runtime: "herdr",
+    requestId: input.requestId,
+  });
   const started = yield* launcher
     .launch({
       checkout: state.checkoutPath(
@@ -97,7 +108,9 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
       harness: input.harness,
       prompt: requestedPrompt ?? (input.prompt?.trim() ? input.prompt : fallback),
       env: {
-        PEER_TASK: task.key ?? task.id,
+        PEER_RUN: run.id,
+        ...(token === undefined ? {} : { PEER_RUN_TOKEN: token }),
+        PEER_TASK: task.id,
       },
     })
     .pipe(
@@ -109,6 +122,9 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
             ),
       ),
     );
+  yield* Effect.promise(() =>
+    runs.book.hold(run.id, started.threadKey, started.paneId).catch(() => undefined),
+  );
   yield* work.assign(started.threadKey, {
     workspace: workspace.slug,
     project: project.id,

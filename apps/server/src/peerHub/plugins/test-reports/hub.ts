@@ -34,6 +34,8 @@ export interface Filing {
   /** The agent session that files and its computer: both, or neither for a person's filing. */
   readonly session?: string;
   readonly environment?: string;
+  /** The session's run, which a Hub with runs accepts as proof once the session's row is gone. */
+  readonly run?: string;
   readonly commit?: string;
 }
 
@@ -56,17 +58,26 @@ export function hubCalls(client: PeerHubClient.PeerHubClient["Service"]) {
           new PeerHubError({ detail: "This Peer Hub cannot keep test reports.", refused: true }),
       ),
     );
+  // A Hub before revision 2 of test reports refuses a filing that names a run (400).
+  const withRun = ({ run, ...filing }: Filing) =>
+    Effect.map(client.features, (features): Filing =>
+      run !== undefined && (features["test-reports"] ?? 0) >= 2 ? { ...filing, run } : filing,
+    );
   return {
     file: (p: Place, filing: Filing) =>
-      served(
-        client.request(Schema.Struct({ report: PeerTestReport, changed: Schema.Boolean }), {
-          workspace: p.workspace,
-          path: path(p),
-          method: "POST",
-          body: filing,
-          timeoutMs: 4000,
-          unsupported,
-        }),
+      withRun(filing).pipe(
+        Effect.flatMap((body) =>
+          served(
+            client.request(Schema.Struct({ report: PeerTestReport, changed: Schema.Boolean }), {
+              workspace: p.workspace,
+              path: path(p),
+              method: "POST",
+              body,
+              timeoutMs: 4000,
+              unsupported,
+            }),
+          ),
+        ),
       ),
     list: (p: Place) =>
       served(

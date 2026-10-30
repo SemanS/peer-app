@@ -211,8 +211,10 @@ newer), or put `npx @webinson/peer-core` in front of each command below without 
    under it and nobody has said yet whether an agent does it as one task or by its parts: picking
    it asks, and the answer is kept. Then **Which agent?** lists the connected editors Peer can
    start in this folder (Claude Code, Codex) and **None now**; the chosen editor opens with a
-   first prompt that names every scope in order and lists its open items. **New task…** first
-   asks under which item the task goes.
+   first prompt that names every scope in order and lists its open items, and Peer starts a run
+   for it (see [Runs](#runs)). **New task…** first asks under which item the task goes. Start a
+   task also works while the Peer app runs; the menu's other steps that change this computer's
+   Peer are then the app's.
 2. `peer core share` in a project's folder shares it with a workspace (or name the folder:
    `peer core share ~/code/project`). The folder needs a git remote. On a terminal it asks which
    workspace when you belong to several and confirms before sharing. When the folder is a clone of
@@ -247,7 +249,7 @@ Codex asks you to approve Peer's hook commands once: the install prints them wit
 Only one of the two coordinates a computer at a time. When you start the Peer app, it takes over
 and Peer Core steps aside; agents carry on after a short pause, as after a Peer restart. While Peer
 Core runs, chats you started in the app on this computer show as unavailable to your team until the
-app runs again. Sign in and out in the app while it runs: `peer core login` refuses then.
+app runs again. Sign in and out in the app while it runs: `peer core login <email>` refuses then.
 
 ### Joining from an invitation
 
@@ -280,6 +282,40 @@ a task or a whole group nobody owns; a task someone owns, directly or through it
 with their name. `--as-one` or `--as-parts` settles an undecided item while taking it; several ids are taken one by
 one. All act as
 you, with the Hub, and need neither the app nor Peer Core running.
+
+### Runs
+
+A run is one attempt of one agent on one task, from its start until it ends or hands the task
+off. It outlives the agent's sessions: a `--resume`, a crash or a Peer restart continues the same
+run, so the task keeps its work. When you start Claude Code or Codex on a task from **Start a
+task**, Peer starts a run and says so before the editor opens:
+
+```
+Run run_01JC… on Cart — Claude Code. peer core runs lists it.
+```
+
+The editor carries the run, so its sessions join it without anything to set. With several scopes
+marked, the run goes to the first task; the agent's other scopes get runs of their own as it moves
+to them. An area or a group picked alone gets a run once the agent starts on one of its tasks.
+
+`peer core runs` lists your runs on this computer that have not ended: task, agent, where it runs
+(`terminal`, `herdr`, `peer` for a Peer chat, `mcp` for an editor using Peer's tools), state,
+sessions and start. `--all` adds the ended ones, `--task <id>` keeps one task's. A run is
+`running` while an agent session is in it, `detached` once its agent stopped, and `ended` after
+`peer review`, `peer done`, the task closing or `peer core runs end <id>`, which stops it and
+releases what its agent held.
+
+`peer core runs continue <id>` starts a detached terminal run's agent again in the project's
+checkout (the folder you are in when it is one), resuming its last session (`claude --resume`,
+`codex resume`) or, when none is known, with the task's first prompt, and it carries the run so
+its sessions join it. Runs started in the app
+continue from the task's page there. A task's page in the app lists terminal runs with "Started
+from a terminal; no view here": the agent's terminal is on the computer that started it.
+
+Run `peer core runs attach <run>` in an agent's shell to put that live session into a run, for
+example an agent you started by hand before Peer knew its task. It prints `Attached this session to
+run <id> on <task>.` The session lives in the Peer app or Peer Core, so one of them must be running.
+`peer core tasks` shows `· 2 runs` after a task agents have run on.
 
 ### Returning to older work
 

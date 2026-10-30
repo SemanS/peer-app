@@ -274,7 +274,9 @@ export const make = Effect.gen(function* () {
       const composed = yield* hub
         .compose(
           p,
-          session ? { environment: String(state.environmentId), session: session.id } : {},
+          session
+            ? { environment: String(state.environmentId), session: session.id, run: session.run }
+            : {},
         )
         .pipe(Effect.timeout(`${Math.min(4000, budget)} millis`), Effect.result);
       if (composed._tag === "Failure") {

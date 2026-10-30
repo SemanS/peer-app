@@ -16,6 +16,7 @@ import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerWork from "./PeerWork.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import { coreLayer, paymentsSeed, seedState, standInHub } from "../testkit.ts";
+import * as PeerRuns from "./runs.ts";
 import { startAgent } from "./start.ts";
 const input: PeerHubStartAgentInput = {
   workspace: "acme",
@@ -35,6 +36,7 @@ const program = (
     read: Effect.Effect<void, PeerHubError>;
     created: Array<PeerLifecycleEvent>;
     worktree: { current: string | undefined };
+    runs: PeerRuns.PeerRuns["Service"];
   }) => Effect.Effect<void, PeerHubError>,
 ) =>
   Effect.gen(function* () {
@@ -144,6 +146,7 @@ const program = (
       read,
       created,
       worktree,
+      runs: yield* PeerRuns.PeerRuns.pipe(Effect.provide(core)),
     });
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 describe("request launch ordering", () => {
@@ -230,6 +233,28 @@ describe("request launch ordering", () => {
         assert.isTrue(Result.isFailure(yield* f.start(asked).pipe(Effect.result)));
         assert.deepStrictEqual(f.accepted, []);
         assert.deepStrictEqual(f.launched, []);
+      }),
+    ),
+  );
+});
+describe("the run a launch starts", () => {
+  it.effect("creates the run before the launch and hands its identity to the agent", () =>
+    program((f) =>
+      Effect.gen(function* () {
+        yield* f.start({ ...input, requestId: "one" });
+        const env = f.launched[0]!.env;
+        assert.strictEqual(env.PEER_TASK, "krk-1");
+        const run = f.runs.book.get(env.PEER_RUN!)!;
+        assert.isTrue(f.runs.book.claim(run.id, env.PEER_RUN_TOKEN));
+        assert.include(run, { task: "krk-1", agent: "codex", runtime: "herdr", requestId: "one" });
+        // The launcher's thread key is the same run's, which the herdr session then joins by pane.
+        assert.strictEqual(f.runs.book.holderOf("herdr:term")?.id, run.id);
+        assert.strictEqual(f.runs.book.get(run.id)!.pane, "pane");
+        // Assigning the thread key wrote the same run, not a second one.
+        assert.strictEqual(
+          f.runs.book.ofTask("acme", "pay", "krk-1").filter((r) => r.runtime === "herdr").length,
+          1,
+        );
       }),
     ),
   );

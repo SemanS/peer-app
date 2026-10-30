@@ -1,7 +1,7 @@
 /**
  * The sections of a task's page that only show what the model says: what waits on the person, the
- * chats, the task context card and the folded details. They hold no data of their own; what a
- * button does is the page's to say.
+ * chats no run covers, the task context card and the folded details. They hold no data of their
+ * own; what a button does is the page's to say.
  */
 import {
   ChevronRightIcon,
@@ -12,7 +12,7 @@ import {
   PackageCheckIcon,
   ShieldCheckIcon,
 } from "lucide-react";
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useState, type ComponentType } from "react";
 
 import { cn } from "../../../lib/utils";
 import { Button, InlineButton } from "../../ui/button";
@@ -140,71 +140,50 @@ function ChatAction({
 }
 
 /**
- * Everyone's chats on the task: the person's own to open, a colleague's as a status row that says
- * why it cannot be opened here and offers to ask them (`onAsk`, absent while asking is off).
+ * A chat on the task that no run covers yet: the person's own to open, a colleague's as a status
+ * row that says why it cannot be opened here and offers to ask them (`onAsk`, absent while asking
+ * is off).
  */
-export function TaskChats({
-  rows,
+export function TaskChatItem({
+  row,
   onOpen,
   onAsk,
-  children,
 }: {
-  readonly rows: ReadonlyArray<TaskChatRow>;
+  readonly row: TaskChatRow;
   readonly onOpen: (open: WorkOpen) => void;
   readonly onAsk: ((row: TaskChatRow) => void) | undefined;
-  readonly children?: ReactNode;
 }) {
   return (
-    <section aria-label="Chats" className="flex flex-col gap-2.5">
-      <PeerSectionLabel
-        after={
-          <span className="font-normal text-muted-foreground tabular-nums">{rows.length}</span>
-        }
-      >
-        Chats
-      </PeerSectionLabel>
-      {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No chat is on this task yet. Start one to put an agent on it.
-        </p>
-      ) : (
-        <ul className="flex flex-col divide-y divide-border/60 border-y border-border/60">
-          {rows.map((row) => (
-            <li key={row.key} className="flex min-h-16 flex-wrap items-center gap-3 py-4">
-              <span
-                aria-hidden
-                className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
-                  row.mine
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground",
-                )}
-              >
-                {initialOf(row.person)}
-              </span>
-              <span className="flex min-w-0 flex-[1_1_16rem] flex-col gap-0.5">
-                <span className="truncate text-sm font-semibold text-foreground">{row.title}</span>
-                <span className="text-sm text-muted-foreground">{row.subtitle}</span>
-                {row.concerns === undefined ? null : (
-                  <span className="text-xs text-warning-foreground">{row.concerns}</span>
-                )}
-              </span>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 text-sm",
-                  TONE_TEXT[row.state.tone],
-                )}
-              >
-                <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current" />
-                {row.state.label}
-              </span>
-              <ChatAction row={row} onOpen={onOpen} onAsk={onAsk} />
-            </li>
-          ))}
-        </ul>
+    <li className="flex min-h-16 flex-wrap items-center gap-3 py-4">
+      <PersonMark name={row.person} mine={row.mine} />
+      <span className="flex min-w-0 flex-[1_1_16rem] flex-col gap-0.5">
+        <span className="truncate text-sm font-semibold text-foreground">{row.title}</span>
+        <span className="text-sm text-muted-foreground">{row.subtitle}</span>
+        {row.concerns === undefined ? null : (
+          <span className="text-xs text-warning-foreground">{row.concerns}</span>
+        )}
+      </span>
+      <span className={cn("inline-flex items-center gap-1.5 text-sm", TONE_TEXT[row.state.tone])}>
+        <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-current" />
+        {row.state.label}
+      </span>
+      <ChatAction row={row} onOpen={onOpen} onAsk={onAsk} />
+    </li>
+  );
+}
+
+/** Whose row it is, by initial: the person's own in the accent. */
+export function PersonMark({ name, mine }: { readonly name: string; readonly mine: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+        mine ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
       )}
-      {children === undefined ? null : <div className="flex flex-wrap gap-2">{children}</div>}
-    </section>
+    >
+      {initialOf(name)}
+    </span>
   );
 }
 

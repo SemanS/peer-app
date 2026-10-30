@@ -34,6 +34,7 @@ import * as PeerWork from "../../core/work/PeerWork.ts";
 import { observeHub } from "./hub.ts";
 
 const sameView = Schema.toEquivalence(PeerAgentView);
+const TERMINAL_RUN_HINT = "Started from a terminal; no view here";
 const hubError = (detail: string) => new PeerHubError({ detail });
 
 /** This computer's threads its owner lets the team watch. */
@@ -147,15 +148,24 @@ const make = Effect.gen(function* () {
   }, state.lock.withPermits(1));
 
   const watch: Observe["Service"]["watch"] = (input) =>
-    Stream.unwrap(
-      Effect.map(Ref.get(stopped), (whenStopped) =>
-        hub.relay(input.workspace, input.environment, input.thread).pipe(
-          // The hub ends a stream every 15 minutes; watching goes on until observe stops here.
-          Stream.forever,
-          Stream.interruptWhen(Deferred.await(whenStopped)),
-        ),
-      ),
-    );
+    // A run's own id is what a client opens for a run with no thread or pane: a terminal's.
+    input.thread.startsWith("run_")
+      ? Stream.succeed({
+          agentId: input.thread,
+          title: "",
+          status: "unknown" as const,
+          gone: true,
+          hint: TERMINAL_RUN_HINT,
+        })
+      : Stream.unwrap(
+          Effect.map(Ref.get(stopped), (whenStopped) =>
+            hub.relay(input.workspace, input.environment, input.thread).pipe(
+              // The hub ends a stream every 15 minutes; watching goes on until observe stops here.
+              Stream.forever,
+              Stream.interruptWhen(Deferred.await(whenStopped)),
+            ),
+          ),
+        );
 
   const unshareAll: Observe["Service"]["unshareAll"] = Effect.gen(function* () {
     yield* stop;

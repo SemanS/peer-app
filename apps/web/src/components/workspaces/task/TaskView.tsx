@@ -39,9 +39,10 @@ import {
   type TaskPerson,
 } from "./task.logic";
 import { TaskActivity } from "./TaskActivity";
+import { chatsWithoutRun, runsRevision, taskRunRows } from "./runs.logic";
+import { TaskRuns, useTaskRuns } from "./TaskRuns";
 import {
   DecisionBar,
-  TaskChats,
   TaskContextSection,
   TaskDetails,
   TaskItems,
@@ -51,7 +52,7 @@ import { taskMenuAction } from "./taskMenu.logic";
 
 /**
  * A task's page, which its title opens: what state it is in and what waits on the person, its
- * chats (a colleague's can only be asked about), the task context, what lately happened, and the
+ * runs (and chats no run covers; a colleague's can only be asked about), the task context, what lately happened, and the
  * details behind a fold. The primary action follows the state. A task with items lists them, and an
  * agent started on a group (or a task worked by its parts) gets its open items; an item nobody
  * decided how to run asks that first and starts nothing.
@@ -116,6 +117,7 @@ export function TaskView({
               model={model}
               needs={waiting}
               now={now}
+              clock={clock}
             />
           )}
         </div>
@@ -134,6 +136,7 @@ function TaskBody({
   model,
   needs,
   now,
+  clock,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
@@ -144,6 +147,7 @@ function TaskBody({
   readonly model: TaskPageModel;
   readonly needs: ReturnType<typeof needsByOpen>;
   readonly now: number;
+  readonly clock: (at: string) => string;
 }) {
   const navigate = useNavigate();
   const [renaming, setRenaming] = useState(false);
@@ -177,10 +181,29 @@ function TaskBody({
   const initialPrompt = launchPrompt(found.project, taskNode);
   const items = taskItems(found.project, taskNode, needs);
   const progress = progressLabel(taskNode);
+  const runs = useTaskRuns({
+    environmentId,
+    workspace,
+    projectId: project,
+    taskId,
+    revision: runsRevision(taskNode.runs, taskNode.threads),
+  });
+  const runRows = taskRunRows(runs.runs, {
+    me: status.email,
+    now,
+    environmentId,
+    agents: status.agents.list,
+    project: projectState,
+    clock,
+  });
+  const otherChats = chatsWithoutRun(model.chats, runs.runs);
+  const onTask = runRows.length + otherChats.length;
+  // A task with only terminal or editor runs has no thread, but its runs still show.
   const preparing =
     launchable &&
     !taskNode.done &&
     taskNode.threads.length === 0 &&
+    runRows.length === 0 &&
     Launcher !== undefined &&
     projectState !== undefined;
 
@@ -264,11 +287,11 @@ function TaskBody({
 
   const startButton = (
     <Button
-      variant={model.chats.length > 0 || model.offerStart ? "outline" : "default"}
+      variant={onTask > 0 || model.offerStart ? "outline" : "default"}
       disabled={t3ProjectId === undefined}
       onClick={startChat}
     >
-      {model.chats.length > 0 ? "Start new chat" : "Start a chat"}
+      {onTask > 0 ? "Start new chat" : "Start a chat"}
     </Button>
   );
 
@@ -328,7 +351,7 @@ function TaskBody({
           ) : null}
           {!preparing &&
           !unsettled &&
-          model.chats.length === 0 &&
+          onTask === 0 &&
           (primary.kind === "start" || model.offerStart)
             ? startButton
             : null}
@@ -406,9 +429,16 @@ function TaskBody({
 
       <div className="flex flex-wrap items-start gap-10">
         <div className="flex min-w-0 flex-[999_1_32rem] flex-col gap-8">
-          {preparing && model.chats.length === 0 ? null : (
-            <TaskChats
-              rows={model.chats}
+          {preparing && onTask === 0 ? null : (
+            <TaskRuns
+              environmentId={environmentId}
+              workspace={workspace}
+              projectId={project}
+              rows={runRows}
+              chats={otherChats}
+              loading={runs.loading}
+              error={runs.error}
+              onChanged={runs.refresh}
               onOpen={actions.open}
               onAsk={
                 RequestDialog !== undefined
@@ -416,8 +446,8 @@ function TaskBody({
                   : undefined
               }
             >
-              {model.chats.length > 0 ? startButton : null}
-            </TaskChats>
+              {onTask > 0 ? startButton : null}
+            </TaskRuns>
           )}
           <TaskItems
             project={found.project}

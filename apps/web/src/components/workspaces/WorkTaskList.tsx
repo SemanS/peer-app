@@ -22,6 +22,7 @@ import {
   toggleSelected,
   unsettledIn,
 } from "./taskTree.logic";
+import { runsChip } from "./task/runs.logic";
 import {
   ALL_PROJECTS,
   projectScopeKey,
@@ -429,6 +430,7 @@ function ListRow({
   const updated = activeLabel(card.updatedAt);
   const needsYou = taskStateTone(card.state.kind) === "needs";
   const progress = progressLabel(card.task);
+  const runs = runsChip(card.task.runs);
   const parent =
     tree === undefined || tree.underParent || card.task.parent === undefined
       ? undefined
@@ -510,6 +512,11 @@ function ListRow({
               </span>
             ),
             card.area === null ? null : <span key="area">{card.area}</span>,
+            runs === undefined ? null : (
+              <span key="runs" className="tabular-nums">
+                {runs}
+              </span>
+            ),
             card.chats === 0 ? null : (
               <span key="chats" className="inline-flex items-center gap-1">
                 <MessageCircleIcon aria-hidden className="size-3" />

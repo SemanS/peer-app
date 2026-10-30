@@ -62,6 +62,7 @@ export const CORE_COMMANDS = [
   "ack",
   "review",
   "done",
+  "run",
   "log",
   "task",
   "share",

@@ -6,8 +6,9 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
 import { CliError, render } from "../../core/plugin.ts";
+import { RunBook } from "../../core/work/runs.ts";
 import { roleTools } from "./client/transport.ts";
-import { logged, ready, ROLES } from "./fixtures.test.ts";
+import { acmeHubOf, logged, ready, ROLES } from "./fixtures.test.ts";
 import { tookText } from "./text.ts";
 
 type Ready = Effect.Success<ReturnType<typeof ready>>;
@@ -35,6 +36,32 @@ const puts = (peer: Ready) =>
   peer.server.calls.filter((call) => call.method === "PUT" && call.url?.startsWith(ROLES));
 
 describe("peer role", () => {
+  it.effect.each([2, 1])(
+    "names the session's run with the role where roles revision %s takes one",
+    (revision) =>
+      run(
+        Effect.gen(function* () {
+          const runs = new RunBook(
+            {},
+            {
+              environment: "ana-laptop",
+              email: () => "bob@acme.test",
+              now: () => Date.parse("2026-10-30T10:00:00Z"),
+              save: async () => undefined,
+            },
+          );
+          const peer = yield* ready({ ...acmeHubOf(), features: { roles: revision } }, () => ({
+            runs,
+            taskOf: () => "t-1",
+          }));
+          yield* role(peer, ["review"]);
+          const sent = JSON.parse(puts(peer)[0]!.body) as { run?: string };
+          const session = peer.fixture.broker.sessions.get("claude:one");
+          assert.isDefined(session?.run);
+          assert.strictEqual(sent.run, revision >= 2 ? session?.run : undefined);
+        }),
+      ),
+  );
   it.effect("makes a fresh session a review session, on the Hub and in its deny", () =>
     run(
       Effect.gen(function* () {

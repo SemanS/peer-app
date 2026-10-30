@@ -2,8 +2,8 @@
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
 /**
  * The broker's socket, which only this user may open: agents' hooks (`/hook`, `/hook/wait`), the
- * `peer` command (`/cli/<command>`), who owns it (`/owner`, `/owner/handover`) and Peer Mod's
- * receipts (`/delivery`, `/usage`).
+ * `peer` command (`/cli/<command>`), who owns it (`/owner`, `/owner/handover`), runs for the terminal's
+ * Peer Core process (`/runs`) and Peer Mod's receipts (`/delivery`, `/usage`).
  *
  * @module peerHub/core/broker/server
  */
@@ -45,12 +45,21 @@ export async function route(
     if (url === "/hook" || url === "/hook/wait") {
       const body = parseJson(raw);
       if (url === "/hook") {
-        const out = await this.hookInTime(body, request.headers);
+        const out = this.withRunNotice(
+          body,
+          request.headers,
+          await this.hookInTime(body, request.headers),
+        );
         respond(response, out === null ? 204 : 200, out === null ? "" : JSON.stringify(out));
       } else {
         const text = await this.wait(body, request.headers);
         respond(response, text === "" ? 204 : 200, text);
       }
+      return;
+    }
+    const runs = await this.runsRoute(request.method, url, raw);
+    if (runs !== undefined) {
+      respondJson(response, runs.status, runs.body);
       return;
     }
     if (url.startsWith("/cli/")) {
@@ -164,6 +173,12 @@ function readBody(request: NodeHttp.IncomingMessage): Promise<string> {
     });
     request.on("error", reject);
   });
+}
+
+function respondJson(response: NodeHttp.ServerResponse, status: number, body: unknown) {
+  if (response.writableEnded) return;
+  response.writeHead(status, { "Content-Type": "application/json" });
+  response.end(JSON.stringify(body));
 }
 
 export function respond(response: NodeHttp.ServerResponse, status: number, body: string) {

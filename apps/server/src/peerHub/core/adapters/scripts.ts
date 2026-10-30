@@ -76,7 +76,17 @@ if [ -n "\${CLAUDE_ENV_FILE:-}" ] && [ "$agent" = claude ]; then
     fi
   fi
 fi
-printf '%s' "$input" | curl -sf --max-time "$max_time" --unix-socket ${quoted} ${headers} "$@" -H "X-Peer-Agent: $agent" -H 'Content-Type: application/json' --data-binary @- http://peer/hook 2>/dev/null
+# The run that started the process (PEER_RUN) goes with every event; its token, like the session's,
+# goes through a file so no other process sees it in this one's arguments.
+if [ -n "\${PEER_RUN_TOKEN:-}" ]; then
+  umask 077
+  run_credential=$(mktemp "\${TMPDIR:-/tmp}/peer-run.XXXXXX" 2>/dev/null) && {
+    trap 'rm -f "\${credential:-}" "$run_credential"' 0
+    printf 'X-Peer-Run-Token: %s\\n' "$PEER_RUN_TOKEN" > "$run_credential"
+    set -- "$@" -H "@$run_credential"
+  }
+fi
+printf '%s' "$input" | curl -sf --max-time "$max_time" --unix-socket ${quoted} ${headers} -H "X-Peer-Run: \${PEER_RUN:-}" "$@" -H "X-Peer-Agent: $agent" -H 'Content-Type: application/json' --data-binary @- http://peer/hook 2>/dev/null
 sent=$?
 ${start}exit 0
 `,

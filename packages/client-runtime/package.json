@@ -487,6 +487,7 @@
     "./peer/test-reports": "./src/peer/testReports.ts",
     "./peer/roles": "./src/peer/roles.ts",
     "./peer/acceptance": "./src/peer/acceptance.ts",
+    "./peer/runs": "./src/peer/runs.ts",
     "./peer/digest": "./src/peer/digest.ts",
     "./peer-digest": "./src/peer/digest.ts",
     "./testing/peer-plans": "./src/testing/peerPlans.ts",

@@ -62,6 +62,8 @@ cwd=$PWD
 printf 'X-Peer-Session: %s\\n' "$(clean "\${PEER_SESSION:-\${CODEX_THREAD_ID:-}}")"
 [ -z "$token" ] || printf 'X-Peer-Session-Token: %s\\n' "$(clean "$token")"
 printf 'X-Peer-Cwd: %s\\n' "$(clean "$cwd")"
+[ -z "\${PEER_RUN:-}" ] || printf 'X-Peer-Run: %s\\n' "$(clean "$PEER_RUN")"
+[ -z "\${PEER_RUN_TOKEN:-}" ] || printf 'X-Peer-Run-Token: %s\\n' "$(clean "$PEER_RUN_TOKEN")"
 } > "$work/headers"
 if [ "$cmd" = mcp ]; then
 [ $# -eq 0 ] || { say 'peer: usage: mcp takes no arguments.' 'run peer mcp from an MCP client.'; exit 2; }

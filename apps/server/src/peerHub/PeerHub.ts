@@ -37,11 +37,11 @@ import * as PeerRpc from "./core/rpc.ts";
 import * as PeerState from "./core/state/PeerState.ts";
 import * as PeerStatus from "./core/status/PeerStatus.ts";
 import * as PeerWork from "./core/work/PeerWork.ts";
+import * as PeerRuns from "./core/work/runs.ts";
 import * as PeerWorkspaces from "./core/workspaces/PeerWorkspaces.ts";
 
 const WORK_INTERVAL = "30 seconds";
 const MANIFEST_INTERVAL = "10 minutes";
-
 /** Peer's core services, built without running them: `t3 peer-core` one-shot commands use it alone. */
 export const coreLayer = Layer.mergeAll(PeerAdapters.layer, PeerContextView.layer).pipe(
   Layer.provideMerge(PeerConversationReport.layer),
@@ -52,6 +52,7 @@ export const coreLayer = Layer.mergeAll(PeerAdapters.layer, PeerContextView.laye
   Layer.provideMerge(PeerHubEvents.layer),
   Layer.provideMerge(PeerWork.layer),
   Layer.provideMerge(PeerStatus.layer),
+  Layer.provideMerge(PeerRuns.layer),
   Layer.provideMerge(PeerPlugins.layer),
   Layer.provideMerge(PeerHubClient.layer),
   Layer.provideMerge(PeerState.layer),

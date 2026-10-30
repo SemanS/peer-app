@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
+import { RunBook } from "../../core/work/runs.ts";
 import { testsTools } from "./client/transport.ts";
 import { TESTS, ready, reportOf, sent, type Route } from "./fixtures.test.ts";
 
@@ -15,6 +16,35 @@ const answering =
     url === TESTS ? answer.current : undefined;
 
 describe("peer tests", () => {
+  it.effect.each([2, 1])(
+    "files with the session's run only where the Hub's revision %s takes one",
+    (revision) =>
+      run(
+        Effect.gen(function* () {
+          const answer = {
+            current: [200, { report: reportOf(), changed: true }] as [number, unknown],
+          };
+          const runs = new RunBook(
+            {},
+            {
+              environment: "ana-laptop",
+              email: () => "ana@acme.test",
+              now: () => Date.parse("2026-10-30T10:00:00Z"),
+              save: async () => undefined,
+            },
+          );
+          const peer = yield* ready({ route: answering(answer), revision }, () => ({ runs }));
+          yield* peer.tests(["pass", "All green", "--pass", "vp test run"]);
+          const [body] = sent(peer.hub, "POST");
+          const session = peer.fixture.broker.sessions.get("claude:one");
+          assert.isDefined(session?.run);
+          // An older Hub refuses a filing that names a run: it hears the session alone.
+          assert.strictEqual(body?.run, revision >= 2 ? session?.run : undefined);
+          assert.strictEqual(body?.session, "claude:one");
+        }),
+      ),
+  );
+
   it.effect("files a mixed report and says its number and its owned items", () =>
     run(
       Effect.gen(function* () {

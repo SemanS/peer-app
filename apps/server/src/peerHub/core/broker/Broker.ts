@@ -48,6 +48,7 @@ import type { PeerBrokerHost } from "./host.ts";
 import * as Landing from "./landing.ts";
 import * as Log from "./log.ts";
 import * as Owner from "./owner.ts";
+import * as Runs from "./runs.ts";
 import * as Server from "./server.ts";
 import * as SessionMemory from "./sessionMemory.ts";
 import * as Sessions from "./sessions.ts";
@@ -180,6 +181,8 @@ export class CoordinationBroker {
   readonly ownerPath: string;
   owner: Owner.Owner | null = null;
   stopped: Promise<void> | null = null;
+  /** Stops hearing runs end (`runEnded`). */
+  stopRunEnds: (() => void) | null = null;
 
   constructor(
     host: PeerBrokerHost,
@@ -235,6 +238,9 @@ export class CoordinationBroker {
     this.server = server;
     this.owner = { kind: this.kind, pid: process.pid, startedAt: new Date().toISOString() };
     await Owner.writeOwner(this.ownerPath, this.owner);
+    // A run whose live session no broker holds now lost it in a crash (design D5).
+    await this.host.runs?.recover(new Set(this.sessions.keys())).catch(() => undefined);
+    this.stopRunEnds = this.host.runs?.onEnded((run) => this.runEnded(run.id)) ?? null;
     this.timer = setInterval(() => void this.tick(), 500);
     this.record("broker.started", { socket: this.host.socketPath, policy: this.host.policy() });
     void this.forgetOldContexts();
@@ -286,7 +292,10 @@ export class CoordinationBroker {
       Promise.all([...this.sessions.values()].map((session) => this.release(session))),
       new Promise((resolve) => setTimeout(resolve, 3000)),
     ]);
-    // Tell the hub this computer's agents are no longer coordinated.
+    // Tell the hub this computer's agents are no longer coordinated; their runs stay, detached.
+    this.stopRunEnds?.();
+    for (const session of this.sessions.values()) this.leaveRun(session);
+    await this.host.runs?.flushed();
     this.sessions.clear();
     const plugins = await this.plugins();
     for (const workspace of this.reported) {
@@ -532,6 +541,20 @@ export class CoordinationBroker {
   readShellChanges = Sessions.readShellChanges;
   editedPaths = Sessions.editedPaths;
   samePath = Sessions.samePath;
+
+  // Runs (runs.ts).
+  planRun = Runs.planRun;
+  contextPathFor = Runs.contextPathFor;
+  enterRun = Runs.enterRun;
+  adoptRun = Runs.adoptRun;
+  attachRun = Runs.attachRun;
+  runTask = Runs.runTask;
+  leaveRun = Runs.leaveRun;
+  runEnded = Runs.runEnded;
+  endRunOf = Runs.endRunOf;
+  withRunNotice = Runs.withRunNotice;
+  runsRoute = Runs.runsRoute;
+  runCommand = Runs.runCommand;
 
   // Hooks (hooks.ts).
   hookInTime = Hooks.hookInTime;

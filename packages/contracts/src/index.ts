@@ -126,6 +126,8 @@ export * from "./peer/test-reports.ts";
 export * from "./peer/test-reports.rpc.ts";
 export * from "./peer/acceptance.ts";
 export * from "./peer/acceptance.rpc.ts";
+export * from "./peer/runs.ts";
+export * from "./peer/runs.rpc.ts";
 
 export * from "./peer/editions.ts";
 

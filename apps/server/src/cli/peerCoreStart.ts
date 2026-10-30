@@ -1,15 +1,18 @@
 /**
  * The menu's `Start a task`: scopes marked in the project's tree (or one row picked alone), each
  * unsettled one settled, the ones nobody owns taken, then the agent to start on them in the
- * project here, its first prompt the set's `scopePrompt`.
+ * project here, its first prompt the set's `scopePrompt`, carrying the run Peer starts for it.
  *
  * @module cli/peerCoreStart
  */
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Random from "effect/Random";
 
 import type { OneShotIo } from "./peerCoreIo.ts";
 import { type Editor, type MenuAsk, type MenuSteps, shortPath } from "./peerCoreMenu.ts";
-import { scopeOfNode, scopePrompt } from "./peerCoreTasks.ts";
+import { envOf, type RunEnv } from "./peerCoreRuns.ts";
+import { scopeOfNode, scopePrompt, type WorkScope } from "./peerCoreTasks.ts";
 import * as Tree from "./peerCoreTree.ts";
 
 /** The tree's own rows after the project's: a new task, another project's tasks. */
@@ -241,9 +244,78 @@ const chooseAgent = <R>(
       },
     ]);
     if (agent === null || agent === NONE_NOW || root === null) return undefined;
+    const work = scopes.map((node) => scopeOfNode(project.project, node));
+    const env = yield* runFor(steps, io, {
+      ...project,
+      agent,
+      editor: input.editors.find((editor) => editor.id === agent)?.title ?? agent,
+      scopes: work,
+    });
     return {
       editor: agent,
       folder: root,
-      prompt: scopePrompt(scopes.map((node) => scopeOfNode(project.project, node))),
+      prompt: scopePrompt(work),
+      ...(env === undefined ? {} : { env }),
     };
+  });
+
+/**
+ * The run the editor carries (design D6): on the set's first task, with a fresh request id per
+ * Start a task. One editor holds one run, so a set's other scopes get runs of their own as the
+ * agent moves to them (its `peer task set` or claims there); an area or a group alone gets none
+ * until then. A run that cannot be created does not keep the editor from starting.
+ */
+/** A Start a task's request id: the time and 62 random bits, unique well past the 24 hours it is kept. */
+const nonce = Effect.gen(function* () {
+  const at = yield* Clock.currentTimeMillis;
+  const a = yield* Random.nextIntBetween(0, 2 ** 31);
+  const b = yield* Random.nextIntBetween(0, 2 ** 31);
+  return `menu-${at.toString(36)}-${a.toString(36)}${b.toString(36)}`;
+});
+
+const runFor = <R>(
+  steps: MenuSteps<R>,
+  io: OneShotIo,
+  input: StartProject & {
+    readonly agent: string;
+    readonly editor: string;
+    readonly scopes: ReadonlyArray<WorkScope>;
+  },
+) =>
+  Effect.gen(function* () {
+    const first = input.scopes.find((scope) => scope.kind === "task");
+    if (first === undefined) return undefined;
+    const created = yield* steps
+      .createRun({
+        workspace: input.workspace,
+        project: input.project,
+        task: first.id,
+        agent: input.agent,
+        requestId: yield* nonce,
+      })
+      .pipe(
+        Effect.catch((error) =>
+          io
+            .say(
+              `No run was started: ${String(error.message).replace(/^peer core: /, "")}. ${input.editor} starts without one; Peer gives it a run when it starts on the task.`,
+            )
+            .pipe(Effect.as(undefined)),
+        ),
+      );
+    if (created === undefined) return { PEER_TASK: first.id } satisfies RunEnv;
+    const others = input.scopes.length - 1;
+    const word = input.scopes.some((scope) => scope !== first && scope.kind !== "task")
+      ? "scope"
+      : "task";
+    yield* io.say(
+      [
+        `Run ${created.id} on ${first.title} — ${input.editor}. peer core runs lists it.`,
+        ...(others === 0
+          ? []
+          : [
+              `The set's other ${others === 1 ? word : `${others} ${word}s`} ${others === 1 ? "gets a run" : "get runs"} of ${others === 1 ? "its" : "their"} own as the agent moves to ${others === 1 ? "it" : "them"}.`,
+            ]),
+      ].join(" "),
+    );
+    return envOf(first.id, created);
   });

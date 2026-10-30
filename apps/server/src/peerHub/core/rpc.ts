@@ -10,9 +10,11 @@ import * as PeerContextView from "./index/PeerContextView.ts";
  */
 import {
   PEER_CORE_METHODS,
+  PEER_RUNS_METHODS,
   PeerCoreRpcGroup,
   PeerHubError,
   PeerRpcGroup,
+  RunsRpcGroup,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -28,7 +30,9 @@ import type { PeerRpcContribution, PeerRpcWrap } from "./plugin.ts";
 import * as PeerPlugins from "./plugins/PeerPlugins.ts";
 import * as PeerState from "./state/PeerState.ts";
 import * as PeerStatus from "./status/PeerStatus.ts";
+import * as ContinueRun from "./work/continueRun.ts";
 import * as PeerWork from "./work/PeerWork.ts";
+import * as PeerRuns from "./work/runs.ts";
 import * as Start from "./work/start.ts";
 import * as PeerWorkspaces from "./workspaces/PeerWorkspaces.ts";
 
@@ -44,7 +48,8 @@ export type PeerRpcServices =
   | PeerPlugins.PeerPlugins
   | PeerStatus.PeerStatus
   | PeerState.PeerState
-  | PeerHubClient.PeerHubClient;
+  | PeerHubClient.PeerHubClient
+  | PeerRuns.PeerRuns;
 
 /** Handlers for every method of the contracts' `PeerRpcGroup`. */
 type PeerRpcHandlers = Rpc.ToHandler<RpcGroup.Rpcs<typeof PeerRpcGroup>>;
@@ -320,6 +325,40 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
     }),
   );
 
+/** Runs are core (design, Registry entries): each method calls one of core's services. */
+const runsRpcLayer = (wrap: PeerRpcWrap) =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      const runs = yield* PeerRuns.PeerRuns;
+      // Continuing a run reads core's services itself, as starting an agent does.
+      const core = yield* Effect.context<
+        | PeerRuns.PeerRuns
+        | PeerState.PeerState
+        | PeerPlugins.PeerPlugins
+        | PeerWork.PeerWork
+        | PeerCoordination.PeerCoordination
+      >();
+      return RunsRpcGroup.toLayer(
+        RunsRpcGroup.of({
+          [PEER_RUNS_METHODS.peerHubRuns]: (input) =>
+            wrap.effect(
+              PEER_RUNS_METHODS.peerHubRuns,
+              runs.list(input).pipe(Effect.map((list) => ({ runs: list }))),
+              PEER_TRACE,
+            ),
+          [PEER_RUNS_METHODS.peerHubEndRun]: (input) =>
+            wrap.effect(PEER_RUNS_METHODS.peerHubEndRun, runs.endRun(input), PEER_TRACE),
+          [PEER_RUNS_METHODS.peerHubContinueRun]: (input) =>
+            wrap.effect(
+              PEER_RUNS_METHODS.peerHubContinueRun,
+              ContinueRun.continueRun(input).pipe(Effect.provideContext(core)),
+              PEER_TRACE,
+            ),
+        }),
+      );
+    }),
+  );
+
 /** A plugin's methods refused while it is inactive, before anything runs. */
 const guarded = (
   wrap: PeerRpcWrap,
@@ -386,6 +425,7 @@ export const layer = (wrap: PeerRpcWrap): Layer.Layer<PeerRpcHandlers, never, Pe
       const served = new Set(
         [
           PeerCoreRpcGroup,
+          RunsRpcGroup,
           ...built.flatMap(({ contributions }) => contributions.rpc?.group ?? []),
         ].flatMap((group) => [...(group as RpcGroup.RpcGroup<Rpc.Any>).requests.keys()]),
       );
@@ -393,6 +433,7 @@ export const layer = (wrap: PeerRpcWrap): Layer.Layer<PeerRpcHandlers, never, Pe
       // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
       return Layer.mergeAll(
         coreRpcLayer(wrap),
+        runsRpcLayer(wrap),
         ...theirs,
         ...unservedRpcLayers(served, wrap),
       ) as Layer.Layer<PeerRpcHandlers, never, PeerRpcServices>;

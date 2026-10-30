@@ -316,6 +316,8 @@ export const PeerCoordSession = Schema.Struct({
   local: Schema.Boolean,
   /** When its agent last did something. */
   activeAt: Schema.optional(Schema.String),
+  /** The run it belongs to; absent from Peers and Hubs that predate runs. */
+  run: Schema.optional(Schema.String),
 });
 export type PeerCoordSession = typeof PeerCoordSession.Type;
 

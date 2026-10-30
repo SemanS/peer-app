@@ -530,3 +530,44 @@ it.effect("sends a task's place in the tree to the Hub as it was given", () =>
     ]);
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
+
+it.effect("puts a Peer thread on a task through a peer run, and moves or ends that run", () =>
+  Effect.gen(function* () {
+    const { work, status, state } = yield* reporting([], hubAnswers);
+    yield* status.coordinationFrom(() =>
+      Effect.succeed({
+        enabled: false,
+        policy: "coordinate",
+        claudeHooks: false,
+        logPath: "/tmp/test-coordination",
+        sessions: [],
+        overlaps: [],
+        findings: [],
+        contexts: [],
+        candidates: [],
+      }),
+    );
+    const place = { workspace: "acme", projectId: "pay", thread: "peer:thread-2" };
+    yield* work.assignThread({ ...place, taskId: "krk-1" });
+    const runs = () =>
+      Object.values(state.current().persisted.runs ?? {}).filter(
+        (run) => run.thread === "peer:thread-2",
+      );
+    assert.deepStrictEqual(
+      runs().map((run) => [run.runtime, run.task, run.endedAt]),
+      [["peer", "krk-1", undefined]],
+    );
+    assert.strictEqual(state.current().persisted.assignments?.["peer:thread-2"]?.task, "krk-1");
+    yield* work.assignThread({ ...place, taskId: "krk-2" });
+    assert.deepStrictEqual(
+      runs().map((run) => run.task),
+      ["krk-2"],
+    );
+    yield* work.assignThread({ ...place, taskId: null });
+    assert.deepStrictEqual(
+      runs().map((run) => run.outcome),
+      ["stopped"],
+    );
+    assert.isUndefined(state.current().persisted.assignments?.["peer:thread-2"]);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);

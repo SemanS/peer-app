@@ -211,6 +211,7 @@ export async function endTools(this: CoordinationBroker, id: string) {
   await this.readTeamLines(session);
   if (session.keeps) await this.saveShared(session);
   await this.release(session);
+  this.leaveRun(session);
   this.sessions.delete(id);
   this.markDirty();
   await handlers(step, "session-end");

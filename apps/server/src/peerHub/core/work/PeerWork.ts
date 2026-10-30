@@ -65,6 +65,7 @@ import {
 } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import { checkoutKind } from "../vcs.ts";
+import * as PeerRuns from "./runs.ts";
 import { shellStatus, taskName, tasksOf, workOf, workspaceReport } from "./report.ts";
 
 /** How plugins find the task a session's branch or title names by key, as hook sessions do. */
@@ -175,6 +176,8 @@ const make = Effect.gen(function* () {
   const projects = yield* ProjectService.ProjectService;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const settings = yield* Settings.ServerSettingsService;
+  const peerRuns = yield* PeerRuns.PeerRuns;
+  const runs = peerRuns.book;
   const clock = yield* Clock.Clock;
   const { environmentId, lock } = state;
   const hubApi = client.api;
@@ -364,6 +367,8 @@ const make = Effect.gen(function* () {
       }
       reportRound += 1;
       yield* state.updateRuntime((current) => ({ ...current, work }));
+      // Runs that changed reach the Hub with the work report, should no broker run here.
+      yield* peerRuns.sync;
       const policy = readHubPolicyState();
       yield* Ref.set(latestPass, {
         at: clock.currentTimeMillisUnsafe(),
@@ -418,44 +423,27 @@ const make = Effect.gen(function* () {
             : Effect.succeed(goneView(thread));
         });
 
+  const saved = (write: () => Promise<void>) =>
+    Effect.tryPromise({ try: write, catch: () => hubError("Could not save the workspace state.") });
+
+  // Assignments are written from runs (design D3): a key put on a task moves or starts its run.
   const assign: PeerWork["Service"]["assign"] = (thread, assignment) =>
-    state.updatePersisted((p) => {
-      const { [thread]: _previous, ...assignments } = p.assignments ?? {};
-      return {
-        ...p,
-        assignments: assignment === null ? assignments : { ...assignments, [thread]: assignment },
-      };
-    });
+    saved(() => runs.assign(thread, assignment));
 
   const rename: PeerWork["Service"]["rename"] = (renames) =>
     Effect.gen(function* () {
-      const { persisted } = yield* state.read;
-      const assignments = persisted.assignments ?? {};
-      const shared = persisted.sharedThreads ?? [];
-      const moves = renames.flatMap(({ from, to }) => {
-        const assignment = assignments[from];
-        return from !== to && assignment !== undefined && assignments[to] === undefined
-          ? [{ from, to, assignment }]
-          : [];
-      });
+      yield* saved(() => runs.rename(renames));
+      const shared = (yield* state.read).persisted.sharedThreads ?? [];
       const renamed = new Map(
         renames.flatMap(({ from, to }) =>
           from !== to && shared.includes(from) ? [[from, to] as const] : [],
         ),
       );
-      if (moves.length === 0 && renamed.size === 0) return;
-      yield* state.updatePersisted((p) => {
-        const next = { ...p.assignments };
-        for (const move of moves) {
-          delete next[move.from];
-          next[move.to] = move.assignment;
-        }
-        return {
-          ...p,
-          assignments: next,
-          sharedThreads: (p.sharedThreads ?? []).map((key) => renamed.get(key) ?? key),
-        };
-      });
+      if (renamed.size === 0) return;
+      yield* state.updatePersisted((p) => ({
+        ...p,
+        sharedThreads: (p.sharedThreads ?? []).map((key) => renamed.get(key) ?? key),
+      }));
     });
 
   const createTask: PeerWork["Service"]["createTask"] = Effect.fn("PeerWork.createTask")(function* (
@@ -483,6 +471,7 @@ const make = Effect.gen(function* () {
     yield* state.project(input.workspace, input.projectId);
     const { workspace, projectId, taskId, ...change } = input;
     yield* hubApi.updateTask(hubUrl, session, workspace, projectId, taskId, change);
+    if (change.status === "done") yield* saved(() => runs.closeTask(workspace, projectId, taskId));
     yield* refresh();
     return yield* status.publish;
   }, lock.withPermits(1));
@@ -494,19 +483,7 @@ const make = Effect.gen(function* () {
     yield* state.project(input.workspace, input.projectId);
     yield* hubApi.deleteTask(hubUrl, session, input.workspace, input.projectId, input.taskId);
     // Threads that worked on it go back to the project's unsorted work.
-    yield* state.updatePersisted((p) => ({
-      ...p,
-      assignments: Object.fromEntries(
-        Object.entries(p.assignments ?? {}).filter(
-          ([, a]) =>
-            !(
-              a.workspace === input.workspace &&
-              a.project === input.projectId &&
-              a.task === input.taskId
-            ),
-        ),
-      ),
-    }));
+    yield* saved(() => runs.closeTask(input.workspace, input.projectId, input.taskId));
     yield* refresh();
     return yield* status.publish;
   }, lock.withPermits(1));

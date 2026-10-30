@@ -280,6 +280,9 @@ const PEER_METHOD_NAMES = [
   "peerHub.settleOverlap",
   "peerHub.setSharedCapacity",
   "peerHub.projectUsage",
+  "peerHub.runs",
+  "peerHub.endRun",
+  "peerHub.continueRun",
 ];
 
 describe("Peer's RPCs in the WebSocket group", () => {

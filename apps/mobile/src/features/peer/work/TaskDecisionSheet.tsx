@@ -18,6 +18,7 @@ import { threadEnvironment } from "../../../state/threads";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { useSavedRemoteConnection } from "../../../state/use-remote-environment-registry";
 import { CurrentContextReport } from "../CurrentContextReport";
+import { taskStateWords } from "./work.logic";
 import { GitHubTaskPullRequests } from "../github/GitHubTaskPullRequests";
 import { PeerHandoff } from "../handoff/PeerHandoff";
 import { OpenSpecTaskPreparation } from "../openspec/OpenSpecTaskPreparation";
@@ -178,7 +179,13 @@ export function TaskDecisionSheet({
           </AppText>
           <AppText className="text-sm text-foreground-muted">
             {workspace} · {project?.project.name ?? projectId} ·{" "}
-            {task?.status === "review" ? "In review" : task?.status === "done" ? "Done" : "Open"}
+            {node === undefined
+              ? task?.status === "review"
+                ? "In review"
+                : task?.status === "done"
+                  ? "Done"
+                  : "Open"
+              : taskStateWords(node)}
           </AppText>
         </View>
         {live.error === null ? null : (

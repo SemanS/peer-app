@@ -10,6 +10,7 @@ import {
   type BoardCard,
   type BoardColumn,
   type WorkProjectNode,
+  type WorkTaskNode,
   type WorkThreadNode,
 } from "@t3tools/client-runtime/peer/work";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
@@ -297,4 +298,22 @@ export function workEmptyText(
   return signedIn.some((status) => status.workspaces.length > 0)
     ? "No team projects yet. Share one on web or desktop, and everyone in the workspace can work on it."
     : "Join or create a workspace on web or desktop to work with your team.";
+}
+
+/**
+ * A task's state in the phone's words, the web's states read from the same tree: a handoff accepted
+ * by a lead or by the project's review policy waits on nobody, only on its landing. `decide` adds
+ * what the person does with a review ("In review · decide") where the row opens it.
+ */
+export function taskStateWords(
+  task: Pick<WorkTaskNode, "done" | "inReview" | "accepted">,
+  decide = false,
+): string {
+  if (task.done) return "Done";
+  if (task.inReview === true && task.accepted !== undefined)
+    return task.accepted === "policy"
+      ? "Accepted by policy · waiting to land"
+      : "Accepted · waiting to land";
+  if (task.inReview === true) return decide ? "In review · decide" : "In review";
+  return "Open";
 }

@@ -20,7 +20,13 @@ import { PEER_MOBILE_PLUGINS } from "../slots";
 import { selectPeerPlugins } from "../slots.logic";
 import { projectSignals } from "./signals";
 import { useWork } from "./useWork";
-import { workEmptyText, workGroups, workNotices, type WorkCardAction } from "./work.logic";
+import {
+  taskStateWords,
+  workEmptyText,
+  workGroups,
+  workNotices,
+  type WorkCardAction,
+} from "./work.logic";
 import {
   WorkProjectCard,
   WorkProjectCards,
@@ -171,7 +177,7 @@ export function WorkRouteScreen() {
                         {task.title}
                       </AppText>
                       <AppText className="text-sm text-foreground-muted">
-                        {task.inReview ? "In review · decide" : task.done ? "Done" : "Open"}
+                        {taskStateWords(task, true)}
                       </AppText>
                     </Pressable>
                   ))}

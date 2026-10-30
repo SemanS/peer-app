@@ -277,7 +277,8 @@ describe("UsageService", () => {
       yield* Effect.gen(function* () {
         const service = yield* UsageService.make;
         const summary = yield* service.readSummary(WINDOW);
-        const totals = yield* service.readSessionTotals(WINDOW);
+        const { sessions: totals, partial } = yield* service.readSessionTotals(WINDOW);
+        assert.isFalse(partial);
         const sum = <A>(items: readonly A[], of: (item: A) => number) =>
           items.reduce((total, item) => total + of(item), 0);
 
@@ -1379,8 +1380,10 @@ describe("UsageService", () => {
           const partial = yield* service.readSummary(WINDOW);
           assert.strictEqual(totalOutputTokens(partial), 5);
           assert.strictEqual(partial.sources[0]?.status, "partial");
+          assert.isTrue((yield* service.readSessionTotals(WINDOW)).partial);
 
           yield* Effect.promise(() => NodeFSP.chmod(unreadable, 0o600));
+          assert.isFalse((yield* service.readSessionTotals(WINDOW)).partial);
           const healthy = yield* service.readSummary(WINDOW);
           assert.strictEqual(totalOutputTokens(healthy), 12);
           assert.strictEqual(healthy.sources[0]?.status, "ok");

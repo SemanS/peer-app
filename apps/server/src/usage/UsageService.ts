@@ -183,7 +183,7 @@ const layerTest = Layer.succeed(
         pricing: EMPTY_PRICING,
         scanDurationMs: 0,
       }),
-    readSessionTotals: () => Effect.succeed([]),
+    readSessionTotals: () => Effect.succeed({ sessions: [], partial: false }),
     refreshRates: Effect.succeed(EMPTY_PRICING),
   }),
 );
@@ -864,9 +864,16 @@ export const make = Effect.gen(function* () {
           unpriced: (known?.unpriced ?? true) && priced.costSource === "unpriced",
         });
       };
-      yield* scanSummary({ timeZone: "UTC", sinceDay, untilDay }, settings, add);
+      const { sources } = yield* scanSummary(
+        { timeZone: "UTC", sinceDay, untilDay },
+        settings,
+        add,
+      );
       yield* schedulePersist;
-      return [...sessions.values()];
+      return {
+        sessions: [...sessions.values()],
+        partial: sources.some(({ status }) => status === "partial" || status === "failed"),
+      };
     },
   );
 

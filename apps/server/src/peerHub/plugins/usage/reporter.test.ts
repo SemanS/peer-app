@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import {
   EnvironmentId,
   PeerHubError,
+  UsageReadError,
   type PeerUsageReportInput,
   type PeerUsageSharingAnswer,
 } from "@t3tools/contracts";
@@ -80,6 +81,7 @@ const stage = (
     features: { usage: 1 } as Readonly<Record<string, number>>,
     sharing: { sharing: true, at: "2026-10-01T00:00:00Z" } as PeerUsageSharingAnswer,
     sessions: [total("pay", 5)],
+    partial: false,
     answer: ((): Effect.Effect<UsageReportOutcome, PeerHubError> => Effect.succeed("stored")) as (
       input: PeerUsageReportInput,
     ) => Effect.Effect<UsageReportOutcome, PeerHubError>,
@@ -110,7 +112,7 @@ const stage = (
     read: () =>
       Effect.sync(() => {
         world.reads += 1;
-        return world.sessions;
+        return { sessions: world.sessions, partial: world.partial };
       }),
     remoteOf: () => Promise.resolve(null),
     now: () => world.now,
@@ -184,7 +186,7 @@ describe("a pass", () => {
         read: (input) =>
           Effect.sync(() => {
             asked = input;
-            return [];
+            return { sessions: [], partial: false };
           }),
       });
       yield* reporter.pass;
@@ -218,16 +220,105 @@ describe("a pass", () => {
     }),
   );
 
-  it.effect("takes back a day whose sessions no longer belong here", () =>
+  it.effect("never takes a day back when its sessions are gone from this pass", () =>
     Effect.gen(function* () {
       const { world, reporter } = stage();
       yield* reporter.pass;
+      assert.lengthOf(world.reports, 1);
       world.sessions = [];
       yield* reporter.pass;
-      assert.deepStrictEqual(world.reports[1]?.rows, []);
-      assert.strictEqual(world.reports[1]?.day, "2026-10-30");
       yield* reporter.pass;
-      assert.lengthOf(world.reports, 2);
+      assert.lengthOf(world.reports, 1);
+    }),
+  );
+
+  it.effect("sends no empty rows for a day of sessions with no tokens", () =>
+    Effect.gen(function* () {
+      const { world, reporter } = stage();
+      const empty = total("pay", 0);
+      world.sessions = [{ ...empty, totals: { ...empty.totals, uncachedInputTokens: 0 } }];
+      yield* reporter.pass;
+      assert.deepStrictEqual(world.reports, []);
+    }),
+  );
+
+  it.effect("sends nothing, and scans nothing, while any workspace's manifest is missing", () =>
+    Effect.gen(function* () {
+      const { world, reporter } = stage();
+      const known = persisted();
+      world.state = {
+        ...known,
+        workspaces: [...known.workspaces, { slug: "beta", manifest: null as never }],
+      };
+      yield* reporter.pass;
+      assert.deepStrictEqual(world.reports, []);
+      assert.strictEqual(world.reads, 0);
+
+      world.state = known;
+      yield* reporter.pass;
+      assert.lengthOf(world.reports, 1);
+    }),
+  );
+
+  it.effect("sends nothing when the sessions were read in part, or could not be read", () =>
+    Effect.gen(function* () {
+      const reads = { fails: false };
+      const { world, reporter } = stage({
+        read: () =>
+          reads.fails
+            ? Effect.fail(new UsageReadError({ reason: "scanFailed", detail: "no" }))
+            : Effect.sync(() => ({ sessions: world.sessions, partial: world.partial })),
+      });
+      world.partial = true;
+      yield* reporter.pass;
+      assert.deepStrictEqual(world.reports, []);
+
+      world.partial = false;
+      reads.fails = true;
+      yield* reporter.pass;
+      assert.deepStrictEqual(world.reports, []);
+
+      reads.fails = false;
+      yield* reporter.pass;
+      assert.lengthOf(world.reports, 1);
+    }),
+  );
+
+  it.effect("asks again for an `origin` that was not found, and places the session then", () =>
+    Effect.gen(function* () {
+      const answers: Array<string | null> = [null, "https://github.com/acme/api.git"];
+      const asked: Array<string> = [];
+      const { world, reporter } = stage({
+        remoteOf: (cwd) => {
+          asked.push(cwd);
+          return Promise.resolve(answers.shift() ?? null);
+        },
+      });
+      const state = persisted();
+      world.state = {
+        ...state,
+        workspaces: [
+          {
+            slug: "acme",
+            manifest: {
+              ...state.workspaces[0]!.manifest,
+              projects: [
+                {
+                  id: "pay",
+                  repositories: [{ id: "api", url: "https://github.com/acme/api.git" } as never],
+                },
+              ],
+            },
+          },
+        ],
+      };
+      world.sessions = [{ ...total("elsewhere", 5), cwd: "/one" }];
+      yield* reporter.pass;
+      assert.deepStrictEqual(world.reports, []);
+      yield* reporter.pass;
+      assert.lengthOf(world.reports, 1);
+      yield* reporter.pass;
+      assert.deepStrictEqual(asked, ["/one", "/one"]);
     }),
   );
 
@@ -330,7 +421,7 @@ describe("a pass", () => {
       const { world, reporter } = stage({
         remoteOf: (cwd) => {
           asked.push(cwd);
-          return Promise.resolve(null);
+          return Promise.resolve("https://github.com/ana/notes.git");
         },
       });
       world.sessions = [

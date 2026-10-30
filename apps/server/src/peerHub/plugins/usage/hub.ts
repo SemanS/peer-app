@@ -31,7 +31,7 @@ const orUnsupported = <A, R>(call: Effect.Effect<A, PeerHubError, R>) =>
 
 /** What became of a report the Hub answered. A refusal outside these stays a `PeerHubError`. */
 export type UsageReportOutcome =
-  /** Kept, or, with empty rows, the computer's row removed. */
+  /** Kept. */
   | "stored"
   /** The kept report's `rev` is as new: send again on the next pass with a higher one. */
   | "stale"

@@ -23,10 +23,16 @@ export interface UsageSessionTotal {
   readonly unpriced: boolean;
 }
 
+export interface UsageSessionTotals {
+  readonly sessions: ReadonlyArray<UsageSessionTotal>;
+  /** A source could not be read whole, so the sessions may be fewer than they are. */
+  readonly partial: boolean;
+}
+
 export type ReadSessionTotals = (input: {
   readonly sinceDay: UsageDay;
   readonly untilDay: UsageDay;
-}) => Effect.Effect<ReadonlyArray<UsageSessionTotal>, UsageReadError>;
+}) => Effect.Effect<UsageSessionTotals, UsageReadError>;
 
 /**
  * `UsageService.readSessionTotals` for code that also runs where the engine does not: Peer's usage

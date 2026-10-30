@@ -285,7 +285,9 @@ describe("where the local usage engine lives", () => {
 
       const withEngine = yield* UsagePlugin.contributions.pipe(
         Effect.provide(core),
-        Effect.provideService(UsageSessionReader, () => Effect.succeed([])),
+        Effect.provideService(UsageSessionReader, () =>
+          Effect.succeed({ sessions: [], partial: false }),
+        ),
       );
       assert.isDefined(withEngine.run);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

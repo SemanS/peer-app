@@ -3,6 +3,10 @@
  * project and UTC day, sent when its content changed. Which sessions may go is `attribution.ts`'s
  * rule and what goes is `rows.ts`'s; here is only when, and what the Hub's answers mean.
  *
+ * A report never takes data back: what was reported stays true, so a rollup with no sessions now
+ * sends nothing, and a person's sharing switch is the only way rows go away. A pass that cannot see
+ * everything (a missing manifest, a partial read) sends nothing, since its rollups would shrink.
+ *
  * What was sent is kept in memory: a restart sends the same rows again, which the Hub takes as a
  * newer `rev` of the same report.
  *
@@ -53,8 +57,11 @@ export function createReporter({ state, features, usage, read, remoteOf, now }: 
   const sent = new Map<string, Map<string, string>>();
   /** Workspace → when sharing went on, as the Hub says: any change means its rows are gone. */
   const sharedAt = new Map<string, string | null>();
-  /** `origin` per directory. Cleared daily, so a repository that moved projects is seen again. */
-  const remotes = new Map<string, string | null>();
+  /**
+   * `origin` per directory, only when found: null also means `git` failed this once. Cleared daily,
+   * so a repository that moved projects is seen again.
+   */
+  const remotes = new Map<string, string>();
   let remotesDay = "";
   let person: string | null = null;
   let lastRev = 0;
@@ -104,7 +111,9 @@ export function createReporter({ state, features, usage, read, remoteOf, now }: 
         [...cwds].filter((cwd) => !remotes.has(cwd)),
         (cwd) =>
           Effect.promise(() => remoteOf(cwd)).pipe(
-            Effect.map((remote) => void remotes.set(cwd, remote)),
+            Effect.map((remote) => {
+              if (remote !== null) remotes.set(cwd, remote);
+            }),
           ),
         { concurrency: REMOTE_CONCURRENCY, discard: true },
       );
@@ -113,12 +122,12 @@ export function createReporter({ state, features, usage, read, remoteOf, now }: 
   /** Each sharing workspace's sessions, by rollup. Any session not returned stays here. */
   const placeSessions = (
     sessions: ReadonlyArray<UsageSessionTotal>,
+    persisted: ReturnType<ReporterInput["state"]["current"]>["persisted"],
     sharing: ReadonlySet<string>,
     email: string,
     today: string,
   ) =>
     Effect.gen(function* () {
-      const { persisted } = state.current();
       const context = {
         runs: runPlaces(Object.values(persisted.runs ?? {}), email),
         hubHomes: [...new Set([state.hubHome, realpathOrSelf(state.hubHome)])],
@@ -159,11 +168,12 @@ export function createReporter({ state, features, usage, read, remoteOf, now }: 
       sent.set(workspace, known);
       for (const key of known.keys()) if (rollupPlace(key).day < firstDay) known.delete(key);
       const skipped = new Set<string>();
-      // A rollup kept in `known` with no sessions now went away here: empty rows take it back.
-      for (const key of [...new Set([...rollups.keys(), ...known.keys()])].toSorted()) {
+      for (const [key, sessions] of [...rollups].toSorted(([a], [b]) => a.localeCompare(b))) {
         const { project, day } = rollupPlace(key);
         if (skipped.has(project)) continue;
-        const rows = reportRows(rollups.get(key) ?? [], environment);
+        const rows = reportRows(sessions, environment);
+        // Sessions of zero tokens alone make no rows, and the Hub reads empty rows as a removal.
+        if (rows.length === 0) continue;
         const digest = toldDigest(encodeRows(rows));
         if (known.get(key) === digest) continue;
         lastRev = Math.max(now(), lastRev + 1);
@@ -179,8 +189,7 @@ export function createReporter({ state, features, usage, read, remoteOf, now }: 
         }
         switch (outcome.success) {
           case "stored":
-            if (rows.length === 0) known.delete(key);
-            else known.set(key, digest);
+            known.set(key, digest);
             break;
           case "stale":
             // Not remembered, so the next pass sends it with a higher `rev`.
@@ -207,9 +216,11 @@ export function createReporter({ state, features, usage, read, remoteOf, now }: 
     const sharing = yield* sharingWorkspaces(persisted.workspaces.map(({ slug }) => slug));
     // Asked only now: a person who shares nothing pays for no scan.
     if (sharing === null || sharing.length === 0) return;
+    // Without every manifest `cwd` attribution stops, so rollups would come out smaller.
+    if (persisted.workspaces.some((workspace) => workspace.manifest === null)) return;
     const today = now();
     const firstDay = dayOf(today - (WINDOW_DAYS - 1) * DAY_MS);
-    const sessions = yield* read({
+    const totals = yield* read({
       sinceDay: UsageDay.make(firstDay),
       untilDay: UsageDay.make(dayOf(today)),
     }).pipe(
@@ -220,8 +231,18 @@ export function createReporter({ state, features, usage, read, remoteOf, now }: 
       ),
       Effect.option,
     );
-    if (Option.isNone(sessions)) return;
-    const rollups = yield* placeSessions(sessions.value, new Set(sharing), email, dayOf(today));
+    if (Option.isNone(totals)) return;
+    if (totals.value.partial) {
+      yield* Effect.logWarning("Peer usage: a source was read in part, so nothing is sent");
+      return;
+    }
+    const rollups = yield* placeSessions(
+      totals.value.sessions,
+      persisted,
+      new Set(sharing),
+      email,
+      dayOf(today),
+    );
     for (const workspace of sharing) {
       const supported = yield* sendWorkspace(
         workspace,

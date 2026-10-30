@@ -154,7 +154,7 @@ export function RoomComposer({
             size="compact"
             variant={chosen.includes(choice.key) ? "outline" : "ghost-muted"}
             aria-pressed={chosen.includes(choice.key)}
-            disabled={choice.disabled !== undefined}
+            disabled={busy || choice.disabled !== undefined}
             onClick={() =>
               onDraftChange({ ...draft, selected: toggleChoice(draft.selected, choice) })
             }
@@ -198,8 +198,8 @@ export function RoomComposer({
               <button
                 type="button"
                 className={
-                  "flex w-full min-w-0 items-baseline gap-2 rounded-sm px-2 py-1 text-start text-sm text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" +
-                  (person === offered ? " bg-accent" : "")
+                  "flex w-full min-w-0 items-baseline gap-2 rounded-sm border px-2 py-1 text-start text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring " +
+                  (person === offered ? "border-primary" : "border-transparent")
                 }
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => choosePerson(person)}

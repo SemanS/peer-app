@@ -269,7 +269,6 @@ function DeliveryLine({
       ))}
       {declining ? (
         <DeclineDialog
-          who={nameOf(message.author.email)}
           busy={busy}
           onDecline={(reason) => {
             void moves.decline(place, message.seq, reason).then((done) => {

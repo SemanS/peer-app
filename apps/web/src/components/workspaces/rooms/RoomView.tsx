@@ -15,10 +15,11 @@ import { runsRevision } from "../task/runs.logic";
 import { useTaskRuns } from "../task/TaskRuns";
 import { useWorkData } from "../useWorkData";
 import type { WorkOpen, WorkTaskNode } from "../workTree.logic";
-import { choicesWithMentions, hasOpenRun, peopleOf } from "./room.logic";
+import { choicesWithMentions, hasOpenRun, peopleOf, reachRows } from "./room.logic";
 import { RoomComposer } from "./RoomComposer";
 import { roomMessageId, RoomConversation } from "./RoomConversation";
 import { RoomDiff, type DiffFocus } from "./RoomDiff";
+import { RoomReach } from "./RoomReach";
 import { watchable } from "./roomDiff.logic";
 import { useRoom, useRoomDiff, useRoomDraft, useRoomMoves } from "./useRoom";
 
@@ -139,6 +140,12 @@ function RoomBody({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <RoomReach
+        environmentId={environmentId}
+        place={place}
+        rows={reachRows(runs.runs, me, read.room)}
+        onChanged={read.refresh}
+      />
       <div className="shrink-0 border-b border-border/60 px-4 py-2 lg:hidden">
         <ToggleGroup
           aria-label="Show"

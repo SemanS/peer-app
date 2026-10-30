@@ -14,13 +14,10 @@ import {
 
 /** Declining a message, with a reason everyone in the room reads, or without one. */
 export function DeclineDialog({
-  who,
   busy,
   onDecline,
   onClose,
 }: {
-  /** Who asked: "Ana". */
-  readonly who: string;
   readonly busy: boolean;
   readonly onDecline: (reason: string) => void;
   readonly onClose: () => void;
@@ -38,7 +35,7 @@ export function DeclineDialog({
         <PeerDialogHeader
           icon={BanIcon}
           title="Decline this message"
-          description={`Your agent will not hear it. ${who} and everyone in the room see that you declined.`}
+          description="Your agent will not hear it, and everyone in the room sees that you declined."
         />
         <PeerDialogBody>
           <PeerStackedField htmlFor={fieldId} label="Why (optional)">

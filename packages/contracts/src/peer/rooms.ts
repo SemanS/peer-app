@@ -126,6 +126,10 @@ export const PeerRoomRead = Schema.Struct({
   seen: Schema.Number,
   messages: Schema.Array(PeerRoomMessage),
   reaches: Schema.Array(PeerRoomReach),
+  /** This computer's word, never the Hub's: it has a checkout of the project. */
+  hasCheckout: Schema.optional(Schema.Boolean),
+  /** This computer's word too: what carries its person's runs on the task, by run. */
+  capacities: Schema.optional(Schema.Record(Schema.String, PeerRoomCapacity)),
 });
 export type PeerRoomRead = typeof PeerRoomRead.Type;
 

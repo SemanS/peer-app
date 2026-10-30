@@ -7442,6 +7442,7 @@ const roomsRealProgram = Effect.gen(function* () {
       ),
     );
     say("Ana's run ended", anaRun.id);
+    const anaHooksAtEnd = events(ana).filter((entry) => entry.event === "hook").length;
     const own = yield* Effect.promise(() =>
       rpc(
         bob.client[PEER_ROOMS_METHODS.peerRoomsPost]({
@@ -7485,6 +7486,10 @@ const roomsRealProgram = Effect.gen(function* () {
       hubRuns.filter((run) => run.email === "ana@acme.test").length === 1 &&
         herdrAgents(anaHerdr).length === anaCount,
       "Ana's computer started nothing",
+    );
+    observe(
+      events(ana).filter((entry) => entry.event === "hook").length === anaHooksAtEnd,
+      "Ana's agent took no step after her run ended",
     );
     const cwd = reviewPane?.cwd;
     if (cwd !== undefined && NodeFS.existsSync(NodePath.join(cwd, "src/pricing.ts"))) {

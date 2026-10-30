@@ -30,7 +30,7 @@ export const ROOMS_REAL_QUESTION =
   "marker-real: does price() round anything, or only sum? One sentence is enough.";
 /** It asks for an edit a review session may not make, so the deny is seen from the agent's side too. */
 export const ROOMS_REAL_OWN =
-  "marker-real-own: read the change on this task and tell me in one or two sentences whether its comment is true. Also append the line `// reviewed by Bob` to src/pricing.ts, and tell me what happened when you tried.";
+  "marker-real-own: read the change on this task and tell me in one or two sentences whether its comment is true. Also add the line `// reviewed by Bob` at the end of src/pricing.ts with your Edit tool, not the shell, and tell me what happened when you tried.";
 
 /** Whether `text` holds exactly one fence, with `inside` in it and nothing after the fence that came from inside. */
 export function wholeFence(text: string, inside: string) {

@@ -49,7 +49,7 @@ export interface DiffFocus {
 export function RoomDiff({
   diff,
   error,
-  onRetry,
+  onRefresh,
   messages,
   drafting,
   focus,
@@ -62,7 +62,8 @@ export function RoomDiff({
 }: {
   readonly diff: PeerRoomDiff | null;
   readonly error: string | null;
-  readonly onRetry: () => void;
+  /** Reads it again: nothing else does while the person stays on the page. */
+  readonly onRefresh: () => void;
   readonly messages: ReadonlyArray<PeerRoomMessage>;
   /** A line is in the composer's draft, so its selection stays lit. */
   readonly drafting: boolean;
@@ -82,7 +83,7 @@ export function RoomDiff({
           {error ?? "Reading the diff on this computer…"}
         </p>
         {error === null ? null : (
-          <Button size="sm" variant="outline" onClick={onRetry}>
+          <Button size="sm" variant="outline" onClick={onRefresh}>
             Try again
           </Button>
         )}
@@ -93,13 +94,16 @@ export function RoomDiff({
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-5 sm:px-6">
         <p className="text-sm text-foreground">{diff.reason}</p>
-        {watch === undefined ? null : (
-          <div>
+        <div className="flex flex-wrap gap-2">
+          {watch === undefined ? null : (
             <Button size="sm" variant="outline" onClick={() => onWatch(watch)}>
               Watch
             </Button>
-          </div>
-        )}
+          )}
+          <Button size="sm" variant="ghost-muted" onClick={onRefresh}>
+            Refresh
+          </Button>
+        </div>
         {diff.files.length === 0 ? null : (
           <ul
             aria-label="Files the Hub knows"
@@ -133,6 +137,7 @@ export function RoomDiff({
       focus={focus}
       me={me}
       nameOf={nameOf}
+      onRefresh={onRefresh}
       onComment={onComment}
       onOpenMessage={onOpenMessage}
     />
@@ -146,6 +151,7 @@ function DiffHere({
   focus,
   me,
   nameOf,
+  onRefresh,
   onComment,
   onOpenMessage,
 }: {
@@ -155,6 +161,7 @@ function DiffHere({
   readonly focus: DiffFocus | null;
   readonly me: string;
   readonly nameOf: NameOf;
+  readonly onRefresh: () => void;
   readonly onComment: (anchor: PeerRoomAnchor) => void;
   readonly onOpenMessage: (seq: number) => void;
 }) {
@@ -221,7 +228,12 @@ function DiffHere({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-col gap-1 border-b border-border/60 px-4 py-2 sm:px-6">
-        <p className="text-xs text-muted-foreground">{diffSourceText(diff)}</p>
+        <div className="flex min-w-0 items-center justify-between gap-2">
+          <p className="min-w-0 text-xs text-muted-foreground">{diffSourceText(diff)}</p>
+          <Button size="compact" variant="ghost-muted" onClick={onRefresh}>
+            Refresh
+          </Button>
+        </div>
         {diff.truncated ? (
           <p role="status" className="text-xs text-warning-foreground">
             This diff was cut at 512 KiB, so it ends early.

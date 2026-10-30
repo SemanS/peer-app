@@ -15,13 +15,13 @@ import { runsRevision } from "../task/runs.logic";
 import { useTaskRuns } from "../task/TaskRuns";
 import { useWorkData } from "../useWorkData";
 import type { WorkOpen, WorkTaskNode } from "../workTree.logic";
-import { choicesWithMentions, hasOpenRun, peopleOf, reachRows } from "./room.logic";
-import { RoomComposer } from "./RoomComposer";
+import { peopleOf, reachRows } from "./room.logic";
+import { RoomComposer, type DraftLine } from "./RoomComposer";
 import { roomMessageId, RoomConversation } from "./RoomConversation";
 import { RoomDiff, type DiffFocus } from "./RoomDiff";
 import { RoomReach } from "./RoomReach";
 import { watchable } from "./roomDiff.logic";
-import { useRoom, useRoomDiff, useRoomDraft, useRoomMoves } from "./useRoom";
+import { useRoom, useRoomDiff, useRoomMoves } from "./useRoom";
 
 /**
  * A task's room: its conversation between people and their agents, with the task's diff beside it
@@ -111,25 +111,22 @@ function RoomBody({
     revision,
   });
   const read = useRoom({ environmentId, status, place, revision });
-  const diff = useRoomDiff({ environmentId, status, place, revision });
+  const diff = useRoomDiff({ environmentId, place, revision });
   const moves = useRoomMoves(environmentId, read.refresh);
   // Below `lg` one pane shows at a time; both stay mounted so neither loses its place.
   const [pane, setPane] = useState<"conversation" | "diff">("conversation");
   const [focus, setFocus] = useState<DiffFocus | null>(null);
-  const [draft, setDraft] = useRoomDraft(place);
+  const [line, setLine] = useState<DraftLine | null>(null);
+  const [drafting, setDrafting] = useState(false);
   const canPost = useAtomValue(serverEnvironment.peerRooms.post.permissionAtom(environmentId));
   const canMove = useAtomValue(serverEnvironment.peerRooms.pass.permissionAtom(environmentId));
 
   const people = peopleOf(projectState.project.members, me, nameOf);
-  const choices = choicesWithMentions(
-    targetsFor(projectState.project, hubTask, runs.runs, me, {
-      ...(read.room?.hasCheckout === undefined ? {} : { hasCheckout: read.room.hasCheckout }),
-      reaches: read.room?.reaches ?? [],
-      nameOf,
-    }),
-    people,
-    draft.selected,
-  );
+  const targets = targetsFor(projectState.project, hubTask, runs.runs, me, {
+    ...(read.room?.hasCheckout === undefined ? {} : { hasCheckout: read.room.hasCheckout }),
+    reaches: read.room?.reaches ?? [],
+    nameOf,
+  });
 
   const openMessage = (seq: number) => {
     setPane("conversation");
@@ -178,6 +175,7 @@ function RoomBody({
             moves={moves}
             error={read.error}
             loading={read.room === null}
+            now={read.now}
             onOpenAnchor={(anchor) => {
               setPane("diff");
               setFocus({ anchor, ask: (focus?.ask ?? 0) + 1 });
@@ -187,11 +185,10 @@ function RoomBody({
             <RoomComposer
               environmentId={environmentId}
               place={place}
-              choices={choices}
+              targets={targets}
               people={people}
-              hasOwnRun={hasOpenRun(runs.runs, me)}
-              draft={draft}
-              onDraftChange={setDraft}
+              line={line}
+              onDrafting={setDrafting}
               onSent={read.refresh}
             />
           ) : (
@@ -210,16 +207,16 @@ function RoomBody({
           <RoomDiff
             diff={diff.diff}
             error={diff.error}
-            onRetry={diff.refresh}
+            onRefresh={diff.refresh}
             messages={read.messages}
-            drafting={draft.anchor !== undefined}
+            drafting={drafting}
             focus={focus}
             me={me}
             nameOf={nameOf}
             watch={watchable(taskNode.threads)}
             onWatch={onOpen}
             onComment={(anchor) => {
-              if (canPost) setDraft({ ...draft, anchor });
+              if (canPost) setLine({ anchor, ask: (line?.ask ?? 0) + 1 });
               setPane("conversation");
             }}
             onOpenMessage={openMessage}

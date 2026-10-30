@@ -5,6 +5,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   EMPTY_ROOM_DRAFT,
   afterSend,
+  atEnd,
   beginSend,
   chosenTarget,
   composerChoices,
@@ -41,6 +42,20 @@ const message = (over: Partial<PeerRoomMessage>): PeerRoomMessage => ({
 
 const choices = (hasCheckout: boolean, runs: Parameters<typeof targetsFor>[2] = []) =>
   composerChoices(targetsFor(project, task, runs, ME, { hasCheckout }));
+
+describe("following the newest message", () => {
+  const at = (y: number) => ({
+    contentOffset: { y },
+    contentSize: { height: 1000 },
+    layoutMeasurement: { height: 400 },
+  });
+
+  it("follows a reader at the end, and leaves one reading further back", () => {
+    expect(atEnd(at(600))).toBe(true);
+    expect(atEnd(at(520))).toBe(true);
+    expect(atEnd(at(100))).toBe(false);
+  });
+});
 
 describe("the composer's targets", () => {
   it("offers Team, the default, and the person's own agent, no colleagues", () => {

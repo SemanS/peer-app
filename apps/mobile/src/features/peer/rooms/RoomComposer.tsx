@@ -100,6 +100,9 @@ export function RoomComposer({
         multiline
         className="max-h-32"
       />
+      {reason === null && target?.note !== undefined ? (
+        <AppText className="text-sm text-foreground-muted">{target.note}</AppText>
+      ) : null}
       {draft.notice === null ? null : (
         <AppText accessibilityRole="alert" className="text-sm text-destructive">
           {draft.notice}

@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useIsFocused } from "@react-navigation/native";
-import { roomRev, type RoomPlace } from "@t3tools/client-runtime/peer/rooms";
+import { nextLostStart, roomRev, type RoomPlace } from "@t3tools/client-runtime/peer/rooms";
 import type {
   EnvironmentId,
   PeerHubStatus,
@@ -62,6 +62,15 @@ export function useRoom(input: {
     [],
   );
 
+  // Try again appears when a start's grace ends, and nothing moves in the room to say so.
+  const [now, setNow] = useState(() => Date.now());
+  const graceEnd = nextLostStart(view?.messages ?? [], now);
+  useEffect(() => {
+    if (graceEnd === null) return;
+    const timer = setTimeout(() => setNow(Date.now()), graceEnd - Date.now());
+    return () => clearTimeout(timer);
+  }, [graceEnd]);
+
   const focused = useIsFocused();
   const markSeen = useAtomCommand(serverEnvironment.peerRooms.seen, { reportFailure: false });
   const canMark = useAtomValue(serverEnvironment.peerRooms.seen.permissionAtom(environmentId));
@@ -74,5 +83,5 @@ export function useRoom(input: {
     void markSeen({ environmentId, input: { ...place, seq: next } });
   }, [canMark, environmentId, focused, markSeen, place, view]);
 
-  return { view, error: query.error, refresh, apply };
+  return { view, error: query.error, refresh, apply, now };
 }

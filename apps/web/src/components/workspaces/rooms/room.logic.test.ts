@@ -19,6 +19,7 @@ import {
   operationFor,
   parseDraft,
   peopleOf,
+  moveKey,
   reachRows,
   recipientsOf,
   sendNotice,
@@ -65,7 +66,10 @@ describe("the To row", () => {
       { kind: "agent", email: "me@acme.test" },
       { kind: "agent", email: "ana@acme.test" },
     ]);
-    expect(notes).toEqual(["Ana decides whether to pass this on."]);
+    expect(notes).toEqual([
+      "This starts your agent on this computer, read-only, on your capacity.",
+      "Ana decides whether to pass this on.",
+    ]);
   });
 
   it("does not let a disabled Your agent be chosen, and blocks a draft that chose it earlier", () => {
@@ -76,6 +80,13 @@ describe("the To row", () => {
     expect(toggleChoice([], own)).toEqual([]);
     const { blocked } = recipientsOf(none, ["own-agent"]);
     expect(blocked).toBe(own.disabled);
+    expect(canSend("hello", blocked)).toBe(false);
+  });
+
+  it("blocks a draft whose chosen person left the list, rather than post to the team", () => {
+    const { to, blocked } = recipientsOf(choices(), ["agent:gone@acme.test"]);
+    expect(to).toEqual([]);
+    expect(blocked).toContain("no longer on this task");
     expect(canSend("hello", blocked)).toBe(false);
   });
 
@@ -201,14 +212,14 @@ describe("a delivery's tone", () => {
   });
 
   it("marks what needs a person, what an agent has, and what ended", () => {
-    expect(deliveryTone(target("waiting"))).toBe("needs");
-    expect(deliveryTone(target("failed"))).toBe("needs");
-    expect(deliveryTone(target("taken"))).toBe("needs");
-    expect(deliveryTone(target("taken", { run: "r1" }))).toBe("working");
-    expect(deliveryTone(target("heard", { run: "r1" }))).toBe("working");
-    expect(deliveryTone(target("answered"))).toBe("delivery");
-    expect(deliveryTone(target("declined"))).toBe("neutral");
-    expect(deliveryTone(target("from-a-newer-hub"))).toBe("neutral");
+    expect(deliveryTone(target("waiting"), 0)).toBe("needs");
+    expect(deliveryTone(target("failed"), 0)).toBe("needs");
+    expect(deliveryTone(target("taken"), 0)).toBe("needs");
+    expect(deliveryTone(target("taken", { run: "r1" }), 0)).toBe("working");
+    expect(deliveryTone(target("heard", { run: "r1" }), 0)).toBe("working");
+    expect(deliveryTone(target("answered"), 0)).toBe("delivery");
+    expect(deliveryTone(target("declined"), 0)).toBe("neutral");
+    expect(deliveryTone(target("from-a-newer-hub"), 0)).toBe("neutral");
   });
 });
 
@@ -226,7 +237,21 @@ describe("the reach switch", () => {
     const personal = reachRows(runs as never, me, { reaches: [], capacities: { r1: "personal" } });
     const untold = reachRows(runs as never, me, { reaches: [], capacities: {} });
     expect(personal[0]?.unavailable).toContain("own capacity");
-    expect(untold[0]?.unavailable).toContain("own capacity");
+    expect(untold[0]?.unavailable).toContain("cannot tell");
+    expect(untold[0]?.unavailable).not.toContain("own capacity");
+  });
+
+  it("makes no claim on a switch that is on: it can always be turned off", () => {
+    const rows = reachRows(runs as never, me, {
+      reaches: [{ run: "r1", reach: "team" }],
+      capacities: {},
+    });
+    expect(rows[0]).toMatchObject({ team: true, unavailable: undefined });
+  });
+
+  it("keeps two rooms' same message apart in a list of moves", () => {
+    const place = { workspace: "w", project: "p", task: "t-1" };
+    expect(moveKey(place, 1)).not.toBe(moveKey({ ...place, task: "t-2" }, 1));
   });
 
   it("reads a reach the Hub reports", () => {

@@ -3,7 +3,12 @@
  * stays after a send, and how a message's author and deliveries read. The words and rules a phone
  * shares are in `client-runtime/peer/rooms`; this only composes them.
  */
-import type { NameOf, RoomTargetChoice } from "@t3tools/client-runtime/peer/rooms";
+import {
+  lostStart,
+  type NameOf,
+  type RoomPlace,
+  type RoomTargetChoice,
+} from "@t3tools/client-runtime/peer/rooms";
 import {
   PeerRoomAnchor,
   type PeerRoomCapacity,
@@ -144,18 +149,22 @@ export function recipientsOf(
   readonly blocked: string | null;
 } {
   const chosen = choices.filter((choice) => selected.includes(choice.key));
+  const gone = selected.some((key) => !choices.some((choice) => choice.key === key));
   return {
     to: chosen.flatMap((choice) => choice.to),
     notes: chosen.flatMap((choice) => (choice.note === undefined ? [] : [choice.note])),
-    blocked: chosen.find((choice) => choice.disabled !== undefined)?.disabled ?? null,
+    // Sending without them would reach the team instead of the people this was written for.
+    blocked: gone
+      ? RECIPIENT_GONE
+      : (chosen.find((choice) => choice.disabled !== undefined)?.disabled ?? null),
   };
 }
 
-/** Said while Your agent is chosen, so a person knows what the message starts. */
-export const ownAgentNote = (hasOpenRun: boolean) =>
-  hasOpenRun
-    ? "Your agent on this task reads this at its next step."
-    : "This starts your agent on this computer, read-only, on your capacity.";
+const RECIPIENT_GONE = "Someone you chose is no longer on this task. Choose who this is for again.";
+
+/** What keeps one message's move apart: a list of a person's rooms holds several `#1`s. */
+export const moveKey = (place: RoomPlace, seq: number) =>
+  `${place.workspace}/${place.project}/${place.task}:${seq}`;
 
 /** Why a draft cannot go, or null. */
 export function draftProblem(text: string, blocked: string | null): string | null {
@@ -261,9 +270,9 @@ export const mentionsOf = (message: Pick<PeerRoomMessage, "to">) =>
   message.to.filter((target) => target.kind === "person");
 
 /** The tone of a delivery's line: what waits on a person stands out, an ended one stays quiet. */
-export function deliveryTone(delivery: PeerRoomTarget): SignalTone {
+export function deliveryTone(delivery: PeerRoomTarget, now: number): SignalTone {
   if (delivery.state === "waiting" || delivery.state === "failed") return "needs";
-  if (delivery.state === "taken" && delivery.run === undefined) return "needs";
+  if (lostStart(delivery, now)) return "needs";
   if (delivery.state === "answered") return "delivery";
   if (delivery.state === "passed" || delivery.state === "taken" || delivery.state === "heard") {
     return "working";
@@ -272,9 +281,6 @@ export function deliveryTone(delivery: PeerRoomTarget): SignalTone {
 }
 
 const openRun = (run: Pick<PeerRun, "state">) => run.state !== "ended";
-
-export const hasOpenRun = (runs: ReadonlyArray<Pick<PeerRun, "email" | "state">>, me: string) =>
-  runs.some((run) => same(run.email, me) && openRun(run));
 
 /** One of the person's open runs on the task, with what the reach switch says of it. */
 export interface ReachRow {
@@ -288,7 +294,7 @@ export interface ReachRow {
 
 /**
  * A person sees the switch of each of their open runs. Team stays off until this computer says the
- * run is on shared capacity: one it cannot tell is personal.
+ * run is on shared capacity, and a switch that is on can always be turned off.
  */
 export function reachRows(
   runs: ReadonlyArray<Pick<PeerRun, "id" | "email" | "state" | "agent">>,
@@ -302,15 +308,18 @@ export function reachRows(
     .filter((run) => same(run.email, me) && openRun(run))
     .map((run) => {
       const capacity = room?.capacities?.[run.id];
+      const team = room?.reaches.some((row) => row.run === run.id && row.reach === "team") === true;
       return {
         run: run.id,
         agent: run.agent,
-        team: room?.reaches.some((row) => row.run === run.id && row.reach === "team") === true,
+        team,
         capacity,
         unavailable:
-          room === null || capacity === "shared"
+          room === null || team || capacity === "shared"
             ? undefined
-            : "This run is on your own capacity, so only you can pass messages to it.",
+            : capacity === "personal"
+              ? "This run is on your own capacity, so only you can pass messages to it."
+              : "This computer cannot tell what carries this run, so Team stays off.",
       };
     });
 }

@@ -12,7 +12,9 @@ import {
   availableActions,
   deliveryOf,
   deliveryWords,
+  lostStart,
   needsYouByTask,
+  nextLostStart,
   roomBadgeCount,
   roomNeedsYou,
   roomRev,
@@ -40,7 +42,9 @@ const message = (to: ReadonlyArray<PeerRoomTarget>, author = BOB): PeerRoomMessa
   text: "Why?",
   to,
 });
-const words = (target: PeerRoomTarget, me = BOB) => deliveryWords(target, { me, nameOf });
+const FAR_ON = Date.parse("2027-01-01T00:00:00Z");
+const words = (target: PeerRoomTarget, me = BOB) =>
+  deliveryWords(target, { me, nameOf, now: FAR_ON });
 
 describe("deliveryWords", () => {
   it.each([
@@ -99,12 +103,12 @@ describe("availableActions", () => {
   ];
   it.each(cases)("%s %j as %s", (state, extra, me, actions) => {
     const target = delivery(state, extra);
-    expect(availableActions(message([target]), target, me)).toEqual(actions);
+    expect(availableActions(message([target]), target, me, FAR_ON)).toEqual(actions);
   });
 
   it("gives an owner who asked their own agent both sets", () => {
     const target = delivery("waiting");
-    expect(availableActions(message([target], ANA), target, ANA)).toEqual([
+    expect(availableActions(message([target], ANA), target, ANA, FAR_ON)).toEqual([
       "pass",
       "decline",
       "withdraw",
@@ -113,7 +117,48 @@ describe("availableActions", () => {
 
   it("offers nothing on a person", () => {
     const target = { kind: "person", email: ANA };
-    expect(availableActions(message([target]), target, ANA)).toEqual([]);
+    expect(availableActions(message([target]), target, ANA, FAR_ON)).toEqual([]);
+  });
+
+  it("offers Withdraw once a message, as it takes back all that wait", () => {
+    const both = [delivery("waiting"), delivery("waiting", { email: EVA })];
+    const row = message(both);
+    expect(both.map((target) => availableActions(row, target, BOB, FAR_ON))).toEqual([
+      ["withdraw"],
+      [],
+    ]);
+  });
+});
+
+describe("a start with no run", () => {
+  const at = "2026-10-30T10:00:00Z";
+  const taken = Date.parse(at);
+  const target = delivery("taken", { at });
+
+  it("is not lost within the grace: no Try again, which the Hub would refuse", () => {
+    const now = taken + 119_000;
+    expect(lostStart(target, now)).toBe(false);
+    expect(availableActions(message([target]), target, ANA, now)).toEqual([]);
+    expect(deliveryWords(target, { me: BOB, nameOf, now })).toBe("With Ana's agent");
+  });
+
+  it("is lost past the grace, with Try again for its owner", () => {
+    const now = taken + 120_000;
+    expect(lostStart(target, now)).toBe(true);
+    expect(availableActions(message([target]), target, ANA, now)).toEqual(["tryAgain"]);
+    expect(deliveryWords(target, { me: BOB, nameOf, now })).toBe(
+      "Ana's agent may not have started",
+    );
+  });
+
+  it("is never lost with a run", () => {
+    expect(lostStart(delivery("taken", { at, run: "run_1" }), taken + 900_000)).toBe(false);
+  });
+
+  it("says when the next grace ends, and nothing once none is running", () => {
+    expect(nextLostStart([message([target])], taken)).toBe(taken + 120_000);
+    expect(nextLostStart([message([target])], taken + 120_000)).toBeNull();
+    expect(nextLostStart([message([delivery("passed", { at })])], taken)).toBeNull();
   });
 });
 
@@ -167,6 +212,16 @@ describe("targetsFor", () => {
     expect(targetsFor(project, task, ended, BOB, { reaches })[3]?.note).toBe(
       "Ana decides whether to pass this on.",
     );
+  });
+
+  it("says what naming your agent does, in the same words on web and the phone", () => {
+    expect(targetsFor(project, task, [], BOB)[1]?.note).toBe(
+      "This starts your agent on this computer, read-only, on your capacity.",
+    );
+    expect(targetsFor(project, task, runs, ANA)[1]?.note).toBe(
+      "Your agent on this task reads this at its next step.",
+    );
+    expect(targetsFor(project, task, [], BOB, { hasCheckout: false })[1]?.note).toBeUndefined();
   });
 
   it("disables your agent without a checkout, unless you have a run on the task", () => {

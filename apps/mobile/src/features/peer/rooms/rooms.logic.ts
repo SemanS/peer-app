@@ -192,22 +192,22 @@ export interface RoomMessageView {
   }>;
 }
 
-/**
- * One message as a row. Withdraw is offered once: it withdraws every waiting delivery of the
- * message, so a message to two agents must not show two buttons that do one thing.
- */
+/** One message as a row. */
 export function messageView(
   message: PeerRoomMessage,
-  context: { readonly me: string | null | undefined; readonly nameOf: NameOf },
+  context: {
+    readonly me: string | null | undefined;
+    readonly nameOf: NameOf;
+    readonly now?: number;
+  },
 ): RoomMessageView {
-  const { me, nameOf } = context;
+  const { me, nameOf, now = Date.now() } = context;
   const mine = message.author.email.toLowerCase() === me?.toLowerCase();
   const person = mine ? "You" : nameOf(message.author.email);
   const fromAgent = message.author.run !== undefined || message.author.agent !== undefined;
   const agentName = harnessName(message.author.agent) ?? message.author.agent;
   const agentLabel = `${mine ? "Your" : `${person}'s`} agent`;
   const people = message.to.filter((target) => target.kind === "person");
-  let withdrawOffered = false;
   return {
     key: String(message.seq),
     seq: message.seq,
@@ -230,14 +230,9 @@ export function messageView(
             )
             .join(", ")}`,
     deliveries: message.to.flatMap((target) => {
-      const words = deliveryWords(target, { me, nameOf });
+      const words = deliveryWords(target, { me, nameOf, now });
       if (words === null) return [];
-      const actions = availableActions(message, target, me).filter((action) => {
-        if (action !== "withdraw") return true;
-        if (withdrawOffered) return false;
-        withdrawOffered = true;
-        return true;
-      });
+      const actions = availableActions(message, target, me, now);
       return [{ key: target.email, words, state: target.state ?? "", actions }];
     }),
   };
@@ -265,6 +260,16 @@ export function seenToSend(
 /** Whether the read stopped at the phone's limit with older messages left out. */
 export const olderLeftOut = (messages: ReadonlyArray<Pick<PeerRoomMessage, "seq">>) =>
   messages.length >= ROOM_READ_LIMIT && (messages[0]?.seq ?? 1) > 1;
+
+/** Within this of the end, a new message keeps the reader at the end. */
+const AT_END = 96;
+
+/** Whether a list is scrolled to its end, so a new message may move it. */
+export const atEnd = (scroll: {
+  readonly contentOffset: { readonly y: number };
+  readonly contentSize: { readonly height: number };
+  readonly layoutMeasurement: { readonly height: number };
+}) => scroll.contentSize.height - scroll.layoutMeasurement.height - scroll.contentOffset.y < AT_END;
 
 /** The count under a task's row; null with nothing waiting. */
 export function roomBadgeText(...args: Parameters<typeof roomBadgeCount>): string | null {

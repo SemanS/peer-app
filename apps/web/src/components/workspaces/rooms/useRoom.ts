@@ -1,4 +1,4 @@
-import { roomRev, roomSeq, type RoomPlace } from "@t3tools/client-runtime/peer/rooms";
+import { nextLostStart, roomRev, type RoomPlace } from "@t3tools/client-runtime/peer/rooms";
 import {
   isAtomCommandInterrupted,
   type AtomCommandResult,
@@ -15,6 +15,7 @@ import {
   EMPTY_DRAFT,
   isEmptyDraft,
   parseDraft,
+  moveKey,
   ROOM_PAGE,
   type RoomDraft,
 } from "./room.logic";
@@ -45,9 +46,19 @@ export function useRoomRead(input: {
     serverEnvironment.peerRooms.read({ environmentId, input: { ...place, limit } }),
   );
   useRefetchOn(`${roomRev(status.rooms, place)}:${revision}`, query.refresh);
+  const messages = query.data?.messages ?? NO_MESSAGES;
+  // Try again appears when a start's grace ends, and nothing moves in the room to say so.
+  const [now, setNow] = useState(() => Date.now());
+  const graceEnd = nextLostStart(messages, now);
+  useEffect(() => {
+    if (graceEnd === null) return;
+    const timer = setTimeout(() => setNow(Date.now()), graceEnd - Date.now());
+    return () => clearTimeout(timer);
+  }, [graceEnd]);
   return {
     room: query.data,
-    messages: query.data?.messages ?? NO_MESSAGES,
+    messages,
+    now,
     error: query.error,
     refresh: query.refresh,
   };
@@ -75,18 +86,20 @@ export function useRoom(input: {
   return read;
 }
 
-/** The task's diff, on the same beat as its room: on open, and when its `seq` or runs move. */
+/**
+ * The task's diff: on open, when its runs move, and when the person asks. A message does not fetch
+ * it, since this runs `git fetch` on this computer and a conversation changes no code.
+ */
 export function useRoomDiff(input: {
   readonly environmentId: EnvironmentId;
-  readonly status: Pick<PeerHubStatus, "rooms">;
   readonly place: RoomPlace;
   readonly revision: string;
 }) {
-  const { environmentId, status, place, revision } = input;
+  const { environmentId, place, revision } = input;
   const query = useEnvironmentQuery(
     serverEnvironment.peerRooms.diff({ environmentId, input: place }),
   );
-  useRefetchOn(`${roomSeq(status.rooms, place)}:${revision}`, query.refresh);
+  useRefetchOn(revision, query.refresh);
   return { diff: query.data, error: query.error, refresh: query.refresh };
 }
 
@@ -111,9 +124,11 @@ function writeStored(key: string, draft: RoomDraft) {
 export function useRoomDraft(place: RoomPlace) {
   const key = draftStorageKey(place);
   const [draft, setDraft] = useState(() => readStored(key));
-  const change = (next: RoomDraft) => {
-    setDraft(next);
-    writeStored(key, next);
+  const latest = useRef(draft);
+  const change = (next: RoomDraft | ((current: RoomDraft) => RoomDraft)) => {
+    latest.current = typeof next === "function" ? next(latest.current) : next;
+    setDraft(latest.current);
+    writeStored(key, latest.current);
   };
   return [draft, change] as const;
 }
@@ -137,41 +152,46 @@ export function useRoomMoves(environmentId: EnvironmentId, onMoved: () => void) 
   const pass = useAtomCommand(serverEnvironment.peerRooms.pass, { reportFailure: false });
   const decline = useAtomCommand(serverEnvironment.peerRooms.decline, { reportFailure: false });
   const withdraw = useAtomCommand(serverEnvironment.peerRooms.withdraw, { reportFailure: false });
-  const [busy, setBusy] = useState<number | null>(null);
-  const [notes, setNotes] = useState<ReadonlyMap<number, string>>(new Map());
-  const settle = async (seq: number, move: () => Promise<AtomCommandResult<unknown, unknown>>) => {
-    setBusy(seq);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
+  const settle = async (
+    place: RoomPlace,
+    seq: number,
+    move: () => Promise<AtomCommandResult<unknown, unknown>>,
+  ) => {
+    const key = moveKey(place, seq);
+    setBusy(key);
     const result = await move();
     const text = moveNote(result);
     setBusy(null);
     setNotes((current) => {
       const next = new Map(current);
-      if (text === null) next.delete(seq);
-      else next.set(seq, text);
+      if (text === null) next.delete(key);
+      else next.set(key, text);
       return next;
     });
     onMoved();
     return text === null;
   };
   return {
-    busy,
-    notes,
+    isBusy: (place: RoomPlace, seq: number) => busy === moveKey(place, seq),
+    noteOf: (place: RoomPlace, seq: number) => notes.get(moveKey(place, seq)),
     /** Its owner's yes, and the retry of a failed or lost start. */
     pass: (place: RoomPlace, seq: number, expect: string | undefined) =>
-      settle(seq, () =>
+      settle(place, seq, () =>
         pass({
           environmentId,
           input: { ...place, seq, ...(expect === undefined ? {} : { expect }) },
         }),
       ),
     decline: (place: RoomPlace, seq: number, reason: string) =>
-      settle(seq, () =>
+      settle(place, seq, () =>
         decline({
           environmentId,
           input: { ...place, seq, expect: "waiting", ...(reason === "" ? {} : { reason }) },
         }),
       ),
     withdraw: (place: RoomPlace, seq: number) =>
-      settle(seq, () => withdraw({ environmentId, input: { ...place, seq } })),
+      settle(place, seq, () => withdraw({ environmentId, input: { ...place, seq } })),
   };
 }

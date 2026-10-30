@@ -50,6 +50,7 @@ export function RoomConversation({
   moves,
   error,
   loading,
+  now,
   onOpenAnchor,
 }: {
   readonly place: RoomPlace;
@@ -64,6 +65,8 @@ export function RoomConversation({
   readonly moves: ReturnType<typeof useRoomMoves>;
   readonly error: string | null;
   readonly loading: boolean;
+  /** The time a delivery's words are read at. */
+  readonly now: number;
   readonly onOpenAnchor: (anchor: PeerRoomAnchor) => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -111,6 +114,7 @@ export function RoomConversation({
             head={head}
             canAct={canAct}
             moves={moves}
+            now={now}
             onOpenAnchor={onOpenAnchor}
           />
         ))}
@@ -127,6 +131,7 @@ function RoomMessage({
   head,
   canAct,
   moves,
+  now,
   onOpenAnchor,
 }: {
   readonly place: RoomPlace;
@@ -136,12 +141,13 @@ function RoomMessage({
   readonly head: string | undefined;
   readonly canAct: boolean;
   readonly moves: ReturnType<typeof useRoomMoves>;
+  readonly now: number;
   readonly onOpenAnchor: (anchor: PeerRoomAnchor) => void;
 }) {
   const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
   const author = authorOf(message, me, nameOf);
   const mentions = mentionsOf(message);
-  const note = moves.notes.get(message.seq);
+  const note = moves.noteOf(place, message.seq);
   const anchor = message.anchor;
   return (
     <article
@@ -205,6 +211,7 @@ function RoomMessage({
             nameOf={nameOf}
             canAct={canAct}
             moves={moves}
+            now={now}
           />
         ))}
         {note === undefined ? null : (
@@ -226,6 +233,7 @@ function DeliveryLine({
   nameOf,
   canAct,
   moves,
+  now,
 }: {
   readonly place: RoomPlace;
   readonly message: PeerRoomMessage;
@@ -234,11 +242,12 @@ function DeliveryLine({
   readonly nameOf: NameOf;
   readonly canAct: boolean;
   readonly moves: ReturnType<typeof useRoomMoves>;
+  readonly now: number;
 }) {
   const [declining, setDeclining] = useState(false);
-  const words = deliveryWords(delivery, { me, nameOf });
-  const actions = canAct ? availableActions(message, delivery, me) : [];
-  const busy = moves.busy === message.seq;
+  const words = deliveryWords(delivery, { me, nameOf, now });
+  const actions = canAct ? availableActions(message, delivery, me, now) : [];
+  const busy = moves.isBusy(place, message.seq);
   const run = (action: RoomAction) => {
     switch (action) {
       case "pass":
@@ -255,7 +264,7 @@ function DeliveryLine({
   };
   return (
     <div className="flex min-h-7 flex-wrap items-center gap-x-2 gap-y-1">
-      <span className={cn("text-xs", TONE_TEXT[deliveryTone(delivery)])}>{words}</span>
+      <span className={cn("text-xs", TONE_TEXT[deliveryTone(delivery, now)])}>{words}</span>
       {actions.map((action) => (
         <Button
           key={action}

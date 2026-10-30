@@ -60,8 +60,8 @@ function RoomItem({
   const navigate = useNavigate();
   const [declining, setDeclining] = useState(false);
   const place = { workspace: item.workspace, project: item.project, task: item.task };
-  const busy = moves.busy === item.seq;
-  const note = moves.notes.get(item.seq);
+  const busy = moves.isBusy(place, item.seq);
+  const note = moves.noteOf(place, item.seq);
   return (
     <li className="flex min-w-0 list-none flex-col gap-1 rounded-lg border border-sidebar-border/70 bg-sidebar-control-surface px-2.5 py-2">
       <p className="flex min-w-0 items-baseline gap-1.5 text-xs text-muted-foreground">

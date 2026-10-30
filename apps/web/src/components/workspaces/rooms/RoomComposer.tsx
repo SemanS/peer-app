@@ -6,6 +6,7 @@ import {
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
 import type { EnvironmentId } from "@t3tools/contracts";
 import { BotIcon, XIcon } from "lucide-react";
+import type { PeerRoomAnchor } from "@t3tools/contracts";
 import { useEffect, useRef, useState } from "react";
 
 import { randomUUID } from "../../../lib/utils";
@@ -25,7 +26,7 @@ import {
   matchPeople,
   mentionAt,
   operationFor,
-  ownAgentNote,
+  choicesWithMentions,
   recipientsOf,
   ROOM_TEXT_MAX,
   sendNotice,
@@ -34,31 +35,40 @@ import {
   type RoomPerson,
   type SendOutcome,
 } from "./room.logic";
+import { useRoomDraft } from "./useRoom";
+
+/** A line the diff asks to comment on; a new `ask` asks again. */
+export interface DraftLine {
+  readonly anchor: PeerRoomAnchor;
+  readonly ask: number;
+}
 
 /**
  * The room's composer: the To row, the text, and the anchor a selected line gave it. A draft leaves
  * only when the Hub confirms the post; anything else keeps it, with the same operation, so sending
- * it again adds nothing twice.
+ * it again adds nothing twice. The draft lives here, so a keystroke re-renders this form and not the
+ * conversation or the diff beside it.
  */
 export function RoomComposer({
   environmentId,
   place,
-  choices,
+  targets,
   people,
-  hasOwnRun,
-  draft,
-  onDraftChange,
+  line: asked,
+  onDrafting,
   onSent,
 }: {
   readonly environmentId: EnvironmentId;
   readonly place: RoomPlace;
-  readonly choices: ReadonlyArray<RoomTargetChoice>;
+  readonly targets: ReadonlyArray<RoomTargetChoice>;
   readonly people: ReadonlyArray<RoomPerson>;
-  readonly hasOwnRun: boolean;
-  readonly draft: RoomDraft;
-  readonly onDraftChange: (draft: RoomDraft) => void;
+  readonly line: DraftLine | null;
+  /** Whether the draft sits on a line, so the diff keeps it lit. */
+  readonly onDrafting: (drafting: boolean) => void;
   readonly onSent: () => void;
 }) {
+  const [draft, onDraftChange] = useRoomDraft(place);
+  const choices = choicesWithMentions(targets, people, draft.selected);
   const post = useAtomCommand(serverEnvironment.peerRooms.post, { reportFailure: false });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -67,21 +77,23 @@ export function RoomComposer({
   const input = useRef<HTMLTextAreaElement>(null);
 
   // A line chosen in the diff opens the composer on it, ready for the words.
+  const answered = useRef(0);
+  useEffect(() => {
+    if (asked === null || asked.ask === answered.current) return;
+    answered.current = asked.ask;
+    onDraftChange((current) => ({ ...current, anchor: asked.anchor }));
+  });
   const line = draft.anchor === undefined ? undefined : anchorText(draft.anchor);
   useEffect(() => {
     if (line !== undefined) input.current?.focus();
   }, [line]);
+  useEffect(() => onDrafting(line !== undefined), [line, onDrafting]);
 
   const recipients = recipientsOf(choices, draft.selected);
   const chosen = chosenKeys(draft);
   const problem = draftProblem(draft.text, recipients.blocked);
   const disabledChoices = choices.filter((choice) => choice.disabled !== undefined);
-  const notes = [
-    ...(draft.selected.includes("own-agent") && recipients.blocked === null
-      ? [ownAgentNote(hasOwnRun)]
-      : []),
-    ...recipients.notes,
-  ];
+  const notes = recipients.blocked === null ? recipients.notes : [];
 
   const mention = mentionAt(draft.text, caret);
   const matches = mention === null ? [] : matchPeople(people, mention.query);

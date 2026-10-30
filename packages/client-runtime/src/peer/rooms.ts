@@ -7,6 +7,7 @@
  * @module peer/rooms
  */
 import {
+  PEER_ROOM_START_GRACE_MS,
   WS_METHODS,
   type PeerHubStatus,
   type PeerProject,
@@ -28,7 +29,7 @@ import {
   createEnvironmentRpcQueryAtomFamily,
 } from "../state/runtime.ts";
 
-/** The plugin's RPC methods as atoms. A client refetches `read` and `diff` when `seq` moves. */
+/** The plugin's RPC methods as atoms. A client refetches `read` when `rev` moves. */
 export function createPeerRoomsAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ) {
@@ -84,9 +85,26 @@ export type NameOf = (email: string) => string;
 export const deliveryOf = (message: PeerRoomMessage, email: string | null | undefined) =>
   message.to.find((target) => isDelivery(target) && same(target.email, email));
 
-/** A taken delivery without a run: its start's fate is unknown, and only its owner decides. */
-const lostStart = (delivery: PeerRoomTarget) =>
-  delivery.state === "taken" && delivery.run === undefined;
+/** When a taken delivery without a run stops counting as starting. */
+const graceEnd = (delivery: PeerRoomTarget) =>
+  Date.parse(delivery.at ?? "") + PEER_ROOM_START_GRACE_MS;
+
+/**
+ * A taken delivery without a run, past the grace: its start's fate is unknown, and only its owner
+ * decides. Sooner the Hub refuses Try again, so it is not offered.
+ */
+export const lostStart = (delivery: PeerRoomTarget, now: number) =>
+  delivery.state === "taken" && delivery.run === undefined && !(graceEnd(delivery) > now);
+
+/** When the next of these deliveries becomes a lost start, for a client to look again then. */
+export function nextLostStart(messages: ReadonlyArray<PeerRoomMessage>, now: number) {
+  const ends = messages
+    .flatMap((message) => message.to)
+    .filter((target) => target.state === "taken" && target.run === undefined)
+    .map(graceEnd)
+    .filter((end) => end > now);
+  return ends.length === 0 ? null : Math.min(...ends);
+}
 
 /**
  * The plain line under a message for one delivery; null for a person, who has none. Words a newer
@@ -94,7 +112,11 @@ const lostStart = (delivery: PeerRoomTarget) =>
  */
 export function deliveryWords(
   delivery: PeerRoomTarget,
-  context: { readonly me: string | null | undefined; readonly nameOf: NameOf },
+  context: {
+    readonly me: string | null | undefined;
+    readonly nameOf: NameOf;
+    readonly now: number;
+  },
 ): string | null {
   if (!isDelivery(delivery)) return null;
   const mine = same(delivery.email, context.me);
@@ -108,7 +130,7 @@ export function deliveryWords(
     case "passed":
       return `Passed on to ${agent}`;
     case "taken":
-      return lostStart(delivery) ? `${Agent} may not have started` : `With ${agent}`;
+      return lostStart(delivery, context.now) ? `${Agent} may not have started` : `With ${agent}`;
     case "heard":
       return `${Agent} read it and has not answered`;
     case "answered":
@@ -130,19 +152,25 @@ export type RoomAction = "pass" | "decline" | "withdraw" | "tryAgain";
 
 /**
  * What a person may do with a delivery: its owner passes on or declines what waits and tries a
- * failed or lost start again (a `pass`); the message's author withdraws while it waits.
+ * failed or lost start again (a `pass`); the message's author withdraws while it waits. Withdraw
+ * takes back every waiting delivery of a message, so it is offered on the first of them only.
  */
 export function availableActions(
   message: PeerRoomMessage,
   delivery: PeerRoomTarget,
   me: string | null | undefined,
+  now: number,
 ): ReadonlyArray<RoomAction> {
   if (!isDelivery(delivery)) return [];
   const actions: RoomAction[] = [];
   const owner = same(delivery.email, me);
   if (owner && delivery.state === "waiting") actions.push("pass", "decline");
-  if (owner && (delivery.state === "failed" || lostStart(delivery))) actions.push("tryAgain");
-  if (delivery.state === "waiting" && same(message.author.email, me)) actions.push("withdraw");
+  if (owner && (delivery.state === "failed" || lostStart(delivery, now))) actions.push("tryAgain");
+  const firstWaiting = message.to.find(
+    (target) => isDelivery(target) && target.state === "waiting",
+  );
+  if (firstWaiting?.email === delivery.email && same(message.author.email, me))
+    actions.push("withdraw");
   return actions;
 }
 
@@ -203,7 +231,13 @@ export function targetsFor(
       label: "Your agent",
       kind: "own-agent",
       to: [{ kind: "agent", email: me }],
-      ...(canAsk ? {} : { disabled: "This computer has no checkout of the project." }),
+      ...(canAsk
+        ? {
+            note: ownRun
+              ? "Your agent on this task reads this at its next step."
+              : "This starts your agent on this computer, read-only, on your capacity.",
+          }
+        : { disabled: "This computer has no checkout of the project." }),
     },
     ...people.flatMap((email): ReadonlyArray<RoomTargetChoice> => {
       const name = nameOf(email);

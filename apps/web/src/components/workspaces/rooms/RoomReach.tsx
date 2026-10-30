@@ -11,7 +11,7 @@ import { moveNote } from "./useRoom";
 
 /**
  * The owner's switch per open run: whether the team may ask this agent directly. It is off by
- * default, and only a run on the project's shared capacity offers it.
+ * default, only a run on the project's shared capacity offers it, and it can always be turned off.
  */
 export function RoomReach({
   environmentId,
@@ -53,7 +53,7 @@ export function RoomReach({
             <Switch
               size="sm"
               checked={row.team}
-              disabled={busy === row.run || row.capacity !== "shared"}
+              disabled={busy === row.run || (!row.team && row.capacity !== "shared")}
               onCheckedChange={(checked) => void change(row, checked)}
             />
             <span className="min-w-0">

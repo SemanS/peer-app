@@ -17,6 +17,7 @@ import { RoomMessageRow } from "./RoomMessageRow";
 import {
   ROOM_READ_LIMIT,
   UNCONFIRMED_MOVE,
+  atEnd,
   messageView,
   olderLeftOut,
   type RoomCommandEnd,
@@ -45,7 +46,7 @@ function Room({
     .find((row) => row.slug === workspace)
     ?.projects.find((row) => row.project.id === projectId);
   const task = project?.work.tasks.find((row) => row.id === taskId);
-  const { view, error, refresh, apply } = useRoom({ environmentId, status, place });
+  const { view, error, refresh, apply, now } = useRoom({ environmentId, status, place });
   const runs = useEnvironmentQuery(
     serverEnvironment.peerRunsList({ environmentId, input: { workspace, projectId, taskId } }),
   );
@@ -88,17 +89,18 @@ function Room({
   );
 
   const rows = useMemo(
-    () => (view?.messages ?? []).map((message) => messageView(message, { me, nameOf })),
-    [me, nameOf, view],
+    () => (view?.messages ?? []).map((message) => messageView(message, { me, nameOf, now })),
+    [me, nameOf, now, view],
   );
   const list = useRef<FlatList<(typeof rows)[number]>>(null);
   const followed = useRef<number | null>(null);
+  const reading = useRef(true);
   const newest = rows.at(-1)?.seq ?? null;
   // Not an inverted list: the automatic inset under the glass header lands on the wrong edge of one.
   const followNewest = () => {
     if (newest === followed.current) return;
     followed.current = newest;
-    list.current?.scrollToEnd({ animated: false });
+    if (reading.current) list.current?.scrollToEnd({ animated: false });
   };
   const targets = useMemo(
     () =>
@@ -141,6 +143,10 @@ function Room({
             keyboardShouldPersistTaps="handled"
             initialNumToRender={ROOM_READ_LIMIT}
             onContentSizeChange={followNewest}
+            onScroll={(event) => {
+              reading.current = atEnd(event.nativeEvent);
+            }}
+            scrollEventThrottle={100}
             data={rows}
             keyExtractor={(row) => row.key}
             renderItem={({ item }) => (

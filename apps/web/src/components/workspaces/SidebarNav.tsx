@@ -9,7 +9,7 @@ import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { Badge } from "../ui/badge";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "../ui/sidebar";
 import { projectSignals } from "./ProjectSignals";
-import { pluginNavRows } from "./sidebarNav.logic";
+import { pluginNavRows, workspaceNavRows } from "./sidebarNav.logic";
 import type { PeerWebPlugin } from "./slots.types";
 import { projectCheckout } from "./useOpenWorkspaceProject";
 import type { WorkProjectNode } from "./workTree.logic";
@@ -203,6 +203,34 @@ export function ProjectActivityNav({
           }
         />
       ) : null}
+    </SidebarMenu>
+  );
+}
+
+/** What Activity lists for the workspace as a whole, whichever project the sidebar is on. */
+export function WorkspaceActivityNav({
+  status,
+  plugins,
+  activeThread,
+}: {
+  readonly status: PeerHubStatus;
+  readonly plugins: ReadonlyArray<PeerWebPlugin>;
+  readonly activeThread: string | null;
+}) {
+  const { navigate, go } = useGo();
+  const rows = workspaceNavRows(plugins, status.workspaces);
+  if (rows.length === 0) return null;
+  return (
+    <SidebarMenu aria-label="Workspace activity">
+      {rows.map(({ id, row }) => (
+        <NavRow
+          key={id}
+          icon={row.icon}
+          label={row.label}
+          active={row.active?.(activeThread) ?? false}
+          onClick={() => go(() => row.open(navigate))}
+        />
+      ))}
     </SidebarMenu>
   );
 }

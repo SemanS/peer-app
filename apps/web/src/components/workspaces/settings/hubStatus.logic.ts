@@ -139,6 +139,16 @@ const FEATURES: ReadonlyArray<Feature> = [
     },
   },
   {
+    id: "usage",
+    name: "Workspace usage",
+    without: "nothing",
+    words: {
+      on: "Each workspace has a usage page, and each person chooses whether to share.",
+      off: "Workspace usage can’t be read: this Hub doesn’t run it.",
+      newer: "Workspace usage can’t be read until the Hub is updated.",
+    },
+  },
+  {
     id: "webhooks",
     name: "Webhooks",
     without: "plugin",

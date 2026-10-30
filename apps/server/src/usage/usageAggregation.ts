@@ -8,7 +8,7 @@ import type {
 } from "@t3tools/contracts";
 
 import { EMPTY_TOTALS, type UsageRecord } from "@t3tools/provider-core/server/usage";
-import { cacheSavingsUsd, priceUsage, type RateTable } from "./usagePricing.ts";
+import { cacheSavingsUsd, priceUsage, type PricedUsage, type RateTable } from "./usagePricing.ts";
 
 /**
  * `en-CA` yields ISO-ordered parts, which is why it is used here rather than
@@ -76,6 +76,13 @@ export interface AggregateOptions {
   readonly resolution?: UsageResolution;
   readonly sinceTimeMs?: number;
   readonly untilTimeMs?: number;
+  /** Each record the buckets counted, for a read that needs them by session. */
+  readonly onCounted?: (counted: {
+    readonly day: string;
+    readonly record: UsageRecord;
+    readonly source: string;
+    readonly priced: PricedUsage;
+  }) => void;
 }
 
 export function resolveModelAliases(
@@ -206,6 +213,7 @@ export class UsageAggregator {
     if (priced.costSource === "unpriced") bucket.unpricedRecords += 1;
     if (priced.costSource === "providerReported") bucket.providerReportedRecords += 1;
     if (record.sessionId.length > 0) bucket.sessions.add(record.sessionId);
+    this.#options.onCounted?.({ day, record, source: sourcePath ?? "", priced });
     return true;
   }
 

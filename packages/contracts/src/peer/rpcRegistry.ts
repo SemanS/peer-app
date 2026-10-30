@@ -6,6 +6,7 @@ import {
 } from "./contextView.ts";
 import { PEER_OPENSPEC_METHODS, OpenSpecRpcGroup, OpenSpecRpcScopes } from "./openspec.rpc.ts";
 import { PEER_DIGEST_METHODS, DigestRpcGroup, DigestRpcScopes } from "./digest.ts";
+import { PEER_USAGE_METHODS, UsageRpcGroup, UsageRpcScopes } from "./usage.rpc.ts";
 import { PEER_RECIPES_METHODS, RecipesRpcGroup, RecipesRpcScopes } from "./recipes.ts";
 import { PEER_IMPACT_METHODS, PeerImpactRpcs, ImpactRpcScopes } from "./impact.ts";
 import { PEER_PLANS_METHODS, PlansRpcGroup, PlansRpcScopes } from "./plans.rpc.ts";
@@ -577,6 +578,7 @@ export const PEER_WS_METHODS = {
   ...PEER_RESOURCES_METHODS,
   ...PEER_FORECAST_METHODS,
   ...PEER_METRICS_METHODS,
+  ...PEER_USAGE_METHODS,
   ...PEER_IMPACT_METHODS,
   ...PEER_PLANS_METHODS,
   ...PEER_AGREEMENTS_METHODS,
@@ -616,6 +618,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   ResourcesRpcGroup,
   WsPeerForecastRpcGroup,
   MetricsRpcGroup,
+  UsageRpcGroup,
   PeerImpactRpcs,
   PlansRpcGroup,
   AgreementsRpcGroup,
@@ -655,6 +658,7 @@ export const PEER_RPC_SCOPES = {
   ...ResourcesRpcScopes,
   ...ForecastRpcScopes,
   ...MetricsRpcScopes,
+  ...UsageRpcScopes,
   ...ImpactRpcScopes,
   ...PlansRpcScopes,
   ...AgreementsRpcScopes,

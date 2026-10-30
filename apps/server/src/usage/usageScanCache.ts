@@ -8,7 +8,7 @@ import * as Schema from "effect/Schema";
 
 import { GUARD_LENGTH, type TranscriptParsePosition } from "./usageTranscriptReader.ts";
 
-const USAGE_SCAN_CACHE_VERSION = 5 as const;
+const USAGE_SCAN_CACHE_VERSION = 6 as const;
 const SPEED_COMPATIBLE_SINCE_VERSION = 4;
 
 /**
@@ -16,7 +16,9 @@ const SPEED_COMPATIBLE_SINCE_VERSION = 4;
  * replace it, dropping saved usage for deleted transcripts. Separate files keep
  * both.
  */
-export const SCAN_CACHE_FILE_NAME = "usage-scan-cache-v5.json";
+export const SCAN_CACHE_FILE_NAME = "usage-scan-cache-v6.json";
+/** Newest first: a server starting on a newer cache name still takes over what these saved. */
+export const PREVIOUS_SCAN_CACHE_FILE_NAMES = ["usage-scan-cache-v5.json"] as const;
 export const LEGACY_SCAN_CACHE_FILE_NAME = "usage-scan-cache.json";
 
 const SPEEDS: readonly UsageSpeed[] = ["standard", "fast", "ultrafast"];
@@ -50,6 +52,7 @@ type SerializedRecord = readonly [
   reportedCostUsd: number | null,
   speed: number,
   rateModelIndex?: number | null,
+  cwdIndex?: number | null,
 ];
 
 interface SerializedFile {
@@ -68,18 +71,28 @@ interface SerializedCache {
   readonly version: number;
   readonly models: readonly string[];
   readonly sessions: readonly string[];
+  readonly cwds?: readonly string[];
   readonly files: Readonly<Record<string, SerializedFile>>;
 }
 
 interface InternTables {
   readonly models: string[];
   readonly sessions: string[];
+  readonly cwds: string[];
   readonly modelIndex: Map<string, number>;
   readonly sessionIndex: Map<string, number>;
+  readonly cwdIndex: Map<string, number>;
 }
 
 function makeInternTables(): InternTables {
-  return { models: [], sessions: [], modelIndex: new Map(), sessionIndex: new Map() };
+  return {
+    models: [],
+    sessions: [],
+    cwds: [],
+    modelIndex: new Map(),
+    sessionIndex: new Map(),
+    cwdIndex: new Map(),
+  };
 }
 
 function intern(table: string[], index: Map<string, number>, value: string): number {
@@ -107,6 +120,7 @@ function serializeFile(entry: CachedFile, tables: InternTables): SerializedFile 
     record.rateModel === undefined
       ? null
       : intern(tables.models, tables.modelIndex, record.rateModel),
+    record.cwd === undefined ? null : intern(tables.cwds, tables.cwdIndex, record.cwd),
   ];
   return {
     s: entry.size,
@@ -129,6 +143,7 @@ export function encodeScanCache(cache: ScanCache): SerializedCache {
     version: USAGE_SCAN_CACHE_VERSION,
     models: tables.models,
     sessions: tables.sessions,
+    cwds: tables.cwds,
     files,
   };
 }
@@ -160,6 +175,7 @@ export function makeScanCacheWriter(): (
       version: USAGE_SCAN_CACHE_VERSION,
       models: tables.models,
       sessions: tables.sessions,
+      cwds: tables.cwds,
     });
     return `${head.slice(0, -1)},"files":{${files.join(",")}}}`;
   };
@@ -193,6 +209,7 @@ export function decodeScanCache(
   if (!root.sessions.every((value) => typeof value === "string")) return cache;
   const models = root.models as readonly string[];
   const sessions = root.sessions as readonly string[];
+  const cwds = (isRecordArray(root.cwds) ? root.cwds : []) as readonly unknown[];
 
   // Any corrupt row disqualifies the whole entry. Keeping the survivors
   // under the original (size, mtime) would read as a valid warm hit and the
@@ -217,11 +234,13 @@ export function decodeScanCache(
         reportedCostUsd,
         speedIndex,
         rateModelIndex,
+        cwdIndex,
       ] = row as SerializedRecord;
       const speed = typeof speedIndex === "number" ? SPEEDS[speedIndex] : undefined;
 
       const model = typeof modelIndex === "number" ? models[modelIndex] : undefined;
       const rateModel = typeof rateModelIndex === "number" ? models[rateModelIndex] : undefined;
+      const cwd = typeof cwdIndex === "number" ? cwds[cwdIndex] : undefined;
       if (
         typeof timestampMs !== "number" ||
         !Number.isFinite(timestampMs) ||
@@ -243,6 +262,7 @@ export function decodeScanCache(
         model,
         ...(rateModel === undefined ? {} : { rateModel }),
         sessionId: (typeof sessionIndex === "number" ? sessions[sessionIndex] : undefined) ?? "",
+        ...(typeof cwd === "string" ? { cwd } : {}),
         totals: {
           uncachedInputTokens: uncached,
           cachedInputTokens: cached,
@@ -285,10 +305,10 @@ export function decodeScanCache(
       continue;
     }
     // v4 records of stateful formats (Codex) predate service tiers, so they
-    // all priced as standard. Keep them, because the rollout may be gone, but
-    // make a live rollout re-parse whole: no file has size -1, and a zero
-    // position cannot resume.
-    const legacy = format.state !== undefined && version < USAGE_SCAN_CACHE_VERSION;
+    // all priced as standard, and records before v6 carry no `cwd`. Keep them,
+    // because the transcript may be gone, but make a live one re-parse whole:
+    // no file has size -1, and a zero position cannot resume.
+    const legacy = version < USAGE_SCAN_CACHE_VERSION;
     // A corrupt state disqualifies the entry: resuming with it would attach
     // appended usage to the wrong model or replay fork-copied history.
     if (!legacy && !isValidState.get(entry.p)?.(entry.cs)) continue;

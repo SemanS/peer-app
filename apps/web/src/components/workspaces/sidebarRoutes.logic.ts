@@ -25,6 +25,7 @@ const TASK_SCREENS: ReadonlySet<string> = new Set([
   "knowledge",
   "memory",
   "team",
+  "team-usage",
   "overlap",
   "observe",
   "agent",
@@ -133,6 +134,7 @@ export function activeRouteKey(
 ): string | null {
   const { agentId, workspace, project, scope, task, environment, thread } = params;
   if (agentId) return `agent:${agentId}`;
+  if (workspace && pathname.split("/")[1] === "team-usage") return `usage:${workspace}`;
   if (workspace && project && scope) return `context:${workspace}:${project}:${scope}`;
   if (workspace && project && task) return `task:${workspace}:${project}:${task}`;
   if (workspace && project) {

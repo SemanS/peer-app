@@ -228,62 +228,10 @@ function FromTaskRow({
   );
 }
 
-function NewAreaRow({
-  others,
-  busy,
-  onAdd,
-}: {
-  readonly others: ReadonlyArray<string>;
-  readonly busy: boolean;
-  readonly onAdd: (name: string) => void;
-}) {
-  const [name, setName] = useState("");
-  // An empty name is a problem only once the person pressed Add on it.
-  const [pressedEmpty, setPressedEmpty] = useState(false);
-  const typed = name.trim() !== "";
-  const problem = typed ? nameProblem(name, others) : pressedEmpty ? "empty" : null;
-  return (
-    <li className="p-2.5">
-      <form
-        className="flex flex-col gap-1.5"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!typed) setPressedEmpty(true);
-          if (!typed || problem !== null) return;
-          onAdd(name.trim());
-          setName("");
-        }}
-      >
-        <div className="flex gap-2">
-          <Input
-            nativeInput
-            className="min-w-0 flex-1"
-            size="sm"
-            aria-label="New area"
-            aria-invalid={problem !== null}
-            placeholder="New area"
-            disabled={busy}
-            value={name}
-            maxLength={AREA_NAME_MAX * 2}
-            onChange={(event) => {
-              setName(event.target.value);
-              setPressedEmpty(false);
-            }}
-          />
-          <Button type="submit" size="sm" variant="outline" disabled={busy}>
-            Add
-          </Button>
-        </div>
-        {problem === null ? null : <Problem>{problemText(problem)}</Problem>}
-      </form>
-    </li>
-  );
-}
-
 /**
  * The areas in their order, as a list to reorder by dragging a row's handle (or by keyboard: focus
  * the handle, Space to pick the row up, arrows to move it, Space to drop it), with each area's task
- * count, rename and delete, then the areas only tasks name, and a field to add one.
+ * count, rename and delete, then the areas only tasks name.
  */
 export function AreaList({
   rows,
@@ -293,7 +241,6 @@ export function AreaList({
   onRename,
   onDelete,
   onAdopt,
-  onAdd,
 }: {
   readonly rows: AreaRows;
   readonly editable: boolean;
@@ -305,7 +252,6 @@ export function AreaList({
   /** Asks to delete an area; the page then asks where its tasks go. */
   readonly onDelete: (name: string) => void;
   readonly onAdopt: (name: string) => void;
-  readonly onAdd: (name: string) => void;
 }) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const sensors = useSensors(
@@ -354,10 +300,6 @@ export function AreaList({
               onAdopt={() => onAdopt(row.name)}
             />
           ))}
-          {rows.listed.length + rows.fromTasks.length === 0 ? (
-            <li className="px-4 py-3 text-sm text-muted-foreground">No areas yet.</li>
-          ) : null}
-          {editable ? <NewAreaRow others={names} busy={busy} onAdd={onAdd} /> : null}
         </ul>
       </SortableContext>
     </DndContext>

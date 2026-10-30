@@ -58,8 +58,8 @@ const NEW_AREA = "\u0000new-area:";
 
 /**
  * Capturing a task the way a modern tracker does: one line for what needs doing, and the rest as
- * quiet chips under it (the item it goes under, the area, a tracker issue it links) that stay out
- * of the way until wanted.
+ * quiet chips under it (the item it goes under, the area of a project that has areas, a tracker
+ * issue it links) that stay out of the way until wanted.
  * Enter creates it; "Create more" keeps the composer open for the next one, and "Create and start
  * chat" opens a chat on the new task straight away where the project is open on this computer.
  */
@@ -206,7 +206,9 @@ export function NewTaskDialog({
                     onChange={setParent}
                   />
                 ) : null}
-                <AreaChip areas={areas} value={area} disabled={busy} onChange={setArea} />
+                {areas.length === 0 ? null : (
+                  <AreaChip areas={areas} value={area} disabled={busy} onChange={setArea} />
+                )}
                 <IssueChip
                   value={key}
                   kind={project.vcs ?? "git"}

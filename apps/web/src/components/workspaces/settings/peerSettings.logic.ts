@@ -43,7 +43,7 @@ export type WorkspaceSection = (typeof WORKSPACE_SECTIONS)[number];
 export const PROJECT_TABS = [
   "basics",
   "people",
-  "areas",
+  "tasks",
   "repositories",
   "tools",
   "capacity",
@@ -77,7 +77,7 @@ export const WORKSPACE_SECTION_LABELS: Readonly<Record<WorkspaceSection, string>
 export const PROJECT_TAB_LABELS: Readonly<Record<ProjectTab, string>> = {
   basics: "Basics",
   people: "People",
-  areas: "Areas",
+  tasks: "Tasks",
   repositories: "Repositories",
   tools: "Tools",
   capacity: "Capacity",

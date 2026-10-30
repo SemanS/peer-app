@@ -240,8 +240,8 @@ export function InviteDialog({
             )}
             {projects.length > 1 ? (
               <p className="text-sm text-muted-foreground">
-                Pick one project to assign areas or tasks now. You can assign more on their page
-                after they join.
+                Pick one project to assign tasks now. You can assign more on their page after they
+                join.
               </p>
             ) : null}
             {workForMany ? (

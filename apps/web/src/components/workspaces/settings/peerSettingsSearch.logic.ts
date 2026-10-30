@@ -316,7 +316,12 @@ const PROJECT_ENTRIES: ReadonlyArray<Entry> = [
     place: p("people"),
     terms: "members leads lead invite add person role people",
   },
-  { id: "project-areas", title: "Areas", place: p("areas"), terms: "areas task area group tasks" },
+  {
+    id: "project-tasks",
+    title: "Project tasks",
+    place: p("tasks"),
+    terms: "tasks task group groups order tree area areas",
+  },
   {
     id: "project-repositories",
     title: "Repositories",

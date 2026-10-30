@@ -6,13 +6,13 @@ import { PeerSettingsMissing } from "./PeerSettingsMissing";
 import { PeerSettingsRedirect } from "./peerSettingsLinks";
 import { DEFAULT_PROJECT_TAB, isProjectTab, type ProjectTab } from "./peerSettings.logic";
 import type { ProjectPageProps } from "./pageProps";
-import { ProjectAreas } from "./pages/ProjectAreas";
 import { ProjectBasics } from "./pages/ProjectBasics";
 import { ProjectCapacity } from "./pages/ProjectCapacity";
 import { ProjectCoordination } from "./pages/ProjectCoordination";
 import { ProjectHistory } from "./pages/ProjectHistory";
 import { ProjectPeople } from "./pages/ProjectPeople";
 import { ProjectRepositories } from "./pages/ProjectRepositories";
+import { ProjectTasks } from "./pages/ProjectTasks";
 import { ProjectTools } from "./pages/ProjectTools";
 import { ProjectHeader } from "./ProjectHeader";
 import { ProposalsBanner } from "./Proposals";
@@ -20,7 +20,7 @@ import { ProposalsBanner } from "./Proposals";
 const PAGES: Readonly<Record<ProjectTab, ComponentType<ProjectPageProps>>> = {
   basics: ProjectBasics,
   people: ProjectPeople,
-  areas: ProjectAreas,
+  tasks: ProjectTasks,
   repositories: ProjectRepositories,
   tools: ProjectTools,
   capacity: ProjectCapacity,

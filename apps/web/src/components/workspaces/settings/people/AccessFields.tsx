@@ -183,7 +183,7 @@ export function WorkChecklist({
   );
 }
 
-/** What someone invited to one project works on: all of it, or the areas and tasks ticked. */
+/** What someone invited to one project works on: all of it, or the tasks ticked. */
 export function InviteWorkFields({
   groups,
   entire,
@@ -208,7 +208,7 @@ export function InviteWorkFields({
         onValueChange={(next) => onEntireChange(next === "entire")}
       >
         <Choice value="entire" title="Entire project" text="Nothing assigned yet" />
-        <Choice value="selected" title="Selected areas or tasks" text="They own what you tick" />
+        <Choice value="selected" title="Selected tasks" text="They own what you tick" />
       </RadioGroup>
       {entire ? null : (
         <WorkChecklist groups={groups} pick={pick} disabled={disabled} onChange={onPickChange} />

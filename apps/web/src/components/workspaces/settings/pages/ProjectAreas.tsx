@@ -8,7 +8,6 @@ import { DraftSaveBar } from "../DraftBar";
 import type { ProjectPageProps } from "../pageProps";
 import { AreaList, DeleteAreaPanel } from "../ProjectAreasParts";
 import {
-  addArea,
   adoptArea,
   areaRows,
   areasOf,
@@ -30,10 +29,10 @@ import { useSettingsView } from "../useSettingsView";
 const NO_MOVES: ReadonlyArray<AreaMove> = [];
 
 /**
- * A project's Areas tab: the parts of the product its tasks sit under, in the order the sidebar and
- * the board list them. Leads and admins reorder them, rename, delete, add and adopt the ones only
- * tasks name; everyone else reads them, with the owners named. Without the settings feature on the
- * Hub the list is the manifest's, read-only.
+ * The areas of a project that still has them, under its Tasks tab: groups took their place, so
+ * nothing here adds a new one and the section shows only while there are any. Leads and admins
+ * reorder them, rename, delete and adopt the ones only tasks name; everyone else reads them, with
+ * the owners named. Without the settings feature on the Hub the list is the manifest's, read-only.
  *
  * Tasks name their area by its text, so renaming or deleting an area moves its tasks. Those moves
  * are kept beside the draft and made after the list is saved, one task update each (the update the
@@ -121,6 +120,9 @@ export function ProjectAreas({ environmentId, workspace, state }: ProjectPagePro
   };
 
   const removing = deleting === null ? undefined : rows.listed.find((row) => row.name === deleting);
+  // Deleting the last area leaves its draft to save, so the section goes once that is settled.
+  const none = rows.listed.length + rows.fromTasks.length === 0;
+  if (none && draft.dirty === 0 && !running) return null;
   return (
     <>
       <section aria-labelledby={headingId} className="flex max-w-2xl flex-col gap-2.5">
@@ -128,7 +130,8 @@ export function ProjectAreas({ environmentId, workspace, state }: ProjectPagePro
           Areas
         </h2>
         <p className="text-sm text-muted-foreground">
-          They group {project.name}’s tasks in the sidebar and on the board, in this order.
+          Some of {project.name}’s tasks still sit in areas, which group them in the sidebar in this
+          order.
         </p>
         {!view.hubHasSettings ? (
           <SettingsUnavailableNote />
@@ -152,7 +155,6 @@ export function ProjectAreas({ environmentId, workspace, state }: ProjectPagePro
           onRename={(from, to) => apply(renameArea(edit, from, to))}
           onDelete={setDeleting}
           onAdopt={(name) => apply(adoptArea(edit, name))}
-          onAdd={(name) => apply(addArea(edit, name))}
         />
         {running ? (
           <p role="status" className="text-sm text-muted-foreground">
@@ -172,7 +174,6 @@ export function ProjectAreas({ environmentId, workspace, state }: ProjectPagePro
             onCancel={() => setDeleting(null)}
           />
         )}
-        <p className="text-xs text-muted-foreground">Every task’s menu has Move to area.</p>
       </section>
       <DraftSaveBar
         draft={saveDraft}

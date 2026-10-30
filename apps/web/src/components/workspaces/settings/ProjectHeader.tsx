@@ -63,9 +63,12 @@ export function ProjectHeader({
           Open its tasks
         </Button>
       </div>
-      <div className="overflow-x-auto">
+      {/* Scrolls on a narrow window; a bar of its own would sit under the tabs or beside them. */}
+      <div className="overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <ToggleGroup
           aria-label="Project settings"
+          variant="liquid"
+          size="sm"
           value={[tab]}
           onValueChange={(next) => {
             const value = next[0];

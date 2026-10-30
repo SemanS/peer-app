@@ -15,7 +15,7 @@ import { threadEnvironment } from "../../state/threads";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { buildThreadRouteParams } from "../../threadRoutes";
 import { toastManager } from "../ui/toast";
-import type { TreeChange } from "./taskTree.logic";
+import { removalQuestion, type TaskMove, type TreeChange } from "./taskTree.logic";
 import { confirmed, reportFailure } from "./workFeedback";
 import { taskLabel, type WorkOpen, type WorkTaskNode } from "./workTree.logic";
 
@@ -57,6 +57,7 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
   const assignThread = useAtomCommand(serverEnvironment.peerHubAssignThread, {
     reportFailure: false,
   });
+  const createTask = useAtomCommand(serverEnvironment.peerHubCreateTask, { reportFailure: false });
   const updateTask = useAtomCommand(serverEnvironment.peerHubUpdateTask, { reportFailure: false });
   const deleteTask = useAtomCommand(serverEnvironment.peerHubDeleteTask, { reportFailure: false });
   const shareProject = useAtomCommand(serverEnvironment.peerHubShareProject, {
@@ -170,6 +171,28 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
         }),
       );
     },
+    /** Adds a group of the project's at `position` among the roots. A group never runs as one. */
+    addGroup: async (scope: Scope, title: string, position: number) => {
+      if (environmentId === null) return;
+      reportFailure(
+        `Could not add ${title}`,
+        await createTask({
+          environmentId,
+          input: { ...scope, title, kind: "group", executable: false, position },
+        }),
+      );
+    },
+    /** Sets siblings' positions, one update each; a failure stops the rest and says which. */
+    placeTasks: async (
+      scope: Scope,
+      places: ReadonlyArray<{ readonly taskId: string; readonly position: number }>,
+    ) => {
+      if (environmentId === null) return;
+      for (const place of places) {
+        const result = await updateTask({ environmentId, input: { ...scope, ...place } });
+        if (!reportFailure("Could not save the new order", result)) return;
+      }
+    },
     /** Settles an item, or makes it a group or a task (`settleChange`, `kindChange`). */
     changeTaskTree: async (scope: Scope, task: WorkTaskNode, change: TreeChange) => {
       if (environmentId === null) return;
@@ -198,6 +221,27 @@ export function useWorkActions(environmentId: EnvironmentId | null) {
         true,
       );
       if (!sure) return;
+      reportFailure(
+        `Could not remove ${taskLabel(task)}`,
+        await deleteTask({ environmentId, input: { ...scope, taskId: task.id } }),
+      );
+    },
+    /**
+     * Removes an item that has `items` under it. The Hub refuses to delete an item with children,
+     * so `moves` take them out first; a failed move leaves the item in place.
+     */
+    removeItem: async (
+      scope: Scope,
+      task: WorkTaskNode,
+      items: number,
+      moves: ReadonlyArray<TaskMove>,
+    ) => {
+      if (environmentId === null) return;
+      if (!(await confirmed(removalQuestion(task, items).join("\n"), true))) return;
+      for (const move of moves) {
+        const moved = await updateTask({ environmentId, input: { ...scope, ...move } });
+        if (!reportFailure(`Could not remove ${taskLabel(task)}`, moved)) return;
+      }
       reportFailure(
         `Could not remove ${taskLabel(task)}`,
         await deleteTask({ environmentId, input: { ...scope, taskId: task.id } }),

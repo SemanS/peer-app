@@ -10,6 +10,7 @@ import {
   scopeOfTask,
   scopePrompt,
   subtreeOf,
+  taskLabel,
   type WorkProjectNode,
   type WorkTaskNode,
 } from "./workTree.logic";
@@ -171,6 +172,22 @@ export function parentChoices(
       group: task.kind === "group",
     }));
 }
+
+/** What a person confirms: an item with items under it leaves them a level up, never gone. */
+export function removalQuestion(
+  task: Pick<WorkTaskNode, "key" | "title">,
+  items: number,
+): ReadonlyArray<string> {
+  return [
+    `Remove "${taskLabel(task)}" for everyone on the project?`,
+    items === 0
+      ? "Its chats stay, on no task."
+      : `${items === 1 ? "Its 1 item moves" : `Its ${items} items move`} up a level. Its chats stay, on no task.`,
+  ];
+}
+
+/** One task's new place in the tree. */
+export type TaskMove = Pick<PeerHubUpdateTaskInput, "taskId" | "parent" | "position" | "area">;
 
 /** The task-tree part of a task's change: settling it, or making it a group or a task. */
 export type TreeChange = Pick<PeerHubUpdateTaskInput, "kind" | "executable" | "unsettled">;

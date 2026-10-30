@@ -375,7 +375,7 @@ export function LeadDisclosure({
         </CollapsibleTrigger>
         <CollapsiblePanel>
           <p className="pt-2 text-sm text-muted-foreground">
-            Change {projectName}’s settings: people, areas, repositories, tools, allocations and
+            Change {projectName}’s settings: people, repositories, tools, allocations and
             coordination. Delete other people’s tasks and release their locks. Create CI credentials
             for notifications. Approve Memory for {projectName}. Admins of {workspaceName} can
             always do the same.

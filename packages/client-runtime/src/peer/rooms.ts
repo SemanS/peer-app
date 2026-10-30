@@ -304,8 +304,8 @@ export function roomNeedsYou(
 }
 
 /** Needs you's items per task, so an owner asked ten times on one task sees one group. */
-export function needsYouByTask(items: ReadonlyArray<RoomNeedsYouItem>) {
-  const groups = new Map<string, RoomNeedsYouItem[]>();
+export function needsYouByTask<Item extends RoomNeedsYouItem>(items: ReadonlyArray<Item>) {
+  const groups = new Map<string, Item[]>();
   for (const item of items) {
     const key = `${item.workspace}/${item.project}/${item.task}`;
     groups.set(key, [...(groups.get(key) ?? []), item]);

@@ -1,4 +1,4 @@
-import { roomSeq, type RoomPlace } from "@t3tools/client-runtime/peer/rooms";
+import { roomRev, roomSeq, type RoomPlace } from "@t3tools/client-runtime/peer/rooms";
 import {
   isAtomCommandInterrupted,
   type AtomCommandResult,
@@ -31,7 +31,7 @@ function useRefetchOn(revision: string, refresh: () => void) {
   }, [refresh, revision]);
 }
 
-/** A room's newest messages, read again when the status says its sequence moved, never on a timer. */
+/** A room's newest messages, read again when the status says it moved, never on a timer. */
 export function useRoomRead(input: {
   readonly environmentId: EnvironmentId;
   readonly status: Pick<PeerHubStatus, "rooms">;
@@ -44,7 +44,7 @@ export function useRoomRead(input: {
   const query = useEnvironmentQuery(
     serverEnvironment.peerRooms.read({ environmentId, input: { ...place, limit } }),
   );
-  useRefetchOn(`${roomSeq(status.rooms, place)}:${revision}`, query.refresh);
+  useRefetchOn(`${roomRev(status.rooms, place)}:${revision}`, query.refresh);
   return {
     room: query.data,
     messages: query.data?.messages ?? NO_MESSAGES,

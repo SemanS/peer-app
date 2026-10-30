@@ -23,6 +23,7 @@ const inboxOf = (seqs: ReadonlyArray<number>): PeerRoomInbox => ({
   waiting: [],
   mentions: [],
   seqs: {},
+  revs: {},
   work: seqs.map((seq) => ({ project: "app", task: "vl-7", message: messageOf({ seq }) })),
 });
 const inState = (state: string, seq = 12) =>

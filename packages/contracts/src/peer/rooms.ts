@@ -148,12 +148,23 @@ export const PeerRoomSeqs = Schema.Record(
 );
 export type PeerRoomSeqs = typeof PeerRoomSeqs.Type;
 
+/**
+ * `project` → `task` → the room's revision. `seq` counts messages; this also moves with every
+ * delivery's move, which adds none, so it is what an open room refetches on.
+ */
+export const PeerRoomRevs = Schema.Record(
+  Schema.String,
+  Schema.Record(Schema.String, Schema.Number),
+);
+export type PeerRoomRevs = typeof PeerRoomRevs.Type;
+
 export const PeerRoomInbox = Schema.Struct({
   waiting: Schema.Array(PeerRoomInboxItem),
   mentions: Schema.Array(PeerRoomInboxItem),
   /** The deliveries this environment acts on, `passed` or `taken`. */
   work: Schema.Array(PeerRoomInboxItem),
   seqs: PeerRoomSeqs,
+  revs: PeerRoomRevs,
 });
 export type PeerRoomInbox = typeof PeerRoomInbox.Type;
 
@@ -179,6 +190,8 @@ export const PeerRoomsStatus = Schema.Struct({
   mentions: Schema.Array(PeerRoomNeed),
   /** `workspace` → `project` → `task` → sequence, so a client knows what moved without polling. */
   seqs: Schema.Record(Schema.String, PeerRoomSeqs),
+  /** `workspace` → `project` → `task` → revision, keyed as `seqs`. */
+  revs: Schema.Record(Schema.String, PeerRoomRevs),
 });
 export type PeerRoomsStatus = typeof PeerRoomsStatus.Type;
 

@@ -260,6 +260,10 @@ const inPlace = (need: PeerRoomNeed, place: RoomPlace) =>
 export const roomSeq = (rooms: PeerRoomsStatus | undefined, place: RoomPlace) =>
   rooms?.seqs[place.workspace]?.[place.project]?.[place.task] ?? 0;
 
+/** Moves with every post and every delivery's move: what an open room refetches on. */
+export const roomRev = (rooms: PeerRoomsStatus | undefined, place: RoomPlace) =>
+  rooms?.revs[place.workspace]?.[place.project]?.[place.task] ?? 0;
+
 /** What the task's badge counts: messages waiting on this person, and mentions of them. */
 export const roomBadgeCount = (rooms: PeerRoomsStatus | undefined, place: RoomPlace) =>
   (rooms?.waiting.filter((need) => inPlace(need, place)).length ?? 0) +

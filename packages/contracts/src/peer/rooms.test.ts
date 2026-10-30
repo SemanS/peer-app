@@ -65,8 +65,10 @@ describe("room rows", () => {
       mentions: [],
       work: [],
       seqs: { app: { "t-1": 12 } },
+      revs: { app: { "t-1": 15 } },
     });
     expect(inbox.seqs.app?.["t-1"]).toBe(12);
+    expect(inbox.revs.app?.["t-1"]).toBe(15);
   });
 });
 

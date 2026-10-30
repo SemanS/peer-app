@@ -115,7 +115,7 @@ export interface RoomHub {
 
 export const roomHubOf = (over: Partial<RoomHub> = {}): RoomHub => ({
   features: { rooms: 1 },
-  inbox: { waiting: [], mentions: [], work: [], seqs: {} },
+  inbox: { waiting: [], mentions: [], work: [], seqs: {}, revs: {} },
   ...over,
 });
 

@@ -26,6 +26,7 @@ const status = {
     waiting: [need, { ...need, seq: 2 }],
     mentions: [{ ...need, seq: 3 }],
     seqs: { w: { p: { t1: 3, gone: 9 } }, other: { p: { t1: 1 } } },
+    revs: { w: { p: { t1: 3, gone: 9 } }, other: { p: { t1: 1 } } },
   },
 } as unknown as PeerHubStatus;
 

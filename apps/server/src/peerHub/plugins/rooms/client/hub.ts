@@ -46,7 +46,7 @@ export interface MoveBody {
 }
 
 const Posted = Schema.Struct({ message: PeerRoomMessage });
-const EMPTY_INBOX: PeerRoomInbox = { waiting: [], mentions: [], work: [], seqs: {} };
+const EMPTY_INBOX: PeerRoomInbox = { waiting: [], mentions: [], work: [], seqs: {}, revs: {} };
 
 /** What a task's handoff packages say of where its work is, read as data of the `handoff` feature. */
 const Handoffs = Schema.Struct({

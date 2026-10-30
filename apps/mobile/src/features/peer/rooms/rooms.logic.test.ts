@@ -234,7 +234,7 @@ describe("rooms in Needs you", () => {
       signedIn: true,
       email: ME,
       plugins: [{ id: "rooms", title: "Task rooms", enabled: true, active: true }],
-      rooms: { waiting: [need(1)], mentions: [need(2)], seqs: {} },
+      rooms: { waiting: [need(1)], mentions: [need(2)], seqs: {}, revs: {} },
       workspaces: [
         {
           slug: "w",
@@ -292,11 +292,14 @@ describe("rooms in Needs you", () => {
   });
 
   it("says the count on a task's row, and nothing with none", () => {
-    expect(roomBadgeText({ waiting: [need(1) as never], mentions: [], seqs: {} }, place)).toBe(
-      "Room · 1 needs you",
-    );
     expect(
-      roomBadgeText({ waiting: [need(1) as never], mentions: [need(2) as never], seqs: {} }, place),
+      roomBadgeText({ waiting: [need(1) as never], mentions: [], seqs: {}, revs: {} }, place),
+    ).toBe("Room · 1 needs you");
+    expect(
+      roomBadgeText(
+        { waiting: [need(1) as never], mentions: [need(2) as never], seqs: {}, revs: {} },
+        place,
+      ),
     ).toBe("Room · 2 need you");
     expect(roomBadgeText(undefined, place)).toBeNull();
   });

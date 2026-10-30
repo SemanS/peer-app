@@ -195,6 +195,7 @@ describe("the status", () => {
           ],
           work: [],
           seqs: { app: { "vl-7": 41 } },
+          revs: { app: { "vl-7": 57 } },
         };
         const peer = yield* roomPeer(current);
         const rooms = yield* roomsWhen(peer.status, (next) => next?.mentions.length === 1);
@@ -211,6 +212,7 @@ describe("the status", () => {
           at: NOW,
         });
         assert.deepStrictEqual(rooms?.seqs, { acme: { app: { "vl-7": 41 } } });
+        assert.deepStrictEqual(rooms?.revs, { acme: { app: { "vl-7": 57 } } });
       }),
     ),
   );
@@ -237,6 +239,31 @@ describe("the status", () => {
     ),
   );
 
+  it.effect("a delivery's move reaches the status on its ping, with no new message", () =>
+    run(
+      Effect.gen(function* () {
+        const current = roomHubOf();
+        current.inbox = {
+          ...current.inbox,
+          seqs: { app: { "vl-7": 2 } },
+          revs: { app: { "vl-7": 2 } },
+        };
+        const peer = yield* roomPeer(current);
+        yield* roomsWhen(peer.status, (next) => next?.revs.acme?.app?.["vl-7"] === 2);
+        current.inbox = { ...current.inbox, revs: { app: { "vl-7": 3 } } };
+        const { hubChanges } = yield* contributionsOf(peer);
+        yield* hubChanges!.onPing({
+          workspace: "acme",
+          change: "rooms",
+          origin: null,
+          data: { project: "app", task: "vl-7", seq: 2 },
+        } as never);
+        const rooms = yield* roomsWhen(peer.status, (next) => next?.revs.acme?.app?.["vl-7"] === 3);
+        assert.strictEqual(rooms?.seqs.acme?.app?.["vl-7"], 2);
+      }),
+    ),
+  );
+
   it.effect("leaves nothing from a Hub that has no inbox route yet", () =>
     run(
       Effect.gen(function* () {
@@ -249,7 +276,7 @@ describe("the status", () => {
           }),
         );
         const rooms = yield* roomsWhen(peer.status, (next) => next !== undefined);
-        assert.deepStrictEqual(rooms, { waiting: [], mentions: [], seqs: {} });
+        assert.deepStrictEqual(rooms, { waiting: [], mentions: [], seqs: {}, revs: {} });
       }),
     ),
   );

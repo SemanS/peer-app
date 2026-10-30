@@ -15,6 +15,7 @@ import {
   needsYouByTask,
   roomBadgeCount,
   roomNeedsYou,
+  roomRev,
   roomSeq,
   targetsFor,
   waitsOnMe,
@@ -206,6 +207,7 @@ describe("needs you", () => {
     waiting: [need("t-1", 3, "2026-10-30T10:00:00Z"), need("t-1", 5, "2026-10-30T11:00:00Z")],
     mentions: [{ ...need("t-2", 1, "2026-10-30T12:00:00Z"), agent: true }],
     seqs: { acme: { app: { "t-1": 5 } } },
+    revs: { acme: { app: { "t-1": 9 } } },
   };
   const place = { workspace: "acme", project: "app", task: "t-1" };
 
@@ -233,5 +235,12 @@ describe("needs you", () => {
   it("reads a room's newest sequence", () => {
     expect(roomSeq(rooms, place)).toBe(5);
     expect(roomSeq(rooms, { ...place, task: "t-9" })).toBe(0);
+  });
+
+  it("reads a room's revision, 0 where it has none, by workspace first", () => {
+    expect(roomRev(rooms, place)).toBe(9);
+    expect(roomRev(rooms, { ...place, workspace: "other" })).toBe(0);
+    expect(roomRev(rooms, { ...place, task: "t-9" })).toBe(0);
+    expect(roomRev(undefined, place)).toBe(0);
   });
 });

@@ -1,6 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useIsFocused } from "@react-navigation/native";
-import { roomSeq, type RoomPlace } from "@t3tools/client-runtime/peer/rooms";
+import { roomRev, type RoomPlace } from "@t3tools/client-runtime/peer/rooms";
 import type {
   EnvironmentId,
   PeerHubStatus,
@@ -21,7 +21,7 @@ interface Kept {
 }
 
 /**
- * A task's room, read again only when the status says its sequence moved, never on a timer. The
+ * A task's room, read again only when the status says it moved, never on a timer. The
  * last read stays on screen meanwhile. `apply` puts the Hub's answer to a post or a move in at once;
  * the next read replaces it. What the person has on screen is marked seen while the screen is in
  * front.
@@ -40,14 +40,14 @@ export function useRoom(input: {
   );
   const { refresh } = query;
 
-  const seq = roomSeq(status.rooms, place);
-  // The query reads on mount; only a later move of the sequence reads again.
-  const lastSeq = useRef(seq);
+  const rev = roomRev(status.rooms, place);
+  // The query reads on mount; only a later move of the revision reads again.
+  const lastRev = useRef(rev);
   useEffect(() => {
-    if (seq === lastSeq.current) return;
-    lastSeq.current = seq;
+    if (rev === lastRev.current) return;
+    lastRev.current = rev;
     refresh();
-  }, [refresh, seq]);
+  }, [refresh, rev]);
 
   const [kept, setKept] = useState<Kept | undefined>(undefined);
   const read = query.data ?? undefined;

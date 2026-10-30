@@ -1,6 +1,6 @@
 /**
  * The plugin's status slice, read on every publish: what waits on the person, clipped, and each
- * room's newest sequence.
+ * room's newest sequence and revision.
  *
  * @module peerHub/plugins/rooms/client/status
  */
@@ -35,5 +35,6 @@ export function statusOf(read: ReadonlyMap<string, PeerRoomInbox>): PeerRoomsSta
     waiting: needs((inbox) => inbox.waiting),
     mentions: needs((inbox) => inbox.mentions),
     seqs: Object.fromEntries(all.map(([workspace, inbox]) => [workspace, inbox.seqs])),
+    revs: Object.fromEntries(all.map(([workspace, inbox]) => [workspace, inbox.revs])),
   };
 }

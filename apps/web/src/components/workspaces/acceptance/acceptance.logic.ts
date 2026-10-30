@@ -136,7 +136,9 @@ export function acceptanceCard(
         ? "The task is done; a lead of the project can still accept the work."
         : state === "none" && facts.delivery === "review"
           ? "Accepting it moves the task to done as the lead's own move."
-          : undefined;
+          : state === "accepted" && current?.via === "policy"
+            ? "The project's review policy accepted the handoff in this lead's name; nothing spoke against it. Withdraw it to review the handoff yourself."
+            : undefined;
   return {
     heading,
     note: current !== undefined && "note" in current ? nonEmpty(current.note) : undefined,

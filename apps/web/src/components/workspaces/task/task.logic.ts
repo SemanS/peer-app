@@ -69,6 +69,8 @@ export function taskStateLook(kind: TaskStateKind): {
   switch (kind) {
     case "done":
       return { tone: "delivery", hollow: false };
+    case "accepted":
+      return { tone: "delivery", hollow: true };
     case "review":
     case "approval":
     case "input":
@@ -260,6 +262,21 @@ function waitsOn(input: {
 }
 
 /**
+ * The state as the page's header says it: an acceptance the project's review policy gave says so,
+ * as the task waits only for its own landing.
+ */
+export function pageState(state: TaskState, task: Pick<WorkTaskNode, "accepted">): TaskState {
+  if (state.kind !== "accepted") return state;
+  return {
+    ...state,
+    label:
+      task.accepted === "policy"
+        ? "Accepted by policy · waiting to land"
+        : "Accepted · waiting to land",
+  };
+}
+
+/**
  * What the primary button does by the task's state: the review for a task in review, the chat that
  * waits for an approval or an answer, then an existing chat of theirs before starting another.
  */
@@ -274,6 +291,11 @@ function primaryOf(
       kind: "review",
       label: handoff === undefined ? "Review" : `Review handoff #${handoff.number}`,
     };
+  }
+  // Accepted and waiting to land: nothing to decide, but the review page holds the facts and the
+  // way to withdraw the acceptance.
+  if (state.kind === "accepted" && handoff !== undefined) {
+    return { kind: "review", label: `Open handoff #${handoff.number}` };
   }
   if (state.kind === "approval" || state.kind === "input") {
     // The first chat of that kind that can be opened here.
@@ -330,7 +352,10 @@ export function taskPageModel(input: {
   const creator: TaskPerson | undefined =
     hub === undefined ? undefined : { name: nameOf(hub.createdBy), mine: hub.createdBy === me };
   // A review asks the task's owner, else the project's leads, else every member.
-  const taskStatus = taskState(task, needs, taskOwnership(project, task, area.name).review);
+  const taskStatus = pageState(
+    taskState(task, needs, taskOwnership(project, task, area.name).review),
+    task,
+  );
   const look = taskStateLook(taskStatus.kind);
   const people = peopleOn(task, creator);
 

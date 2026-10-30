@@ -158,4 +158,18 @@ describe("acceptance on the task page", () => {
     // An open or reviewed task without acceptance gets no fact: the Team page shows it as before.
     expect(fact(statusFor("member"), "vl7")).toBeUndefined();
   });
+
+  it("a_policy_acceptance_says_so_and_a_lead_may_withdraw_it", () => {
+    const byPolicy = { ...summary("vl7"), via: "policy" as const };
+    const facts = acceptanceFacts(statusFor("lead", [byPolicy]), place("vl7"))!;
+    expect(acceptanceCard(facts, undefined, clock)).toMatchObject({
+      heading: "Accepted by Ana via policy · 10:00",
+      tone: "accepted",
+      actions: ["withdraw"],
+      hint: expect.stringContaining("review policy accepted the handoff"),
+    });
+    // A member reads the same card without the way to withdraw it.
+    const member = acceptanceFacts(statusFor("member", [byPolicy]), place("vl7"))!;
+    expect(acceptanceCard(member, undefined, clock)?.actions).toEqual([]);
+  });
 });

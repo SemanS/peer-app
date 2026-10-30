@@ -283,6 +283,25 @@ describe("taskPageModel", () => {
     ]);
   });
 
+  it("reads an accepted handoff as waiting only to land: no wait of the person's, the handoff one click away", () => {
+    const built = model(taskNode([thread({ key: "a" })], { inReview: true, accepted: "policy" }), {
+      hub: hubTask({ status: "review" }),
+      status: status({ handoffs: [summary(2, 120, 3)] }),
+    });
+    expect(built.state).toMatchObject({
+      kind: "accepted",
+      label: "Accepted by policy · waiting to land",
+    });
+    expect(built.tone).toBe("delivery");
+    expect(built.waits).toEqual([]);
+    expect(built.primary).toEqual({ kind: "review", label: "Open handoff #2" });
+    expect(built.details.find((row) => row.label === "Handoffs")?.value).toBe("#2 accepted");
+    const byLead = model(taskNode([thread({ key: "a" })], { inReview: true, accepted: "person" }), {
+      hub: hubTask({ status: "review" }),
+    });
+    expect(byLead.state.label).toBe("Accepted · waiting to land");
+  });
+
   it("falls back to a plain Review while the Hub keeps no handoff package", () => {
     const built = model(taskNode([thread({ key: "a" })], { inReview: true }), {
       hub: hubTask({ status: "review" }),
@@ -643,6 +662,7 @@ describe("taskStateLook", () => {
     expect(taskStateLook("paused")).toEqual({ tone: "neutral", hollow: false });
     expect(taskStateLook("new")).toEqual({ tone: "neutral", hollow: true });
     expect(taskStateLook("done").tone).toBe("delivery");
+    expect(taskStateLook("accepted")).toEqual({ tone: "delivery", hollow: true });
   });
 });
 

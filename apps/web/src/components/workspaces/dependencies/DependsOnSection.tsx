@@ -11,6 +11,7 @@ import {
   dependenciesOf,
   neededBy,
   dependencyName,
+  dependencyRows,
   projectDependencyIndex,
   stateWord,
   toggleInput,
@@ -37,7 +38,8 @@ export function DependsOnSection({
     index = projectDependencyIndex(value),
     on = dependenciesOf(snapshot, project, task, index),
     needed = neededBy(snapshot, project, task, index),
-    choices = candidates(snapshot, project, task, index);
+    choices = candidates(snapshot, project, task, index),
+    rows = dependencyRows(status, workspace, value, task);
   const toggle = async (id: string, checked: boolean) => {
     setBusy(true);
     setError(null);
@@ -62,21 +64,27 @@ export function DependsOnSection({
     <section aria-label="Dependencies" className="flex flex-col gap-2.5">
       <PeerSectionLabel>Depends on</PeerSectionLabel>
       {on.length ? (
-        on.map(({ task: other, state }) => (
-          <div key={other.id} className="flex items-center gap-2 text-sm">
-            <span>
-              {dependencyName(other)} · {stateWord(state)}
-            </span>
-            <Button
-              variant="ghost"
-              size="xs"
-              disabled={busy}
-              onClick={() => void toggle(other.id, true)}
-            >
-              Remove
-            </Button>
-          </div>
-        ))
+        <>
+          {on.map(({ task: other, state }) => (
+            <div key={other.id} className="flex items-center gap-2 text-sm">
+              <span>
+                {rows?.dependsOn.find((row) => row.id === other.id)?.line ??
+                  `${dependencyName(other)} · ${stateWord(state)}`}
+              </span>
+              <Button
+                variant="ghost"
+                size="xs"
+                disabled={busy}
+                onClick={() => void toggle(other.id, true)}
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
+          {rows?.readyWhen ? (
+            <p className="text-sm text-muted-foreground">This task is {rows.readyWhen}.</p>
+          ) : null}
+        </>
       ) : (
         <p className="text-sm text-muted-foreground">None</p>
       )}
@@ -101,9 +109,17 @@ export function DependsOnSection({
         </div>
       </details>
       <PeerSectionLabel>Needed by</PeerSectionLabel>
-      <p className="text-sm text-muted-foreground">
-        {needed.map(({ task: other }) => dependencyName(other)).join(", ") || "None"}
-      </p>
+      {rows !== null && rows.neededBy.length > 0 ? (
+        rows.neededBy.map((group) => (
+          <p key={group.key} className="text-sm text-foreground">
+            {group.line}
+          </p>
+        ))
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {needed.map(({ task: other }) => dependencyName(other)).join(", ") || "None"}
+        </p>
+      )}
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}

@@ -7285,6 +7285,12 @@ const roomsRealProgram = Effect.gen(function* () {
     ).runs;
   const live: Array<{ computer: Computer; h: HerdrServer; pane: string; label?: string }> = [];
   const rpc = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect);
+  /** What this arm must show: reported as any observation, and the run fails at its end without them. */
+  const missed: string[] = [];
+  const must = (ok: unknown, what: string) => {
+    observe(ok, what);
+    if (!ok) missed.push(what);
+  };
   const herdrAgents = (h: HerdrServer) =>
     (herdrJson(h, "agent", "list").result?.agents ?? []) as ReadonlyArray<{
       readonly pane_id: string;
@@ -7334,8 +7340,9 @@ const roomsRealProgram = Effect.gen(function* () {
       })),
     );
   try {
-    // Trust Bob's whole workspace folder now, while no prompt depends on it.
-    const trusted = NodeFS.realpathSync(NodePath.join(bob.home, "workspace"));
+    // Claude Code keeps a worktree's trust under its repository's root, and asks in a worktree of a repository it has
+    // not seen: a prompt typed then is lost. Trust Bob's checkout now, while no prompt depends on it.
+    const trusted = NodeFS.realpathSync(bob.checkout);
     const trustPane = yield* Effect.promise(() =>
       startClaude(bobHerdr, bob, "trust", { cwd: trusted }),
     );
@@ -7409,11 +7416,11 @@ const roomsRealProgram = Effect.gen(function* () {
       ),
     );
     for (const text of heard) told("Ana's agent (from her log)", text);
-    observe(
+    must(
       heard.some((text) => wholeFence(text, "marker-real")),
       "her real agent was told it, fenced",
     );
-    observe(answered, "her agent answered with --reply and the Hub says `answered`");
+    must(answered, "her agent answered with --reply and the Hub says `answered`");
     say("the room", yield* Effect.promise(() => shown(300)));
 
     // Her run ends; Bob's own question starts a review session on the change.
@@ -7452,7 +7459,7 @@ const roomsRealProgram = Effect.gen(function* () {
         3 * 60_000,
       ),
     );
-    observe(startedBob, "Peer started a Claude Code on Bob's computer");
+    must(startedBob, "Peer started a Claude Code on Bob's computer");
     const reviewPane = herdrAgents(bobHerdr).find((one) => one.agent === "claude");
     if (reviewPane !== undefined) {
       live.push({ computer: bob, h: bobHerdr, pane: reviewPane.pane_id, label: "bob-review" });
@@ -7465,10 +7472,10 @@ const roomsRealProgram = Effect.gen(function* () {
         8 * 60_000,
       ),
     );
-    observe(answeredOwn, "its answer is in the room and the Hub says `answered`");
+    must(answeredOwn, "its answer is in the room and the Hub says `answered`");
     const denied = events(bob).filter((entry) => entry.event === "roles.denied");
     say("roles.denied on Bob's computer", JSON.stringify(denied));
-    observe(
+    must(
       denied.some((entry) => entry.where === "edit"),
       "its edit attempt was denied",
     );
@@ -7482,10 +7489,11 @@ const roomsRealProgram = Effect.gen(function* () {
     const cwd = reviewPane?.cwd;
     if (cwd !== undefined && NodeFS.existsSync(NodePath.join(cwd, "src/pricing.ts"))) {
       const text = NodeFS.readFileSync(NodePath.join(cwd, "src/pricing.ts"), "utf8");
-      observe(text.includes("integer cents"), `the review checkout ${cwd} has Ana's change`);
+      must(text.includes("integer cents"), `the review checkout ${cwd} has Ana's change`);
       observe(!text.includes("reviewed by Bob"), "its file is unedited");
     } else observe(false, `the review checkout can be read (${String(cwd)})`);
     say("the room at the end", yield* Effect.promise(() => shown(600)));
+    check(missed.length === 0, `the real arm showed all it must (missing: ${missed.join("; ")})`);
   } finally {
     for (const { computer, h, pane, label } of live) {
       console.log(`\n===== ${label ?? computer.name}'s agent, last screen =====`);

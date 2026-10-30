@@ -28,6 +28,13 @@ export const PeerRunSession = Schema.Struct({
 });
 export type PeerRunSession = typeof PeerRunSession.Type;
 
+/** An environment a run was carried on, from when it took the run over: the minting one first. */
+export const PeerRunEnvironment = Schema.Struct({
+  id: Schema.String,
+  from: Schema.String,
+});
+export type PeerRunEnvironment = typeof PeerRunEnvironment.Type;
+
 export const PeerRun = Schema.Struct({
   /** `run_` and the 20 Crockford base-32 characters of a ULID, so ids sort by start. */
   id: Schema.String,
@@ -53,8 +60,37 @@ export const PeerRun = Schema.Struct({
   sessionsBefore: Schema.Number,
   /** What created it (startAgent's `requestId`, the menu's nonce), so a retry creates no second run. */
   requestId: Schema.optional(Schema.String),
+  /**
+   * The environments that carried it, oldest first, once another computer of its person took it
+   * over (a handover); absent from a Hub that predates handovers and for a run never moved.
+   */
+  environments: Schema.optional(Schema.Array(PeerRunEnvironment)),
 });
 export type PeerRun = typeof PeerRun.Type;
+
+/**
+ * One of this computer's runs that has not ended, as the work view carries it: the thread keys that
+ * show it (`peer:<thread>`, `herdr:<terminal>`, its last session's `<agent>:<id>` and
+ * `herdr:<agent>:<id>`), so a client puts this computer's chats and agents on its task.
+ */
+export const PeerWorkRun = Schema.Struct({
+  id: Schema.String,
+  task: Schema.String,
+  agent: Schema.String,
+  runtime: PeerRunRuntime,
+  state: PeerRunState,
+  keys: Schema.Array(Schema.String),
+});
+export type PeerWorkRun = typeof PeerWorkRun.Type;
+
+/**
+ * The task of the run a thread key shows, newest run first as the work view lists them; undefined
+ * when no run holds the key (an older environment sends no runs).
+ */
+export const runTaskOf = (
+  runs: ReadonlyArray<PeerWorkRun> | undefined,
+  key: string,
+): string | undefined => runs?.find((run) => run.keys.includes(key))?.task;
 
 /** How many of a task's runs are in each state, as the work view carries them per task. */
 export const PeerRunCounts = Schema.Struct({
@@ -83,7 +119,10 @@ export const PeerHubEndRunInput = Schema.Struct({
 });
 export type PeerHubEndRunInput = typeof PeerHubEndRunInput.Type;
 
-/** Starts a new session in a detached run on the Peer that minted it. */
+/**
+ * Starts a new session in a detached run: on the Peer that holds it, or on another computer of the
+ * same person, which takes the run over from the Hub first.
+ */
 export const PeerHubContinueRunInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
   projectId: TrimmedNonEmptyString,

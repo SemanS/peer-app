@@ -26,6 +26,7 @@ import { createPeerObserveAtoms } from "./observe.ts";
 import { createOwnershipEnvironmentAtoms } from "./ownership.ts";
 import { createPeerRequestsAtoms } from "./requests.ts";
 import { createPeerRolesAtoms } from "./roles.ts";
+import { createPeerRunsAtoms } from "./runs.ts";
 import { createPeerSettingsAtoms } from "./settings.ts";
 import { createPeerTestReportsAtoms } from "./testReports.ts";
 import { createPeerAcceptanceAtoms } from "./acceptance.ts";
@@ -62,6 +63,7 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerToolTrustAtoms(runtime),
     peerOwnership: createOwnershipEnvironmentAtoms(runtime),
     peerRoles: createPeerRolesAtoms(runtime),
+    ...createPeerRunsAtoms(runtime),
     peerSettings: createPeerSettingsAtoms(runtime),
     peerOpenSpec: createOpenSpecEnvironmentAtoms(runtime),
     ...createPeerTestReportsAtoms(runtime),

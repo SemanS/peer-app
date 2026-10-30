@@ -1,6 +1,7 @@
 import type { EnvironmentId, PeerCoordEvent, PeerCoordSession } from "@t3tools/contracts";
 import {
   coordinationActorLabel,
+  coordinationRunLabel,
   coordinationEventLabel,
   coordinationScopeLabel,
   coordinationTimeline,
@@ -130,6 +131,7 @@ export function PeerCoordTimeline({
               <p className="mt-1 break-words text-xs text-muted-foreground">
                 {[
                   coordinationActorLabel(event, sessions),
+                  coordinationRunLabel(event),
                   event.scope === undefined
                     ? undefined
                     : coordinationScopeLabel(event.scope, tasks),

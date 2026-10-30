@@ -6,9 +6,11 @@
  *
  * `RunBook` keeps this computer's runs in memory and on disk (`persisted.runs`), where the broker
  * reads them without waiting (a hook never waits): every change is a map update now and a write
- * of `peer-hub.json` after it, which also rewrites the assignments index the code from before
- * runs reads (design D3). `PeerRuns` is the service around it: creating runs for start paths,
- * listing them with the Hub's, ending them and keeping the Hub's copy current (design D5).
+ * of `peer-hub.json` after it. Runs are the one record of which task a thread, a herdr pane or a
+ * session works on (design D3); every start path creates its run through `create`. `PeerRuns` is
+ * the service around it: creating runs for start paths, listing them with the Hub's, ending them,
+ * taking one over from another computer of the same person and keeping the Hub's copy current
+ * (design D5, D8).
  *
  * @module peerHub/core/work/runs
  */
@@ -24,6 +26,7 @@ import {
   type PeerRunOutcome,
   type PeerRunRuntime,
   type PeerRunState,
+  type PeerWorkRun,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -34,8 +37,12 @@ import * as Option from "effect/Option";
 
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import { runsApi, type RunBody } from "../hub/runsApi.ts";
+import { runtimeOfKey } from "../state/legacyAssignments.ts";
 import * as PeerState from "../state/PeerState.ts";
-import type { PersistedRun, PersistedState } from "../state/PeerState.ts";
+import { runHolding, runKeys, type PersistedRun } from "../state/PeerState.ts";
+import { mintRunId } from "../state/runIds.ts";
+
+export { mintRunId };
 
 /** The Hub keeps the newest 20 sessions of a run and counts the rest; so does this computer. */
 const MAX_SESSIONS = 20;
@@ -43,28 +50,6 @@ const MAX_SESSIONS = 20;
 const REQUEST_MS = 24 * 60 * 60 * 1000;
 /** How long a Hub without `/runs` is not asked again. */
 const UNSUPPORTED_MS = 60 * 60 * 1000;
-
-const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-
-/**
- * `run_` and 20 Crockford base-32 characters of a ULID: its 10 time characters, so ids sort by
- * start, and the first 10 of its randomness.
- */
-export function mintRunId(now: number, random: Buffer = NodeCrypto.randomBytes(7)): string {
-  let time = "";
-  let rest = Math.max(0, Math.floor(now));
-  for (let i = 0; i < 10; i++) {
-    time = `${CROCKFORD[rest % 32]}${time}`;
-    rest = Math.floor(rest / 32);
-  }
-  let bits = BigInt(`0x${random.toString("hex").padStart(14, "0")}`);
-  let tail = "";
-  for (let i = 0; i < 10; i++) {
-    tail = `${CROCKFORD[Number(bits & 31n)]}${tail}`;
-    bits >>= 5n;
-  }
-  return `run_${time}${tail}`;
-}
 
 export const hashToken = (token: string) =>
   NodeCrypto.createHash("sha256").update(token).digest("hex");
@@ -81,38 +66,11 @@ export function toPeerRun(run: PersistedRun): PeerRun {
   return { ...shown, state: stateOf(run) };
 }
 
+// The Hub keeps a run's environments itself, from its handovers; a `PUT` never names them.
 const bodyOf = (run: PersistedRun, email: string): RunBody => {
-  const { state: _state, ...body } = toPeerRun(run);
+  const { state: _state, environments: _e, ...body } = toPeerRun(run);
   return body.email === "" ? { ...body, email } : body;
 };
-
-/** Every thread key that names a run's work: its held keys, its thread, its last session's. */
-export function keysOf(run: PersistedRun): ReadonlyArray<string> {
-  const last = run.sessions.at(-1);
-  return [
-    ...(run.keys ?? []),
-    ...(run.thread === undefined ? [] : [run.thread]),
-    ...(last === undefined ? [] : [last.id, `herdr:${last.id}`]),
-  ];
-}
-
-/**
- * The assignments index of the code from before runs (design D3), from every run that has not
- * ended; a newer run's key wins. The last session's keys stay while a run is detached, so a herdr
- * pane whose agent exited keeps its task in the work report as it did.
- */
-export function assignmentsOf(
-  runs: Readonly<Record<string, PersistedRun>>,
-): NonNullable<PersistedState["assignments"]> {
-  const out: Record<string, { workspace: string; project: string; task: string }> = {};
-  const open = Object.values(runs)
-    .filter((run) => run.endedAt === undefined)
-    .toSorted((a, b) => a.startedAt.localeCompare(b.startedAt));
-  for (const run of open)
-    for (const key of keysOf(run))
-      out[key] = { workspace: run.workspace, project: run.project, task: run.task };
-  return out;
-}
 
 /** How many of each task's runs here are in each state, for a project. */
 export function runCounts(
@@ -130,43 +88,28 @@ export function runCounts(
   return out;
 }
 
-/** The runtime and agent a thread key says, for a run made from an assignment. */
-function fromKey(key: string): { readonly runtime: PeerRunRuntime; readonly agent: string } {
-  if (key.startsWith("peer:")) return { runtime: "peer", agent: "unknown" };
-  if (key.startsWith("retained:")) return { runtime: "terminal", agent: "unknown" };
-  const parts = key.split(":");
-  if (key.startsWith("herdr:"))
-    return { runtime: "herdr", agent: parts.length >= 3 ? parts[1]! : "unknown" };
-  return { runtime: "terminal", agent: parts.length >= 2 ? parts[0]! : "unknown" };
-}
-
 /**
- * The assignments written before runs, each as a detached run that keeps its key and stays on this
- * computer (`local`): the Hub never heard of them and would only refuse them.
+ * A project's runs here that have not ended, newest first, as the work view carries them: the keys
+ * that put this computer's chats and agents on their tasks.
  */
-export function importAssignments(
-  assignments: NonNullable<PersistedState["assignments"]>,
-  environment: string,
-  email: string | null,
-  now: number,
-): Record<string, PersistedRun> {
-  const runs: Record<string, PersistedRun> = {};
-  for (const [key, assignment] of Object.entries(assignments)) {
-    const id = mintRunId(now);
-    runs[id] = {
-      id,
-      ...assignment,
-      email: email ?? "",
-      environment,
-      ...fromKey(key),
-      ...(key.startsWith("peer:") ? { thread: key } : { keys: [key] }),
-      startedAt: new Date(now).toISOString(),
-      sessions: [],
-      sessionsBefore: 0,
-      local: true,
-    };
-  }
-  return runs;
+export function workRunsOf(
+  runs: ReadonlyArray<PersistedRun>,
+  workspace: string,
+  project: string,
+): ReadonlyArray<PeerWorkRun> {
+  return runs
+    .filter(
+      (run) => run.endedAt === undefined && run.workspace === workspace && run.project === project,
+    )
+    .toSorted((a, b) => b.startedAt.localeCompare(a.startedAt) || b.id.localeCompare(a.id))
+    .map((run) => ({
+      id: run.id,
+      task: run.task,
+      agent: run.agent,
+      runtime: run.runtime,
+      state: stateOf(run),
+      keys: [...new Set(runKeys(run))],
+    }));
 }
 
 export interface CreateRun {
@@ -194,7 +137,7 @@ export interface RunBookIo {
   readonly environment: string;
   readonly email: () => string | null;
   readonly now: () => number;
-  /** Writes the runs and the assignments index made of them. */
+  /** Writes the runs. */
   readonly save: (runs: Readonly<Record<string, PersistedRun>>) => Promise<void>;
   /**
    * Sends what changed to the Hub: the broker calls it at the coordination report's cadence, the
@@ -266,9 +209,7 @@ export class RunBook {
 
   /** The run that holds a thread key now: the newest of those not ended. */
   holderOf(key: string): PersistedRun | undefined {
-    return this.all()
-      .filter((run) => run.endedAt === undefined && keysOf(run).includes(key))
-      .toSorted((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
+    return runHolding(this.runs, key);
   }
 
   /**
@@ -423,8 +364,9 @@ export class RunBook {
   }
 
   /**
-   * `PeerWork.assign` over runs (design D3): a key put on a task moves the run that holds it, or
-   * starts a detached one; a key taken off a task ends the run it named, or only drops a held key.
+   * A person puts one of this computer's threads on a task (`peerHub.assignThread`): the run that
+   * holds its key moves, or a detached one starts through `create`; taken off every task, the run
+   * it named ends, or only drops a key it held besides its thread or sessions.
    */
   async assign(
     key: string,
@@ -433,6 +375,7 @@ export class RunBook {
       readonly project: string;
       readonly task: string;
     } | null,
+    requestId?: string,
   ): Promise<void> {
     const holder = this.holderOf(key);
     if (assignment === null) {
@@ -450,30 +393,67 @@ export class RunBook {
       }
       await this.end(holder.id, "stopped");
     }
-    const derived = fromKey(key);
+    const derived = runtimeOfKey(key);
     await this.create({
       ...assignment,
       ...derived,
+      requestId,
       ...(derived.runtime === "peer" ? { thread: key } : { keys: [key] }),
     });
   }
 
-  /** Thread keys that changed (a runtime learned a session): a run keeps holding them. */
-  async rename(renames: ReadonlyArray<{ readonly from: string; readonly to: string }>) {
+  /**
+   * Thread keys that changed (a runtime learned a session): a run keeps holding them, and its pane
+   * follows, so Observe and a later session there find it. Only the run's keys move: the task is
+   * the run's.
+   */
+  async rename(
+    renames: ReadonlyArray<{
+      readonly from: string;
+      readonly to: string;
+      readonly pane?: string | undefined;
+    }>,
+  ) {
     const next = { ...this.runs };
     let changed = false;
-    for (const { from, to } of renames) {
+    for (const { from, to, pane } of renames) {
       const holder = this.holderOf(from);
       if (from === to || holder === undefined || !holder.keys?.includes(from)) continue;
       if (this.holderOf(to) !== undefined) continue;
       next[holder.id] = {
         ...next[holder.id]!,
         keys: (next[holder.id]!.keys ?? []).map((k) => (k === from ? to : k)),
+        ...(pane === undefined ? {} : { pane }),
         pending: true,
       };
       changed = true;
     }
     if (changed) await this.write(next);
+  }
+
+  /**
+   * A run another computer of this person minted, which the Hub handed over to this one (design
+   * D8): kept here as this environment's from now on, with no token until a process continues it.
+   */
+  async takeOver(run: PeerRun): Promise<PersistedRun> {
+    const { state: _state, ...row } = run;
+    const environments = run.environments ?? [];
+    const kept: PersistedRun = {
+      ...row,
+      environment: this.io.environment,
+      // When this computer took it, so a session from before (on the other one) is not resumed.
+      environments:
+        environments.at(-1)?.id === this.io.environment
+          ? environments
+          : [
+              ...environments,
+              { id: this.io.environment, from: new Date(this.io.now()).toISOString() },
+            ],
+      hubTask: run.task,
+      pending: false,
+    };
+    await this.write({ ...this.runs, [run.id]: kept });
+    return kept;
   }
 
   /**
@@ -519,7 +499,10 @@ export class RunBook {
     const token = NodeCrypto.randomBytes(16).toString("hex");
     await this.put({ ...run, tokenHash: hashToken(token) });
     const last = run.sessions.at(-1);
-    const separator = last?.id.indexOf(":") ?? -1;
+    // A session from before this computer took the run over ran elsewhere: nothing to resume here.
+    const since = run.environments?.findLast((entry) => entry.id === this.io.environment)?.from;
+    const separator =
+      last === undefined || (since !== undefined && last.from < since) ? -1 : last.id.indexOf(":");
     return {
       env: { PEER_RUN: run.id, PEER_RUN_TOKEN: token, PEER_TASK: run.task },
       ...(last === undefined || separator < 0
@@ -528,6 +511,16 @@ export class RunBook {
             resume: { agent: last.id.slice(0, separator), nativeId: last.id.slice(separator + 1) },
           }),
     };
+  }
+
+  /**
+   * A run another computer of this person took over (the Hub refuses this computer's writes of it):
+   * it leaves this computer, whose sessions in it fall back as for a run Peer does not know.
+   */
+  async forget(id: string): Promise<void> {
+    if (this.get(id) === undefined) return;
+    const { [id]: _gone, ...rest } = this.runs;
+    await this.write(rest);
   }
 
   /** What the Hub took: unchanged since, the run no longer waits to be sent. */
@@ -585,6 +578,11 @@ export class PeerRuns extends Context.Service<
     readonly endRun: (input: PeerHubEndRunInput) => Effect.Effect<PeerRun, PeerHubError>;
     /** Sends the runs that changed to the Hub; a Hub without `/runs` is left alone for an hour. */
     readonly sync: Effect.Effect<void>;
+    /**
+     * Takes over a run another computer of this person minted (design D8): the Hub moves it to
+     * this environment, refusing an ended run (`ended`) and another person's (`not_your_run`).
+     */
+    readonly takeOver: (run: PeerRun) => Effect.Effect<PersistedRun, PeerHubError>;
   }
 >()("t3/peerHub/core/work/runs/PeerRuns") {}
 
@@ -599,12 +597,8 @@ const make = Effect.gen(function* () {
   let unsupportedUntil = 0;
   let syncing = false;
 
-  const { persisted } = yield* state.read;
-  const legacy =
-    persisted.runs === undefined && Object.keys(persisted.assignments ?? {}).length > 0;
-  const initial =
-    persisted.runs ??
-    importAssignments(persisted.assignments ?? {}, state.environmentId, persisted.email, now());
+  // PeerState turned any assignments from before runs into runs as it loaded the file.
+  const initial = (yield* state.read).persisted.runs ?? {};
 
   const send = (run: PersistedRun, email: string) =>
     Effect.gen(function* () {
@@ -631,6 +625,15 @@ const make = Effect.gen(function* () {
         yield* Effect.promise(() => book.synced(run));
         continue;
       }
+      // Another computer of this person took the run over: it is that computer's to keep now.
+      if (
+        sent.failure.code === "not_your_run" &&
+        (run.email === "" || run.email.toLowerCase() === email.toLowerCase())
+      ) {
+        yield* Effect.logInfo("Peer Hub says a run moved to another computer", { run: run.id });
+        yield* Effect.promise(() => book.forget(run.id));
+        continue;
+      }
       // The Hub refused the run (another's, a task gone): repeating it changes nothing.
       if (sent.failure.refused === true) {
         yield* Effect.logWarning("Peer Hub refused a run", {
@@ -645,7 +648,7 @@ const make = Effect.gen(function* () {
   }).pipe(Effect.ensuring(Effect.sync(() => (syncing = false))));
 
   const save = (runs: Readonly<Record<string, PersistedRun>>) =>
-    state.updatePersisted((p) => ({ ...p, runs: { ...runs }, assignments: assignmentsOf(runs) }));
+    state.updatePersisted((p) => ({ ...p, runs: { ...runs } }));
   const book: RunBook = new RunBook(initial, {
     environment: state.environmentId,
     email: () => state.current().persisted.email,
@@ -653,8 +656,6 @@ const make = Effect.gen(function* () {
     save: (runs) => runPromise(save(runs)),
     push: () => runPromise(sync),
   });
-  // The assignments from before runs become runs once, so the index is written from runs only.
-  if (legacy) yield* save(initial).pipe(Effect.ignore);
 
   const create: PeerRuns["Service"]["create"] = (input) =>
     Effect.tryPromise({
@@ -672,9 +673,24 @@ const make = Effect.gen(function* () {
         .list(input.workspace, input.projectId, { task: input.taskId })
         .pipe(Effect.orElseSucceed(() => null));
       if (hub === null) return local;
-      // This computer's own runs are newer here than in the Hub's copy.
-      const mine = new Set(local.map((run) => run.id));
-      return [...local, ...hub.runs.filter((run) => !mine.has(run.id))].toSorted(
+      // This computer's own runs are newer here than in the Hub's copy, unless another computer
+      // of the person took one over since: the Hub's then knows a later handover than this one.
+      const handovers = (run: Pick<PeerRun, "environments">) => run.environments?.length ?? 0;
+      const moved = new Set(
+        hub.runs
+          .filter((run) => {
+            const here = book.get(run.id);
+            return (
+              here !== undefined &&
+              run.environment !== state.environmentId &&
+              handovers(run) > handovers(here)
+            );
+          })
+          .map((run) => run.id),
+      );
+      const kept = local.filter((run) => !moved.has(run.id));
+      const mine = new Set(kept.map((run) => run.id));
+      return [...kept, ...hub.runs.filter((run) => !mine.has(run.id))].toSorted(
         (a, b) => b.startedAt.localeCompare(a.startedAt) || b.id.localeCompare(a.id),
       );
     });
@@ -699,7 +715,63 @@ const make = Effect.gen(function* () {
       return ended.run;
     });
 
-  return PeerRuns.of({ book, create, list, endRun, sync });
+  const takeOver: PeerRuns["Service"]["takeOver"] = (run) =>
+    Effect.gen(function* () {
+      // Revision 2 of `runs` moves runs between computers; a catalog not read yet is asked anyway.
+      if ((yield* client.featuresRead) && ((yield* client.features).runs ?? 0) < 2)
+        return yield* hubError("This Peer Hub does not move runs between computers yet.");
+      const moved = yield* api
+        .patch(run.workspace, run.project, run.id, { environment: state.environmentId })
+        .pipe(
+          Effect.mapError((failure) =>
+            failure.code === "ended"
+              ? hubError("This run has ended.")
+              : failure.code === "not_your_run"
+                ? hubError("This run is another person's; only its person continues it.")
+                : failure,
+          ),
+        );
+      if (moved === null)
+        return yield* hubError(
+          "This Peer Hub cannot hand runs between computers yet; continue it on the computer that started it.",
+        );
+      return yield* Effect.tryPromise({
+        try: () => book.takeOver(moved.run),
+        catch: () => hubError("Could not save the run."),
+      });
+    });
+
+  return PeerRuns.of({ book, create, list, endRun, sync, takeOver });
 });
 
 export const layer = Layer.effect(PeerRuns, make);
+
+/** The variables a process of a run carries (design D2): `PEER_RUN`, `PEER_RUN_TOKEN`, `PEER_TASK`. */
+export type RunEnv = Readonly<Record<string, string>>;
+
+/**
+ * A start in a runtime Peer launches (herdr's, for `startAgent`, a role's agent): the run exists
+ * before its agent does, so the agent's first hook proves it with the token; once the agent runs,
+ * the run holds its thread key and pane, which is how the work view and Observe find it.
+ */
+export const launchInRun = <
+  A extends { readonly threadKey: string; readonly paneId: string },
+  E,
+  R,
+>(
+  runs: PeerRuns["Service"],
+  input: CreateRun,
+  launch: (env: RunEnv) => Effect.Effect<A, E, R>,
+) =>
+  Effect.gen(function* () {
+    const { run, token } = yield* runs.create(input);
+    const started = yield* launch({
+      PEER_RUN: run.id,
+      ...(token === undefined ? {} : { PEER_RUN_TOKEN: token }),
+      PEER_TASK: run.task,
+    });
+    yield* Effect.promise(() =>
+      runs.book.hold(run.id, started.threadKey, started.paneId).catch(() => undefined),
+    );
+    return { run: run.id, started };
+  });

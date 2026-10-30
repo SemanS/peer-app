@@ -306,11 +306,14 @@ export const listRuns = <R>(
 
 const NEXT_LIST = "peer core runs lists this computer's runs; repeat the command with one of them.";
 
-const findRun = <R>(access: RunsAccess<R>, id: string, email: string | null) =>
+/** Said for a run this computer does not keep: another computer of the person may have it. */
+const ELSEWHERE_NEXT =
+  "if it is a run of another of your computers, continue it in the Peer app to move it here.";
+
+const findRun = <R>(access: RunsAccess<R>, id: string, email: string | null, next = NEXT_LIST) =>
   Effect.gen(function* () {
     const run = (yield* access.list).find((candidate) => candidate.id === id.trim());
-    if (run === undefined)
-      return yield* outcome("refused", `no run ${id} on this computer`, NEXT_LIST);
+    if (run === undefined) return yield* outcome("refused", `no run ${id} on this computer`, next);
     if (!mine(run, email))
       return yield* outcome(
         "refused",
@@ -327,7 +330,8 @@ export const endRun = <R>(
   io: OneShotIo,
 ) =>
   Effect.gen(function* () {
-    const run = yield* findRun(access, input.id, input.email);
+    // Moving a run between computers is the app's (it asks the Hub); here only this computer's.
+    const run = yield* findRun(access, input.id, input.email, ELSEWHERE_NEXT);
     if (run.state === "ended") {
       yield* io.say(
         `Run ${run.id} on ${input.titleOf(run)} has ended already (${run.outcome ?? "ended"}).`,
@@ -373,7 +377,8 @@ export const continueRun = <R, RC>(
   io: OneShotIo,
 ) =>
   Effect.gen(function* () {
-    const run = yield* findRun(access, input.id, input.email);
+    // Moving a run between computers is the app's (it asks the Hub); here only this computer's.
+    const run = yield* findRun(access, input.id, input.email, ELSEWHERE_NEXT);
     if (run.state === "ended")
       return yield* outcome(
         "refused",

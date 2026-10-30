@@ -125,7 +125,16 @@ function kirkwood(): PeerProjectState {
           seenAt: "2026-10-03T11:40:00Z",
         },
       ],
-      assignments: { "peer:t2": "partner-rec" },
+      runs: [
+        {
+          id: "run_1",
+          task: "partner-rec",
+          agent: "claude",
+          runtime: "peer",
+          state: "running",
+          keys: ["peer:t2"],
+        },
+      ],
     },
     peers: [],
   };
@@ -761,7 +770,6 @@ describe("the task tree", () => {
         ...base.work,
         areas: ["Revenue"],
         threads: [],
-        assignments: {},
         tasks: [
           item("str", "STR", { area: "Revenue" }),
           // Listed before its parent, with an area of its own: it still shows under its root.

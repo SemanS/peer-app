@@ -30,6 +30,7 @@ import {
   ORCHESTRATION_PROTOCOL_VERSION,
   ORCHESTRATION_V2_WS_METHODS,
   ProviderInstanceId,
+  runTaskOf,
   WS_METHODS,
   WsRpcGroup,
   type PeerHubStatus,
@@ -601,8 +602,8 @@ const program = Effect.gen(function* () {
       taskId: task.id,
     });
     const work = demoOf(placed)!.work;
-    log("demo work", JSON.stringify({ assignments: work.assignments, threads: work.threads }));
-    if (work.assignments[agent.id] !== task.id) throw new Error("the agent is not on the task");
+    log("demo work", JSON.stringify({ runs: work.runs, threads: work.threads }));
+    if (runTaskOf(work.runs, agent.id) !== task.id) throw new Error("the agent is not on the task");
     const anas = work.threads.find((t) => t.id === "peer:a1");
     if (anas?.task !== task.id) throw new Error("Ana's branch did not put her thread on the task");
     // Ana's Peer sees Bob's herdr agent under the task.

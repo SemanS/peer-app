@@ -202,13 +202,16 @@ export const makeHerdrAgents = Effect.gen(function* () {
           );
   });
 
-  /** An agent placed on a task under its terminal keeps the task once its session is known. */
+  /**
+   * The run an agent started in holds its terminal's key until herdr names its session; then the
+   * run holds the session's key and the pane, so Observe finds the agent. The task is the run's.
+   */
   const keepKeys = (list: ReadonlyArray<HerdrAgentState>) =>
     work.rename(
       list.flatMap((agent) => {
         const from = `herdr:${agent.terminalId}`;
         const to = keyOf(agent);
-        return to === from ? [] : [{ from, to }];
+        return to === from ? [] : [{ from, to, pane: agent.paneId }];
       }),
     );
 

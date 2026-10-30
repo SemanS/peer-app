@@ -30,6 +30,14 @@ export function coordinationActorLabel(
   return session?.label || event.email || "Agent";
 }
 
+/**
+ * The run an event's session was in, as a short reference beside its actor: the id's last six
+ * characters, which are random, so two runs on a page tell apart. Undefined without a run.
+ */
+export function coordinationRunLabel(event: Pick<PeerCoordEvent, "run">): string | undefined {
+  return event.run === undefined || event.run === "" ? undefined : `run …${event.run.slice(-6)}`;
+}
+
 export function inputReadiness(reads: PeerStaleReads): "stale" | "current" | "empty" | "unknown" {
   if (reads.stale.length > 0) return "stale";
   if (!reads.fresh || reads.reads === undefined) return "unknown";

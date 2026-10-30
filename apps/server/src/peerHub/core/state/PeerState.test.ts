@@ -77,10 +77,63 @@ const readFile = (path: string) => Effect.promise(() => NodeFSP.readFile(path, "
 
 const CapacityData = Schema.Struct({ revoked: Schema.Array(Schema.String) });
 
+/** The same file as phase B of runs writes it: no `assignments`, which became runs. */
+const ASSIGNMENT =
+  '"assignments":{"peer:thread-1":{"workspace":"acme","project":"pay","task":"krk-812"}},';
+const BEFORE_PLUGINS_WITHOUT_ASSIGNMENTS = BEFORE_PLUGINS.replace(ASSIGNMENT, "");
+
 describe("PeerState", () => {
+  it.effect("turns assignments from before runs into detached runs once, and drops the field", () =>
+    Effect.gen(function* () {
+      assert.include(BEFORE_PLUGINS, ASSIGNMENT);
+      const baseDir = yield* seeded(BEFORE_PLUGINS);
+      const first = (yield* (yield* startState(baseDir)).read).persisted;
+      const runs = Object.values(first.runs ?? {});
+      assert.deepStrictEqual(
+        runs.map((run) => [run.thread, run.task, run.runtime, run.environment, run.local]),
+        [["peer:thread-1", "krk-812", "peer", "ana-laptop", true]],
+      );
+      assert.deepStrictEqual(runs[0]?.sessions, []);
+      assert.isUndefined(runs[0]?.endedAt);
+      assert.strictEqual(PeerState.assignedTask(first, "peer:thread-1", "acme", "pay"), "krk-812");
+      const written = yield* readFile(stateFile(baseDir));
+      assert.notInclude(written, '"assignments"');
+      // A restart reads the runs; nothing is imported a second time.
+      const again = (yield* (yield* startState(baseDir)).read).persisted;
+      assert.deepStrictEqual(Object.keys(again.runs ?? {}), Object.keys(first.runs ?? {}));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("drops the index phase A wrote beside its runs without importing it", () =>
+    Effect.gen(function* () {
+      const run = {
+        id: "run_0000000000PHASEA001",
+        workspace: "acme",
+        project: "pay",
+        task: "krk-1",
+        email: "ana@acme.test",
+        environment: "ana-laptop",
+        agent: "claude",
+        runtime: "terminal",
+        startedAt: "2026-10-30T09:00:00.000Z",
+        sessions: [],
+        sessionsBefore: 0,
+      };
+      const baseDir = yield* seeded(
+        BEFORE_PLUGINS.replace(
+          ASSIGNMENT,
+          `${ASSIGNMENT}"runs":{"${run.id}":${JSON.stringify(run)}},`,
+        ),
+      );
+      const { persisted } = yield* (yield* startState(baseDir)).read;
+      assert.deepStrictEqual(Object.keys(persisted.runs ?? {}), [run.id]);
+      assert.notInclude(yield* readFile(stateFile(baseDir)), '"assignments"');
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("loads and saves a peer-hub.json from before plugins unchanged", () =>
     Effect.gen(function* () {
-      const baseDir = yield* seeded(BEFORE_PLUGINS);
+      const baseDir = yield* seeded(BEFORE_PLUGINS_WITHOUT_ASSIGNMENTS);
       const state = yield* startState(baseDir);
       const { persisted } = yield* state.read;
       assert.strictEqual(yield* state.email, "ana@acme.test");
@@ -89,7 +142,7 @@ describe("PeerState", () => {
       assert.isUndefined(persisted.pluginData);
 
       yield* state.updatePersisted((current) => current);
-      assert.strictEqual(yield* readFile(stateFile(baseDir)), BEFORE_PLUGINS);
+      assert.strictEqual(yield* readFile(stateFile(baseDir)), BEFORE_PLUGINS_WITHOUT_ASSIGNMENTS);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

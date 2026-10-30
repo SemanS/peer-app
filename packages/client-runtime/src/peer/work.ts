@@ -42,7 +42,7 @@ import type {
   PeerWorkDelivery,
   PeerWorkspaceState,
 } from "@t3tools/contracts";
-import { isExecutable, taskKind } from "@t3tools/contracts";
+import { isExecutable, runTaskOf, taskKind } from "@t3tools/contracts";
 import type { EnvironmentThreadShell } from "../state/models.ts";
 import { projectVcs, type PeerVcsKind } from "./vcsWords.ts";
 import {
@@ -482,7 +482,7 @@ function projectTree(input: {
     }
     const key = `peer:${thread.id}`;
     placed.push({
-      task: taskOf(work.assignments[key], [thread.branch, thread.title]),
+      task: taskOf(runTaskOf(work.runs, key), [thread.branch, thread.title]),
       node: {
         key,
         title: thread.title,
@@ -526,7 +526,7 @@ function projectTree(input: {
       );
     const key = record?.id ?? agent.id;
     placed.push({
-      task: taskOf(work.assignments[key] ?? work.assignments[agent.id], [
+      task: taskOf(runTaskOf(work.runs, key) ?? runTaskOf(work.runs, agent.id), [
         agent.branch,
         agent.title,
       ]),
@@ -586,10 +586,10 @@ function projectTree(input: {
     const session = /^herdr:([^:]+:.+)$/.exec(thread.id)?.[1];
     const files = session === undefined ? undefined : overlapping.get(session);
     placed.push({
-      task: taskOf(localEnvironment ? (work.assignments[thread.id] ?? thread.task) : thread.task, [
-        thread.branch,
-        thread.title,
-      ]),
+      task: taskOf(
+        localEnvironment ? (runTaskOf(work.runs, thread.id) ?? thread.task) : thread.task,
+        [thread.branch, thread.title],
+      ),
       node: {
         key: localEnvironment ? thread.id : `${thread.environment}:${thread.id}`,
         title: thread.title,

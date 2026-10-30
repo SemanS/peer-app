@@ -188,9 +188,13 @@ function TaskBody({
     taskId,
     revision: runsRevision(taskNode.runs, taskNode.threads),
   });
+  const workspaceRole = status.workspaces.find((candidate) => candidate.slug === workspace)?.role;
   const runRows = taskRunRows(runs.runs, {
     me: status.email,
     now,
+    manages:
+      projectState?.project.role === "lead" ||
+      (workspaceRole !== undefined && workspaceRole !== "member"),
     environmentId,
     agents: status.agents.list,
     project: projectState,

@@ -1,6 +1,11 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import type { PeerAgentView, PeerPluginId, PeerWorkThread } from "@t3tools/contracts";
+import {
+  runTaskOf,
+  type PeerAgentView,
+  type PeerPluginId,
+  type PeerWorkThread,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -17,6 +22,7 @@ import {
   coreLayer,
   paymentsSeed,
   paymentsT3,
+  SEED_RUN,
   seedState,
   standInHub,
   type HubAnswer,
@@ -367,8 +373,8 @@ describe("the work report", () => {
       assert.isNull(work.runtimeOf("peer:thread-1", "claude:another"));
       assert.strictEqual(yield* work.taskName("acme", "pay", "krk-1"), "krk-1");
       assert.deepStrictEqual(
-        yield* work.assignment("peer:thread-1"),
-        Option.some({ workspace: "acme", project: "pay", task: "krk-1" }),
+        yield* work.runOf("peer:thread-1"),
+        Option.some({ id: SEED_RUN, workspace: "acme", project: "pay", task: "krk-1" }),
       );
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
@@ -548,7 +554,13 @@ it.effect("puts a Peer thread on a task through a peer run, and moves or ends th
       }),
     );
     const place = { workspace: "acme", projectId: "pay", thread: "peer:thread-2" };
-    yield* work.assignThread({ ...place, taskId: "krk-1" });
+    yield* work.assignThread({ ...place, taskId: "krk-1", requestId: "thread-start:thread-2" });
+    // A retried start finds the run it made; the work view puts the thread on its task.
+    const placed = yield* work.assignThread({
+      ...place,
+      taskId: "krk-1",
+      requestId: "thread-start:thread-2",
+    });
     const runs = () =>
       Object.values(state.current().persisted.runs ?? {}).filter(
         (run) => run.thread === "peer:thread-2",
@@ -557,17 +569,78 @@ it.effect("puts a Peer thread on a task through a peer run, and moves or ends th
       runs().map((run) => [run.runtime, run.task, run.endedAt]),
       [["peer", "krk-1", undefined]],
     );
-    assert.strictEqual(state.current().persisted.assignments?.["peer:thread-2"]?.task, "krk-1");
+    assert.strictEqual(
+      runTaskOf(placed.workspaces[0]?.projects[0]?.work.runs, "peer:thread-2"),
+      "krk-1",
+    );
     yield* work.assignThread({ ...place, taskId: "krk-2" });
     assert.deepStrictEqual(
       runs().map((run) => run.task),
       ["krk-2"],
     );
-    yield* work.assignThread({ ...place, taskId: null });
+    const cleared = yield* work.assignThread({ ...place, taskId: null });
     assert.deepStrictEqual(
       runs().map((run) => run.outcome),
       ["stopped"],
     );
-    assert.isUndefined(state.current().persisted.assignments?.["peer:thread-2"]);
+    assert.isUndefined(runTaskOf(cleared.workspaces[0]?.projects[0]?.work.runs, "peer:thread-2"));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.effect(
+  "counts a task's runs as the Hub does where it counts them, else this computer's, and keeps the old field empty",
+  () =>
+    Effect.gen(function* () {
+      const task = (id: string, runs?: { running: number; detached: number; ended: number }) => ({
+        id,
+        title: id,
+        status: "open",
+        createdBy: "ana@acme.test",
+        createdAt: "2026-10-09",
+        updatedAt: "2026-10-09",
+        ...(runs === undefined ? {} : { runs }),
+      });
+      const counted: HubAnswer = (url) =>
+        url === "/v1/workspaces/acme/work"
+          ? [
+              200,
+              {
+                projects: {
+                  pay: {
+                    areas: [],
+                    tasks: [task("krk-1", { running: 2, detached: 0, ended: 5 }), task("krk-2")],
+                    threads: [],
+                  },
+                },
+              },
+            ]
+          : [200, {}];
+      const { work, status } = yield* reporting([], counted);
+      yield* status.coordinationFrom(() =>
+        Effect.succeed({
+          enabled: false,
+          policy: "coordinate",
+          claudeHooks: false,
+          logPath: "/tmp/test-coordination",
+          sessions: [],
+          overlaps: [],
+          findings: [],
+          contexts: [],
+          candidates: [],
+        }),
+      );
+      yield* work.assignThread({
+        workspace: "acme",
+        projectId: "pay",
+        thread: "peer:thread-3",
+        taskId: "krk-2",
+      });
+      const project = (yield* status.publish).workspaces[0]?.projects[0];
+      const runsOf = (id: string) => project?.work.tasks.find((t) => t.id === id)?.runs;
+      // The Hub counts every computer's runs of krk-1; it counted none of krk-2, so this computer's stand in.
+      assert.deepStrictEqual(runsOf("krk-1"), { running: 2, detached: 0, ended: 5 });
+      assert.deepStrictEqual(runsOf("krk-2"), { running: 0, detached: 1, ended: 0 });
+      // A phone app from before runs still finds the field it requires.
+      assert.deepStrictEqual(project?.work.assignments, {});
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );

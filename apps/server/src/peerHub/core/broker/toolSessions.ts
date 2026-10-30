@@ -62,7 +62,9 @@ export function clientAgent(input: Pick<PeerToolBinding, "harness" | "client">):
 /**
  * Binds a tool caller to a session, in this order: its hook session and token, its Peer thread,
  * its herdr pane, or else the folder it runs in. The last is how any MCP client Peer did not start
- * (an editor, a CLI agent) coordinates: its conversation id is its native session id.
+ * (an editor, a CLI agent) coordinates: its conversation id is its native session id. A process
+ * that names its run with a matching token (`PEER_RUN`, `PEER_RUN_TOKEN`) joins that run before
+ * any of the thread, pane or folder resolves a task, as a hook session does (design D3, step 1).
  */
 export async function bindTools(this: CoordinationBroker, input: PeerToolBinding) {
   if (input.session !== undefined)
@@ -114,6 +116,7 @@ export async function bindTools(this: CoordinationBroker, input: PeerToolBinding
       : `mcp-${runtime.id.replace(/^herdr:/, "")}`;
   }
   const id = `${agent}:${native}`;
+  const claim = input.run === undefined ? undefined : { id: input.run, token: input.runToken };
   if (input.thread === undefined && input.pane !== undefined)
     for (const previous of Array.from(this.sessions.values()))
       if (previous.adapter === "mcp" && previous.pane === input.pane && previous.id !== id)
@@ -126,6 +129,8 @@ export async function bindTools(this: CoordinationBroker, input: PeerToolBinding
       input.pane,
       "mcp",
       thread,
+      false,
+      claim,
     ).finally(() => this.creatingSessions.delete(id));
     this.creatingSessions.set(id, creating);
   }
@@ -137,6 +142,14 @@ export async function bindTools(this: CoordinationBroker, input: PeerToolBinding
         ? "run the agent in a checkout of a workspace project, or share the folder with peer_share."
         : "run the agent in a checkout of a workspace project.",
     );
+  // A session Peer met before it named its run (an MCP server restarted in the run's process).
+  if (
+    claim !== undefined &&
+    session.run !== claim.id &&
+    this.host.runs?.claim(claim.id, claim.token) === true &&
+    this.host.runs.get(claim.id)?.endedAt === undefined
+  )
+    await this.attachRun(session, claim.id);
   if (runtimeKey !== undefined) {
     session.runtimeKey = runtimeKey;
     session.task = this.taskFor(session, (await this.plugins()).runtime);

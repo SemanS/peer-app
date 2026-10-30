@@ -93,7 +93,6 @@ function computer(
                 },
               ],
               threads,
-              assignments: {},
             },
           },
         ],

@@ -199,7 +199,6 @@ export function statusFor(email: string, looking: Looking = {}): PeerHubStatus {
       areas: looking.areas ?? ["Payments", "Menu"],
       tasks: looking.tasks ?? TASKS,
       threads: looking.threads ?? [],
-      assignments: {},
     },
   } as unknown as PeerProjectState;
   return {

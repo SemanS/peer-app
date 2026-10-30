@@ -61,7 +61,32 @@ const status = {
           project: { id: "app" },
           repositories: [],
           work: {
-            assignments: { "herdr:a": "task", "herdr:c": "task", "herdr:b": "task" },
+            runs: [
+              {
+                id: "run_a",
+                task: "task",
+                agent: "claude",
+                runtime: "herdr",
+                state: "running",
+                keys: ["herdr:a"],
+              },
+              {
+                id: "run_c",
+                task: "task",
+                agent: "claude",
+                runtime: "herdr",
+                state: "running",
+                keys: ["herdr:c"],
+              },
+              {
+                id: "run_b",
+                task: "task",
+                agent: "claude",
+                runtime: "herdr",
+                state: "running",
+                keys: ["herdr:b"],
+              },
+            ],
             threads: [
               own,
               { ...own, id: "peer:colleague", email: "other" },
@@ -105,7 +130,7 @@ it("offers an agent whose task the Hub inferred from its branch, but only the pe
       workspaces: [
         {
           ...status.workspaces[0]!,
-          projects: [{ ...project, work: { ...project.work, assignments: {}, threads } }],
+          projects: [{ ...project, work: { ...project.work, runs: [], threads } }],
         },
       ],
     }) as unknown as PeerHubStatus;
@@ -173,11 +198,25 @@ it("merges this environment's live owned shells before Hub reporting, without re
             repositories: [{ projectId: "project" }],
             work: {
               ...project.work,
-              assignments: {
-                ...project.work.assignments,
-                "peer:local": "task",
-                "peer:stale": "task",
-              },
+              runs: [
+                ...(project.work.runs ?? []),
+                {
+                  id: "run_local",
+                  task: "task",
+                  agent: "claude",
+                  runtime: "peer",
+                  state: "running",
+                  keys: ["peer:local"],
+                },
+                {
+                  id: "run_stale",
+                  task: "task",
+                  agent: "claude",
+                  runtime: "peer",
+                  state: "running",
+                  keys: ["peer:stale"],
+                },
+              ],
             },
           },
         ],

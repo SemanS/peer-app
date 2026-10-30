@@ -267,7 +267,6 @@ const make = Effect.gen(function* () {
       ...(persisted.localCheckouts === undefined
         ? {}
         : { localCheckouts: persisted.localCheckouts }),
-      ...(persisted.assignments === undefined ? {} : { assignments: persisted.assignments }),
       ...(persisted.runs === undefined ? {} : { runs: persisted.runs }),
       ...(persisted.coordination === undefined ? {} : { coordination: persisted.coordination }),
       // Which plugins run here is the environment owner's choice, not the signed-in person's.

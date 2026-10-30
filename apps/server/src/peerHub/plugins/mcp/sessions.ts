@@ -37,6 +37,8 @@ const make = Effect.gen(function* () {
       server,
       ...(headers["x-peer-session"] ? { session: headers["x-peer-session"] } : {}),
       ...(headers["x-peer-session-token"] ? { token: headers["x-peer-session-token"] } : {}),
+      ...(headers["x-peer-run"] ? { run: headers["x-peer-run"] } : {}),
+      ...(headers["x-peer-run-token"] ? { runToken: headers["x-peer-run-token"] } : {}),
       ...(headers["x-peer-thread"] ? { thread: headers["x-peer-thread"] } : {}),
       ...(headers["x-herdr-pane"] ? { pane: headers["x-herdr-pane"] } : {}),
       ...(headers["x-peer-cwd"] ? { cwd: headers["x-peer-cwd"] } : {}),

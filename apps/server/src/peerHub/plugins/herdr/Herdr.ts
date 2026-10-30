@@ -110,16 +110,14 @@ const make = Effect.gen(function* () {
       (candidate) => keyOf(candidate) === agentId || `herdr:${candidate.terminalId}` === agentId,
     );
 
-  /** The task one of herdr's agents was put on in a workspace project, if any. */
+  /** The task of the run one of herdr's agents shows in a workspace project, if any. */
   const taskOf = (thread: string, workspace: string, projectId: string) =>
     work
-      .assignment(thread)
+      .runOf(thread)
       .pipe(
-        Effect.map((assignment) =>
-          Option.isSome(assignment) &&
-          assignment.value.workspace === workspace &&
-          assignment.value.project === projectId
-            ? assignment.value.task
+        Effect.map((run) =>
+          Option.isSome(run) && run.value.workspace === workspace && run.value.project === projectId
+            ? run.value.task
             : undefined,
         ),
       );

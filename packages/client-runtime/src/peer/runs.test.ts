@@ -133,9 +133,37 @@ describe("availability", () => {
     expect(canEnd(run({ id: "r", state: "running" }), undefined)).toBe(false);
   });
 
+  it("offers End run to a lead or admin on a colleague's run, never Continue", () => {
+    const [row] = runRows([run({ id: "r", state: "detached" })], {
+      me: "ben@acme.dev",
+      now,
+      manages: true,
+    });
+    expect(row).toMatchObject({ mine: false, canContinue: false, canEnd: true });
+    expect(canEnd(run({ id: "r", state: "ended" }), "ben@acme.dev", true)).toBe(false);
+  });
+
   it("carries the same answers on the rows", () => {
     const [row] = runRows([run({ id: "r", state: "detached" })], { me, now });
     expect(row).toMatchObject({ mine: true, canContinue: true, canEnd: true });
+  });
+
+  it("names the computer a handed-over run continued on", () => {
+    const [moved, kept] = runRows(
+      [
+        run({
+          id: "run_2",
+          environments: [
+            { id: "env-ana", from: "2026-10-30T09:00:00.000Z" },
+            { id: "env-ana-desk", from: "2026-10-30T09:40:00.000Z" },
+          ],
+        }),
+        run({ id: "run_1", environments: [{ id: "env-ana", from: "2026-10-30T09:00:00.000Z" }] }),
+      ],
+      { me, now },
+    );
+    expect(moved?.continuedOn).toBe("env-ana-desk");
+    expect(kept?.continuedOn).toBeUndefined();
   });
 });
 

@@ -2149,6 +2149,12 @@ describe("peer core runs", () => {
         yield* refusal(run("run_c"), { checkout: null }),
         "peer core: refused: acme/pay has no checkout on this computer.",
       );
+      // A run this computer does not keep may be another computer's: the app moves it here.
+      const elsewhere = yield* continueOn([run("run_c")], "run_desk").pipe(
+        Effect.map(({ relaunch }) => (Result.isFailure(relaunch) ? relaunch.failure.message : "")),
+      );
+      assert.include(elsewhere, "refused: no run run_desk on this computer.");
+      assert.include(elsewhere, "continue it in the Peer app to move it here.");
     }),
   );
 

@@ -79,7 +79,8 @@ const standInHerdr = (agents: { current: ReadonlyArray<HerdrAgent> | null }) => 
     notify: async () => undefined,
     start: async (input) => {
       const env = Object.entries(input.env ?? {}).map(([name, value]) => `${name}=${value}`);
-      asked.push(`start ${input.harness} with ${env.join(" ")}`);
+      const args = input.resume === undefined ? "" : ` resuming ${input.resume.session}`;
+      asked.push(`start ${input.harness}${args} with ${env.join(" ")}`);
       agents.current = [
         ...(agents.current ?? []),
         agentIn(input.cwd, { terminalId: "t2", paneId: "w2:p1", session: undefined }),
@@ -290,21 +291,38 @@ describe("starting an agent on a task", () => {
         assert.deepStrictEqual(asked.slice(1), [
           "prompt w2:p1: KRK-1: Split payments. Work in your own checkout and coordinate shared changes through Peer.",
         ]);
-        // Its thread is on the task, and it works in a worktree beside Ana's checkout.
-        assert.deepStrictEqual(Option.getOrUndefined(yield* work.assignment("herdr:t2")), {
-          workspace: "acme",
-          project: "pay",
-          task: "krk-1",
-        });
+        // Its run holds its terminal on the task, and it works in a worktree beside Ana's checkout.
+        const run = Option.getOrUndefined(yield* work.runOf("herdr:t2"));
+        assert.deepStrictEqual([run?.workspace, run?.project, run?.task], ["acme", "pay", "krk-1"]);
+        assert.match(asked[0] ?? "", new RegExp(`PEER_RUN=${run?.id} `));
         const trees = NodeFS.readdirSync(NodePath.join(root, ".worktrees", "acme", "pay", "api"));
         assert.match(trees[0] ?? "", /^KRK-1-[0-9a-f]{8}$/);
+
+        // A continued run resumes its last session through herdr's own arguments for the harness.
+        const launcher = yield* plugins.require("taskLauncher");
+        const task = (yield* work.tasks("acme", "pay").pipe(Effect.provide(core)))[0]!;
+        yield* launcher.launch({
+          checkout,
+          baseBranch: "main",
+          worktrees: NodePath.join(root, ".worktrees", "acme", "pay", "api"),
+          task,
+          harness: "claude",
+          prompt: "Peer: your person continues the run.",
+          env: { PEER_RUN: "run_X", PEER_RUN_TOKEN: "t", PEER_TASK: "krk-1" },
+          resume: { agent: "claude", session: "s-9" },
+        });
+        assert.strictEqual(
+          asked[2],
+          "start claude resuming s-9 with PEER_RUN=run_X PEER_RUN_TOKEN=t PEER_TASK=krk-1",
+        );
+        const before = asked.length;
 
         yield* plugins.setPlugin({ id: "herdr", enabled: false });
         assert.strictEqual(
           yield* refusal(Start.startAgent(input).pipe(Effect.provide(core))),
           "herdr agents is turned off on this environment.",
         );
-        assert.strictEqual(asked.length, 2, "nothing was started or prompted");
+        assert.strictEqual(asked.length, before, "nothing was started or prompted");
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

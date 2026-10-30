@@ -1,4 +1,5 @@
 import {
+  runTaskOf,
   WS_METHODS,
   type PeerHubStatus,
   type PeerRecipeSummary,
@@ -56,7 +57,7 @@ export function askableAgents(
     if (
       agent.workspace !== place.workspace ||
       agent.projectId !== place.project ||
-      (project.work.assignments[agent.id] ?? inferred) !== place.task ||
+      (runTaskOf(project.work.runs, agent.id) ?? inferred) !== place.task ||
       !["A", "B"].includes(agent.coordinationLevel ?? "") ||
       agent.status === "done"
     )
@@ -73,7 +74,7 @@ export function askableAgents(
       continue;
     known.add(thread.id);
     if (
-      (project.work.assignments[thread.id] ?? thread.task) !== place.task ||
+      (runTaskOf(project.work.runs, thread.id) ?? thread.task) !== place.task ||
       !["claude", "codex"].includes(thread.harness ?? "") ||
       thread.runtimePresent === false ||
       thread.status === "done" ||
@@ -92,7 +93,7 @@ export function askableAgents(
       !projectIds.has(thread.projectId) ||
       thread.archivedAt !== null ||
       thread.deletedAt !== null ||
-      project.work.assignments[`peer:${thread.id}`] !== place.task ||
+      runTaskOf(project.work.runs, `peer:${thread.id}`) !== place.task ||
       !thread.runtime ||
       !/^(codex|claude(?:[ -]?code)?)$/i.test(thread.runtime.providerName ?? "") ||
       !["running", "idle", "waiting", "starting", "preparing", "queued"].includes(

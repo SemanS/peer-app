@@ -127,7 +127,6 @@ const statusOf = (
                 task("krk-2", "KRK-2", "Loyalty points"),
               ],
               threads: [],
-              assignments: {},
             },
           },
         ],

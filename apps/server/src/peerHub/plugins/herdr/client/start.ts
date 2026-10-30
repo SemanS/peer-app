@@ -24,6 +24,10 @@ import {
 export type HerdrHarness = "claude" | "codex";
 const HARNESSES: ReadonlySet<string> = new Set<HerdrHarness>(["claude", "codex"]);
 
+/** How each harness's own command resumes a session. */
+export const resumeArgs = (harness: HerdrHarness, session: string) =>
+  harness === "claude" ? ["--resume", session] : ["resume", session];
+
 /** The herdr workspace Peer starts agents in, so they stay out of the person's own. */
 const PEER_WORKSPACE = "Peer agents";
 
@@ -34,6 +38,12 @@ export interface StartHerdrAgentInput {
   readonly prompt?: string | undefined;
   /** Set in the pane's shell, so the agent has it too. */
   readonly env?: Readonly<Record<string, string>> | undefined;
+  /**
+   * A provider session the agent resumes: the harness's own arguments (`--resume <id>` for Claude
+   * Code, `resume <id>` for Codex), which herdr's `agent.start` passes on (its `args`, herdr 0.9).
+   * A session of another harness is not this one's to resume.
+   */
+  readonly resume?: { readonly agent: string; readonly session: string } | undefined;
 }
 
 export interface StartedHerdrAgent {
@@ -297,7 +307,15 @@ export async function startHerdrAgent(
       await call(
         path,
         "agent.start",
-        { name, kind: input.harness, pane_id: pane.paneId, timeout_ms: startupMs },
+        {
+          name,
+          kind: input.harness,
+          pane_id: pane.paneId,
+          timeout_ms: startupMs,
+          ...(input.resume === undefined || input.resume.agent !== input.harness
+            ? {}
+            : { args: resumeArgs(input.harness, input.resume.session) }),
+        },
         5000,
       );
       break;

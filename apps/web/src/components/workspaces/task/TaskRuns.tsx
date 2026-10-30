@@ -4,8 +4,8 @@ import type { EnvironmentId, PeerRun } from "@t3tools/contracts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "../../../lib/utils";
-import { peerRuns } from "../../../state/peerRuns";
 import { useEnvironmentQuery } from "../../../state/query";
+import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { Button } from "../../ui/button";
 import { PeerSectionLabel } from "../PeerPageHeader";
@@ -33,7 +33,7 @@ export function useTaskRuns(input: {
 }) {
   const { environmentId, workspace, projectId, taskId, revision } = input;
   const query = useEnvironmentQuery(
-    peerRuns.list({ environmentId, input: { workspace, projectId, taskId } }),
+    serverEnvironment.peerRunsList({ environmentId, input: { workspace, projectId, taskId } }),
   );
   const { refresh } = query;
   // The query reads on mount; only a later change of the work view reads again.
@@ -82,10 +82,12 @@ export function TaskRuns({
   readonly onAsk: ((row: TaskChatRow) => void) | undefined;
   readonly children?: ReactNode;
 }) {
-  const endRun = useAtomCommand(peerRuns.end, { reportFailure: false });
-  const continueRun = useAtomCommand(peerRuns.continue, { reportFailure: false });
-  const canEndHere = useAtomValue(peerRuns.end.permissionAtom(environmentId));
-  const canContinueHere = useAtomValue(peerRuns.continue.permissionAtom(environmentId));
+  const endRun = useAtomCommand(serverEnvironment.peerRunsEnd, { reportFailure: false });
+  const continueRun = useAtomCommand(serverEnvironment.peerRunsContinue, { reportFailure: false });
+  const canEndHere = useAtomValue(serverEnvironment.peerRunsEnd.permissionAtom(environmentId));
+  const canContinueHere = useAtomValue(
+    serverEnvironment.peerRunsContinue.permissionAtom(environmentId),
+  );
   const [busy, setBusy] = useState<string | null>(null);
   // One line per run, beside the button that caused it: a refused Continue says why there.
   const [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
@@ -158,6 +160,9 @@ export function TaskRuns({
                   </span>
                   {row.hint === undefined ? null : (
                     <span className="text-xs text-muted-foreground">{row.hint}</span>
+                  )}
+                  {row.handover === undefined ? null : (
+                    <span className="text-xs text-muted-foreground">{row.handover}</span>
                   )}
                   {rowNote === undefined ? null : (
                     <span role="status" className="text-xs text-warning-foreground">

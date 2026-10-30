@@ -42,7 +42,6 @@ import {
   type PeerWorkContextText,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
-import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -52,14 +51,10 @@ import * as ServerConfig from "../../../config.ts";
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
 import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import * as ProjectService from "../../../project/ProjectService.ts";
-import { harnessForDriver } from "../../hubPolicy.ts";
 import { queueCoordinationWake, coordinationWakePending } from "../../coordinationWake.ts";
 import { LocalAuthority } from "../localCoordination/LocalAuthority.ts";
-import {
-  localPlace,
-  coordinationRepository,
-  localCoordinationProjectId,
-} from "../localCoordination/localPlace.ts";
+import { localPlace } from "../localCoordination/localPlace.ts";
+import { localProjectsOf } from "../localCoordination/localProjects.ts";
 import { withLocalCoordination } from "../localCoordination/localHost.ts";
 import { CoordinationBroker } from "../broker/Broker.ts";
 import { PeerBrokerKind } from "../broker/owner.ts";
@@ -69,6 +64,7 @@ import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import * as PeerIndex from "../index/PeerIndex.ts";
 import { run } from "../local.ts";
 import { resumeNative } from "./resumeNative.ts";
+import { threadAgentOf, threadOfNative } from "./threadLookup.ts";
 export { resumeNative };
 import { currentRef } from "../vcs.ts";
 import { readCommittedSince, readGitStatus } from "./edits.ts";
@@ -79,7 +75,7 @@ import * as PeerStatus from "../status/PeerStatus.ts";
 import * as PeerWork from "../work/PeerWork.ts";
 import * as PeerRuns from "../work/runs.ts";
 import * as PeerWorkspaces from "../workspaces/PeerWorkspaces.ts";
-import { taskName, taskNamed, tasksOf } from "../work/report.ts";
+import { taskName, taskOfKeys, tasksOf } from "../work/report.ts";
 import * as PeerLog from "../log/PeerLog.ts";
 import * as PeerAgents from "./PeerAgents.ts";
 
@@ -268,93 +264,12 @@ const make = Effect.gen(function* () {
     scripts: { hook: NodePath.join(dir, "hook"), wait: NodePath.join(dir, "wait") },
   };
 
-  /**
-   * The Peer thread whose agent runs as a provider session, by the session id its harness gives
-   * hooks: Peer starts Claude Code with its thread's native id, and Codex's thread id is it too.
-   * Threads at work come first, since a session's hooks start as its thread's turn does.
-   */
-  const threadOf = (nativeId: string) =>
-    Effect.gen(function* () {
-      const shell = yield* projections.getShellSnapshot({ location: "active" });
-      // Only threads at work, or whose run started lately: a session's hooks start with its run.
-      const lately = DateTime.toEpochMillis(yield* DateTime.now) - 15 * 60 * 1000;
-      const candidates = shell.threads
-        .filter(
-          (thread) =>
-            (thread.activityRunStatus ?? null) !== null ||
-            (thread.latestRunStartedAt !== undefined &&
-              thread.latestRunStartedAt !== null &&
-              DateTime.toEpochMillis(thread.latestRunStartedAt) > lately),
-        )
-        .slice(0, 20);
-      for (const thread of candidates) {
-        const records = yield* projections.getThreadRecords(thread.id, ["providerThreads"]);
-        if (records.providerThreads.some((p) => p.nativeThreadRef?.nativeId === nativeId)) {
-          return `peer:${thread.id}`;
-        }
-      }
-      return undefined;
-    }).pipe(Effect.orElseSucceed(() => undefined));
-
   const withHub = <A>(
     call: (hubUrl: string, session: string) => Effect.Effect<A, PeerHubError>,
   ): Promise<A> =>
     runPromise(client.session.pipe(Effect.flatMap(({ hubUrl, session }) => call(hubUrl, session))));
 
-  // Repository names enrich status, but Git must never delay the Hub or broker snapshot.
-  // Keep successful identities until a root closes; retry failed probes at most once a minute.
-  type LocalRepository = Awaited<ReturnType<typeof coordinationRepository>>;
-  interface LocalRepositoryEntry {
-    value: LocalRepository;
-    pending: boolean;
-    retryAfter: number;
-  }
-  const localRepositoryCache = new Map<string, LocalRepositoryEntry>();
-  const localProjects = projects.listShells().pipe(
-    Effect.map((opened) => {
-      const now = Date.now();
-      const roots = new Set(opened.map((project) => project.workspaceRoot));
-      for (const root of localRepositoryCache.keys()) {
-        if (!roots.has(root)) localRepositoryCache.delete(root);
-      }
-      return opened.flatMap((project) => {
-        const root = project.workspaceRoot;
-        let entry = localRepositoryCache.get(root);
-        if (
-          entry === undefined ||
-          (!entry.pending && entry.value === null && entry.retryAfter <= now)
-        ) {
-          entry = { value: null, pending: true, retryAfter: 0 };
-          localRepositoryCache.set(root, entry);
-          const probeEntry = entry;
-          void coordinationRepository(root).then(
-            (repo) => {
-              if (localRepositoryCache.get(root) !== probeEntry) return;
-              probeEntry.value = repo;
-              probeEntry.pending = false;
-              probeEntry.retryAfter = Date.now() + 60_000;
-            },
-            () => {
-              if (localRepositoryCache.get(root) !== probeEntry) return;
-              probeEntry.pending = false;
-              probeEntry.retryAfter = Date.now() + 60_000;
-            },
-          );
-        }
-        const repo = entry.value;
-        return repo === null
-          ? []
-          : [
-              {
-                id: localCoordinationProjectId(repo.identity),
-                projectId: project.id,
-                name: project.title,
-              },
-            ];
-      });
-    }),
-    Effect.orElseSucceed(() => []),
-  );
+  const localProjects = localProjectsOf(projects);
 
   const local = new LocalAuthority(NodePath.join(dir, "local-state.json"), environmentId);
   const host = () =>
@@ -396,31 +311,10 @@ const make = Effect.gen(function* () {
       return head === "" ? undefined : head;
     },
     gitCommittedSince: readCommittedSince,
-    threadOf: (nativeId) => runPromise(threadOf(nativeId)),
+    threadOf: (nativeId) => runPromise(threadOfNative(projections, nativeId)),
     threadRuntime: work.runtimeOf,
-    threadAgent: (key) =>
-      runPromise(
-        Effect.gen(function* () {
-          const id = key.replace(/^peer:/, "");
-          const shell = yield* projections.getShellSnapshot({ location: "active" });
-          const thread = shell.threads.find((thread) => thread.id === id);
-          if (thread === undefined) return null;
-          const records = yield* projections.getThreadRecords(thread.id, ["providerThreads"]);
-          const provider = records.providerThreads.find(
-            (provider) => provider.id === thread.activeProviderThreadId,
-          );
-          const agent = provider === undefined ? undefined : harnessForDriver(provider.driver);
-          const project = yield* projects.getById(thread.projectId);
-          if (agent === undefined || Option.isNone(project)) return null;
-          return {
-            agent,
-            cwd: thread.worktreePath ?? project.value.workspaceRoot,
-            ...(provider?.nativeThreadRef?.nativeId == null
-              ? {}
-              : { nativeId: provider.nativeThreadRef.nativeId }),
-          };
-        }).pipe(Effect.orElseSucceed(() => null)),
-      ),
+    threadAgent: (key) => runPromise(threadAgentOf(projections, projects, key)),
+
     contextLineage: (key) => runPromise(contextLineage(projections, key)),
     resumableThreads: () => runPromise(work.resumableThreads),
     nativeWakePending: async (session, thread) => {
@@ -484,20 +378,8 @@ const make = Effect.gen(function* () {
       const { persisted } = current();
       return persisted.email === null ? [] : persisted.workspaces.map((w) => w.slug);
     },
-    taskOf: (workspace, project, keys, texts) => {
-      const s = current();
-      for (const key of keys) {
-        const assigned = s.persisted.assignments?.[key];
-        if (
-          assigned !== undefined &&
-          assigned.workspace === workspace &&
-          assigned.project === project
-        ) {
-          return assigned.task;
-        }
-      }
-      return taskNamed(tasksOf(s.work, workspace, project), texts);
-    },
+    taskOf: (workspace, project, keys, texts) =>
+      taskOfKeys(current(), workspace, project, keys, texts),
     tasks: (workspace, project) => tasksOf(current().work, workspace, project),
     taskName: (workspace, project, task) => taskName(current().work, workspace, project, task),
     createTask: (workspace, projectId, task) =>
@@ -659,8 +541,8 @@ const make = Effect.gen(function* () {
           op,
         }),
       ).then((answer) => {
-        // The Hub did not move a task that waits for an owner's call: nothing changed to read.
-        if (!("ownerCallNeeded" in answer))
+        // The Hub did not move a task that waits for an owner's call or on live runs: nothing to read.
+        if (!("ownerCallNeeded" in answer) && !("runsRunning" in answer))
           void runFork(work.refresh().pipe(state.lock.withPermits(1), Effect.ignore));
         return answer;
       }),

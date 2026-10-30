@@ -545,6 +545,25 @@ describe("an agent's move of its task that waits for an owner's call", () => {
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 
+  it.effect("is answered with the live runs the done gate names, for an agent", () =>
+    Effect.gen(function* () {
+      const details = {
+        runs: [{ id: "run_0000000000OTHERRUN1", email: "bob@acme.test", agent: "codex" }],
+        running: 1,
+      };
+      const hub = yield* standInHub(
+        (response) =>
+          response
+            .writeHead(409)
+            .end(JSON.stringify({ error: { code: "runs_running", message: "Runs.", details } })),
+        "/v1/workspaces/acme/projects/app/tasks/ord-9",
+      );
+      assert.deepStrictEqual(yield* move(hub.url, { session: "claude:one" }), {
+        runsRunning: details,
+      });
+    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
+  );
+
   it.effect("is a refusal as it was for a person, whose move carries no guard", () =>
     Effect.gen(function* () {
       const hub = yield* standInHub(

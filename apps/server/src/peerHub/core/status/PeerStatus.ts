@@ -41,7 +41,7 @@ import { commandAvailable } from "../local.ts";
 import { checkoutState } from "../vcs.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
-import { runCounts } from "../work/runs.ts";
+import { runCounts, workRunsOf } from "../work/runs.ts";
 import {
   projectKey,
   realpathOrSelf,
@@ -175,12 +175,6 @@ const make = Effect.gen(function* () {
         workspace.slug,
         project.id,
       );
-      const assignments: Record<string, string> = {};
-      for (const [thread, assignment] of Object.entries(s.persisted.assignments ?? {})) {
-        if (assignment.workspace === workspace.slug && assignment.project === project.id) {
-          assignments[thread] = assignment.task;
-        }
-      }
       return {
         bound,
         state: {
@@ -207,7 +201,9 @@ const make = Effect.gen(function* () {
                 : { ...task, runs: counts };
             }),
             threads: work?.threads ?? [],
-            assignments,
+            runs: workRunsOf(Object.values(s.persisted.runs ?? {}), workspace.slug, project.id),
+            // Only for phone apps from before runs, which require the field; remove next release.
+            assignments: {},
           },
           peers: peersOf(
             (work?.threads ?? []).filter(

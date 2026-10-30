@@ -89,6 +89,44 @@ describe("runs in the broker", () => {
     }
   });
 
+  it("an_mcp_session_with_its_run_token_joins_the_run", async () => {
+    const runs = memoryRuns();
+    // The folder's branch would put it on another task: the run comes first (design D3, step 1).
+    const f = await fixture(runs, "krk-9");
+    try {
+      const { run, token } = await runs.create({
+        workspace: "acme",
+        project: "app",
+        task: "krk-1",
+        agent: "cursor",
+        runtime: "terminal",
+      });
+      const view = await f.broker.bindTools({
+        server: "editor-7",
+        cwd: f.root,
+        client: "Cursor",
+        run: run.id,
+        runToken: token!,
+      });
+      const session = f.broker.sessions.get(view.id)!;
+      expect([session.adapter, session.run, session.task]).toEqual(["mcp", run.id, "krk-1"]);
+      expect(runs.get(run.id)!.sessions.map((s) => s.id)).toEqual(["cursor:editor-7"]);
+      // A wrong token leaves the session to the folder, as a hook session's.
+      const other = await f.broker.bindTools({
+        server: "editor-8",
+        cwd: f.root,
+        client: "Cursor",
+        run: run.id,
+        runToken: "f".repeat(32),
+      });
+      const fallback = f.broker.sessions.get(other.id)!;
+      expect(fallback.run).not.toBe(run.id);
+      expect(fallback.task).toBe("krk-9");
+    } finally {
+      await f.dispose();
+    }
+  });
+
   it("a_wrong_token_falls_back_and_tells_once", async () => {
     const runs = memoryRuns();
     const f = await fixture(runs, "krk-9");

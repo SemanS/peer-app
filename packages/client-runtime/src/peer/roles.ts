@@ -7,6 +7,7 @@
  * @module peer/roles
  */
 import {
+  runTaskOf,
   WS_METHODS,
   type PeerHubStatus,
   type PeerRoleRow,
@@ -178,7 +179,7 @@ export function threadPlace(
     for (const state of workspace.projects) {
       const { work } = state;
       if (
-        work.assignments[key] !== undefined ||
+        runTaskOf(work.runs, key) !== undefined ||
         work.threads.some(
           (thread) =>
             thread.id === key &&

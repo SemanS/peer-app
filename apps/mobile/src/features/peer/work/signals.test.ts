@@ -33,7 +33,7 @@ const SLOT_USERS = [
 const project = (id: string, name: string) => ({
   project: { id, name, role: "member", members: [] },
   repositories: [],
-  work: { areas: [], tasks: [], threads: [], assignments: {} },
+  work: { areas: [], tasks: [], threads: [] },
 });
 
 function status(overrides: Partial<Record<keyof PeerHubStatus, unknown>> = {}): PeerHubStatus {

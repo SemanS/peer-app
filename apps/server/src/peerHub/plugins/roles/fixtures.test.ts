@@ -141,7 +141,8 @@ const answerOf =
     if (url === ROLES) return [200, { roles: current.rows }];
     if (url.startsWith(`${ROLES}/`)) {
       const session = decodeURIComponent(url.slice(ROLES.length + 1));
-      const others = current.rows.filter((row) => row.session !== session);
+      // A run-keyed row is addressed by its run too, as a Hub at roles revision 3 does.
+      const others = current.rows.filter((row) => row.session !== session && row.run !== session);
       if (method === "PUT") {
         const sent = JSON.parse(body) as { role: string; environment: string; setBy: string };
         current.rows = [...others, { session, email: BOB, at: NOW, ...sent }];

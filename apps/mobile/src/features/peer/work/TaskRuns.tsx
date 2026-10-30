@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, View } from "react-native";
 
 import { AppText } from "../../../components/ui/AppText";
-import { peerRuns } from "../../../state/peerRuns";
+import { serverEnvironment } from "../../../state/server";
 import { useEnvironmentQuery } from "../../../state/query";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { useMinuteClock } from "../ownership/useMinuteClock";
@@ -36,7 +36,7 @@ export function TaskRuns({
 }) {
   const projectId = project.project.id;
   const query = useEnvironmentQuery(
-    peerRuns.list({ environmentId, input: { workspace, projectId, taskId } }),
+    serverEnvironment.peerRunsList({ environmentId, input: { workspace, projectId, taskId } }),
   );
   const { refresh } = query;
   // The query reads on mount; only a later change of the task reads again.
@@ -46,8 +46,8 @@ export function TaskRuns({
     seen.current = revision;
     refresh();
   }, [refresh, revision]);
-  const end = useAtomCommand(peerRuns.end, { reportFailure: false });
-  const allowed = useAtomValue(peerRuns.end.permissionAtom(environmentId));
+  const end = useAtomCommand(serverEnvironment.peerRunsEnd, { reportFailure: false });
+  const allowed = useAtomValue(serverEnvironment.peerRunsEnd.permissionAtom(environmentId));
   const now = useMinuteClock();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);

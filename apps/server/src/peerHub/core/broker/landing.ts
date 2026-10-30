@@ -28,7 +28,7 @@ import {
   type TaskNamer,
 } from "../coordination/edits.ts";
 import { unseenNotes } from "../coordination/news.ts";
-import type { OwnerCallNeeded } from "../hub/workApi.ts";
+import type { OwnerCallNeeded, RunsRunning } from "../hub/workApi.ts";
 import type { HubOverlap } from "../hub/coordApi.ts";
 import type { PeerToolContext } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";
@@ -281,6 +281,21 @@ export async function landingRefusal(
     chars: reason.length,
   });
   return refused(reason, `${this.cli} ${command}`);
+}
+
+/**
+ * `peer done` the Hub's done gate held (409 `runs_running`): other agents' runs on the task are still
+ * live. The refusal names those the Hub named and how many there are in all.
+ */
+export function runsRunningRefusal(answer: unknown): CliError | undefined {
+  if (typeof answer !== "object" || answer === null || !("runsRunning" in answer)) return undefined;
+  const { runs, running } = (answer as { readonly runsRunning: RunsRunning }).runsRunning;
+  const named = runs.map((run) => `${run.agent} (${run.email}) run ${run.id}`).join(", ");
+  const more = running > runs.length ? ` and ${running - runs.length} more` : "";
+  return refused(
+    `another agent is still on this task: ${named || `${running} running`}${more}`,
+    "wait, or ask your person to end it.",
+  );
 }
 
 /** The Hub's refusal of an agent's move to review or done for an owner's call that is missing, if that is what it answered. */

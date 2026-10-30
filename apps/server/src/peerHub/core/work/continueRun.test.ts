@@ -10,12 +10,43 @@ import { brokerFixture } from "../broker/testkit.ts";
 import * as PeerAdapters from "../coordination/PeerAdapters.ts";
 import * as PeerCoordination from "../coordination/PeerCoordination.ts";
 import * as PeerContextView from "../index/PeerContextView.ts";
-import type { PeerRpcWrap } from "../plugin.ts";
-import { coreLayer, paymentsSeed, seedState, standInHub } from "../testkit.ts";
+import { bindPlugin, type PeerRpcWrap, type PeerTaskLauncher } from "../plugin.ts";
+import * as PeerPlugins from "../plugins/PeerPlugins.ts";
+import * as PeerWork from "./PeerWork.ts";
+import * as PeerHubClient from "../hub/PeerHubClient.ts";
+import { coreLayer, meAnswer, paymentsSeed, seedState, standInHub } from "../testkit.ts";
 import * as PeerRuns from "./runs.ts";
 import { stateOf } from "./runs.ts";
 
 const FOREIGN = "run_FOREIGN00000000000";
+/** Ana's own run that her other computer minted and left detached. */
+const DESK = "run_DESK0000000000000000";
+const deskView = {
+  id: DESK,
+  workspace: "acme",
+  project: "pay",
+  task: "krk-1",
+  email: "ana@acme.test",
+  environment: "ana-desk",
+  agent: "claude",
+  runtime: "herdr",
+  startedAt: "2026-10-30T08:00:00.000Z",
+  state: "detached",
+  sessions: [
+    { id: "claude:desk-1", from: "2026-10-30T08:00:00.000Z", to: "2026-10-30T08:30:00.000Z" },
+  ],
+  sessionsBefore: 0,
+};
+const task = {
+  id: "krk-1",
+  key: "KRK-1",
+  title: "Split payments",
+  status: "open",
+  createdBy: "ana@acme.test",
+  createdAt: "2026-10-09",
+  updatedAt: "2026-10-09",
+};
+
 /** Another computer's run as the Hub keeps it. */
 const foreignView = {
   id: FOREIGN,
@@ -44,15 +75,62 @@ const wrap: PeerRpcWrap = {
  * `queued`, and the runs methods as a client calls them.
  */
 const setup = Effect.gen(function* () {
+  // What herdr's task launcher was asked to start, through a stand-in for the plugin.
+  const launched: Array<Parameters<PeerTaskLauncher["launch"]>[0]> = [];
+  const herdr = bindPlugin({
+    id: "herdr",
+    title: "herdr",
+    summary: "test",
+    defaultEnabled: true,
+    layer: Layer.empty,
+    make: Effect.succeed({
+      taskLauncher: {
+        unavailable: Effect.succeed(null),
+        launch: (asked) =>
+          Effect.sync(() => {
+            launched.push(asked);
+            return { paneId: "pane-9", terminalId: "term-9", threadKey: "herdr:term-9" };
+          }),
+      },
+    }),
+  });
+  /** How the Hub answers Ana's other computer's run: handed over, or refused with a code. */
+  const desk: { answer: readonly [number, unknown]; me: unknown } = {
+    me: {},
+    answer: [
+      200,
+      {
+        run: {
+          ...deskView,
+          environment: "ana-laptop",
+          environments: [
+            { id: "ana-desk", from: "2026-10-30T08:00:00.000Z" },
+            { id: "ana-laptop", from: "2026-10-30T09:00:00.000Z" },
+          ],
+        },
+        changed: true,
+      },
+    ],
+  };
   const hub = yield* standInHub({
     current: (url, method) =>
-      method === "PATCH" && url === `/v1/workspaces/acme/runs/pay/${FOREIGN}`
-        ? [200, { run: foreignView, changed: true }]
-        : [200, {}],
+      url === "/v1/me"
+        ? [200, desk.me]
+        : method === "PATCH" && url === `/v1/workspaces/acme/runs/pay/${FOREIGN}`
+          ? [200, { run: foreignView, changed: true }]
+          : method === "PATCH" && url === `/v1/workspaces/acme/runs/pay/${DESK}`
+            ? (desk.answer as [number, unknown])
+            : method === "GET" && url.startsWith("/v1/workspaces/acme/runs/pay")
+              ? [200, { runs: [deskView, foreignView] }]
+              : url.endsWith("/work")
+                ? [200, { projects: { pay: { areas: [], tasks: [task], threads: [] } } }]
+                : [200, {}],
   });
   const core = yield* Layer.build(
-    coreLayer(yield* seedState(paymentsSeed(hub.url)), { session: "person" }),
+    coreLayer(yield* seedState(paymentsSeed(hub.url)), { session: "person", plugins: [herdr] }),
   );
+  yield* PeerPlugins.startPlugins.pipe(Effect.provide(core));
+  yield* (yield* PeerWork.PeerWork.pipe(Effect.provide(core))).readWork("acme");
   const runs = yield* PeerRuns.PeerRuns.pipe(Effect.provide(core));
   const queued: Array<readonly [string, string, string]> = [];
   const fixture = yield* Effect.acquireRelease(
@@ -87,13 +165,13 @@ const setup = Effect.gen(function* () {
     ),
   );
   const client = yield* RpcTest.makeClient(RunsRpcGroup).pipe(Effect.provide(handlers));
-  return { hub, runs, queued, fixture, client };
+  return { hub, runs, queued, fixture, client, launched, desk, core };
 });
 
 /** A run of this computer whose one session ended. */
 const detached = (
   runs: PeerRuns.PeerRuns["Service"],
-  runtime: "peer" | "terminal",
+  runtime: "peer" | "terminal" | "herdr",
   session: string,
 ) =>
   Effect.promise(async () => {
@@ -146,6 +224,91 @@ describe("continuing a run", () => {
         });
         assert.deepStrictEqual(queued, []);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("continuing a herdr run", () => {
+  it.effect("relaunches it in herdr resuming its last session, with a new token", () =>
+    Effect.gen(function* () {
+      const { runs, client, launched } = yield* setup;
+      const id = yield* detached(runs, "herdr", "claude:native-4");
+      const before = runs.book.get(id)!.tokenHash;
+      assert.deepStrictEqual(yield* client["peerHub.continueRun"]({ ...place, runId: id }), {
+        started: true,
+      });
+      assert.strictEqual(launched.length, 1);
+      assert.deepStrictEqual(launched[0]!.resume, { agent: "claude", session: "native-4" });
+      assert.strictEqual(launched[0]!.env.PEER_RUN, id);
+      assert.strictEqual(launched[0]!.env.PEER_TASK, "krk-1");
+      assert.notStrictEqual(runs.book.get(id)!.tokenHash, before);
+      assert.isTrue(runs.book.claim(id, launched[0]!.env.PEER_RUN_TOKEN));
+      // The new pane is the run's, so the work view and Observe find it.
+      assert.strictEqual(runs.book.holderOf("herdr:term-9")?.id, id);
+      assert.strictEqual(runs.book.get(id)!.pane, "pane-9");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+});
+
+describe("continuing a run of another computer of the same person", () => {
+  it.effect(
+    "asks the Hub to hand it over, keeps it here and continues it on the task's prompt",
+    () =>
+      Effect.gen(function* () {
+        const { runs, client, launched, hub } = yield* setup;
+        assert.deepStrictEqual(yield* client["peerHub.continueRun"]({ ...place, runId: DESK }), {
+          started: true,
+        });
+        const patch = hub.calls.find(
+          (call) => call.method === "PATCH" && call.url === `/v1/workspaces/acme/runs/pay/${DESK}`,
+        )!;
+        assert.deepStrictEqual(JSON.parse(patch.body), { environment: "ana-laptop" });
+        const kept = runs.book.get(DESK)!;
+        assert.strictEqual(kept.environment, "ana-laptop");
+        assert.isTrue(runs.book.claim(DESK, launched[0]!.env.PEER_RUN_TOKEN));
+        // Its provider session is on the desk: nothing to resume here.
+        assert.isUndefined(launched[0]!.resume);
+        assert.include(launched[0]!.prompt, `You continue run ${DESK}`);
+        const listed = yield* client["peerHub.runs"]({ ...place, taskId: "krk-1" });
+        const row = listed.runs.find((run) => run.id === DESK)!;
+        assert.strictEqual(row.environment, "ana-laptop");
+        assert.deepStrictEqual(
+          row.environments?.map((entry) => entry.id),
+          ["ana-desk", "ana-laptop"],
+        );
+      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("says a Hub at runs revision 1 does not move runs, and asks it nothing", () =>
+    Effect.gen(function* () {
+      const { runs, client, launched, hub, desk, core } = yield* setup;
+      desk.me = meAnswer({ runs: 1 });
+      yield* (yield* PeerHubClient.PeerHubClient.pipe(Effect.provide(core))).me;
+      assert.deepStrictEqual(yield* client["peerHub.continueRun"]({ ...place, runId: DESK }), {
+        started: false,
+        reason: "This Peer Hub does not move runs between computers yet.",
+      });
+      assert.isFalse(hub.calls.some((call) => call.method === "PATCH"));
+      assert.isUndefined(runs.book.get(DESK));
+      assert.deepStrictEqual(launched, []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("says why the Hub refused, and keeps nothing", () =>
+    Effect.gen(function* () {
+      const { runs, client, launched, desk } = yield* setup;
+      desk.answer = [409, { error: { code: "ended", message: "the run ended" } }];
+      assert.deepStrictEqual(yield* client["peerHub.continueRun"]({ ...place, runId: DESK }), {
+        started: false,
+        reason: "This run has ended.",
+      });
+      desk.answer = [403, { error: { code: "not_your_run", message: "not yours" } }];
+      assert.deepStrictEqual(yield* client["peerHub.continueRun"]({ ...place, runId: DESK }), {
+        started: false,
+        reason: "This run is another person's; only its person continues it.",
+      });
+      assert.isUndefined(runs.book.get(DESK));
+      assert.deepStrictEqual(launched, []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });
 

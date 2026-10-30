@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import {
   coordinationEventLabel,
   coordinationActorLabel,
+  coordinationRunLabel,
   coordinationTimeline,
   groupRepeated,
   staleInputLine,
@@ -11,6 +12,11 @@ import {
 } from "./coordinationTimeline.ts";
 
 describe("coordination history", () => {
+  it("names an event's run quietly by its random tail, and nothing without one", () => {
+    expect(coordinationRunLabel({ run: "run_01JBX0000000K3F9QZAB" })).toBe("run …F9QZAB");
+    expect(coordinationRunLabel({})).toBeUndefined();
+  });
+
   it("does not present missing or empty receipts as current inputs", () => {
     expect(inputReadiness({ fresh: true, stale: [] })).toBe("unknown");
     expect(inputReadiness({ fresh: true, reads: [], stale: [] })).toBe("empty");

@@ -2,8 +2,9 @@
 /**
  * Starting an agent on a task in herdr (the plugin's task launcher): a git worktree of its own on
  * a new branch, the agent in a pane of Peer's own herdr workspace, then its first prompt once it is
- * ready for one. Core has checked the task, taken the team request it answers, and puts the agent's
- * thread on the task once it runs.
+ * ready for one. Core has checked the task, taken the team request it answers and created the run
+ * the agent starts in; the run holds the agent's thread once it runs. A continued run's agent
+ * resumes its last provider session where it is known.
  *
  * @module peerHub/plugins/herdr/launcher
  */
@@ -52,7 +53,7 @@ export const makeLauncher = (agents: HerdrAgents) =>
           catch: () => hubError("The newly created task checkout disappeared before startup."),
         });
         const started = yield* Effect.tryPromise({
-          try: () => client.start({ cwd: tree.cwd, harness, env: input.env }),
+          try: () => client.start({ cwd: tree.cwd, harness, env: input.env, resume: input.resume }),
           catch: (failure) => {
             const message = messageOf(failure);
             return hubError(

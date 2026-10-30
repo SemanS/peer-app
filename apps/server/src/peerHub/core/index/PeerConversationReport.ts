@@ -1,6 +1,7 @@
 import {
   PEER_LOCAL_WORKSPACE,
   PeerHubError,
+  runTaskOf,
   type PeerContextViewInput,
   type PeerConversationReport,
   type PeerHubStatus,
@@ -138,7 +139,8 @@ const make = Effect.gen(function* () {
   const collect = Effect.fnUntraced(function* (job: Job, status: PeerHubStatus) {
     const project = projectOf(job.place, status);
     const tasks = project?.work.tasks ?? [];
-    const assignments = project?.work.assignments ?? {};
+    // This computer's runs say which task each of its threads and agents is on.
+    const runs = project?.work.runs;
     const snapshots = yield* Effect.forEach(
       [...new Set(projectIds(job.place, status))],
       (projectId) => projections.getShellSnapshot({ projectId }),
@@ -158,7 +160,7 @@ const make = Effect.gen(function* () {
           const id = `peer:${thread.id}`;
           const sourceRevision = revision(thread);
           const task =
-            assignments[id] ?? taskNamed(tasks, [thread.branch ?? undefined, thread.title]);
+            runTaskOf(runs, id) ?? taskNamed(tasks, [thread.branch ?? undefined, thread.title]);
           const previous = job.cache.get(id);
           if (previous?.revision === sourceRevision && previous.item.availability === "available") {
             const cached = { ...previous.item, task };
@@ -236,8 +238,8 @@ const make = Effect.gen(function* () {
         availability: entries.length > 0 ? "partial" : "unavailable",
         truncated: true,
         task:
-          assignments[id] ??
-          assignments[agent.id] ??
+          runTaskOf(runs, id) ??
+          runTaskOf(runs, agent.id) ??
           record?.task ??
           taskNamed(tasks, [agent.branch, agent.title]),
       });

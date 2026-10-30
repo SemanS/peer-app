@@ -5,7 +5,7 @@
  * told apart, and the words of the status cell and the Finished shelf; the row components only
  * lay them out.
  */
-import type { PeerHubStatus, PeerTask } from "@t3tools/contracts";
+import { runTaskOf, type PeerHubStatus, type PeerTask, type PeerWorkRun } from "@t3tools/contracts";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 
 import { formatShortTimestamp, parseTimestampDate } from "../timestampFormat";
@@ -138,8 +138,8 @@ interface ChatTaskProject {
   readonly tasks: ReadonlyArray<PeerTask>;
   /** Whether any task has a key a branch or a title could name. */
   readonly keyed: boolean;
-  /** This computer's threads (`peer:<thread id>`) → the task they were placed on. */
-  readonly assignments: Readonly<Record<string, string>>;
+  /** This computer's runs on the project: the task each of its threads (`peer:<id>`) is on. */
+  readonly runs: ReadonlyArray<PeerWorkRun> | undefined;
 }
 
 /** The Hub's tasks as the sidebar needs them: by the local project a chat lives in. */
@@ -166,7 +166,7 @@ export function chatTaskIndex(
       const project: ChatTaskProject = {
         tasks: state.work.tasks,
         keyed: state.work.tasks.some((task) => task.key !== undefined && task.key !== ""),
-        assignments: state.work.assignments,
+        runs: state.work.runs,
       };
       byWorkspaceProject.set(`${workspace.slug}/${state.project.id}`, project);
       for (const repository of state.repositories) {
@@ -196,7 +196,7 @@ export interface ChatTaskThread {
 }
 
 function taskOfThread(project: ChatTaskProject, thread: ChatTaskThread): PeerTask | undefined {
-  const placed = project.assignments[`peer:${thread.id}`];
+  const placed = runTaskOf(project.runs, `peer:${thread.id}`);
   const task = placed === undefined ? undefined : project.tasks.find((t) => t.id === placed);
   if (task !== undefined) return task;
   return project.keyed ? taskNamedIn(project.tasks, [thread.branch, thread.title]) : undefined;

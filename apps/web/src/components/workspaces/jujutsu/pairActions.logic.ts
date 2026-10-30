@@ -6,13 +6,14 @@
  * a teammate.
  */
 import { taskNamedIn } from "@t3tools/client-runtime/peer/work";
-import type {
-  JujutsuFollowResult,
-  JujutsuIntegrateInput,
-  PeerForecastPair,
-  PeerForecastSide,
-  PeerHubStatus,
-  PeerProjectState,
+import {
+  runTaskOf,
+  type JujutsuFollowResult,
+  type JujutsuIntegrateInput,
+  type PeerForecastPair,
+  type PeerForecastSide,
+  type PeerHubStatus,
+  type PeerProjectState,
 } from "@t3tools/contracts";
 
 export interface PairTask {
@@ -199,8 +200,8 @@ export function localSessions(input: {
         thread.environment === status.environmentId,
     );
     const taskId =
-      placed(work.assignments[agent.id]) ??
-      placed(record === undefined ? undefined : work.assignments[record.id]) ??
+      placed(runTaskOf(work.runs, agent.id)) ??
+      placed(record === undefined ? undefined : runTaskOf(work.runs, record.id)) ??
       placed(record?.task) ??
       taskNamedIn(work.tasks, [agent.branch, agent.title])?.id;
     if (taskId === undefined) continue;

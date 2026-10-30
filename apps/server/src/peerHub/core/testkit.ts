@@ -121,6 +121,9 @@ export const emptyT3: Layer.Layer<T3Services> = Layer.mergeAll(
   }),
 );
 
+/** The run that puts Ana's thread-1 on krk-1 in `paymentsSeed`. */
+export const SEED_RUN = "run_0000000000SEEDRUN001";
+
 /**
  * peer-hub.json of Ana signed in to `hubUrl`, in acme's Payments project (its one repository is
  * `api`), with her Peer thread-1 put on task krk-1.
@@ -160,7 +163,24 @@ export const paymentsSeed = (hubUrl: string) =>
     joinable: [],
     lastSyncAt: null,
     sharedInstances: {},
-    assignments: { "peer:thread-1": { workspace: "acme", project: "pay", task: "krk-1" } },
+    // Ana's thread-1 on krk-1, as a person placed it before runs reached the Hub.
+    runs: {
+      [SEED_RUN]: {
+        id: SEED_RUN,
+        workspace: "acme",
+        project: "pay",
+        task: "krk-1",
+        email: "ana@acme.test",
+        environment: "ana-laptop",
+        agent: "unknown",
+        runtime: "peer",
+        thread: "peer:thread-1",
+        startedAt: "2026-10-01T09:00:00.000Z",
+        sessions: [],
+        sessionsBefore: 0,
+        local: true,
+      },
+    },
   });
 
 /** T3 where Ana's Payments checkout is project `t3-pay`, and Claude Code runs thread-1 there now. */

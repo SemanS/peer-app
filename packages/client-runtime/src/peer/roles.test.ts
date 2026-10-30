@@ -135,7 +135,16 @@ describe("session roles", () => {
             {
               project: { id: "web" },
               work: {
-                assignments: { "herdr:term": "VL7" },
+                runs: [
+                  {
+                    id: "run_1",
+                    task: "VL7",
+                    agent: "claude",
+                    runtime: "herdr",
+                    state: "running",
+                    keys: ["herdr:term"],
+                  },
+                ],
                 threads: [{ id: "peer:t9", email: "slavo@example.com", environment: "env-1" }],
               },
             },

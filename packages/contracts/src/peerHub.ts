@@ -25,6 +25,7 @@ import { PeerLocalAgent } from "./peer/herdr.ts";
 import { PeerPluginState } from "./peer/plugin.ts";
 import { peerPluginStatusFields } from "./peer/registry.ts";
 import { PeerAgentRequest } from "./peer/requests.ts";
+import { PeerWorkRun } from "./peer/runs.ts";
 
 // Schemas plugins share moved to `peer/base.ts`, and each plugin's to `peer/<id>.ts`; their names
 // stay importable from here.
@@ -216,8 +217,16 @@ export const PeerProjectState = Schema.Struct({
     areas: Schema.Array(Schema.String),
     tasks: Schema.Array(PeerTask),
     threads: Schema.Array(PeerWorkThread),
-    /** This computer's threads (`peer:<thread id>`, `herdr:<terminal id>`) → task id. */
-    assignments: Schema.Record(Schema.String, Schema.String),
+    /**
+     * This computer's runs on the project that have not ended, newest first: which task each of
+     * its chats and agents is on. Absent from an environment that predates runs.
+     */
+    runs: Schema.optional(Schema.Array(PeerWorkRun)),
+    /**
+     * Deprecated, always `{}`: what put threads on tasks before runs (`runs` says it now). Sent for
+     * one release so a phone app from before runs still reads the status; remove it in the next.
+     */
+    assignments: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   }),
   /** Colleagues' environments working on this project right now. */
   peers: Schema.Array(
@@ -875,12 +884,18 @@ export const PeerHubTaskInput = Schema.Struct({
 });
 export type PeerHubTaskInput = typeof PeerHubTaskInput.Type;
 
+/**
+ * Puts one of this computer's threads on a task, or on none: the run that shows the thread moves,
+ * or a run starts for it (`peer` for a Peer thread).
+ */
 export const PeerHubAssignThreadInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
   projectId: TrimmedNonEmptyString,
   /** `peer:<thread id>` or `herdr:<terminal id>`. */
   thread: TrimmedNonEmptyString,
   taskId: Schema.NullOr(TrimmedNonEmptyString),
+  /** What starts the thread on the task, so a retried start creates no second run. */
+  requestId: Schema.optional(TrimmedNonEmptyString),
 });
 export type PeerHubAssignThreadInput = typeof PeerHubAssignThreadInput.Type;
 
@@ -950,6 +965,8 @@ export const PeerCoordEvent = Schema.Struct({
   at: Schema.String,
   email: Schema.optional(Schema.String),
   session: Schema.optional(Schema.String),
+  /** The run the session was in, from a Hub that keeps runs. */
+  run: Schema.optional(Schema.String),
   environment: Schema.optional(Schema.String),
   task: Schema.optional(Schema.String),
   scope: Schema.optional(Schema.String),

@@ -16,6 +16,7 @@ import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
 import { coreLayer } from "../../core/testkit.ts";
 import { McpPlugin } from "./index.ts";
 import { bindPlugin, type PeerPluginEntry } from "../../core/plugin.ts";
+import { RunBook } from "../../core/work/runs.ts";
 
 const program = <E>(
   body: (
@@ -88,6 +89,44 @@ describe("coordination tool sessions", () => {
         }),
       ),
   );
+  it.effect("puts an MCP client in the run its process names with the run's token", () =>
+    program((fixture, plugins) =>
+      Effect.gen(function* () {
+        const runs = new RunBook(
+          {},
+          {
+            environment: "test",
+            email: () => null,
+            now: () => Date.parse("2026-10-30T10:00:00Z"),
+            save: async () => undefined,
+          },
+        );
+        Object.assign(fixture.broker.host, { runs });
+        const { run, token } = yield* Effect.promise(() =>
+          runs.create({
+            workspace: "acme",
+            project: "app",
+            task: "task-7",
+            agent: "cursor",
+            runtime: "terminal",
+          }),
+        );
+        const command = yield* commandOf(plugins);
+        const runHeaders = {
+          "x-peer-mcp": "mcp-cursor-run",
+          "x-peer-cwd": fixture.root,
+          "x-peer-harness": "cursor",
+          "x-peer-run": run.id,
+          "x-peer-run-token": token!,
+        };
+        const reply = JSON.parse(yield* command.stdio!({ line: status, headers: runHeaders }));
+        assert.isUndefined(reply.result.isError);
+        const session = fixture.broker.sessions.get("cursor:mcp-cursor-run");
+        assert.deepStrictEqual([session?.run, session?.task], [run.id, "task-7"]);
+      }),
+    ),
+  );
+
   it.effect("binds an MCP client Peer did not start by the folder it runs in", () =>
     program((fixture, plugins) =>
       Effect.gen(function* () {

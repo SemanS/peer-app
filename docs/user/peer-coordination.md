@@ -85,7 +85,7 @@ you confirm. Nothing is deleted. A Hub that does not keep briefs yet shows the l
 manual prompt as before.
 
 Peer creates a separate git worktree and a `feature/` branch containing the task's issue key when it
-has one; in a Jujutsu repository it creates a jj workspace and a bookmark of the same name instead. It assigns the agent to the task before sending the prompt. On mobile, open **Settings →
+has one; in a Jujutsu repository it creates a jj workspace and a bookmark of the same name instead. It starts the agent in a run on the task (see [Runs](#runs)) before sending the prompt. On mobile, open **Settings →
 Peer workspaces**, select a task, then start the agent. Projects requiring approved commercial or
 shared capacity use a Peer thread with an allowed provider instead of this local CLI launch.
 
@@ -287,8 +287,11 @@ you, with the Hub, and need neither the app nor Peer Core running.
 
 A run is one attempt of one agent on one task, from its start until it ends or hands the task
 off. It outlives the agent's sessions: a `--resume`, a crash or a Peer restart continues the same
-run, so the task keeps its work. When you start Claude Code or Codex on a task from **Start a
-task**, Peer starts a run and says so before the editor opens:
+run, so the task keeps its work. A run is the only thing that puts an agent on a task: a Peer chat
+or a herdr pane is where a run shows, and putting a chat on a task in the sidebar starts its run
+or moves it. Every start makes one the same way, whether from the app (a chat, **Start agent** in
+herdr), from an editor using Peer's tools, or from the terminal. When you start Claude Code or
+Codex on a task from **Start a task**, Peer starts a run and says so before the editor opens:
 
 ```
 Run run_01JC… on Cart — Claude Code. peer core runs lists it.
@@ -303,14 +306,22 @@ to them. An area or a group picked alone gets a run once the agent starts on one
 sessions and start. `--all` adds the ended ones, `--task <id>` keeps one task's. A run is
 `running` while an agent session is in it, `detached` once its agent stopped, and `ended` after
 `peer review`, `peer done`, the task closing or `peer core runs end <id>`, which stops it and
-releases what its agent held.
+releases what its agent held. An agent's `peer done` is refused while another agent's run on the
+task is still running; it names that run, so you can wait for it or end it.
 
 `peer core runs continue <id>` starts a detached terminal run's agent again in the project's
 checkout (the folder you are in when it is one), resuming its last session (`claude --resume`,
 `codex resume`) or, when none is known, with the task's first prompt, and it carries the run so
-its sessions join it. Runs started in the app
-continue from the task's page there. A task's page in the app lists terminal runs with "Started
-from a terminal; no view here": the agent's terminal is on the computer that started it.
+its sessions join it. Runs started in the app continue from **Continue** on the task's page there:
+a Peer chat wakes, and a herdr agent starts again in a new pane, resuming its last session. A
+task's page in the app lists terminal runs with "Started from a terminal; no view here": the
+agent's terminal is on the computer that started it. Leads and admins can end anyone's run there.
+
+You can continue your own detached run from another of your computers. **Continue** on the task's
+page there asks the Hub to hand the run over; that computer then keeps it, and the agent starts on
+the task's first prompt, since its earlier sessions stay on the other computer. The task's page
+says "Continued here from another computer", and the first computer lists the run as running on
+another computer from then on. A Peer chat cannot move: continue it on the computer that has it.
 
 Run `peer core runs attach <run>` in an agent's shell to put that live session into a run, for
 example an agent you started by hand before Peer knew its task. It prints `Attached this session to

@@ -23,6 +23,10 @@ import type { TaskChatRow } from "./taskChats.logic";
 
 /** Said where Open would be when the run's agent lives on another of the person's computers. */
 export const ELSEWHERE_RUN_HINT = "Runs on another computer; open it there";
+/** A run this computer took over from another of the person's computers (a handover). */
+export const CONTINUED_HERE = "Continued here from another computer";
+/** A run another computer of the person took over from wherever it ran before. */
+export const CONTINUED_ELSEWHERE = "Continued on another computer";
 
 const RUNTIME_LABEL: Readonly<Record<PeerRunRuntime, string>> = {
   terminal: "terminal",
@@ -61,6 +65,8 @@ export interface TaskRunRow {
   readonly open: WorkOpen | undefined;
   /** Why there is no Open, for a run whose agent has no view here. */
   readonly hint: string | undefined;
+  /** Where a handed-over run continued: here, or on another computer. */
+  readonly handover: string | undefined;
   readonly canContinue: boolean;
   readonly canEnd: boolean;
 }
@@ -68,6 +74,8 @@ export interface TaskRunRow {
 interface RunContext {
   readonly me: string | null | undefined;
   readonly now: number;
+  /** The person leads the project or administers the workspace: they may end colleagues' runs. */
+  readonly manages: boolean;
   /** This computer's environment, whose Peer threads and herdr agents open here. */
   readonly environmentId: EnvironmentId;
   readonly agents: ReadonlyArray<PeerLocalAgent>;
@@ -150,30 +158,40 @@ export function taskRunRows(
   ctx: RunContext,
 ): ReadonlyArray<TaskRunRow> {
   const byId = new Map(runs.map((run) => [run.id, run] as const));
-  return runRows(runs, { me: ctx.me, now: ctx.now }).flatMap((row): ReadonlyArray<TaskRunRow> => {
-    const run = byId.get(row.id);
-    if (run === undefined) return [];
-    return [
-      {
-        id: row.id,
-        agent: harnessName(row.agent) ?? row.agent,
-        runtime: RUNTIME_LABEL[row.runtime],
-        person: row.mine
-          ? "You"
-          : ctx.project === undefined
-            ? row.email
-            : personName(ctx.project, row.email),
-        mine: row.mine,
-        state: stateLabel(row),
-        tone: STATE_TONE[row.state],
-        sessions: `${row.sessionsCount} ${row.sessionsCount === 1 ? "session" : "sessions"}`,
-        when: whenLabel(row, ctx.clock),
-        ...openHere(run, row, ctx),
-        canContinue: row.canContinue,
-        canEnd: row.canEnd,
-      },
-    ];
-  });
+  return runRows(runs, { me: ctx.me, now: ctx.now, manages: ctx.manages }).flatMap(
+    (row): ReadonlyArray<TaskRunRow> => {
+      const run = byId.get(row.id);
+      if (run === undefined) return [];
+      const here = run.environment === ctx.environmentId;
+      return [
+        {
+          id: row.id,
+          agent: harnessName(row.agent) ?? row.agent,
+          runtime: RUNTIME_LABEL[row.runtime],
+          person: row.mine
+            ? "You"
+            : ctx.project === undefined
+              ? row.email
+              : personName(ctx.project, row.email),
+          mine: row.mine,
+          state: stateLabel(row),
+          tone: STATE_TONE[row.state],
+          sessions: `${row.sessionsCount} ${row.sessionsCount === 1 ? "session" : "sessions"}`,
+          when: whenLabel(row, ctx.clock),
+          ...openHere(run, row, ctx),
+          handover:
+            row.continuedOn === undefined
+              ? undefined
+              : row.continuedOn === ctx.environmentId
+                ? CONTINUED_HERE
+                : CONTINUED_ELSEWHERE,
+          // Another computer's run continues here once the Hub hands it over; a Peer chat cannot move.
+          canContinue: row.canContinue && (here || row.runtime !== "peer"),
+          canEnd: row.canEnd,
+        },
+      ];
+    },
+  );
 }
 
 /**

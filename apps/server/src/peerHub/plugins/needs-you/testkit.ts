@@ -61,7 +61,6 @@ export const richStatus = (): PeerHubStatus => ({
           peers: [],
           work: {
             areas: [],
-            assignments: {},
             threads: [],
             tasks: [
               {

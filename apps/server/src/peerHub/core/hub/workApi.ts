@@ -29,6 +29,16 @@ const decodeOwnerDetails = Schema.decodeUnknownOption(Schema.Struct({ owner: Sch
 const OwnerCallNeeded = Schema.Struct({ owner: Schema.String, paths: Schema.Array(Schema.String) });
 export type OwnerCallNeeded = typeof OwnerCallNeeded.Type;
 const decodeOwnerCallNeeded = Schema.decodeUnknownOption(OwnerCallNeeded);
+/** What the Hub says when it did not let an agent's `done` through: other runs on the task are live. */
+const RunsRunning = Schema.Struct({
+  /** Up to five of them, named. */
+  runs: Schema.Array(
+    Schema.Struct({ id: Schema.String, email: Schema.String, agent: Schema.String }),
+  ),
+  running: Schema.Number,
+});
+export type RunsRunning = typeof RunsRunning.Type;
+const decodeRunsRunning = Schema.decodeUnknownOption(RunsRunning);
 
 const segment = (value: string) => encodeURIComponent(value);
 
@@ -91,15 +101,22 @@ export const workApi = (
       method: "PATCH",
       session,
       body,
-      // An agent's move that waits for an owner's call is told whose and for which paths, not failed.
+      // An agent's move that waits for an owner's call is told whose and for which paths, and one
+      // the done gate holds (other runs still live on the task) which runs, rather than failed.
       conflict: (code, details) =>
-        body.session === undefined || code !== "owner_call_needed"
+        body.session === undefined
           ? undefined
-          : Option.getOrUndefined(
-              Option.map(decodeOwnerCallNeeded(details), (needed) => ({
-                ownerCallNeeded: needed,
-              })),
-            ),
+          : code === "owner_call_needed"
+            ? Option.getOrUndefined(
+                Option.map(decodeOwnerCallNeeded(details), (needed) => ({
+                  ownerCallNeeded: needed,
+                })),
+              )
+            : code === "runs_running"
+              ? Option.getOrUndefined(
+                  Option.map(decodeRunsRunning(details), (running) => ({ runsRunning: running })),
+                )
+              : undefined,
     }),
 
   deleteTask: (hubUrl: string, session: string, slug: string, projectId: string, taskId: string) =>

@@ -61,12 +61,17 @@ export const rolesHub = (client: PeerHubClient.PeerHubClient["Service"]) => ({
       timeoutMs: 4000,
     }),
 
-  /** Clears a session's role; clearing one that has none changes nothing. */
-  clear: (workspace: string, project: string, session: string) =>
-    client.request(Schema.Unknown, {
-      workspace,
-      path: sessionPath(project, session),
-      method: "DELETE",
-      timeoutMs: 4000,
-    }),
+  /**
+   * Clears a session's role; clearing one that has none changes nothing. A run-keyed row is
+   * addressed by its run where the Hub keys roles by run (revision 3): the session may be gone.
+   */
+  clear: (workspace: string, project: string, session: string, run?: string) =>
+    Effect.flatMap(client.features, (features) =>
+      client.request(Schema.Unknown, {
+        workspace,
+        path: sessionPath(project, run !== undefined && (features.roles ?? 0) >= 3 ? run : session),
+        method: "DELETE",
+        timeoutMs: 4000,
+      }),
+    ),
 });

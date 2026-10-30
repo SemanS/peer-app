@@ -38,7 +38,7 @@ import {
   uncertain,
   usage,
 } from "./cliContract.ts";
-import { ownerCallNeeded } from "./landing.ts";
+import { ownerCallNeeded, runsRunningRefusal } from "./landing.ts";
 import { PUBLIC_COMMANDS, publicCli } from "./publicCli.ts";
 import { headerOf } from "./server.ts";
 import { inRepository, type LocalSession, unsupportedCheckout } from "./sessions.ts";
@@ -630,6 +630,15 @@ export async function runCli(
             : "other";
         this.record("handoff.refused", { session: session.id, at: command, refusal: code });
         throw hubFailure(error, command, HANDOFF_NEXT[code] ?? HANDOFF_NEXT.other!);
+      }
+      const held = runsRunningRefusal(moved);
+      if (held !== undefined) {
+        this.record("handoff.refused", {
+          session: session.id,
+          at: command,
+          refusal: "runs_running",
+        });
+        throw held;
       }
       const owing = ownerCallNeeded(moved);
       if (owing !== undefined)

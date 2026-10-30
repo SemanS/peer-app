@@ -3,7 +3,43 @@
  * the task, newest first, with what a person can do with it. The Hub still decides every action;
  * these only keep a button from being offered where it would be refused anyway.
  */
-import type { PeerRun, PeerRunCounts, PeerRunRuntime, PeerRunState } from "@t3tools/contracts";
+import {
+  WS_METHODS,
+  type PeerRun,
+  type PeerRunCounts,
+  type PeerRunRuntime,
+  type PeerRunState,
+} from "@t3tools/contracts";
+import type { Atom } from "effect/reactivity";
+
+import type * as EnvironmentRegistry from "../connection/registry.ts";
+import {
+  createEnvironmentRpcCommand,
+  createEnvironmentRpcQueryAtomFamily,
+} from "../state/runtime.ts";
+
+/** Agent runs (`peerHub.runs`, `endRun`, `continueRun`), for the task page on web and the phone. */
+export function createPeerRunsAtoms<R, ER>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
+) {
+  return {
+    // Always fresh: a run's state changes on another computer between two looks at the page.
+    peerRunsList: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:peer-hub:runs",
+      tag: WS_METHODS.peerHubRuns,
+      staleTimeMs: 0,
+      idleTtlMs: 0,
+    }),
+    peerRunsEnd: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:end-run",
+      tag: WS_METHODS.peerHubEndRun,
+    }),
+    peerRunsContinue: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:continue-run",
+      tag: WS_METHODS.peerHubContinueRun,
+    }),
+  };
+}
 
 export const TERMINAL_RUN_HINT = "Started from a terminal; no view here";
 export const EDITOR_RUN_HINT = "Started from an editor; no view here";
@@ -33,12 +69,19 @@ export interface RunRow {
   readonly open: RunOpen;
   readonly canContinue: boolean;
   readonly canEnd: boolean;
+  /**
+   * Another computer of its person took the run over (a handover): the environment it continued
+   * on, which the page compares with its own.
+   */
+  readonly continuedOn: string | undefined;
 }
 
 interface Viewer {
   /** The signed-in person's address; null before sign-in. */
   readonly me: string | null | undefined;
   readonly now: number;
+  /** The person leads the project or administers the workspace, as the work view says. */
+  readonly manages?: boolean;
 }
 
 const samePerson = (a: string, b: string | null | undefined) =>
@@ -51,9 +94,15 @@ const CONTINUABLE: ReadonlySet<PeerRunRuntime> = new Set(["terminal", "herdr", "
 export const canContinue = (run: PeerRun, me: string | null | undefined) =>
   samePerson(run.email, me) && run.state === "detached" && CONTINUABLE.has(run.runtime);
 
-/** Offered to the run's person; a lead or admin may also end it, which the Hub decides. */
-export const canEnd = (run: PeerRun, me: string | null | undefined) =>
-  samePerson(run.email, me) && run.state !== "ended";
+/** Offered to the run's person, and to a lead or admin; the Hub decides finally. */
+export const canEnd = (run: PeerRun, me: string | null | undefined, manages = false) =>
+  (samePerson(run.email, me) || manages) && run.state !== "ended";
+
+/** The environment a handed-over run continued on: its last, when it is not the minting one. */
+export const continuedOn = (run: Pick<PeerRun, "environments">) => {
+  const carried = run.environments ?? [];
+  return carried.length > 1 ? carried.at(-1)?.id : undefined;
+};
 
 const PEER_THREAD = "peer:";
 
@@ -102,7 +151,8 @@ export function runRows(runs: ReadonlyArray<PeerRun>, viewer: Viewer): ReadonlyA
     durationMs: durationOf(run, viewer.now),
     open: runOpen(run),
     canContinue: canContinue(run, viewer.me),
-    canEnd: canEnd(run, viewer.me),
+    canEnd: canEnd(run, viewer.me, viewer.manages),
+    continuedOn: continuedOn(run),
   }));
 }
 

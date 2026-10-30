@@ -1080,6 +1080,28 @@ describe("peer review and peer done", () => {
     });
   });
 
+  it("ends peer done refused while the Hub's done gate names other agents' live runs", async () => {
+    const { fixture } = await landingFixture(NO_PLUGINS, "claude", {
+      taskOf: () => "ord-15",
+      finishTask: async () => ({
+        runsRunning: {
+          runs: [{ id: "run_0000000000OTHERRUN1", email: "bob@acme.test", agent: "codex" }],
+          running: 3,
+        },
+      }),
+    });
+    try {
+      expect(await outcome(fixture.broker["runCli"]("done", [], as))).toBe(
+        [
+          "peer: refused: another agent is still on this task: codex (bob@acme.test) run run_0000000000OTHERRUN1 and 2 more.",
+          "Next: wait, or ask your person to end it.",
+        ].join("\n"),
+      );
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
   it("never stop a person: a terminal that is no agent session is refused for that, whatever waits", async () => {
     const { moved, ready } = onTask();
     const { fixture, view, overlap } = await ready;

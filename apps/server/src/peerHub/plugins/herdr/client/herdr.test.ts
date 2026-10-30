@@ -1006,6 +1006,27 @@ describe("startHerdrAgent", () => {
     await herdr.stop();
   });
 
+  it("resumes a session through herdr's arguments for the harness, never another harness's", async () => {
+    const herdr = await startingHerdr();
+    const argsOf = () =>
+      (
+        herdr.requests.findLast((request) => request.method === "agent.start")!.params as {
+          args?: ReadonlyArray<string>;
+        }
+      ).args;
+    await startHerdrAgent(
+      { cwd, harness: "codex", resume: { agent: "codex", session: "th-1" } },
+      { socketPath: herdr.socketPath, ...fast },
+    );
+    assert.deepStrictEqual(argsOf(), ["resume", "th-1"]);
+    await startHerdrAgent(
+      { cwd, harness: "codex", resume: { agent: "claude", session: "s-1" } },
+      { socketPath: herdr.socketPath, ...fast },
+    );
+    assert.isUndefined(argsOf());
+    await herdr.stop();
+  });
+
   it("splits the newest of Peer's workspaces, and makes a new one when it cannot split it", async () => {
     const herdr = await startingHerdr({
       workspaces: [

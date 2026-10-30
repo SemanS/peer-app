@@ -2,7 +2,14 @@ import { EnvironmentId, type PeerLocalAgent, type PeerRun } from "@t3tools/contr
 import { TERMINAL_RUN_HINT } from "@t3tools/client-runtime/peer/runs";
 import { describe, expect, it } from "vite-plus/test";
 
-import { chatsWithoutRun, ELSEWHERE_RUN_HINT, runsChip, taskRunRows } from "./runs.logic";
+import {
+  chatsWithoutRun,
+  CONTINUED_ELSEWHERE,
+  CONTINUED_HERE,
+  ELSEWHERE_RUN_HINT,
+  runsChip,
+  taskRunRows,
+} from "./runs.logic";
 import type { TaskChatRow } from "./taskChats.logic";
 
 const HERE = EnvironmentId.make("env-here");
@@ -37,6 +44,7 @@ const agent = (id: string): PeerLocalAgent => ({
 const ctx = {
   me: ME,
   now: NOW,
+  manages: false,
   environmentId: HERE,
   agents: [] as ReadonlyArray<PeerLocalAgent>,
   project: undefined,
@@ -144,6 +152,44 @@ describe("taskRunRows", () => {
       ["run_B", false, false],
       ["run_A", false, true],
     ]);
+  });
+
+  it("offers End run on a colleague's run to a lead, and Continue elsewhere only where it can move", () => {
+    const rows = taskRunRows(
+      [
+        run({ id: "run_C", state: "detached", email: "ana@acme.dev" }),
+        run({ id: "run_B", state: "detached", environment: "env-laptop", runtime: "terminal" }),
+        run({ id: "run_A", state: "detached", environment: "env-laptop" }),
+      ],
+      { ...ctx, manages: true },
+    );
+    expect(rows.map((row) => [row.id, row.canContinue, row.canEnd])).toEqual([
+      ["run_C", false, true],
+      ["run_B", true, true],
+      ["run_A", false, true],
+    ]);
+  });
+
+  it("says where a handed-over run continued, and stops calling it another computer's", () => {
+    const environments = (last: string) => [
+      { id: "env-laptop", from: "2026-10-30T10:00:00.000Z" },
+      { id: last, from: "2026-10-30T11:00:00.000Z" },
+    ];
+    const [taken, moved] = taskRunRows(
+      [
+        run({ id: "run_B", environments: environments(HERE) }),
+        run({
+          id: "run_A",
+          environment: "env-desk",
+          environments: environments("env-desk"),
+          startedAt: "2026-10-30T09:00:00.000Z",
+        }),
+      ],
+      ctx,
+    );
+    expect(taken).toMatchObject({ handover: CONTINUED_HERE, hint: undefined });
+    expect(taken?.open).toBeDefined();
+    expect(moved).toMatchObject({ handover: CONTINUED_ELSEWHERE, hint: ELSEWHERE_RUN_HINT });
   });
 });
 

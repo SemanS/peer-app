@@ -346,18 +346,21 @@ const make = Effect.gen(function* () {
       const { workspace, project } = input;
       if ((input.session === undefined) === (input.thread === undefined))
         return yield* failure("Name one session or one thread.");
-      const live = input.thread === undefined ? [] : yield* liveOf(input.thread);
+      const ofThread = input.thread === undefined ? [] : yield* liveOf(input.thread);
       const sessions = new Set([
         ...(input.session === undefined ? [] : [input.session]),
-        ...live.map((s) => s.id),
+        ...ofThread.map((s) => s.id),
         ...data.bound.filter((b) => b.thread === input.thread).map((b) => b.session),
       ]);
+      const live = yield* agents.sessions;
       for (const session of sessions) {
-        yield* hub.clear(workspace, project, session);
+        const run =
+          projectOf(workspace, project)?.roles.find((row) => row.session === session)?.run ??
+          live.find((s) => s.id === session)?.run;
+        yield* hub.clear(workspace, project, session, run);
         yield* save(yield* withRow(workspace, project, session));
       }
-      for (const session of yield* agents.sessions)
-        if (sessions.has(session.id)) localOf(session).role = undefined;
+      for (const session of live) if (sessions.has(session.id)) localOf(session).role = undefined;
       yield* save({
         ...data,
         threads: data.threads.filter((t) => t.thread !== input.thread),
@@ -390,26 +393,38 @@ const make = Effect.gen(function* () {
       const launcher = yield* plugins.require("taskLauncher");
       const unavailable = yield* launcher.unavailable;
       if (unavailable !== null) return yield* failure(unavailable);
-      const started = yield* launcher.launch({
-        checkout: state.checkoutPath(
-          (yield* state.read).persisted,
-          workspace.slug,
-          project.id,
-          repository.id,
-        ),
-        baseBranch: input.baseBranch ?? repository.branch,
-        worktrees: NodePath.join(
-          state.workspaceRoot,
-          ".worktrees",
-          workspace.slug,
-          project.id,
-          repository.id,
-        ),
-        task,
-        harness: input.harness,
-        prompt: reviewPrompt(task),
-        env: { PEER_TASK: task.key ?? task.id },
-      });
+      const checkout = state.checkoutPath(
+        (yield* state.read).persisted,
+        workspace.slug,
+        project.id,
+        repository.id,
+      );
+      // The review agent works in a run of its own on the task, as one startAgent starts does.
+      const { started } = yield* work.launchRun(
+        {
+          workspace: workspace.slug,
+          project: project.id,
+          task: task.id,
+          agent: input.harness,
+          runtime: "herdr",
+        },
+        (env) =>
+          launcher.launch({
+            checkout,
+            baseBranch: input.baseBranch ?? repository.branch,
+            worktrees: NodePath.join(
+              state.workspaceRoot,
+              ".worktrees",
+              workspace.slug,
+              project.id,
+              repository.id,
+            ),
+            task,
+            harness: input.harness,
+            prompt: reviewPrompt(task),
+            env,
+          }),
+      );
       const at = iso(yield* Clock.currentTimeMillis);
       yield* save({
         ...data,
@@ -423,11 +438,6 @@ const make = Effect.gen(function* () {
             at,
           },
         ],
-      });
-      yield* work.assign(started.threadKey, {
-        workspace: workspace.slug,
-        project: project.id,
-        task: task.id,
       });
       yield* work.refresh().pipe(state.lock.withPermits(1));
       yield* status.publish;

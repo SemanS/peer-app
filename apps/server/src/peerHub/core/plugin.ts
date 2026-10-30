@@ -539,6 +539,9 @@ export interface PeerToolBinding {
   readonly server: string;
   readonly session?: string;
   readonly token?: string;
+  /** The run its process names (`PEER_RUN`) and the token it proves it with (`PEER_RUN_TOKEN`). */
+  readonly run?: string;
+  readonly runToken?: string;
   readonly thread?: string;
   readonly pane?: string;
   /** The folder the agent runs in: a refusal says when no workspace project holds it. */
@@ -695,8 +698,14 @@ export interface PeerTaskLauncher {
     readonly task: PeerTask;
     readonly harness: PeerHarness;
     readonly prompt: string;
-    /** The assigned PEER_TASK, from core. */
+    /** The run's variables (`PEER_RUN`, `PEER_RUN_TOKEN`, `PEER_TASK`), from core. */
     readonly env: Readonly<Record<string, string>>;
+    /**
+     * The provider session a continued run resumes (design D6): the harness starts on it
+     * (`claude --resume <id>`, `codex resume <id>`) where the runtime can pass arguments, and the
+     * prompt then only says the run continues.
+     */
+    readonly resume?: { readonly agent: string; readonly session: string } | undefined;
     /** Provenance is returned only when this launch created a new worktree, never for reuse. */
   }) => Effect.Effect<
     PeerHubStartAgentResult & {

@@ -202,7 +202,16 @@ describe("the sessions on this computer", () => {
         { id: "t14", key: "ORD-14", title: "VAT" },
       ],
       threads: [],
-      assignments: { "herdr:codex:abc": "t12" },
+      runs: [
+        {
+          id: "run_1",
+          task: "t12",
+          agent: "claude",
+          runtime: "herdr",
+          state: "running",
+          keys: ["herdr:codex:abc"],
+        },
+      ],
     },
   } as unknown as Parameters<typeof localSessions>[0]["project"];
   const agent = (over: Record<string, unknown>) => ({

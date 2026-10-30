@@ -162,7 +162,7 @@ function status(
                 { email: "ana@acme.test", name: "Ana" },
               ],
             },
-            work: { areas: ["Orders"], tasks: [], threads: options.records ?? [], assignments: {} },
+            work: { areas: ["Orders"], tasks: [], threads: options.records ?? [] },
           },
         ],
       },

@@ -77,6 +77,25 @@ export function taskNamed(
   return named.length === 1 ? named[0]?.id : undefined;
 }
 
+/**
+ * The task a session works on as it starts or its keys change (design D3, step 2): the run one of
+ * its keys shows (its Peer thread's, its herdr agent's, its own), else the one task its branch or
+ * title names by key.
+ */
+export function taskOfKeys(
+  state: { readonly persisted: PersistedState; readonly work: ReadonlyMap<string, ProjectWork> },
+  workspace: string,
+  project: string,
+  keys: ReadonlyArray<string>,
+  texts: ReadonlyArray<string | undefined>,
+): string | undefined {
+  for (const key of keys) {
+    const task = assignedTask(state.persisted, key, workspace, project);
+    if (task !== undefined) return task;
+  }
+  return taskNamed(tasksOf(state.work, workspace, project), texts);
+}
+
 /** One workspace's work as the Hub gave it, keyed like `RuntimeState.work`. */
 export const workOf = (slug: string, fetched: HubWork) =>
   Object.entries(fetched.projects).map(

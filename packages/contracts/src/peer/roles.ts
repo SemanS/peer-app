@@ -29,7 +29,10 @@ export type PeerSessionRole = typeof PeerSessionRole.Type;
 /** Who gave a session its role: its `person` in Peer, or the `agent` itself while it was clean. */
 export const PEER_ROLE_SETTERS = ["person", "agent"] as const;
 
-/** One session's role, as the Hub keeps it (`rl:{slug}:{project}:{session}`). */
+/**
+ * One session's role, as the Hub keeps it: by its run (`rl:{slug}:{project}:{run}`) when the
+ * session carries one, so a new session of the run keeps it, else by session.
+ */
 export const PeerRoleRow = Schema.Struct({
   /** `claude:<id>` or `codex:<id>`, as coordination reports it. */
   session: Schema.String,
@@ -44,6 +47,8 @@ export const PeerRoleRow = Schema.Struct({
   at: Schema.String,
   /** Its reported files changed through the shell while it had the role; content-free. */
   changedFiles: Schema.optional(Schema.Boolean),
+  /** The run the role belongs to, from a Hub that keys roles by run (`roles` revision 3). */
+  run: Schema.optional(Schema.String),
 });
 export type PeerRoleRow = typeof PeerRoleRow.Type;
 

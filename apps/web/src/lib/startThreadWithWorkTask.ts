@@ -7,7 +7,11 @@ import type {
 } from "@t3tools/contracts";
 import { AsyncResult } from "effect/reactivity";
 
-/** Place the final thread on its launch host before the first turn can publish work. */
+/**
+ * Place the final thread on its launch host before the first turn can publish work: its run starts
+ * there (a retried start finds the same run by its request id), and the thread's provider session
+ * joins it.
+ */
 export async function startThreadWithWorkTask<A, E, PlacementError>(options: {
   readonly workTask: PeerHubTaskInput | null | undefined;
   readonly threadRef: ScopedThreadRef;
@@ -20,7 +24,11 @@ export async function startThreadWithWorkTask<A, E, PlacementError>(options: {
   if (options.workTask) {
     const placement = await options.assign({
       environmentId: options.threadRef.environmentId,
-      input: { ...options.workTask, thread: `peer:${options.threadRef.threadId}` },
+      input: {
+        ...options.workTask,
+        thread: `peer:${options.threadRef.threadId}`,
+        requestId: `thread-start:${options.threadRef.threadId}`,
+      },
     });
     if (placement._tag === "Failure") return AsyncResult.failure(placement.cause);
   }

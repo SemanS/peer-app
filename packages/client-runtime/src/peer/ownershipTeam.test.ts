@@ -253,7 +253,6 @@ function statusOf(setup: Setup = {}): PeerHubStatus {
               areas: ["Orders", "Payments", "Menu"],
               tasks: [...(setup.tasks ?? TASKS)],
               threads: [...(setup.threads ?? THREADS)],
-              assignments: {},
             },
             peers: [],
           },

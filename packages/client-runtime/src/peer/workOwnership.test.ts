@@ -532,7 +532,6 @@ describe("the work tree", () => {
                 hubTask("vl20", { status: "review", key: "VL20" }),
               ],
               threads: [],
-              assignments: {},
             },
             peers: [],
           },

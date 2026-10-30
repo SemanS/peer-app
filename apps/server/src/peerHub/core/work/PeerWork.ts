@@ -1,6 +1,6 @@
 /**
  * PeerWork: the work of this environment's workspaces as their Hub keeps it — tasks, every
- * member's threads, and the task each of this computer's threads is on.
+ * member's threads, and the task each of this computer's threads is on, which its run says.
  *
  * Peer reports this computer's threads to each workspace and reads everyone's work back: on a
  * timer, after each change made here, and when the Hub says a workspace's work changed. Peer's own
@@ -66,6 +66,7 @@ import {
 import * as PeerStatus from "../status/PeerStatus.ts";
 import { checkoutKind } from "../vcs.ts";
 import * as PeerRuns from "./runs.ts";
+import { launchInRun, type CreateRun, type RunEnv } from "./runs.ts";
 import { shellStatus, taskName, tasksOf, workOf, workspaceReport } from "./report.ts";
 
 /** How plugins find the task a session's branch or title names by key, as hook sessions do. */
@@ -85,8 +86,17 @@ export interface PeerWorkPass {
   >;
 }
 
-/** The task one of this computer's threads works on. */
-export type PeerAssignment = NonNullable<PersistedState["assignments"]>[string];
+/** A task in a workspace project, which a thread is put on. */
+export interface PeerTaskPlace {
+  readonly workspace: string;
+  readonly project: string;
+  readonly task: string;
+}
+
+/** The run that holds one of this computer's thread keys, and the task it is on. */
+export interface PeerThreadRun extends PeerTaskPlace {
+  readonly id: string;
+}
 
 /** How long the last report's view of Peer threads' provider runtimes stands. */
 const NATIVE_RUNTIMES_MS = 180_000;
@@ -122,21 +132,35 @@ export class PeerWork extends Context.Service<
       projectId: string,
       task: string,
     ) => Effect.Effect<string>;
-    /** The task one of this computer's threads (`peer:…`, `herdr:…`) was put on. */
-    readonly assignment: (thread: string) => Effect.Effect<Option.Option<PeerAssignment>>;
-    /** Puts one of this computer's threads under a task, or under none. */
+    /** The run one of this computer's threads (`peer:…`, `herdr:…`) shows, with its task. */
+    readonly runOf: (thread: string) => Effect.Effect<Option.Option<PeerThreadRun>>;
+    /**
+     * Puts one of this computer's threads under a task, or under none: the run holding its key
+     * moves, or a detached one starts (`RunBook.assign`).
+     */
     readonly assign: (
       thread: string,
-      assignment: PeerAssignment | null,
+      place: PeerTaskPlace | null,
     ) => Effect.Effect<void, PeerHubError>;
     /**
-     * Some of this computer's threads go by new keys (a runtime learned their sessions): what
-     * `peer-hub.json` keeps under an old key follows it, the task it is on (unless the new key has
-     * one) and whether the team may watch it.
+     * Some of this computer's threads go by new keys (a runtime learned their sessions): the run
+     * holding an old key holds the new one, with its pane, and the team may still watch it.
      */
     readonly rename: (
-      renames: ReadonlyArray<{ readonly from: string; readonly to: string }>,
+      renames: ReadonlyArray<{
+        readonly from: string;
+        readonly to: string;
+        readonly pane?: string | undefined;
+      }>,
     ) => Effect.Effect<void, PeerHubError>;
+    /**
+     * Starts an agent in a run Peer creates first (`launchInRun`): a plugin's start (a role's
+     * agent) gets its run as `startAgent`'s does, and the run holds the agent's thread.
+     */
+    readonly launchRun: <A extends { readonly threadKey: string; readonly paneId: string }, E, R>(
+      input: CreateRun,
+      launch: (env: RunEnv) => Effect.Effect<A, E, R>,
+    ) => Effect.Effect<{ readonly run: string; readonly started: A }, E | PeerHubError, R>;
     /**
      * Reports this computer's threads to each workspace, or only to `only`, and reads everyone's
      * work back. Run it under the state lock.
@@ -426,9 +450,8 @@ const make = Effect.gen(function* () {
   const saved = (write: () => Promise<void>) =>
     Effect.tryPromise({ try: write, catch: () => hubError("Could not save the workspace state.") });
 
-  // Assignments are written from runs (design D3): a key put on a task moves or starts its run.
-  const assign: PeerWork["Service"]["assign"] = (thread, assignment) =>
-    saved(() => runs.assign(thread, assignment));
+  const assign: PeerWork["Service"]["assign"] = (thread, place) =>
+    saved(() => runs.assign(thread, place));
 
   const rename: PeerWork["Service"]["rename"] = (renames) =>
     Effect.gen(function* () {
@@ -508,11 +531,15 @@ const make = Effect.gen(function* () {
       if (!runsHere && !(input.thread.startsWith("retained:") && ownsRetained)) {
         return yield* hubError("Only this computer's work can be placed.");
       }
-      yield* assign(
-        input.thread,
-        input.taskId === null
-          ? null
-          : { workspace: input.workspace, project: input.projectId, task: input.taskId },
+      // The thread's run moves to the task, or starts on it through `RunBook.create`.
+      yield* saved(() =>
+        runs.assign(
+          input.thread,
+          input.taskId === null
+            ? null
+            : { workspace: input.workspace, project: input.projectId, task: input.taskId },
+          input.requestId,
+        ),
       );
       // Apply a placement to saved work as well, including clearing an old assignment.
       // Mark it open until the hub derives delivery from the newly selected task.
@@ -561,9 +588,20 @@ const make = Effect.gen(function* () {
       ),
     taskName: (workspace, projectId, task) =>
       state.read.pipe(Effect.map((s) => taskName(s.work, workspace, projectId, task))),
-    assignment: (thread) =>
-      state.read.pipe(Effect.map((s) => Option.fromNullishOr(s.persisted.assignments?.[thread]))),
+    runOf: (thread) =>
+      Effect.sync(() => {
+        const run = runs.holderOf(thread);
+        return run === undefined
+          ? Option.none()
+          : Option.some({
+              id: run.id,
+              workspace: run.workspace,
+              project: run.project,
+              task: run.task,
+            });
+      }),
     assign,
+    launchRun: (input, launch) => launchInRun(peerRuns, input, launch),
     rename,
     refresh,
     readWork,

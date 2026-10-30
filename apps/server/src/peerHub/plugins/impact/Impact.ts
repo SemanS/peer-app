@@ -14,7 +14,7 @@ import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 import * as DateTime from "effect/DateTime";
 import * as Data from "effect/Data";
-import { PeerState, projectKey } from "../../core/state/PeerState.ts";
+import { assignedTask, PeerState, projectKey } from "../../core/state/PeerState.ts";
 import { PeerAgents } from "../../core/coordination/PeerAgents.ts";
 import { PeerHubClient } from "../../core/hub/PeerHubClient.ts";
 import { usage, type PeerSessionView } from "../../core/plugin.ts";
@@ -430,15 +430,13 @@ export function makeImpact(
           const event = created.shift()!,
             parent = `${state.workspaceRoot}/.worktrees/${event.workspace}/${event.project}/${event.repository}`,
             valid = () => {
-              const live = state.current(),
-                assignment = live.persisted.assignments?.[event.thread];
+              const live = state.current();
               return (
                 active &&
                 live.persisted.coordination?.enabled !== false &&
                 autoIndex &&
-                assignment?.workspace === event.workspace &&
-                assignment.project === event.project &&
-                assignment.task === event.task &&
+                assignedTask(live.persisted, event.thread, event.workspace, event.project) ===
+                  event.task &&
                 !!live.persisted.workspaces
                   .find((w) => w.slug === event.workspace)
                   ?.manifest?.projects.find((p) => p.id === event.project)

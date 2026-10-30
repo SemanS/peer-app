@@ -2,9 +2,9 @@
 /**
  * Starting an agent on a task (`peerHub.startAgent`). Core checks that the task is open, the
  * repository is the project's and the project lets people's own capacity in; takes the team
- * request the start answers through the active request acceptor (team requests'); launches the
- * agent in a checkout of its own through the active task launcher (herdr's); then puts the agent's
- * thread on the task and reports it. Without the plugin a step needs, it fails before anything
+ * request the start answers through the active request acceptor (team requests'); creates the run
+ * and launches the agent in a checkout of its own through the active task launcher (herdr's), in
+ * that run (`launchInRun`), so the run alone puts the agent on the task; then reports it. Without the plugin a step needs, it fails before anything
  * happens, saying that plugin is turned off or needs a newer Hub.
  *
  * @module peerHub/core/work/start
@@ -26,10 +26,11 @@ import { safeId } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import * as PeerWork from "./PeerWork.ts";
 import * as PeerRuns from "./runs.ts";
+import { launchInRun } from "./runs.ts";
 
 const hubError = (detail: string) => new PeerHubError({ detail });
 
-/** Starts an agent on a task in its own checkout and puts its thread on the task. */
+/** Starts an agent on a task in its own checkout, in a run on the task. */
 export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
   input: PeerHubStartAgentInput,
 ) {
@@ -79,57 +80,49 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
     yield* refreshWork;
     yield* status.publish;
   }
-  // The run exists before its agent does, so the agent's first hook proves it with the token.
-  const { run, token } = yield* runs.create({
-    workspace: workspace.slug,
-    project: project.id,
-    task: task.id,
-    agent: input.harness,
-    runtime: "herdr",
-    requestId: input.requestId,
-  });
-  const started = yield* launcher
-    .launch({
-      checkout: state.checkoutPath(
-        (yield* state.read).persisted,
-        workspace.slug,
-        project.id,
-        repository.id,
-      ),
-      baseBranch: input.baseBranch ?? repository.branch,
-      worktrees: NodePath.join(
-        state.workspaceRoot,
-        ".worktrees",
-        workspace.slug,
-        project.id,
-        repository.id,
-      ),
-      task,
-      harness: input.harness,
-      prompt: requestedPrompt ?? (input.prompt?.trim() ? input.prompt : fallback),
-      env: {
-        PEER_RUN: run.id,
-        ...(token === undefined ? {} : { PEER_RUN_TOKEN: token }),
-        PEER_TASK: task.id,
-      },
-    })
-    .pipe(
-      Effect.mapError((failure) =>
-        input.requestId === undefined
-          ? failure
-          : hubError(
-              `${failure.detail} The request is accepted. Inspect herdr and the task before starting another agent.`,
-            ),
-      ),
-    );
-  yield* Effect.promise(() =>
-    runs.book.hold(run.id, started.threadKey, started.paneId).catch(() => undefined),
+  const checkout = state.checkoutPath(
+    (yield* state.read).persisted,
+    workspace.slug,
+    project.id,
+    repository.id,
   );
-  yield* work.assign(started.threadKey, {
-    workspace: workspace.slug,
-    project: project.id,
-    task: task.id,
-  });
+  const { started } = yield* launchInRun(
+    runs,
+    {
+      workspace: workspace.slug,
+      project: project.id,
+      task: task.id,
+      agent: input.harness,
+      runtime: "herdr",
+      requestId: input.requestId,
+    },
+    (env) =>
+      launcher
+        .launch({
+          checkout,
+          baseBranch: input.baseBranch ?? repository.branch,
+          worktrees: NodePath.join(
+            state.workspaceRoot,
+            ".worktrees",
+            workspace.slug,
+            project.id,
+            repository.id,
+          ),
+          task,
+          harness: input.harness,
+          prompt: requestedPrompt ?? (input.prompt?.trim() ? input.prompt : fallback),
+          env,
+        })
+        .pipe(
+          Effect.mapError((failure) =>
+            input.requestId === undefined
+              ? failure
+              : hubError(
+                  `${failure.detail} The request is accepted. Inspect herdr and the task before starting another agent.`,
+                ),
+          ),
+        ),
+  );
   yield* refreshWork;
   if (started.worktree !== undefined) {
     const created = started.worktree,

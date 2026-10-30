@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import type { PersistedRun } from "../state/PeerState.ts";
 import * as PeerState from "../state/PeerState.ts";
 import { coreLayer, paymentsSeed, seedState, standInHub } from "../testkit.ts";
-import { assignmentsOf, mintRunId, RunBook, stateOf } from "./runs.ts";
+import { mintRunId, RunBook, stateOf, workRunsOf } from "./runs.ts";
 import * as PeerRuns from "./runs.ts";
 
 const place = { workspace: "acme", project: "pay" };
@@ -118,29 +118,34 @@ describe("RunBook", () => {
     assert.strictEqual(ended!.outcome, "done");
   });
 
-  it("assignments_mirror_live_runs", async () => {
+  it("thread_keys_follow_live_runs", async () => {
     const { runs, saved } = book();
+    const tasks = () =>
+      Object.fromEntries(
+        workRunsOf(Object.values(saved.at(-1)!), "acme", "pay").flatMap((run) =>
+          run.keys.map((key) => [key, run.task] as const),
+        ),
+      );
     // A herdr agent put on a task before its session is known holds its terminal's key.
     await runs.assign("herdr:term", { ...place, task: "krk-1" });
     await runs.assign("peer:thread-1", { ...place, task: "krk-2" });
-    assert.deepStrictEqual(assignmentsOf(saved.at(-1)!), {
-      "herdr:term": { ...place, task: "krk-1" },
-      "peer:thread-1": { ...place, task: "krk-2" },
-    });
-    await runs.rename([{ from: "herdr:term", to: "herdr:claude:s1" }]);
+    assert.deepStrictEqual(tasks(), { "herdr:term": "krk-1", "peer:thread-1": "krk-2" });
+    // herdr names the agent's session: the run holds its key and pane, its task stays.
+    await runs.rename([{ from: "herdr:term", to: "herdr:claude:s1", pane: "p-2" }]);
     const herdr = runs.holderOf("herdr:claude:s1")!;
+    assert.deepStrictEqual([herdr.task, herdr.pane], ["krk-1", "p-2"]);
     await runs.attach(herdr.id, "claude:s1");
-    assert.deepStrictEqual(Object.keys(assignmentsOf(saved.at(-1)!)).toSorted(), [
+    assert.deepStrictEqual(Object.keys(tasks()).toSorted(), [
       "claude:s1",
       "herdr:claude:s1",
       "peer:thread-1",
     ]);
     // Moving a key moves its run; taking it off a task ends the run it named.
     await runs.assign("peer:thread-1", { ...place, task: "krk-3" });
-    assert.strictEqual(assignmentsOf(saved.at(-1)!)["peer:thread-1"]?.task, "krk-3");
+    assert.strictEqual(tasks()["peer:thread-1"], "krk-3");
     await runs.assign("peer:thread-1", null);
     await runs.closeTask("acme", "pay", "krk-1");
-    assert.deepStrictEqual(assignmentsOf(saved.at(-1)!), {});
+    assert.deepStrictEqual(tasks(), {});
     assert.deepStrictEqual(
       runs
         .all()
@@ -165,7 +170,7 @@ describe("PeerRuns and the Hub", () => {
       );
       const runs = yield* PeerRuns.PeerRuns.pipe(Effect.provide(core));
       const state = yield* PeerState.PeerState.pipe(Effect.provide(core));
-      // The seed's assignment from before runs became a run that stays here.
+      // The seed's run from before runs reached the Hub stays here.
       assert.strictEqual(runs.book.holderOf("peer:thread-1")?.local, true);
       const { run } = yield* runs.create({
         ...place,
@@ -193,6 +198,74 @@ describe("PeerRuns and the Hub", () => {
       assert.isFalse(
         hub.calls.some((call) => call.method === "GET" && call.url?.includes("/runs/")),
       );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("a run another computer of the person took over lists as the Hub says", () =>
+    Effect.gen(function* () {
+      const listed: { runs: ReadonlyArray<unknown> } = { runs: [] };
+      const hub = yield* standInHub({
+        current: (url, method) =>
+          method === "GET" && url.startsWith("/v1/workspaces/acme/runs/pay")
+            ? [200, listed]
+            : [200, {}],
+      });
+      const core = yield* Layer.build(
+        coreLayer(yield* seedState(paymentsSeed(hub.url)), { session: "person" }),
+      );
+      const runs = yield* PeerRuns.PeerRuns.pipe(Effect.provide(core));
+      const { run } = yield* runs.create({
+        ...place,
+        task: "krk-1",
+        agent: "codex",
+        runtime: "herdr",
+      });
+      const view = { ...PeerRuns.toPeerRun(run), state: "detached" as const };
+      // The Hub's copy, not yet handed over, says nothing new: this computer's stays.
+      listed.runs = [view];
+      const before = yield* runs.list({ workspace: "acme", projectId: "pay", taskId: "krk-1" });
+      assert.strictEqual(before.find((r) => r.id === run.id)?.environment, "ana-laptop");
+      listed.runs = [
+        {
+          ...view,
+          environment: "ana-desk",
+          environments: [
+            { id: "ana-laptop", from: run.startedAt },
+            { id: "ana-desk", from: "2026-10-30T12:00:00.000Z" },
+          ],
+        },
+      ];
+      const after = yield* runs.list({ workspace: "acme", projectId: "pay", taskId: "krk-1" });
+      assert.deepStrictEqual(
+        after.filter((r) => r.id === run.id).map((r) => r.environment),
+        ["ana-desk"],
+      );
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("a run the Hub says moved to another computer of the person leaves this one", () =>
+    Effect.gen(function* () {
+      const hub = yield* standInHub({
+        current: (url, method) =>
+          method === "PUT" && url.includes("/runs/")
+            ? [403, { error: { code: "not_your_run", message: "Not your run." } }]
+            : [200, {}],
+      });
+      const core = yield* Layer.build(
+        coreLayer(yield* seedState(paymentsSeed(hub.url)), { session: "person" }),
+      );
+      const runs = yield* PeerRuns.PeerRuns.pipe(Effect.provide(core));
+      const { run } = yield* runs.create({
+        ...place,
+        task: "krk-1",
+        agent: "claude",
+        runtime: "herdr",
+      });
+      yield* runs.sync;
+      assert.isUndefined(runs.book.get(run.id));
+      // Nothing of it is sent again.
+      yield* runs.sync;
+      assert.strictEqual(hub.calls.filter((call) => call.method === "PUT").length, 1);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

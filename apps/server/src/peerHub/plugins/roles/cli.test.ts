@@ -3,6 +3,7 @@ import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
+import { PEER_ROLES_METHODS } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import { CliError, render } from "../../core/plugin.ts";
@@ -59,6 +60,40 @@ describe("peer role", () => {
           const session = peer.fixture.broker.sessions.get("claude:one");
           assert.isDefined(session?.run);
           assert.strictEqual(sent.run, revision >= 2 ? session?.run : undefined);
+        }),
+      ),
+  );
+  it.effect.each([3, 2])(
+    "clears a run-keyed role by its run where roles revision %s keys roles by run",
+    (revision) =>
+      run(
+        Effect.gen(function* () {
+          const peer = yield* ready({
+            rows: [
+              {
+                session: "claude:gone",
+                role: "review",
+                email: "bob@acme.test",
+                environment: "ana-laptop",
+                setBy: "person",
+                at: "2026-10-30T10:00:00Z",
+                run: "run_0000000000ROLERUN01",
+              },
+            ],
+            features: { roles: revision },
+          });
+          yield* peer.reread;
+          yield* peer.rpc[PEER_ROLES_METHODS.peerRolesClear]({
+            workspace: "acme",
+            project: "app",
+            session: "claude:gone",
+          });
+          const deleted = peer.server.calls.find((call) => call.method === "DELETE")!;
+          assert.strictEqual(
+            deleted.url,
+            `${ROLES}/${revision >= 3 ? "run_0000000000ROLERUN01" : "claude%3Agone"}`,
+          );
+          assert.deepStrictEqual(peer.current.rows, []);
         }),
       ),
   );

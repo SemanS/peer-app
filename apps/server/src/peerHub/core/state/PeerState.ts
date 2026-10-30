@@ -24,6 +24,7 @@ import {
   PeerFounding,
   PeerRemovedWorkspace,
   PeerManifest,
+  PeerRunEnvironment,
   PeerRunOutcome,
   PeerRunRuntime,
   PeerRunSession,
@@ -34,6 +35,7 @@ import {
   type PeerTask,
   type PeerWorkThread,
 } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -44,6 +46,7 @@ import * as Semaphore from "effect/Semaphore";
 
 import * as ServerConfig from "../../../config.ts";
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
+import { importAssignments, LegacyAssignments } from "./legacyAssignments.ts";
 import { matchRepositories } from "./remotes.ts";
 import { run } from "../local.ts";
 import { checkoutKind } from "../vcs.ts";
@@ -83,6 +86,8 @@ export const PersistedRun = Schema.Struct({
   sessions: Schema.Array(PeerRunSession),
   sessionsBefore: Schema.Number,
   requestId: Schema.optional(Schema.String),
+  /** The environments that carried it, as the Hub said when this computer took it over. */
+  environments: Schema.optional(Schema.Array(PeerRunEnvironment)),
   /** sha256 of the token its process holds, hex; the token itself is never kept. */
   tokenHash: Schema.optional(Schema.String),
   /** Thread keys put on its task before a session of it is known (`herdr:<terminal>`). */
@@ -135,16 +140,9 @@ export const PersistedState = Schema.Struct({
   /** Address → workspaces that person left on this computer; signing in does not rejoin them. */
   leftWorkspaces: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
   /**
-   * This computer's threads (`peer:<thread id>`, `herdr:<terminal id>`) → the task they work on:
-   * written from `runs` (design D3), read by everything that predates runs.
+   * Run id → this computer's runs of agents on tasks: the one record of which task each of its
+   * threads (`peer:<thread id>`, a herdr agent's keys, a session) works on.
    */
-  assignments: Schema.optional(
-    Schema.Record(
-      Schema.String,
-      Schema.Struct({ workspace: Schema.String, project: Schema.String, task: Schema.String }),
-    ),
-  ),
-  /** Run id → this computer's runs of agents on tasks; absent until runs first wrote. */
   runs: Schema.optional(Schema.Record(Schema.String, PersistedRun)),
   /**
    * Tasks an invitation named for the signed-in person, listed first by `peer core tasks` until
@@ -178,6 +176,7 @@ export const PersistedState = Schema.Struct({
 export type PersistedState = typeof PersistedState.Type;
 
 const decodePersisted = Schema.decodeUnknownOption(Schema.fromJsonString(PersistedState));
+const decodeLegacy = Schema.decodeUnknownOption(Schema.fromJsonString(LegacyAssignments));
 const encodePersisted = Schema.encodeSync(Schema.fromJsonString(PersistedState));
 
 /** A fresh install's state, and what signing out goes back to. */
@@ -244,18 +243,45 @@ export function safeId(id: string): boolean {
   return /^[a-z0-9][a-z0-9-]{0,62}$/.test(id);
 }
 
-/** The task one of this computer's threads was put on in a workspace project, if any. */
+/** Every thread key that shows a run's work: its held keys, its thread, its last session's. */
+export function runKeys(run: PersistedRun): ReadonlyArray<string> {
+  const last = run.sessions.at(-1);
+  return [
+    ...(run.keys ?? []),
+    ...(run.thread === undefined ? [] : [run.thread]),
+    ...(last === undefined ? [] : [last.id, `herdr:${last.id}`]),
+  ];
+}
+
+/**
+ * The run that holds a thread key: the newest of those not ended. A detached run keeps its last
+ * session's keys, so a herdr pane whose agent exited stays on its task.
+ */
+export function runHolding(
+  runs: Readonly<Record<string, PersistedRun>> | undefined,
+  key: string,
+): PersistedRun | undefined {
+  let found: PersistedRun | undefined;
+  for (const run of Object.values(runs ?? {}))
+    if (
+      run.endedAt === undefined &&
+      (found === undefined || run.startedAt > found.startedAt) &&
+      runKeys(run).includes(key)
+    )
+      found = run;
+  return found;
+}
+
+/** The task of the run one of this computer's threads shows in a workspace project, if any. */
 export function assignedTask(
   persisted: PersistedState,
   thread: string,
   workspace: string,
   projectId: string,
 ): string | undefined {
-  const assignment = persisted.assignments?.[thread];
-  return assignment !== undefined &&
-    assignment.workspace === workspace &&
-    assignment.project === projectId
-    ? assignment.task
+  const run = runHolding(persisted.runs, thread);
+  return run !== undefined && run.workspace === workspace && run.project === projectId
+    ? run.task
     : undefined;
 }
 
@@ -381,10 +407,26 @@ const make = Effect.gen(function* () {
   const hubHome = NodePath.join(config.baseDir, "hub");
   const workspaceRoot = resolveWorkspaceRoot();
 
-  const loaded = yield* Effect.tryPromise(() => NodeFSP.readFile(statePath, "utf8")).pipe(
-    Effect.map((text) => Option.getOrElse(decodePersisted(text), () => EMPTY_PERSISTED)),
-    Effect.orElseSucceed(() => EMPTY_PERSISTED),
+  const text = yield* Effect.tryPromise(() => NodeFSP.readFile(statePath, "utf8")).pipe(
+    Effect.orElseSucceed(() => ""),
   );
+  const decoded = Option.getOrElse(decodePersisted(text), () => EMPTY_PERSISTED);
+  // A file from before runs' phase B may still name assignments: once, each becomes a detached run,
+  // unless the file has runs already (phase A wrote assignments as an index of its runs).
+  const legacy = Option.getOrUndefined(decodeLegacy(text));
+  const migrated = legacy?.assignments !== undefined && decoded !== EMPTY_PERSISTED;
+  const loaded: PersistedState =
+    migrated && legacy.runs === undefined
+      ? {
+          ...decoded,
+          runs: importAssignments(
+            legacy.assignments!,
+            environmentId,
+            decoded.email,
+            yield* Clock.currentTimeMillis,
+          ),
+        }
+      : decoded;
   const ref = yield* Ref.make<RuntimeState>({
     persisted: loaded,
     syncing: false,
@@ -404,6 +446,9 @@ const make = Effect.gen(function* () {
       await NodeFSP.writeFile(temp, `${encodePersisted(persisted)}\n`, { mode: 0o600 });
       await NodeFSP.rename(temp, statePath);
     }).pipe(Effect.mapError(() => hubError("Could not save the workspace state.")));
+
+  // The file loses the field it was migrated from, so the assignments become runs only once.
+  if (migrated) yield* persist(loaded).pipe(Effect.ignore);
 
   const updatePersisted: PeerState["Service"]["updatePersisted"] = (f) =>
     Effect.gen(function* () {

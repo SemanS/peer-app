@@ -59,7 +59,7 @@ const state = (vcs: "git" | "jj") =>
         ...(vcs === "jj" ? { vcs } : {}),
       },
     ],
-    work: { areas: [], tasks: [], threads: [], assignments: {} },
+    work: { areas: [], tasks: [], threads: [] },
   }) as unknown as PeerProjectState;
 
 const STATUS = { email: "slavo@acme.test", environmentId: HERE } as unknown as PeerHubStatus;

@@ -58,8 +58,10 @@ export const runsApi = (client: PeerHubClient.PeerHubClient["Service"]) => ({
     }),
 
   /**
-   * Ends a run (its person, the task's owner, a lead or an admin) or moves it (a person only). Peer
-   * calls it as the person, never as an agent session, so `person_only` does not apply to it.
+   * Ends a run (its person, the task's owner, a lead or an admin), moves it to another task (a
+   * person only), or hands it to another environment of its person (`{ environment }`, design D8:
+   * 409 `ended`, 403 `not_your_run`). Peer calls it as the person, never as an agent session, so
+   * `person_only` does not apply to it.
    */
   patch: (
     workspace: string,
@@ -67,7 +69,8 @@ export const runsApi = (client: PeerHubClient.PeerHubClient["Service"]) => ({
     run: string,
     body:
       | { readonly endedAt: string; readonly outcome: PeerRunOutcome }
-      | { readonly task: string },
+      | { readonly task: string }
+      | { readonly environment: string },
   ) =>
     client.request(Written, {
       workspace,

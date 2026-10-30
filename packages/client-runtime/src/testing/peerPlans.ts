@@ -75,7 +75,6 @@ export function status(
               areas: [],
               tasks,
               threads: [],
-              assignments: {},
             },
           },
         ],

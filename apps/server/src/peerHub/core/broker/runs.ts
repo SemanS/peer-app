@@ -348,7 +348,8 @@ type Reply = { readonly status: number; readonly body: unknown };
 
 /**
  * The socket's `/runs` routes, for the terminal's Peer Core process, which never writes
- * `peer-hub.json` while a broker owns the socket (design D5): `POST /runs` creates a run,
+ * `peer-hub.json` while a broker owns the socket (design D5): `POST /runs` creates a run
+ * (`RunBook.create`, as every start path does; `thread` and `pane` optional),
  * `GET /runs?workspace=&project=&task=` lists them, `POST /runs/<id>/end` ends one (`stopped`),
  * `POST /runs/<id>/attach` puts a live session in it, and `POST /runs/<id>/continue` gives a new
  * process of a detached run its identity.
@@ -390,6 +391,7 @@ export async function runsRoute(
       return { status: 400, body: { error: "workspace, project, task and agent are required" } };
     if (!["terminal", "herdr", "peer", "mcp"].includes(runtime))
       return { status: 400, body: { error: "runtime is terminal, herdr, peer or mcp" } };
+    // The same creation as every start path's: `thread` and `pane` say where the run shows.
     const created = await book.create({
       workspace,
       project,
@@ -397,6 +399,8 @@ export async function runsRoute(
       agent,
       runtime: runtime as PeerRunRuntime,
       requestId: text("requestId"),
+      thread: text("thread"),
+      pane: text("pane"),
     });
     this.record("run.created", {
       run: created.run.id,

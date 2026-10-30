@@ -312,7 +312,8 @@ task is still running; it names that run, so you can wait for it or end it.
 `peer core runs continue <id>` starts a detached terminal run's agent again in the project's
 checkout (the folder you are in when it is one), resuming its last session (`claude --resume`,
 `codex resume`) or, when none is known, with the task's first prompt, and it carries the run so
-its sessions join it. Runs started in the app continue from **Continue** on the task's page there:
+its sessions join it. When the last conversation is gone (the harness says it finds no session),
+add `--fresh` to start on the task's prompt instead. Runs started in the app continue from **Continue** on the task's page there:
 a Peer chat wakes, and a herdr agent starts again in a new pane, resuming its last session. A
 task's page in the app lists terminal runs with "Started from a terminal; no view here": the
 agent's terminal is on the computer that started it. Leads and admins can end anyone's run there.

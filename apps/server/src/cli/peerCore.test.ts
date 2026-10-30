@@ -1423,7 +1423,7 @@ describe("peer core create, invite and the menu", () => {
             continued.io,
           );
           assert.deepStrictEqual(continued.lines, [
-            `Continuing run ${kept!.id} on T1 · Cart — Claude Code, resuming session one.`,
+            `Continuing run ${kept!.id} on T1 · Cart — Claude Code, resuming session one (gone? add --fresh).`,
           ]);
           assert.deepStrictEqual(
             [
@@ -2052,7 +2052,12 @@ describe("peer core runs", () => {
   const continueOn = (
     runs: Array<PeerRun>,
     id: string,
-    options: { readonly fresh?: boolean; readonly checkout?: string | null } = {},
+    options: {
+      readonly fresh?: boolean;
+      readonly checkout?: string | null;
+      /** The person's `--fresh`: the prompt even when the broker could resume. */
+      readonly flagFresh?: boolean;
+    } = {},
   ) =>
     Effect.gen(function* () {
       const { access } = fakeRuns(runs, options);
@@ -2063,6 +2068,7 @@ describe("peer core runs", () => {
           id,
           email: me,
           ...names,
+          ...(options.flagFresh === undefined ? {} : { fresh: options.flagFresh }),
           checkoutOf: () =>
             Effect.succeed(
               options.checkout === undefined ? "/home/ana/code/pay" : options.checkout,
@@ -2085,7 +2091,7 @@ describe("peer core runs", () => {
           env: { PEER_RUN: "run_1", PEER_RUN_TOKEN: "new-token", PEER_TASK: "t1" },
         });
         assert.deepStrictEqual(claude.lines, [
-          "Continuing run run_1 on T1 · Cart — Claude Code, resuming session sess-1.",
+          "Continuing run run_1 on T1 · Cart — Claude Code, resuming session sess-1 (gone? add --fresh).",
         ]);
         const codex = yield* continueOn(
           [
@@ -2105,6 +2111,11 @@ describe("peer core runs", () => {
           'Work on the Peer task "Cart" (t1).',
         ]);
         // The broker knows no session to resume: the task's prompt, with the run's variables.
+        // `--fresh`: the person skips a resumable session (its conversation is gone).
+        const chosen = yield* continueOn([run("run_1")], "run_1", { flagFresh: true });
+        assert.deepStrictEqual(Result.getOrThrow(chosen.relaunch).args, [
+          'Work on the Peer task "Cart" (t1).',
+        ]);
         const unknown = yield* continueOn([run("run_1")], "run_1", { fresh: true });
         assert.deepStrictEqual(Result.getOrThrow(unknown.relaunch).args, [
           'Work on the Peer task "Cart" (t1).',

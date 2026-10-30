@@ -369,6 +369,8 @@ export const continueRun = <R, RC>(
     readonly titleOf: TitleOf;
     /** The task's title alone, for the prompt. */
     readonly taskTitle: (run: PeerRun) => string;
+    /** Start on the task's prompt even when the last session could be resumed (`--fresh`). */
+    readonly fresh?: boolean;
     readonly checkoutOf: (
       workspace: string,
       project: string,
@@ -420,7 +422,10 @@ export const continueRun = <R, RC>(
       );
     const { env, resume } = yield* access.continue(run.id);
     const resumes =
-      resume !== undefined && resume.session !== "" && isTerminalAgent(resume.agent)
+      input.fresh !== true &&
+      resume !== undefined &&
+      resume.session !== "" &&
+      isTerminalAgent(resume.agent)
         ? { agent: resume.agent, session: resume.session }
         : undefined;
     const editor = resumes?.agent ?? planned;
@@ -431,7 +436,7 @@ export const continueRun = <R, RC>(
           ? ["--resume", resumes.session]
           : ["resume", resumes.session];
     yield* io.say(
-      `Continuing run ${run.id} on ${input.titleOf(run)} — ${editor === "claude" ? "Claude Code" : "Codex"}${resumes === undefined ? ", on the task's prompt" : `, resuming session ${resumes.session}`}.`,
+      `Continuing run ${run.id} on ${input.titleOf(run)} — ${editor === "claude" ? "Claude Code" : "Codex"}${resumes === undefined ? ", on the task's prompt" : `, resuming session ${resumes.session} (gone? add --fresh)`}.`,
     );
     return { editor, args, folder, env } satisfies Relaunch;
   });

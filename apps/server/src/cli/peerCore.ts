@@ -1224,6 +1224,11 @@ const runsEndCommand = Command.make("end", { ...authLocationFlags, id: runIdArgu
 const runsContinueCommand = Command.make("continue", {
   ...authLocationFlags,
   id: runIdArgument,
+  fresh: Flag.Boolean("fresh").pipe(
+    Flag.withDescription(
+      "Start on the task's prompt instead of resuming the last session (when its conversation is gone).",
+    ),
+  ),
 }).pipe(
   Command.withDescription(
     "Start a detached terminal run's agent again, in its project's checkout with the run's variables.",
@@ -1241,6 +1246,7 @@ const runsContinueCommand = Command.make("continue", {
             email,
             titleOf,
             taskTitle,
+            fresh: flags.fresh,
             // The folder this runs in when it is a checkout of the run's project, else the one recorded.
             checkoutOf: (workspace, project) =>
               Effect.gen(function* () {

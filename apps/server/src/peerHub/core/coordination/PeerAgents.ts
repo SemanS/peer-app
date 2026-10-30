@@ -7,7 +7,13 @@
  *
  * @module peerHub/core/coordination/PeerAgents
  */
-import { type PeerAgentEntry, PeerHubError, type PeerStaleReads } from "@t3tools/contracts";
+import {
+  type PeerAgentEntry,
+  PeerHubError,
+  type PeerHubContinueRunInput,
+  type PeerHubContinueRunResult,
+  type PeerStaleReads,
+} from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -170,6 +176,17 @@ export class PeerAgents extends Context.Service<
     readonly advise: (session: string, advice: PeerAdvice) => Effect.Effect<void>;
     /** A line in the coordination log; a plugin's events start with its id. */
     readonly log: (event: string, fields: Readonly<Record<string, unknown>>) => Effect.Effect<void>;
+    /**
+     * Continues a detached run of this computer, as `peerHub.continueRun` does, for a plugin that has
+     * news for it. Not started, with why, while coordination is off.
+     */
+    readonly continueRun: (
+      input: PeerHubContinueRunInput,
+    ) => Effect.Effect<PeerHubContinueRunResult>;
+    /** Queues a turn on a native session's Peer thread; false when it could not be queued. */
+    readonly queueNative: (session: string, text: string, thread: string) => Effect.Effect<boolean>;
+    /** A plugin's notice that wakes is ready: idle agents hear it now, not at the next report. */
+    readonly wake: Effect.Effect<void>;
     /** Hands over the broker coordination runs on, or none once it stops (PeerCoordination does). */
     readonly attach: (broker: CoordinationBroker | null) => Effect.Effect<void>;
   }
@@ -346,6 +363,22 @@ const make = Effect.gen(function* () {
     },
     advise: (session, advice) => ask((running) => running.adviseOn(session, advice), undefined),
     log: (event, fields) => ask((running) => running.logEvent(event, fields), undefined),
+    continueRun: (input) =>
+      Effect.promise(async () => {
+        const run = broker?.host.continueRun;
+        if (run === undefined)
+          return { started: false, reason: "Coordination is not running on this computer." };
+        return run(input).catch((failure: unknown) => ({
+          started: false,
+          reason: messageOf(failure),
+        }));
+      }),
+    queueNative: (session, text, thread) =>
+      Effect.promise(
+        async () =>
+          (await broker?.host.queueNative?.(session, text, thread).catch(() => false)) ?? false,
+      ),
+    wake: ask((running) => running.wakeWaiters(), undefined),
     attach: (next) =>
       Effect.sync(() => {
         stopHearing?.();

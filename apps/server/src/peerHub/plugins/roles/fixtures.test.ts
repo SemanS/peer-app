@@ -173,11 +173,14 @@ export const acmeHub = (current: AcmeHub) =>
 /** Peer signed in as Bob to `server`, with `plugin` started, the Hub's catalog read and VL-7 known. */
 export const rolesPeer = (
   server: { readonly url: string },
-  plugin: PeerPluginEntry = RolesPlugin,
+  plugin: PeerPluginEntry | ReadonlyArray<PeerPluginEntry> = RolesPlugin,
 ) =>
   Effect.gen(function* () {
     const core = yield* Layer.build(
-      coreLayer(yield* seedState(seed(server.url)), { session: "phs_test", plugins: [plugin] }),
+      coreLayer(yield* seedState(seed(server.url)), {
+        session: "phs_test",
+        plugins: [plugin].flat(),
+      }),
     );
     return yield* Effect.gen(function* () {
       const status = yield* PeerStatus.PeerStatus;

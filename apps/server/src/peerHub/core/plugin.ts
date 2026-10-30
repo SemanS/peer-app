@@ -71,10 +71,8 @@ import type * as PeerWork from "./work/PeerWork.ts";
 export type { AgentKind, PersistedWorkspace, ReportedSession, ReportedThread };
 
 /**
- * What a plugin's layer and contributions may require: core's services (design decision 3), and the
- * T3 services plugins build on: provider settings, which shared capacity adds its provider
- * instances to; the server's configuration and HTTP client, which memory keeps its local queue and
- * calls the Hub with; and T3's projects and threads, which memory binds agents' runtimes to.
+ * What a plugin's layer and contributions may require: core's services, and the T3 services plugins
+ * build on: provider settings, the server's configuration and HTTP client, its projects and threads.
  */
 import type * as PeerLog from "./log/PeerLog.ts";
 export type PeerCore =
@@ -286,6 +284,7 @@ export interface PeerContributions {
   readonly threadReport?: (threadKey: string) => { readonly observable?: boolean };
   readonly taskLauncher?: PeerTaskLauncher;
   readonly requestAcceptor?: PeerRequestAcceptor;
+  readonly reviewStarter?: import("./plugins/PeerReviewStarter.ts").PeerReviewStarter;
 }
 
 export type PeerLifecycleEvent =

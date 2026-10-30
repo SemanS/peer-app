@@ -372,9 +372,12 @@ const make = Effect.gen(function* () {
     }),
     /**
      * Starts an agent on a task in its own checkout, through the task launcher, with the review
-     * prompt; the thread's sessions take the role `review`. Core's checks of a start apply.
+     * prompt or the one a plugin gives (`reviewStarter`); the thread's sessions take the role
+     * `review`. Core's checks of a start apply.
      */
-    startReview: Effect.fn("Roles.startReview")(function* (input: PeerRolesStartReviewInput) {
+    startReview: Effect.fn("Roles.startReview")(function* (
+      input: PeerRolesStartReviewInput & { readonly prompt?: string },
+    ) {
       const { workspace, project } = yield* state.project(input.workspace, input.projectId);
       const task = (yield* work.tasks(workspace.slug, project.id)).find(
         (candidate) => candidate.id === input.taskId,
@@ -400,7 +403,7 @@ const make = Effect.gen(function* () {
         repository.id,
       );
       // The review agent works in a run of its own on the task, as one startAgent starts does.
-      const { started } = yield* work.launchRun(
+      const { run, started } = yield* work.launchRun(
         {
           workspace: workspace.slug,
           project: project.id,
@@ -421,7 +424,7 @@ const make = Effect.gen(function* () {
             ),
             task,
             harness: input.harness,
-            prompt: reviewPrompt(task),
+            prompt: input.prompt ?? reviewPrompt(task),
             env,
           }),
       );
@@ -443,6 +446,7 @@ const make = Effect.gen(function* () {
       yield* status.publish;
       return {
         thread: started.threadKey,
+        run,
         paneId: started.paneId,
         terminalId: started.terminalId,
         ...(started.promptError === undefined ? {} : { promptError: started.promptError }),

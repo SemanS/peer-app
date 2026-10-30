@@ -30,6 +30,7 @@ import type { PeerRpcContribution, PeerRpcWrap } from "./plugin.ts";
 import * as PeerPlugins from "./plugins/PeerPlugins.ts";
 import * as PeerState from "./state/PeerState.ts";
 import * as PeerStatus from "./status/PeerStatus.ts";
+import * as PeerAgents from "./coordination/PeerAgents.ts";
 import * as ContinueRun from "./work/continueRun.ts";
 import * as PeerWork from "./work/PeerWork.ts";
 import * as PeerRuns from "./work/runs.ts";
@@ -336,7 +337,7 @@ const runsRpcLayer = (wrap: PeerRpcWrap) =>
         | PeerState.PeerState
         | PeerPlugins.PeerPlugins
         | PeerWork.PeerWork
-        | PeerCoordination.PeerCoordination
+        | PeerAgents.PeerAgents
       >();
       return RunsRpcGroup.toLayer(
         RunsRpcGroup.of({

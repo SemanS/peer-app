@@ -72,6 +72,7 @@ import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
 import { projectKey } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
+import * as ContinueRun from "../work/continueRun.ts";
 import * as PeerWork from "../work/PeerWork.ts";
 import * as PeerRuns from "../work/runs.ts";
 import * as PeerWorkspaces from "../workspaces/PeerWorkspaces.ts";
@@ -239,6 +240,13 @@ const make = Effect.gen(function* () {
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const projects = yield* ProjectService.ProjectService;
   const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
+  const continuing = yield* Effect.context<
+    | PeerRuns.PeerRuns
+    | PeerState.PeerState
+    | PeerPlugins.PeerPlugins
+    | PeerWork.PeerWork
+    | PeerAgents.PeerAgents
+  >();
   const services = yield* Effect.context<never>();
   const runPromise = Effect.runPromiseWith(services);
   const runFork = Effect.runForkWith(services);
@@ -329,6 +337,8 @@ const make = Effect.gen(function* () {
         nativeWakeMessages.delete(session);
       return pending;
     },
+    continueRun: (input) =>
+      runPromise(ContinueRun.continueRun(input).pipe(Effect.provide(continuing))),
     queueNative: async (session, text, thread) => {
       const messageId = MessageId.make(NodeCrypto.randomUUID());
       const separator = session.indexOf(":");

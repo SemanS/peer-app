@@ -82,7 +82,7 @@ export const PeerRoomTarget = Schema.Struct({
   run: Schema.optional(Schema.String),
   harness: Schema.optional(Schema.String),
   reason: Schema.optional(Schema.String),
-  /** The person who last moved it. */
+  /** The person who passed it on; an own message and a team-reach delivery have none. */
   by: Schema.optional(Schema.String),
   at: Schema.optional(Schema.String),
 });
@@ -258,7 +258,8 @@ export const PeerRoomsSetReachInput = Schema.Struct({
 });
 export type PeerRoomsSetReachInput = typeof PeerRoomsSetReachInput.Type;
 
-export const PeerRoomsSetReachResult = Schema.Struct({ reach: Schema.String });
+/** The Hub answers with the row it stored, as a room shows it. */
+export const PeerRoomsSetReachResult = Schema.Struct({ reach: PeerRoomReach });
 export type PeerRoomsSetReachResult = typeof PeerRoomsSetReachResult.Type;
 
 /** At most this much unified diff; `truncated` says it was cut. */

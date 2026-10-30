@@ -134,7 +134,8 @@ export const roomPeer = (current: RoomHub, plugins: ReadonlyArray<PeerPluginEntr
       if (url.startsWith(ROOM) && method === "GET")
         return [200, { seq: 12, seen: 3, messages: [messageOf()], reaches: [] }];
       if (url.startsWith(ROOM)) return [200, { message: messageOf({ seq: 13 }) }];
-      if (url.includes("/reach")) return [200, { reach: "own" }];
+      if (url.includes("/reach"))
+        return [200, { reach: { run: "run_x", reach: "team", email: BOB, capacity: "shared" } }];
       return [404, { error: { code: "not_found", message: "Not here." } }];
     };
     const server = yield* standInHub({ current: answer });

@@ -149,11 +149,14 @@ describe("what a person does in a room", () => {
     run(
       Effect.gen(function* () {
         const peer = yield* roomPeer(roomHubOf());
-        yield* rpc(peer, "peer.rooms.setReach", {
+        const answer = yield* rpc(peer, "peer.rooms.setReach", {
           workspace: "acme",
           project: "app",
           run: "run_x",
           reach: "team",
+        });
+        assert.deepStrictEqual(answer, {
+          reach: { run: "run_x", reach: "team", email: BOB, capacity: "shared" },
         });
         assert.deepStrictEqual(
           bodyOf(callsTo(peer, "PUT", `${ACME}/projects/app/runs/run_x/reach`)[0]),

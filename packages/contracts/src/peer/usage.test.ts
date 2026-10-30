@@ -25,7 +25,7 @@ const decodeReport = Schema.decodeUnknownSync(PeerUsageReportBody);
 
 /** The example of design D3, as the Hub answers it. */
 const example = {
-  workspace: "vocabulift",
+  workspace: "acme",
   days: 30,
   from: "2026-10-01",
   to: "2026-10-30",

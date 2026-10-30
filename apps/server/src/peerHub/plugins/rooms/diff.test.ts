@@ -96,19 +96,18 @@ describe("the run a diff reads", () => {
     );
   });
 
-  it("finds that branch's worktree", () =>
-    Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const { dir, work } = yield* repositories;
-          const tree = NodePath.join(dir, "tree");
-          git(work, "worktree", "add", "-q", "-b", "ana/tax", tree);
-          const found = yield* Effect.promise(() => worktreeOf(work, "ana/tax"));
-          assert.strictEqual(NodeFS.realpathSync(found ?? ""), NodeFS.realpathSync(tree));
-          assert.isUndefined(yield* Effect.promise(() => worktreeOf(work, "ana/other")));
-        }),
-      ),
-    ));
+  it.effect("finds that branch's worktree", () =>
+    scoped(
+      Effect.gen(function* () {
+        const { dir, work } = yield* repositories;
+        const tree = NodePath.join(dir, "tree");
+        git(work, "worktree", "add", "-q", "-b", "ana/tax", tree);
+        const found = yield* Effect.promise(() => worktreeOf(work, "ana/tax"));
+        assert.strictEqual(NodeFS.realpathSync(found ?? ""), NodeFS.realpathSync(tree));
+        assert.isUndefined(yield* Effect.promise(() => worktreeOf(work, "ana/other")));
+      }),
+    ),
+  );
 });
 
 describe("the change a review session starts on", () => {

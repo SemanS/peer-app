@@ -293,8 +293,7 @@ const make = Effect.gen(function* () {
       yield* Ref.update(inboxes, (current) => new Map(current).set(workspace, inbox));
       queues.prune(workspace, inbox);
       yield* status.publish;
-      for (const job of [...unsent.values()])
-        if (workspaceOf(job) === workspace) yield* handle(job);
+      for (const job of unsent.values()) if (workspaceOf(job) === workspace) yield* handle(job);
       const deps = followDeps(workspace, email);
       yield* Effect.forEach(inbox.work, (item) => actOn(deps, item), { discard: true });
     }).pipe(Effect.ignore);

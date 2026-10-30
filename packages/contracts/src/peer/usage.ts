@@ -43,7 +43,7 @@ export const PeerUsageGateway = Schema.Struct({
 export type PeerUsageGateway = typeof PeerUsageGateway.Type;
 
 export const PeerUsageApiSpend = Schema.Struct({
-  /** Null: nothing was reported on shared capacity. */
+  /** Null: nothing priced was reported on shared capacity. */
   usd: Schema.NullOr(Schema.Number),
   /** Null: no project has a gateway team, or the scope is `self`. */
   gateway: Schema.NullOr(PeerUsageGateway),
@@ -114,7 +114,7 @@ export const PeerUsageOverview = Schema.Struct({
   tickets: Schema.NullOr(PeerUsageTickets),
   implementations: PeerUsageImplementations,
   apiSpend: PeerUsageApiSpend,
-  /** Null: nothing was reported. */
+  /** Null: nothing priced was reported; `tokens` may still hold tokens of unpriced models. */
   tokenValue: Schema.NullOr(PeerUsageTokenValue),
   /** Null: the workspace has no `github` block, or the scope is `self`. */
   code: Schema.NullOr(PeerUsageCode),
@@ -175,6 +175,14 @@ export const PEER_USAGE_REPORT_LIMITS = {
   days: 35,
 } as const;
 
+/**
+ * The shape of a model's name, and nothing longer: a transcript's model is free text, so a local
+ * model's path or a cloud ARN would otherwise reach the Hub. Anything else is reported as `other`.
+ */
+export const PEER_USAGE_MODEL_PATTERN = new RegExp(
+  `^[A-Za-z0-9][A-Za-z0-9._+-]{0,${String(PEER_USAGE_REPORT_LIMITS.modelChars - 1)}}$`,
+);
+
 const reportCount = Schema.Number.check(
   Schema.isInt(),
   Schema.isBetween({ minimum: 0, maximum: PEER_USAGE_REPORT_LIMITS.count }),
@@ -186,11 +194,7 @@ const reportCount = Schema.Number.check(
  */
 export const PeerUsageReportRow = Schema.Struct({
   agent: Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9_.-]{0,47}$/)),
-  model: Schema.String.check(
-    Schema.isPattern(
-      new RegExp(`^\\P{Cc}{1,${String(PEER_USAGE_REPORT_LIMITS.modelChars)}}$`, "u"),
-    ),
-  ),
+  model: Schema.String.check(Schema.isPattern(PEER_USAGE_MODEL_PATTERN)),
   capacity: Schema.Literals(["personal", "shared"]),
   input: reportCount,
   output: reportCount,
@@ -203,7 +207,10 @@ export const PeerUsageReportRow = Schema.Struct({
 });
 export type PeerUsageReportRow = typeof PeerUsageReportRow.Type;
 
-/** The body of `PUT /usage/reports/{project}/{day}`. Empty `rows` remove the computer's report. */
+/**
+ * The body of `PUT /usage/reports/{project}/{day}`. The Hub reads empty `rows` as removing the
+ * computer's report; Peer never sends them, since only a person's sharing switch takes rows away.
+ */
 export const PeerUsageReportBody = Schema.Struct({
   environment: Schema.String.check(Schema.isPattern(/^[A-Za-z0-9._-]{1,120}$/)),
   rev: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),

@@ -185,6 +185,10 @@ describe("a report", () => {
     refused({ model: "" });
     refused({ model: "x".repeat(PEER_USAGE_REPORT_LIMITS.modelChars + 1) });
     refused({ model: "claude\nopus" });
+    refused({ model: "/Users/ana/models/llama.gguf" });
+    refused({ model: "arn:aws:bedrock:eu-west-1:123456789012:foundation-model/x" });
+    refused({ model: "-flag" });
+    refused({ model: "x".repeat(PEER_USAGE_REPORT_LIMITS.modelChars) + "\n" });
     expect(() => decodeReport({ ...report, environment: "/Users/ana" })).toThrow();
     expect(() =>
       decodeReport({ ...report, rows: rowsOf(PEER_USAGE_REPORT_LIMITS.rows + 1) }),

@@ -4,7 +4,11 @@
  *
  * @module peerHub/plugins/usage/rows
  */
-import { PEER_USAGE_REPORT_LIMITS, type PeerUsageReportRow } from "@t3tools/contracts";
+import {
+  PEER_USAGE_MODEL_PATTERN,
+  PEER_USAGE_REPORT_LIMITS,
+  type PeerUsageReportRow,
+} from "@t3tools/contracts";
 
 import type { UsageSessionTotal } from "../../../usage/usageSessionTotals.ts";
 
@@ -30,11 +34,16 @@ interface Fold {
   sessions: number;
 }
 
-/** A model name as the Hub takes one: a transcript's text is not bound by the Hub's limits. */
-const wireModel = (model: string) => {
-  const cut = [...model].slice(0, PEER_USAGE_REPORT_LIMITS.modelChars).join("");
-  return /^\P{Cc}+$/u.test(cut) ? cut : OTHER_MODEL;
-};
+/** Never cut to fit: part of a path is still a path. */
+const wireModel = (model: string) => (PEER_USAGE_MODEL_PATTERN.test(model) ? model : OTHER_MODEL);
+
+/** Claude's `<synthetic>` records carry no tokens and no price, and would read as a pricing gap. */
+const hasTokens = ({ totals }: UsageRowInput) =>
+  totals.uncachedInputTokens +
+    totals.cacheCreationTokens +
+    totals.cachedInputTokens +
+    totals.outputTokens >
+  0;
 
 const keyOf = ({ agent, model, capacity, priced }: Omit<Fold, keyof Tallies>) =>
   [agent, model, capacity, priced].join("\0");
@@ -45,7 +54,7 @@ const tokensOf = (fold: Fold) => fold.input + fold.output + fold.cached;
 
 const foldSessions = (sessions: ReadonlyArray<UsageRowInput>): ReadonlyArray<Fold> => {
   const folds = new Map<string, Fold & { readonly ids: Set<string> }>();
-  for (const session of sessions) {
+  for (const session of sessions.filter(hasTokens)) {
     const shape = {
       agent: session.provider,
       model: wireModel(session.model),

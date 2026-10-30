@@ -47,6 +47,8 @@ const SENTINELS = {
   outside: "SENTINEL-session-outside",
   deleted: "SENTINEL-session-deleted-dir",
   twoWorkspaces: "SENTINEL-session-two-workspaces",
+  modelPath: "SENTINEL-model-path",
+  modelArn: "SENTINEL-model-arn",
 };
 
 const SHARED_REMOTE = "https://github.com/both/lib.git";
@@ -72,7 +74,13 @@ const repository = async (path: string, remote: string) => {
 const decodeBody = Schema.decodeUnknownSync(Schema.fromJsonString(PeerUsageReportBody));
 
 /** A transcript as Claude Code writes one, with everything a report must leave behind. */
-const transcript = (sessionId: string, cwd: string, output: number, at: string) =>
+const transcript = (
+  sessionId: string,
+  cwd: string,
+  output: number,
+  at: string,
+  model = "priced-model",
+) =>
   [
     { type: "summary", summary: SENTINELS.title, sessionId },
     {
@@ -91,7 +99,7 @@ const transcript = (sessionId: string, cwd: string, output: number, at: string) 
       gitBranch: SENTINELS.branch,
       message: {
         id: `msg-${sessionId}`,
-        model: "priced-model",
+        model,
         content: [{ type: "text", text: SENTINELS.reply }],
         usage: { input_tokens: 1, output_tokens: output },
       },
@@ -188,6 +196,7 @@ interface Stage {
     readonly id: string;
     readonly cwd: string;
     readonly output: number;
+    readonly model?: string;
   }>;
   readonly runSessions?: ReadonlyArray<string>;
 }
@@ -211,10 +220,10 @@ const reportOf = ({ sessions, runSessions = [] }: Stage) =>
       await repository(paths.lib, SHARED_REMOTE);
       const folder = NodePath.join(home, "claude", "projects", SENTINELS.folder);
       await NodeFSP.mkdir(folder, { recursive: true });
-      for (const { id, cwd, output } of sessions)
+      for (const { id, cwd, output, model } of sessions)
         await NodeFSP.writeFile(
           NodePath.join(folder, `${id}.jsonl`),
-          transcript(id, paths[cwd as keyof typeof paths] ?? cwd, output, at),
+          transcript(id, paths[cwd as keyof typeof paths] ?? cwd, output, at, model),
         );
     });
 
@@ -285,6 +294,36 @@ describe("what leaves the computer", () => {
 
       for (const text of everyText(calls))
         for (const sentinel of Object.values(SENTINELS)) assert.notInclude(text, sentinel);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.live("names no model that is a path or an ARN", () =>
+    Effect.gen(function* () {
+      const { calls, reports } = yield* reportOf({
+        sessions: [
+          {
+            id: "local",
+            cwd: "repository",
+            output: 3,
+            model: `/Users/ana/${SENTINELS.modelPath}/llama.gguf`,
+          },
+          {
+            id: "cloud",
+            cwd: "repository",
+            output: 4,
+            model: `arn:aws:bedrock:eu-west-1:123456789012:${SENTINELS.modelArn}/x`,
+          },
+        ],
+      });
+      assert.lengthOf(reports, 1);
+      const { rows } = decodeBody(reports[0]?.body ?? "");
+      assert.deepStrictEqual(
+        rows.map(({ model, output, sessions }) => ({ model, output, sessions })),
+        [{ model: "other", output: 7, sessions: 2 }],
+      );
+      for (const text of everyText(calls))
+        for (const sentinel of [SENTINELS.modelPath, SENTINELS.modelArn])
+          assert.notInclude(text, sentinel);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

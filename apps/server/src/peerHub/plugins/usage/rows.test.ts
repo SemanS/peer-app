@@ -115,9 +115,21 @@ describe("a day's rows", () => {
   });
 
   it("stay under the Hub's 16 KiB, which the schema cannot say", () => {
-    const longName = (index: number) => `${String(index)}-${"\u{1F600}".repeat(110)}`;
+    const longName = (index: number) =>
+      String(index).padEnd(PEER_USAGE_REPORT_LIMITS.modelChars, "x");
     const sessions = Array.from({ length: 64 }, (_, index) =>
-      session({ model: longName(index), output: index + 1 }),
+      session({
+        model: longName(index),
+        output: 1e12 + index,
+        costUsd: 123_456.789012,
+        totals: {
+          uncachedInputTokens: 1e12,
+          cachedInputTokens: 1e12,
+          cacheCreationTokens: 0,
+          outputTokens: 1e12 + index,
+          reasoningTokens: 0,
+        },
+      }),
     );
     const environment = "e".repeat(120);
     const rows = reportRows(sessions, environment);
@@ -127,6 +139,59 @@ describe("a day's rows", () => {
     );
     expect(rows.length).toBeLessThan(64);
     expect(decodes(body)).toBe(true);
+  });
+
+  it("name a model only when the whole name has a model's shape", () => {
+    const named = (model: string) => reportRows([session({ model })], "env")[0]?.model;
+    expect(named("gpt-6.1_sol+fast")).toBe("gpt-6.1_sol+fast");
+    expect(named("m".repeat(PEER_USAGE_REPORT_LIMITS.modelChars))).toBe(
+      "m".repeat(PEER_USAGE_REPORT_LIMITS.modelChars),
+    );
+    expect(named("m".repeat(PEER_USAGE_REPORT_LIMITS.modelChars + 1))).toBe("other");
+    expect(named("/Users/ana/models/llama.gguf")).toBe("other");
+    expect(named("arn:aws:bedrock:eu-west-1:123456789012:foundation-model/x")).toBe("other");
+  });
+
+  it("leave out records of no tokens, and count no session for them", () => {
+    const empty = {
+      uncachedInputTokens: 0,
+      cachedInputTokens: 0,
+      cacheCreationTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+    };
+    const synthetic = {
+      model: "<synthetic>",
+      sessionId: "two",
+      totals: empty,
+      costUsd: 0,
+      unpriced: true,
+    };
+    expect(reportRows([session(synthetic)], "env")).toEqual([]);
+    const rows = reportRows(
+      [session({}), session(synthetic), session({ ...synthetic, model: "claude-opus-5-5" })],
+      "env",
+    );
+    expect(rows.map(({ model, sessions, usd }) => ({ model, sessions, usd }))).toEqual([
+      { model: "claude-opus-5-5", sessions: 1, usd: 0.5 },
+    ]);
+  });
+
+  it("keep a session whose only tokens are of one kind", () => {
+    const zero = {
+      uncachedInputTokens: 0,
+      cachedInputTokens: 0,
+      cacheCreationTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+    };
+    for (const kind of [
+      "uncachedInputTokens",
+      "cachedInputTokens",
+      "cacheCreationTokens",
+      "outputTokens",
+    ] as const)
+      expect(tokens(reportRows([session({ totals: { ...zero, [kind]: 1 } })], "env"))).toBe(1);
   });
 
   it("hold only what the Hub allows, however odd the transcript", () => {

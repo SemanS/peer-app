@@ -1177,7 +1177,7 @@ Everyone in a room brings their own agent. Who answers a message depends on who 
 
 - **Team** reaches people only, and starts no agent.
 - **A person** puts the message in their Needs you.
-- **Your agent** answers on your capacity. With a run of yours on the task, that run hears it. Without one, Peer starts a read-only review session in your checkout, on the change. This works after a handoff, when the author's agent has finished, so you can ask about the work without pinging its author.
+- **Your agent** answers on your capacity. With a run of yours on the task, that run hears it. Without one, Peer starts a review session in your checkout, on the change. Peer denies its edits, its plain shell writes and its landing steps; it is not a sandbox, but nothing it does can land, and it costs the author nothing. This works after a handoff, when the author's agent has finished, so you can ask about the work without pinging its author.
 - **A colleague's agent** waits for that colleague. They choose **Pass on** or **Decline**, in the room or in Needs you, and nothing reaches their agent until they pass it on, because their subscription runs only the turns they start.
 
 If your run is on the project's shared capacity, you can let the team reach it directly with the switch at the top of the room. It covers that run only, and you can turn it off at any time. A run on your own subscription cannot be opened this way.

@@ -212,3 +212,66 @@ it("fingerprints what a brief holds and lists the current changes without the ar
   });
   expect(await listChanges(root)).toEqual([{ name: "vl36", title: "Goal" }]);
 });
+
+it("falls back to the change an imported task came from, after the mapping and the name", async () => {
+  const root = await repository("survey-editor-concurrency");
+  const imported = {
+    id: "t-11",
+    key: "SEC-1-1",
+    title: "Create the shared concurrency contract",
+    source: { system: "openspec", ref: "survey-editor-concurrency#1.1" },
+  };
+  const read = await readSource(root, "app", imported);
+  expect(read).toMatchObject({
+    changeId: "survey-editor-concurrency",
+    imported: "survey-editor-concurrency",
+    live: { state: "ready", changeId: "survey-editor-concurrency" },
+  });
+  expect(read.mapped).toBeUndefined();
+  expect(read.named).toBeUndefined();
+  // A mapping or a directory named like the task still wins; the import is only reported.
+  await mapping(root, "add-story-summaries");
+  await NodeFSP.mkdir(NodePath.join(root, "openspec/changes/add-story-summaries"), {
+    recursive: true,
+  });
+  await NodeFSP.writeFile(
+    NodePath.join(root, "openspec/changes/add-story-summaries/proposal.md"),
+    "# Why\nSummaries.",
+  );
+  await NodeFSP.writeFile(
+    NodePath.join(root, "openspec/changes/add-story-summaries/tasks.md"),
+    "- [ ] One",
+  );
+  await NodeFSP.writeFile(
+    NodePath.join(root, "openspec/peer-tasks.json"),
+    JSON.stringify({ version: 1, tasks: { [imported.id]: "add-story-summaries" } }),
+  );
+  expect(await readSource(root, "app", imported)).toMatchObject({
+    changeId: "add-story-summaries",
+    mapped: "add-story-summaries",
+    imported: "survey-editor-concurrency",
+  });
+  // Another system, or an unsafe reference, names no change.
+  await NodeFSP.rm(NodePath.join(root, "openspec/peer-tasks.json"));
+  expect(
+    await readSource(root, "app", { ...imported, source: { system: "jira", ref: "SEC-11" } }),
+  ).toMatchObject({ live: { state: "unavailable", code: "not-linked" } });
+  expect(
+    await readSource(root, "app", { ...imported, source: { system: "openspec", ref: "../x#1" } }),
+  ).toMatchObject({ live: { state: "unavailable", code: "not-linked" } });
+  // The change it came from was archived: the reason says so, and nothing is proposed.
+  await NodeFSP.rm(NodePath.join(root, "openspec/changes/survey-editor-concurrency"), {
+    recursive: true,
+  });
+  await NodeFSP.mkdir(
+    NodePath.join(root, "openspec/changes/archive/2026-10-30-survey-editor-concurrency"),
+    { recursive: true },
+  );
+  expect(await readSource(root, "app", imported)).toMatchObject({
+    gone: true,
+    archivedAs: "2026-10-30-survey-editor-concurrency",
+    live: {
+      reason: expect.stringContaining("This task was imported from survey-editor-concurrency"),
+    },
+  });
+});

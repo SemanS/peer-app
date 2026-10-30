@@ -8,7 +8,12 @@ import {
   staleOwnerLine,
   type ReportDraft,
 } from "@t3tools/client-runtime/peer/test-reports";
-import type { PeerTestReport, PeerTestReportItem, PeerTestReportResult } from "@t3tools/contracts";
+import type {
+  PeerTask,
+  PeerTestReport,
+  PeerTestReportItem,
+  PeerTestReportResult,
+} from "@t3tools/contracts";
 import { useState } from "react";
 
 import { ensureLocalApi } from "../../../localApi";
@@ -54,6 +59,7 @@ export function ReportSection(props: TaskSlotProps) {
       members={project.members}
       task={props.task.id}
       taskName={props.task.key ?? props.task.title}
+      tasks={props.project.work.tasks}
     />
   );
 }
@@ -72,6 +78,7 @@ function TaskReports({
   readonly members: ReadonlyArray<Member>;
   readonly task: string;
   readonly taskName: string;
+  readonly tasks: ReadonlyArray<Pick<PeerTask, "id" | "key" | "title">>;
 }) {
   const { reports, error, refresh } = useTestReports({
     environmentId,
@@ -96,6 +103,10 @@ function TaskReports({
   const me = status.email;
   const own = ownReport(reports ?? [], me);
   const canAssign = maySetOwner && assignRights(status, place);
+  const taskLabel = (id: string) => {
+    const found = tasks.find((candidate) => candidate.id === id);
+    return found === undefined ? id : (found.key ?? found.title);
+  };
   const name = (email: string) =>
     members.find((member) => member.email.toLowerCase() === email.toLowerCase())?.name ??
     email.split("@")[0] ??
@@ -203,6 +214,7 @@ function TaskReports({
                 busy={busy}
                 members={members}
                 name={name}
+                taskLabel={taskLabel}
                 canAssign={canAssign}
                 onReplace={mine && mayFile && !editing ? () => setEditing(true) : undefined}
                 onRemove={mine && mayRemove ? () => void removeOwn(report) : undefined}
@@ -258,6 +270,8 @@ function ReportRow({
   readonly busy: boolean;
   readonly members: ReadonlyArray<Member>;
   readonly name: (email: string) => string;
+  /** A task an item is left to, as its key or title. */
+  readonly taskLabel: (id: string) => string;
   readonly canAssign: boolean;
   readonly onReplace: (() => void) | undefined;
   readonly onRemove: (() => void) | undefined;
@@ -299,6 +313,7 @@ function ReportRow({
               busy={busy}
               members={members}
               name={name}
+              taskLabel={taskLabel}
               canAssign={canAssign}
               onAssign={(owner) => onAssign(index, owner)}
             />
@@ -321,10 +336,13 @@ function ItemRow({
   readonly busy: boolean;
   readonly members: ReadonlyArray<Member>;
   readonly name: (email: string) => string;
+  readonly taskLabel: (id: string) => string;
   readonly canAssign: boolean;
   readonly onAssign: (owner: string | null) => void;
 }) {
   const mark = itemMark(item);
+  // Left to a dependent task by its author: shown as such; a person who names an owner takes it over.
+  const leftTo = item.kind === "unverified" && item.owner === undefined ? item.task : undefined;
   return (
     <li className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 text-sm">
       <span className="w-20 shrink-0 text-xs text-muted-foreground">{KIND_WORD[item.kind]}</span>
@@ -340,9 +358,12 @@ function ItemRow({
           {mark}
         </span>
       )}
+      {leftTo === undefined ? null : (
+        <span className="text-xs text-muted-foreground">Left to {taskLabel(leftTo)}</span>
+      )}
       {item.kind !== "unverified" ? null : canAssign ? (
         <OwnerSelect item={item} busy={busy} members={members} name={name} onAssign={onAssign} />
-      ) : (
+      ) : leftTo !== undefined ? null : (
         <span
           className={
             item.owner === undefined

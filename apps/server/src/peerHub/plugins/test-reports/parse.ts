@@ -1,7 +1,7 @@
 /**
  * `peer tests` as an agent types it: `pass|fail|mixed "<summary>" [--for <task>] [--pass "<text>"]...
- * [--fail "<text>"]... [--unverified "<text> [@<person>]"]...`, or `show [<task>]`. Flags repeat, so
- * the command reads its own arguments rather than core's one-value `flag`.
+ * [--fail "<text>"]... [--unverified "<text> [@<person>|@task:<key>]"]...`, or `show [<task>]`. Flags
+ * repeat, so the command reads its own arguments rather than core's one-value `flag`.
  *
  * @module peerHub/plugins/test-reports/parse
  */
@@ -10,13 +10,15 @@ import type { PeerTestReportItemKind, PeerTestReportResult } from "@t3tools/cont
 import { usage } from "../../core/plugin.ts";
 
 export const FORM =
-  'peer tests pass|fail|mixed "<summary>" [--for <task>] [--pass "<text>"]... [--fail "<text>"]... [--unverified "<text> [@<person>]"]..., or peer tests show [<task>]';
+  'peer tests pass|fail|mixed "<summary>" [--for <task>] [--pass "<text>"]... [--fail "<text>"]... [--unverified "<text> [@<person>|@task:<key>]"]..., or peer tests show [<task>]';
 
 export interface ParsedItem {
   readonly kind: PeerTestReportItemKind;
   readonly text: string;
   /** As typed after `@`: a short name or an address; the Hub completes and checks it. */
   readonly owner?: string;
+  /** As typed after `@task:`: a key, or an item number of the same OpenSpec change; the Hub resolves it. */
+  readonly task?: string;
 }
 
 export type Parsed =
@@ -35,16 +37,21 @@ const ITEM_FLAGS: Readonly<Record<string, PeerTestReportItemKind>> = {
   "--fail": "fail",
   "--unverified": "unverified",
 };
-/** A trailing `@ana` or `@ana@acme.test` names who answers for the item. */
+/** A trailing `@ana` or `@ana@acme.test` names who answers for the item; `@task:3.1` the task that covers it. */
 const OWNER = /^(.*\S)\s+@([^\s@]+(?:@[^\s@]+)?)$/;
+const TASK = /^task:(.+)$/i;
 
 const bad = (reason: string) => usage(reason, `run ${FORM}.`);
 
-/** An unverified item's text and its owner, when it names one. */
+/** An unverified item's text and its owner, or the task it is left to, when it names one. */
 export function itemOf(kind: PeerTestReportItemKind, raw: string): ParsedItem {
   const text = raw.trim();
   const owned = kind === "unverified" ? OWNER.exec(text) : null;
-  return owned === null ? { kind, text } : { kind, text: owned[1]!, owner: owned[2]! };
+  if (owned === null) return { kind, text };
+  const task = TASK.exec(owned[2]!);
+  return task === null
+    ? { kind, text: owned[1]!, owner: owned[2]! }
+    : { kind, text: owned[1]!, task: task[1]! };
 }
 
 /** The command line read, or a usage error naming what is wrong with it. */

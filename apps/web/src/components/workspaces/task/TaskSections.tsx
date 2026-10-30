@@ -12,9 +12,11 @@ import {
   PackageCheckIcon,
   ShieldCheckIcon,
 } from "lucide-react";
+import { derivePendingThreadRequests } from "@t3tools/client-runtime/state/thread-requests";
 import { useState, type ComponentType } from "react";
 
 import { cn } from "../../../lib/utils";
+import { useThreadProjection } from "../../../state/entities";
 import { Button, InlineButton } from "../../ui/button";
 import { Checkbox } from "../../ui/checkbox";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../../ui/collapsible";
@@ -82,6 +84,9 @@ export function WaitsOnYou({
             <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-0.5">
               <span className="text-sm font-semibold text-foreground">{wait.title}</span>
               <span className="text-sm text-muted-foreground">{wait.detail}</span>
+              {wait.kind === "input" && wait.open?.kind === "thread" ? (
+                <PendingQuestion open={wait.open} />
+              ) : null}
             </div>
             {wait.kind === "review" ? (
               onOpenReview === undefined ? null : (
@@ -104,6 +109,29 @@ export function WaitsOnYou({
         );
       })}
     </section>
+  );
+}
+
+/**
+ * The question a chat of this computer waits on, so the person decides from the task page whether
+ * to open it: the first pending question's heading and text, from the thread's projection. A chat
+ * whose projection is not loaded, or a herdr agent's, shows only that it asks.
+ */
+function PendingQuestion({ open }: { readonly open: Extract<WorkOpen, { kind: "thread" }> }) {
+  const thread = useThreadProjection({
+    environmentId: open.environmentId,
+    threadId: open.threadId,
+  });
+  const question =
+    thread === null
+      ? undefined
+      : derivePendingThreadRequests(thread.projection).userInputs[0]?.questions[0];
+  if (question === undefined) return null;
+  return (
+    <p className="max-w-prose text-sm text-foreground">
+      <span className="text-muted-foreground">{question.header} · </span>
+      {question.question}
+    </p>
   );
 }
 

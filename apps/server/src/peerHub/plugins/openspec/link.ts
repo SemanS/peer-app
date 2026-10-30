@@ -25,7 +25,10 @@ export function linkOf(
       : {
           ...base,
           state: "proposed",
-          proposed: { change, via: read.mapped === change ? "mapping" : "name" },
+          proposed: {
+            change,
+            via: read.mapped === change ? "mapping" : read.named === change ? "name" : "import",
+          },
         };
   }
   const differs =

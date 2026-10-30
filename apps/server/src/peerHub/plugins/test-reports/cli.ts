@@ -37,6 +37,17 @@ function failure(error: PeerHubError, filing: boolean): CliError {
       error.detail,
       'name a member of the project after @ (as --unverified "<text> @ana"), or leave the owner out.',
     );
+  if (error.code === "unknown_task")
+    return refused(
+      error.detail,
+      'name a task of this project by its key after @task: (as --unverified "<text> @task:SEC-3-1"), or an item of the same OpenSpec change by its number (@task:3.1); the report\'s own task does not count.',
+    );
+  // A Hub from before items could be left to a task refuses the field whole.
+  if (error.status === 400 && /unknown field `task`/.test(error.detail))
+    return refused(
+      "this Peer Hub does not keep the task an unverified item is left to yet",
+      'name a person after @ instead (--unverified "<text> @<person>"), or ask your person to give the item an owner on the task page.',
+    );
   if (error.code === "not_your_session")
     return refused(
       error.detail,
@@ -66,10 +77,15 @@ export const testsCommand = (
     });
   const name = (session: PeerSessionView) => (email: string) =>
     state.nameOf(session.workspace, email);
+  const taskLabel = (session: PeerSessionView) =>
+    Effect.map(work.tasks(session.workspace, session.project), (tasks) => (id: string) => {
+      const found = tasks.find((task) => task.id === id);
+      return found === undefined ? id : (found.key ?? found.id);
+    });
   return {
     name: "tests",
     usage:
-      'tests pass|fail|mixed "<summary>" [--for <task>] [--pass "<text>"]... [--fail "<text>"]... [--unverified "<text> [@<person>]"]... | show [<task>]',
+      'tests pass|fail|mixed "<summary>" [--for <task>] [--pass "<text>"]... [--fail "<text>"]... [--unverified "<text> [@<person>|@task:<key>]"]... | show [<task>]',
     summary: "file a test report on your task, or read a task's reports (reference)",
     run: ({ session, args }) =>
       Effect.gen(function* () {
@@ -102,6 +118,7 @@ export const testsCommand = (
             label,
             yield* reports.list(place).pipe(Effect.mapError((e) => failure(e, false))),
             name(session),
+            yield* taskLabel(session),
           );
         const shell = session.local("test-reports", emptyShell);
         const items = parsed.items.map((item) => {

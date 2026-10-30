@@ -20,7 +20,7 @@ import { emptyShell, remember } from "./evidence.ts";
 import * as TestReports from "./TestReports.ts";
 
 export const START_LINE =
-  'Before peer done, file what you tested: peer tests pass|fail|mixed "<summary>" --pass "<command>" --unverified "<what nobody checked> @<person>". Every unverified item needs an owner before the task is done.';
+  'Before peer done, file what you tested: peer tests pass|fail|mixed "<summary>" --pass "<command>" --unverified "<what this task should have checked> @<person>". What a dependent task covers is "<text> @task:<key>", not a question for your person. Every unverified item needs an owner before the task is done.';
 
 export const TestReportsPlugin = bindPlugin({
   ...PEER_TEST_REPORTS_PLUGIN,

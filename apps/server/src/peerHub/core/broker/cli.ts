@@ -131,7 +131,7 @@ export function commandArguments(args: ReadonlyArray<string>): CommandArguments 
 const HANDOFF_NEXT: Readonly<Record<string, string>> = {
   review_session: "a review session hands nothing over; ask your person to move the task in Peer.",
   unverified_unowned:
-    'give each unverified item an owner with peer tests … --unverified "<text> @<person>", or ask your person to on the task page, then retry.',
+    'give each unverified item an owner with peer tests … --unverified "<text> @<person>", leave what a dependent task covers to it with "<text> @task:<key>", or ask your person to on the task page, then retry.',
   other: "read the changed inputs with peer context <task>, recheck the result and retry.",
 };
 

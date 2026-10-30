@@ -135,12 +135,19 @@ export function briefStateText(link: PeerBriefLink | undefined): string | null {
       return "The repository cannot be read on this computer, so the agent starts from the saved brief.";
     case "proposed":
       return link.served
-        ? `The repository ${link.proposed?.via === "mapping" ? "maps this task to" : "has a change named like this task:"} ${link.proposed?.change}. Link it to keep a brief that survives when the change moves.`
+        ? `${proposedBy(link.proposed?.via)} ${link.proposed?.change}. Link it to keep a brief that survives when the change moves.`
         : null;
     case "none":
       return null;
   }
 }
+
+const proposedBy = (via: "mapping" | "name" | "import" | undefined) =>
+  via === "mapping"
+    ? "The repository maps this task to"
+    : via === "import"
+      ? "This task was imported from the change"
+      : "The repository has a change named like this task:";
 
 /** Where the agent's first prompt comes from, as the launch shows it. */
 export function promptSourceText(result: PeerOpenSpecReadResult | undefined): string | null {

@@ -56,6 +56,10 @@ it("proposes the repository's change only while no brief exists, and says how it
     state: "proposed",
     proposed: { change: "voices", via: "mapping" },
   });
+  expect(linkOf({ ...live("a"), imported: "voices" }, null, true)).toMatchObject({
+    state: "proposed",
+    proposed: { change: "voices", via: "import" },
+  });
   expect(linkOf({ ...live("a"), named: "voices" }, null, false)).toMatchObject({
     state: "proposed",
     served: false,

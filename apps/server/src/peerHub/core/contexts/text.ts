@@ -153,11 +153,36 @@ export function sharedTemplate(subject: string): string {
     "",
     "## Blockers",
     "",
+    GUIDANCE.blockers,
+    "",
     "## Agents",
     "",
     "## Next",
     "",
+    GUIDANCE.next,
+    "",
   ].join("\n");
+}
+
+/**
+ * What the template says under Blockers and Next, as HTML comments: the handoff shows those two
+ * sections as "Needs attention" and "Next step", so what another task owns must not land there.
+ * Comments never reach the Hub (`publishable`) and count as nothing written.
+ */
+export const GUIDANCE = {
+  blockers:
+    "<!-- What stops this task now. Work another task owns (a dependency, a later task) is not a blocker: name it under Decisions or State. -->",
+  next: "<!-- One line: the next step and who takes it. Ask your person only what the brief and the project's rules leave open. -->",
+} as const;
+
+const COMMENT_LINE = /^\s*<!--.*-->\s*$/;
+
+/** The context as the Hub gets it: without the template's guidance and other one-line comments. */
+export function publishable(markdown: string): string {
+  return markdown
+    .split("\n")
+    .filter((line) => !COMMENT_LINE.test(line))
+    .join("\n");
 }
 
 /** Whether an agent has written anything into a context beyond Peer's template. */
@@ -165,7 +190,13 @@ export function contextWritten(markdown: string): boolean {
   return markdown
     .split("\n")
     .map((line) => line.trim())
-    .some((line) => line !== "" && !line.startsWith("#") && !line.startsWith("Goal:"));
+    .some(
+      (line) =>
+        line !== "" &&
+        !line.startsWith("#") &&
+        !line.startsWith("Goal:") &&
+        !COMMENT_LINE.test(line),
+    );
 }
 
 /** The bullet lines under "## For the team": what the agent shares with its project. */

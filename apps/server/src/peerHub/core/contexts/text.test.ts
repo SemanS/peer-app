@@ -9,6 +9,7 @@ import {
   contextSkill,
   contextTemplate,
   contextWritten,
+  GUIDANCE,
   findingsForKeeper,
   findingsOnWork,
   keeperSkill,
@@ -16,6 +17,7 @@ import {
   rosterChange,
   sharedChange,
   sharedForReader,
+  publishable,
   sharedTemplate,
   startContext,
   teamLines,
@@ -363,6 +365,23 @@ describe("working context", () => {
     assert.isTrue(
       contextWritten(`${contextTemplate("Fix DNS errors", undefined)}- reading net.rs`),
     );
+    // The shared template's guidance under Blockers and Next is Peer's, not the keeper's.
+    assert.isFalse(contextWritten(sharedTemplate("KRK-335 · DNS errors")));
+    assert.isTrue(contextWritten(`${sharedTemplate("KRK-335")}- the contract is in place`));
+  });
+
+  it("publishes a shared context without the template's guidance, keeping everything else", () => {
+    const written = sharedTemplate("KRK-335").replace(
+      "## Blockers\n",
+      "## Blockers\n- waiting on the schema <!-- not a comment line -->\n",
+    );
+    const sent = publishable(written);
+    assert.notInclude(sent, GUIDANCE.blockers);
+    assert.notInclude(sent, GUIDANCE.next);
+    assert.include(sent, "- waiting on the schema <!-- not a comment line -->");
+    assert.include(written, GUIDANCE.blockers);
+    assert.include(written, GUIDANCE.next);
+    assert.strictEqual(publishable("## Next\n- ship it\n"), "## Next\n- ship it\n");
   });
 });
 

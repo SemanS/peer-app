@@ -48,6 +48,8 @@ export const PeerTestReportItem = Schema.Struct({
   text: Schema.String,
   /** Who answers for an unverified item: a project member's verified address. */
   owner: Schema.optional(Schema.String),
+  /** The task (its id) an unverified item is left to: a dependent task covers it, so nobody has to. */
+  task: Schema.optional(Schema.String),
   seen: Schema.optional(PeerTestReportSeen),
 });
 export type PeerTestReportItem = typeof PeerTestReportItem.Type;

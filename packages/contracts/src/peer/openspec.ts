@@ -71,9 +71,9 @@ export const PeerBriefLink = Schema.Struct({
   /** False while the signed-in Hub does not keep briefs: then nothing can be linked or saved. */
   served: Schema.Boolean,
   brief: Schema.NullOr(PeerTaskBrief),
-  /** The change a person may link, and how the repository names it. */
+  /** The change a person may link, and how it was found: the repository's mapping, a change named like the task, or the change the task was imported from. */
   proposed: Schema.optional(
-    Schema.Struct({ change: Schema.String, via: Schema.Literals(["mapping", "name"]) }),
+    Schema.Struct({ change: Schema.String, via: Schema.Literals(["mapping", "name", "import"]) }),
   ),
   /** The repository's own mapping, when it names another change than the saved link. */
   mappingDiffers: Schema.optional(Schema.String),

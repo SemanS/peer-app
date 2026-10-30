@@ -26,6 +26,7 @@ import {
   findingsForKeeper,
   findingsOnWork,
   projectLines,
+  publishable,
   scopeOf,
   type SharedContext,
   sharedTemplate,
@@ -529,7 +530,7 @@ export async function pushNow(
       mirror.scope,
       session.id,
       mirror.version,
-      sent,
+      publishable(sent),
       mirror.epoch,
       newOp(),
     );

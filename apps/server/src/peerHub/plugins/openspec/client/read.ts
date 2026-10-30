@@ -152,12 +152,14 @@ async function archivedAs(changes: string, changeId: string): Promise<string | u
 export interface SourceRead {
   /** The live change, or why it cannot be read. */
   readonly live: Extract<PeerOpenSpecReadResult, { state: "ready" | "unavailable" }>;
-  /** The change read (or that should have been): the saved link's, the mapping's or the name's. */
+  /** The change read (or that should have been): the saved link's, the mapping's, the name's or the import's. */
   readonly changeId?: string;
   /** What `openspec/peer-tasks.json` maps the task to; null when it is invalid or conflicting. */
   readonly mapped?: string | null;
   /** The one change directory named exactly like the task. */
   readonly named?: string;
+  /** The change the task was imported from (`task.source`), when nothing else names one. */
+  readonly imported?: string;
   readonly archivedAs?: string;
   /** The change directory is gone: renamed, deleted or archived. */
   readonly gone?: true;
@@ -195,17 +197,26 @@ export function snapshotOf(proposal: string, tasks: string): PeerOpenSpecSnapsho
   return { goal: goalOf(proposal), checklist, fingerprint };
 }
 
+/** The change an imported task came from: `add-x#1.2` → `add-x`; nothing for another system or an unsafe name. */
+export function importedChange(task: { readonly source?: PeerTask["source"] }): string | undefined {
+  if (task.source?.system !== "openspec") return undefined;
+  const change = task.source.ref.split("#")[0] ?? "";
+  return slug(change) ? change : undefined;
+}
+
 /**
  * A saved link wins, then the repository mapping, then a change named exactly like the task id or
- * key, ignoring case. The mapping and the name are reported either way, so a caller sees a
- * repository that disagrees with the saved link.
+ * key, ignoring case, then the change the task was imported from. The mapping, the name and the
+ * import are reported either way, so a caller sees a repository that disagrees with the saved link.
  */
 export async function readSource(
   checkout: string,
   repositoryId: string,
-  task: Pick<PeerTask, "id" | "key" | "title">,
+  task: Pick<PeerTask, "id" | "key" | "title"> & { readonly source?: PeerTask["source"] },
   saved?: string,
 ): Promise<SourceRead> {
+  const imported = importedChange(task);
+  const origin = imported === undefined ? {} : { imported };
   try {
     let root: string;
     try {
@@ -229,7 +240,7 @@ export async function readSource(
       if (saved === undefined || !isHubError(error)) throw error;
       mapped = null;
     }
-    const known = mapped === undefined ? {} : { mapped };
+    const known = { ...origin, ...(mapped === undefined ? {} : { mapped }) };
     if (mapped === null && saved === undefined)
       return {
         ...known,
@@ -242,7 +253,7 @@ export async function readSource(
       changes = await real(root, NodePath.join(root, "openspec/changes"));
     } catch (error) {
       if (!missing(error)) throw error;
-      const changeId = saved ?? mapped ?? undefined;
+      const changeId = saved ?? mapped ?? imported;
       return {
         ...known,
         ...(changeId === undefined ? {} : { changeId, gone: true as const }),
@@ -270,7 +281,7 @@ export async function readSource(
           "This task matches multiple OpenSpec changes. Map it to one of them in openspec/peer-tasks.json, then retry.",
         ),
       };
-    const changeId = saved ?? mapped ?? named;
+    const changeId = saved ?? mapped ?? named ?? imported;
     if (changeId === undefined)
       return {
         ...seen,
@@ -281,7 +292,11 @@ export async function readSource(
       };
     if (!slug(changeId)) fail("OpenSpec change has an unsafe directory name.");
     const by =
-      saved === undefined ? "openspec/peer-tasks.json maps this task to" : "This task is linked to";
+      saved !== undefined
+        ? "This task is linked to"
+        : mapped !== undefined
+          ? "openspec/peer-tasks.json maps this task to"
+          : "This task was imported from";
     let change: string;
     try {
       change = await real(changes, NodePath.join(changes, changeId));

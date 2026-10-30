@@ -25,6 +25,10 @@ describe("peer tests, as typed", () => {
         "iPhone layout of the task page @slavo",
         "--unverified",
         "Android layout @eva@acme.test",
+        "--unverified",
+        "the actions consume the contract @task:3.1",
+        "--unverified",
+        "a note to self @Task:SEC-3-1",
         "--fail",
         "e2e @nobody",
         "--for",
@@ -39,6 +43,9 @@ describe("peer tests, as typed", () => {
           { kind: "pass", text: "cargo test features::handoff" },
           { kind: "unverified", text: "iPhone layout of the task page", owner: "slavo" },
           { kind: "unverified", text: "Android layout", owner: "eva@acme.test" },
+          // `@task:` leaves the item to a dependent task instead of a person.
+          { kind: "unverified", text: "the actions consume the contract", task: "3.1" },
+          { kind: "unverified", text: "a note to self", task: "SEC-3-1" },
           // Only an unverified item names an owner.
           { kind: "fail", text: "e2e @nobody" },
         ],

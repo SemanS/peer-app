@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import { parseClaudeLine } from "./claudeUsage.ts";
+import { claudeUsageFormat, parseClaudeLine } from "./claudeUsage.ts";
 
 function claudeLine(overrides: {
   messageId: string;
@@ -64,6 +64,18 @@ describe("parseClaudeLine", () => {
 
     expect(text?.dedupeKey).toBe(toolUse?.dedupeKey);
     expect(text?.totals).toEqual(toolUse?.totals);
+  });
+
+  it("keeps the line's working directory, also when only its selected fields are read", () => {
+    const line = claudeLine({ messageId: "msg_1", contentType: "text" });
+    expect(parseClaudeLine(line)?.cwd).toBe("/home/theo/project");
+    expect(claudeUsageFormat.selectFields.cwd).toBe(true);
+    expect(claudeUsageFormat.parseProjected(JSON.parse(line), undefined)[0]?.cwd).toBe(
+      "/home/theo/project",
+    );
+
+    const { cwd: _cwd, ...without } = JSON.parse(line) as Record<string, unknown>;
+    expect(parseClaudeLine(JSON.stringify(without))).not.toHaveProperty("cwd");
   });
 
   it("ignores records that are not assistant messages", () => {

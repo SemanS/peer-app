@@ -49,7 +49,10 @@ is not a T3 server; if it held the lock, the app could not start while it runs.
 - thread projections: empty for every thread;
 - server settings: `<stateDir>/settings.json` read with the app's schema and defaults, writes
   refused (shared capacity cannot add provider instances);
-- awareness relay and provider continuations: no-ops.
+- awareness relay and provider continuations: no-ops;
+- the local usage engine: none. It is no part of `PeerCore`; the `usage` plugin reads it through
+  [`UsageSessionReader`](../../apps/server/src/usage/usageSessionTotals.ts), null here, and then
+  runs no reporter.
 
 So headless there are no app threads, no Codex or native wake queues, no provider instances and no
 herdr runtime. Plugins build on `PeerCore` only and construct on these stand-ins; one that fails to

@@ -1,6 +1,11 @@
 import { PEER_USAGE_METHODS, UsageRpcGroup } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import { UsageSessionReader } from "../../../usage/usageSessionTotals.ts";
+import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
+import * as PeerState from "../../core/state/PeerState.ts";
+import { createReporter } from "./reporter.ts";
 import { PeerUsageService, layer } from "./service.ts";
 
 export const UsagePlugin = bindPlugin({
@@ -12,7 +17,25 @@ export const UsagePlugin = bindPlugin({
   layer,
   make: Effect.gen(function* () {
     const usage = yield* PeerUsageService;
+    // Null in headless Peer Core, which has no usage engine: the page still works, and nothing here
+    // reads a transcript or sends a report.
+    const read = yield* UsageSessionReader;
+    const state = yield* PeerState.PeerState;
+    const { features } = yield* PeerHubClient.PeerHubClient;
+    const clock = yield* Clock.Clock;
     return {
+      ...(read === null
+        ? {}
+        : {
+            run: createReporter({
+              state,
+              features,
+              usage,
+              read,
+              remoteOf: PeerState.remoteOf,
+              now: () => clock.currentTimeMillisUnsafe(),
+            }).run,
+          }),
       rpc: {
         group: UsageRpcGroup,
         handlers: (wrap) =>

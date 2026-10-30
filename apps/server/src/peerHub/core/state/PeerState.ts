@@ -48,6 +48,7 @@ import * as ServerConfig from "../../../config.ts";
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
 import { importAssignments, LegacyAssignments } from "./legacyAssignments.ts";
 import { matchRepositories } from "./remotes.ts";
+export { matchRepositories, type RepositoryManifest } from "./remotes.ts";
 import { run } from "../local.ts";
 import { checkoutKind } from "../vcs.ts";
 import type { ReportedThread } from "../hub/hubApi.ts";

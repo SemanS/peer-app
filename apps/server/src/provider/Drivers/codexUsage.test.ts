@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import { initialCodexScanState, parseCodexLine } from "./codexUsage.ts";
+import { initialCodexScanState, parseCodexLine, codexUsageFormat } from "./codexUsage.ts";
 
 describe("parseCodexLine", () => {
   const sessionMeta = JSON.stringify({
@@ -181,6 +181,33 @@ describe("parseCodexLine", () => {
         state,
       );
       expect(record).not.toBeNull();
+    });
+
+    it("gives every record the working directory of the rollout's own session_meta", () => {
+      const state = initialCodexScanState();
+      const line = (payload: Record<string, unknown>, type = "session_meta") =>
+        JSON.stringify({
+          type,
+          timestamp: "2026-10-01T10:00:00.000Z",
+          payload: { type, ...payload },
+        });
+      parseCodexLine(line({ id: "child", cwd: "/work/repo" }), state);
+      parseCodexLine(line({ id: "ancestor", cwd: "/work/other" }), state);
+      parseCodexLine(line({ model: "gpt-6-astra" }, "turn_context"), state);
+      const record = parseCodexLine(
+        JSON.stringify({
+          type: "event_msg",
+          timestamp: "2026-10-01T10:00:05.000Z",
+          payload: {
+            type: "token_count",
+            info: { last_token_usage: { input_tokens: 3, output_tokens: 2 } },
+          },
+        }),
+        state,
+      );
+      expect(record?.cwd).toBe("/work/repo");
+      expect(record?.sessionId).toBe("child");
+      expect(codexUsageFormat.selectFields.payload).toHaveProperty("cwd", true);
     });
   });
 });

@@ -82,7 +82,12 @@ describe("the reviewStarter slot", () => {
         const started = yield* (yield* peer.plugins.require("reviewStarter")).start(start);
         const built = yield* peer.plugins.built;
         const refusal = built.find(({ state }) => state.id === "roles")?.contributions.beforeReview;
-        const session = { workspace: "acme", project: "app", thread: undefined };
+        const session = {
+          workspace: "acme",
+          project: "app",
+          thread: undefined,
+          local: <A>(_: string, make: () => A) => make(),
+        };
         const inRun = yield* refusal!({ session: { ...session, run: started.run } } as never);
         const elsewhere = yield* refusal!({ session: { ...session, run: "run_other" } } as never);
         assert.isNotNull(inRun);

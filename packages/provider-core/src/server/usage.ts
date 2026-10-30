@@ -17,6 +17,8 @@ export interface UsageRecord {
   readonly model: string;
   readonly rateModel?: string;
   readonly sessionId: string;
+  /** The session's working directory, for formats that record one. */
+  readonly cwd?: string;
   readonly totals: UsageTokenTotals;
   readonly reportedCostUsd: number | null;
   readonly speed: UsageSpeed;

@@ -248,6 +248,97 @@ function cursorSource(summary: { readonly sources: readonly UsageSource[] }) {
 }
 
 describe("UsageService", () => {
+  it.live("gives per-session totals that add up to the summary", () =>
+    Effect.gen(function* () {
+      const { home, settings, transcript } = yield* setup;
+      const line = (id: number, sessionId: string, cwd: string, model: string, output: number) =>
+        `${encodeUnknownJsonString({
+          type: "assistant",
+          timestamp: "2026-08-01T10:00:00Z",
+          requestId: `req_${id}`,
+          sessionId,
+          cwd,
+          message: {
+            id: `msg_${id}`,
+            model,
+            usage: { input_tokens: 10, cache_read_input_tokens: 4, output_tokens: output },
+          },
+        })}\n`;
+      yield* Effect.promise(() =>
+        NodeFSP.writeFile(
+          transcript,
+          line(1, "one", "/work/a", "priced-model", 5) +
+            line(1, "one", "/work/a", "priced-model", 5) +
+            line(2, "one", "/work/a", "priced-model", 7) +
+            line(3, "two", "/work/b", "priced-model", 11) +
+            line(4, "two", "/work/b", "no-such-model", 13),
+        ),
+      );
+      yield* Effect.gen(function* () {
+        const service = yield* UsageService.make;
+        const summary = yield* service.readSummary(WINDOW);
+        const { sessions: totals, failed } = yield* service.readSessionTotals(WINDOW);
+        assert.isFalse(failed);
+        const sum = <A>(items: readonly A[], of: (item: A) => number) =>
+          items.reduce((total, item) => total + of(item), 0);
+
+        assert.strictEqual(
+          sum(totals, (total) => total.costUsd),
+          sum(summary.buckets, (bucket) => bucket.costUsd),
+        );
+        assert.strictEqual(
+          sum(totals, (total) => total.totals.outputTokens),
+          totalOutputTokens(summary),
+        );
+        assert.deepStrictEqual(
+          totals
+            .map((t) => [t.sessionId, t.cwd, t.model, t.totals.outputTokens, t.unpriced])
+            .toSorted(),
+          [
+            ["one", "/work/a", "priced-model", 12, false],
+            ["two", "/work/b", "no-such-model", 13, true],
+            ["two", "/work/b", "priced-model", 11, false],
+          ],
+        );
+        assert.isTrue(totals.every((total) => total.day === "2026-08-01"));
+        assert.isTrue(totals.every((total) => total.dir.endsWith("projects")));
+      }).pipe(
+        Effect.provide(
+          layerService({
+            prefix: "usage-session-totals",
+            home,
+            settings,
+            ratesDocument: {
+              "priced-model": { input_cost_per_token: 1, output_cost_per_token: 2 },
+            },
+          }),
+        ),
+      );
+    }).pipe(Effect.scoped),
+  );
+
+  it.live("takes over a cache saved under the previous version's name", () =>
+    Effect.gen(function* () {
+      const { home, settings, transcript } = yield* setup;
+      yield* Effect.promise(() => NodeFSP.writeFile(transcript, claudeLine(1, 5)));
+      yield* Effect.gen(function* () {
+        const { stateDir } = yield* ServerConfig.ServerConfig;
+        const first = yield* UsageService.make;
+        yield* first.readSummary(WINDOW);
+        yield* first.awaitPersisted;
+        yield* Effect.promise(async () => {
+          await NodeFSP.rename(
+            NodePath.join(stateDir, "usage-scan-cache-v6.json"),
+            NodePath.join(stateDir, "usage-scan-cache-v5.json"),
+          );
+          await NodeFSP.rm(transcript);
+        });
+        const summary = yield* (yield* UsageService.make).readSummary(WINDOW);
+        assert.strictEqual(totalOutputTokens(summary), 5);
+      }).pipe(Effect.provide(layerService({ prefix: "usage-previous-cache", home, settings })));
+    }).pipe(Effect.scoped),
+  );
+
   it.live(
     "reads Pi per-model usage and auxiliary costs once across forks and repeated entries",
     () =>
@@ -789,6 +880,7 @@ describe("UsageService", () => {
         cursor.state.error = "Sign in to Cursor again to read account usage.";
         const failed = yield* service.readSummary({ ...WINDOW, awaitRefresh: true });
         assert.strictEqual(cursorSource(failed)?.status, "partial");
+        assert.isFalse((yield* service.readSessionTotals(WINDOW)).failed);
         assert.strictEqual(cursorSource(failed)?.message, cursor.state.error);
         assert.isUndefined(cursorSource(failed)?.refreshing);
         assert.strictEqual(totalOutputTokens(failed), 5);
@@ -1289,6 +1381,10 @@ describe("UsageService", () => {
           const partial = yield* service.readSummary(WINDOW);
           assert.strictEqual(totalOutputTokens(partial), 5);
           assert.strictEqual(partial.sources[0]?.status, "partial");
+          // One file stays out and the rest is reported.
+          const read = yield* service.readSessionTotals(WINDOW);
+          assert.isFalse(read.failed);
+          assert.lengthOf(read.sessions, 1);
 
           yield* Effect.promise(() => NodeFSP.chmod(unreadable, 0o600));
           const healthy = yield* service.readSummary(WINDOW);
@@ -1456,7 +1552,7 @@ describe("UsageService", () => {
 
         yield* Effect.gen(function* () {
           const { stateDir } = yield* ServerConfig.ServerConfig;
-          const cachePath = NodePath.join(stateDir, "usage-scan-cache-v5.json");
+          const cachePath = NodePath.join(stateDir, "usage-scan-cache-v6.json");
           const legacyPath = NodePath.join(stateDir, "usage-scan-cache.json");
           const first = yield* UsageService.make;
           yield* first.readSummary(WINDOW);

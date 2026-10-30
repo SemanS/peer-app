@@ -39,6 +39,7 @@ import { Route as ChatWorkRouteImport } from './routes/_chat.work'
 import { Route as ChatPullRequestsRouteImport } from './routes/_chat.pull-requests'
 import { Route as ChatNewRouteImport } from './routes/_chat.new'
 import { Route as SettingsPeerSplatRouteImport } from './routes/settings.peer.$'
+import { Route as ChatTeamUsageWorkspaceRouteImport } from './routes/_chat.team-usage.$workspace'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatAgentAgentIdRouteImport } from './routes/_chat.agent.$agentId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
@@ -208,6 +209,11 @@ const SettingsPeerSplatRoute = SettingsPeerSplatRouteImport.update({
   path: '/$',
   getParentRoute: () => SettingsPeerRoute,
 } as any)
+const ChatTeamUsageWorkspaceRoute = ChatTeamUsageWorkspaceRouteImport.update({
+  id: '/team-usage/$workspace',
+  path: '/team-usage/$workspace',
+  getParentRoute: () => ChatRoute,
+} as any)
 const ChatDraftDraftIdRoute = ChatDraftDraftIdRouteImport.update({
   id: '/draft/$draftId',
   path: '/draft/$draftId',
@@ -347,6 +353,7 @@ export interface FileRoutesByFullPath {
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/team-usage/$workspace': typeof ChatTeamUsageWorkspaceRoute
   '/settings/peer/$': typeof SettingsPeerSplatRoute
   '/changes/$workspace/$project': typeof ChatChangesWorkspaceProjectRoute
   '/integration/$workspace/$project': typeof ChatIntegrationWorkspaceProjectRoute
@@ -396,6 +403,7 @@ export interface FileRoutesByTo {
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/team-usage/$workspace': typeof ChatTeamUsageWorkspaceRoute
   '/settings/peer/$': typeof SettingsPeerSplatRoute
   '/changes/$workspace/$project': typeof ChatChangesWorkspaceProjectRoute
   '/integration/$workspace/$project': typeof ChatIntegrationWorkspaceProjectRoute
@@ -447,6 +455,7 @@ export interface FileRoutesById {
   '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/_chat/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/_chat/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/_chat/team-usage/$workspace': typeof ChatTeamUsageWorkspaceRoute
   '/settings/peer/$': typeof SettingsPeerSplatRoute
   '/_chat/changes/$workspace/$project': typeof ChatChangesWorkspaceProjectRoute
   '/_chat/integration/$workspace/$project': typeof ChatIntegrationWorkspaceProjectRoute
@@ -498,6 +507,7 @@ export interface FileRouteTypes {
     | '/$environmentId/$threadId'
     | '/agent/$agentId'
     | '/draft/$draftId'
+    | '/team-usage/$workspace'
     | '/settings/peer/$'
     | '/changes/$workspace/$project'
     | '/integration/$workspace/$project'
@@ -547,6 +557,7 @@ export interface FileRouteTypes {
     | '/$environmentId/$threadId'
     | '/agent/$agentId'
     | '/draft/$draftId'
+    | '/team-usage/$workspace'
     | '/settings/peer/$'
     | '/changes/$workspace/$project'
     | '/integration/$workspace/$project'
@@ -597,6 +608,7 @@ export interface FileRouteTypes {
     | '/_chat/$environmentId/$threadId'
     | '/_chat/agent/$agentId'
     | '/_chat/draft/$draftId'
+    | '/_chat/team-usage/$workspace'
     | '/settings/peer/$'
     | '/_chat/changes/$workspace/$project'
     | '/_chat/integration/$workspace/$project'
@@ -838,6 +850,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsPeerSplatRouteImport
       parentRoute: typeof SettingsPeerRoute
     }
+    '/_chat/team-usage/$workspace': {
+      id: '/_chat/team-usage/$workspace'
+      path: '/team-usage/$workspace'
+      fullPath: '/team-usage/$workspace'
+      preLoaderRoute: typeof ChatTeamUsageWorkspaceRouteImport
+      parentRoute: typeof ChatRoute
+    }
     '/_chat/draft/$draftId': {
       id: '/_chat/draft/$draftId'
       path: '/draft/$draftId'
@@ -975,6 +994,7 @@ interface ChatRouteChildren {
   ChatEnvironmentIdThreadIdRoute: typeof ChatEnvironmentIdThreadIdRoute
   ChatAgentAgentIdRoute: typeof ChatAgentAgentIdRoute
   ChatDraftDraftIdRoute: typeof ChatDraftDraftIdRoute
+  ChatTeamUsageWorkspaceRoute: typeof ChatTeamUsageWorkspaceRoute
   ChatChangesWorkspaceProjectRoute: typeof ChatChangesWorkspaceProjectRoute
   ChatIntegrationWorkspaceProjectRoute: typeof ChatIntegrationWorkspaceProjectRoute
   ChatKnowledgeWorkspaceProjectRoute: typeof ChatKnowledgeWorkspaceProjectRoute
@@ -997,6 +1017,7 @@ const ChatRouteChildren: ChatRouteChildren = {
   ChatEnvironmentIdThreadIdRoute: ChatEnvironmentIdThreadIdRoute,
   ChatAgentAgentIdRoute: ChatAgentAgentIdRoute,
   ChatDraftDraftIdRoute: ChatDraftDraftIdRoute,
+  ChatTeamUsageWorkspaceRoute: ChatTeamUsageWorkspaceRoute,
   ChatChangesWorkspaceProjectRoute: ChatChangesWorkspaceProjectRoute,
   ChatIntegrationWorkspaceProjectRoute: ChatIntegrationWorkspaceProjectRoute,
   ChatKnowledgeWorkspaceProjectRoute: ChatKnowledgeWorkspaceProjectRoute,

@@ -342,6 +342,8 @@ export interface PeerWebPlugin {
     status: PeerHubStatus,
     project: WorkProjectNode,
   ) => ReadonlyArray<ProjectSignal>;
+  /** A row in the sidebar's Activity for a whole workspace, whichever project is chosen. */
+  readonly workspaceNavRow?: (workspace: PeerWorkspaceState) => ProjectNavRow;
   /**
    * The one short fact a plugin adds to a task's row on the Team page, or undefined where it has
    * none for that task. Shown while the plugin is active.

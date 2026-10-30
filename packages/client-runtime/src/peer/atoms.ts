@@ -2,6 +2,7 @@ import { createOpenSpecEnvironmentAtoms } from "./openspec.ts";
 import { createDigestEnvironmentAtoms } from "./digest.ts";
 import { createRecipesEnvironmentAtoms } from "./recipes.ts";
 import { createPeerMetricsAtoms } from "./metrics.ts";
+import { createPeerUsageAtoms } from "./usage.ts";
 import { createPeerImpactAtoms } from "./impact.ts";
 import { createPeerPlansAtoms } from "./plans.ts";
 import { createPeerAgreementsAtoms } from "./agreements.ts";
@@ -43,6 +44,7 @@ export function createPeerPluginAtoms<R, ER>(
     peerDigest: createDigestEnvironmentAtoms(runtime),
     peerRecipes: createRecipesEnvironmentAtoms(runtime),
     ...createPeerMetricsAtoms(runtime),
+    ...createPeerUsageAtoms(runtime),
     peerResources: createResourcesEnvironmentAtoms(runtime),
     ...createPeerForecastAtoms(runtime),
     peerAnnouncements: createAnnouncementsEnvironmentAtoms(runtime),

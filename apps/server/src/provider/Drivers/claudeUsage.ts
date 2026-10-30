@@ -53,12 +53,14 @@ function parseClaudeRecord(parsed: unknown): UsageRecord | null {
     messageId === null && requestId === null ? null : `${messageId ?? ""}:${requestId ?? ""}`;
 
   const cost = record["costUSD"];
+  const cwd = record["cwd"];
 
   return {
     provider: "claude",
     timestampMs,
     model,
     sessionId: typeof record["sessionId"] === "string" ? record["sessionId"] : "",
+    ...(typeof cwd === "string" && cwd.length > 0 ? { cwd } : {}),
     totals: {
       uncachedInputTokens: tokenCount(usageRecord["input_tokens"]),
       cachedInputTokens: tokenCount(usageRecord["cache_read_input_tokens"]),
@@ -82,6 +84,7 @@ export const claudeUsageFormat: TranscriptUsageFormat<void> = {
     timestamp: true,
     requestId: true,
     sessionId: true,
+    cwd: true,
     costUSD: true,
     message: { id: true, model: true, usage: true },
   },

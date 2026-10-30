@@ -1276,6 +1276,14 @@ Choose a UTC range of at most 366 days and **Download CSVs** or **Download JSON*
 client you use and identify their scope and sources. Mobile shows a read-only 28-day summary;
 sharing, debug controls and export are available on web and desktop.
 
+## Workspace usage
+
+Open **Workspace usage** from a workspace's **Activity** in Tasks, or find it in the command palette. It shows the last 1, 7 or 30 UTC days for all projects or one: tickets, agent runs and agent time, API spend, token value, code changed and tokens, by agent and by person. Owners and admins read the whole workspace. Anyone else reads only their own numbers.
+
+**Not measured** means no source, not zero, and the page says why. Tokens and money appear only for people who turn on **Share my usage with this workspace**, and the page says how many people its totals cover. API spend and token value are estimates at list prices: token value covers all reported tokens, API spend only what ran on the workspace's shared capacity. The gateway's own total covers its budget period, not the days you chose. **Code changed** needs GitHub checks under **Settings → Integrations**.
+
+Sharing is off until you turn it on, for each workspace, and only you can change it. Your computers then send daily counts for work in that workspace's repositories, on its shared capacity or on its tasks, including up to the last 35 days: agent, model, project, tokens, sessions, an estimated cost and the computer's id, never prompts, paths, titles or transcripts. First numbers appear within a few minutes while Peer is open, then every 30 minutes. Peer Core reports nothing. Turning sharing off erases what you reported to that workspace at once. Reports are kept for 90 days.
+
 ## Catching up
 
 **Since you were away** shows what changed when you return after more than an hour: task movements, merged pull requests, shared contexts, overlaps, knowledge decisions and your requests. Your own work and your agents’ changes are included. The device remembers when you left. On web and desktop it is what a project's **Activity** in Tasks shows first, one timeline with the newest change on top and a filter per kind; the Activity row counts it until you choose **Mark all seen**, and the same view shows the last 8 hours, 24 hours or 7 days. Mobile Peer workspaces shows it as a card you dismiss per project; pull requests open directly, while other entries are reference text.

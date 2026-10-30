@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import { GitPreparePullRequestThreadInput } from "./git.ts";
 import {
+  AuthAccessWriteScope,
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
@@ -74,6 +75,8 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerHubContinueRun]: AuthOrchestrationOperateScope,
   // A review policy accepts handoffs in the name of the lead who set it.
   [WS_METHODS.peerAcceptanceSetReviewPolicy]: AuthOrchestrationOperateScope,
+  // Consent to send this person's usage off the computer; turning it off erases it on the Hub.
+  [WS_METHODS.peerUsageSetSharing]: AuthAccessWriteScope,
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;

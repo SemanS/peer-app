@@ -6,6 +6,7 @@ import {
   roleDetail,
   roleLabel,
   reviewHarness,
+  threadRole,
 } from "@t3tools/client-runtime/peer/roles";
 import type { PeerHubStatus, PeerRoleRow, PeerRolesStartReviewInput } from "@t3tools/contracts";
 
@@ -47,6 +48,21 @@ export function reviewLaunch(
     },
     label: taskLabel(task),
   };
+}
+
+/**
+ * What to ask before a further review of a task, or null for its first. It counts the chats the
+ * task shows as reviewing, so a finished review still counts: starting again repeats its work.
+ */
+export function anotherReviewQuestion(
+  props: Pick<TaskSlotProps, "status" | "task">,
+): string | null {
+  const count = props.task.threads.filter(
+    (thread) => threadRole(props.status, thread)?.role === "review",
+  ).length;
+  if (count === 0) return null;
+  const reviews = count === 1 ? "a review chat" : `${count} review chats`;
+  return `${taskLabel(props.task)} already has ${reviews}. Start another? It repeats the check in a new chat and checkout.`;
 }
 
 type TaskRolesStatus = Pick<PeerHubStatus, "plugins" | "roles" | "mcp" | "coordination" | "email">;

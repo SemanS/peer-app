@@ -32,6 +32,8 @@ import {
 
 type Role = "owner" | "admin" | "member";
 
+const roleName = (role: Role) => `${role.charAt(0).toUpperCase()}${role.slice(1)}`;
+
 /** What `email` owns in a project now, as the status's last view of its ownership says. */
 function ownedWork(status: PeerHubStatus, slug: string, project: string, email: string): WorkPick {
   const view = status.ownership?.projects.find(
@@ -310,7 +312,7 @@ export function PersonSheet({
                     }}
                   >
                     <SelectTrigger size="sm" aria-label={`Role of ${member.email}`}>
-                      <SelectValue />
+                      <SelectValue>{roleName(role ?? member.role)}</SelectValue>
                     </SelectTrigger>
                     <SelectPopup>
                       {(workspace.role === "owner"
@@ -318,15 +320,13 @@ export function PersonSheet({
                         : (["admin", "member"] as const)
                       ).map((value) => (
                         <SelectItem key={value} value={value}>
-                          {`${value.charAt(0).toUpperCase()}${value.slice(1)}`}
+                          {roleName(value)}
                         </SelectItem>
                       ))}
                     </SelectPopup>
                   </Select>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    {`${member.role.charAt(0).toUpperCase()}${member.role.slice(1)}`}
-                  </p>
+                  <p className="text-sm text-muted-foreground">{roleName(member.role)}</p>
                 )}
               </section>
               {limits.edit && (role ?? member.role) === "member" ? (

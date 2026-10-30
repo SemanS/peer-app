@@ -12,6 +12,7 @@ import {
 } from "../ownership/ownership.testkit";
 import {
   CHANGED_FILES_LINE,
+  anotherReviewQuestion,
   reviewLaunch,
   taskRoleRows,
   teamSignals,
@@ -152,6 +153,33 @@ describe("a task's review sessions", () => {
     const status = withRoles([roleRow("claude:a", ANA)], [coordSession("claude:a", ANA, "vl7")]);
     const off = { ...status, plugins: [{ id: "roles", title: "", enabled: true, active: false }] };
     expect(taskRoleRows(off as PeerHubStatus, ON_VL7, MEMBERS)).toEqual([]);
+  });
+});
+
+describe("another review of a task", () => {
+  const task = (keys: ReadonlyArray<string>) =>
+    ({
+      key: "VL7",
+      title: "Checkout totals",
+      threads: keys.map((key) => ({ key })),
+    }) as unknown as Props["task"];
+  const status = withRoles(
+    [roleRow("claude:a", ANA), roleRow("claude:b", ANA), roleRow("claude:c", ANA, { role: "qa" })],
+    [],
+  );
+
+  it("does not ask before a task's first review", () => {
+    expect(anotherReviewQuestion({ status, task: task(["herdr:claude:other"]) })).toBeNull();
+    expect(anotherReviewQuestion({ status, task: task(["herdr:claude:c"]) })).toBeNull();
+  });
+
+  it("names how many review chats the task already has", () => {
+    expect(anotherReviewQuestion({ status, task: task(["herdr:claude:a"]) })).toContain(
+      "VL7 · Checkout totals already has a review chat.",
+    );
+    expect(
+      anotherReviewQuestion({ status, task: task(["herdr:claude:a", "herdr:claude:b"]) }),
+    ).toContain("VL7 · Checkout totals already has 2 review chats.");
   });
 });
 

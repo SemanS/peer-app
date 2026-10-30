@@ -204,13 +204,14 @@ export function InviteDialog({
                   {INVITE_ROLES.map((entry) => (
                     <label
                       key={entry.id}
-                      className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 has-data-checked:border-ring has-data-checked:bg-accent/40"
+                      className="flex cursor-pointer items-baseline gap-2.5 text-sm"
                     >
-                      <Radio value={entry.id} className="mt-0.5" />
-                      <span className="flex min-w-0 flex-col">
-                        <span className="text-sm font-medium text-foreground">{entry.title}</span>
-                        <span className="text-sm text-muted-foreground">
-                          {entry.description(workspace.name)}
+                      <Radio value={entry.id} className="translate-y-0.5" />
+                      <span>
+                        <span className="font-medium text-foreground">{entry.title}</span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          — {entry.description(workspace.name)}
                         </span>
                       </span>
                     </label>

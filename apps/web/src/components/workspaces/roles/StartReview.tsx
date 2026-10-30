@@ -10,8 +10,8 @@ import { Button } from "../../ui/button";
 import { toastManager } from "../../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import type { TaskMenuEntry, TaskSlotProps } from "../slots.types";
-import { reportFailure } from "../workFeedback";
-import { reviewLaunch, type ReviewLaunch } from "./roles.logic";
+import { confirmed, reportFailure } from "../workFeedback";
+import { anotherReviewQuestion, reviewLaunch, type ReviewLaunch } from "./roles.logic";
 
 const START_LABEL = "Start a review";
 const START_HINT =
@@ -19,12 +19,17 @@ const START_HINT =
 
 const starting = new Set<string>();
 
-/** Starts a review once per task at a time; true when it started. */
-async function startReview(environmentId: EnvironmentId, launch: ReviewLaunch): Promise<boolean> {
+/** Starts a review once per task at a time, asking first if it has one; true when it started. */
+async function startReview(
+  environmentId: EnvironmentId,
+  launch: ReviewLaunch,
+  question: string | null,
+): Promise<boolean> {
   const key = `${environmentId}:${launch.input.workspace}:${launch.input.projectId}:${launch.input.taskId}`;
   if (starting.has(key)) return false;
   starting.add(key);
   try {
+    if (question !== null && !(await confirmed(question))) return false;
     const result = await runAtomCommand(
       appAtomRegistry,
       serverEnvironment.peerRoles.startReview,
@@ -73,7 +78,9 @@ export function StartReviewAction(props: TaskSlotProps) {
             onClick={(event) => {
               event.stopPropagation();
               setBusy(true);
-              void startReview(props.environmentId, launch).finally(() => setBusy(false));
+              void startReview(props.environmentId, launch, anotherReviewQuestion(props)).finally(
+                () => setBusy(false),
+              );
             }}
           >
             <ScanEyeIcon />
@@ -98,7 +105,7 @@ export function startReviewMenu(props: TaskSlotProps): ReadonlyArray<TaskMenuEnt
   return [
     {
       item: { id: "roles:start-review", label: START_LABEL, separatorBefore: true },
-      run: () => void startReview(props.environmentId, launch),
+      run: () => void startReview(props.environmentId, launch, anotherReviewQuestion(props)),
     },
   ];
 }

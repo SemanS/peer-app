@@ -59,7 +59,7 @@ export function ProjectAccessFields({
     ...picked.filter((id) => !known.has(id)).map((id) => ({ id, name: id })),
   ];
   return (
-    <fieldset className="flex flex-col gap-2.5">
+    <fieldset className="flex min-w-0 flex-col gap-2.5">
       <legend className="pb-2 text-sm font-medium text-foreground">Project access</legend>
       {fixed ? null : (
         <RadioGroup
@@ -129,7 +129,7 @@ export function WorkChecklist({
   const all = pickAll(groups);
   const everything = pickedCount(pick, groups) === pickedCount(all, groups);
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-3">
       <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
         <span>{pickedCount(pick, groups)}</span>
         <button
@@ -142,7 +142,10 @@ export function WorkChecklist({
         </button>
       </div>
       {groups.map((group) => (
-        <div key={group.id} className="flex flex-col gap-2 rounded-lg border border-border p-3">
+        <div
+          key={group.id}
+          className="flex min-w-0 flex-col gap-2 rounded-lg border border-border p-3"
+        >
           <div className="flex items-center justify-between gap-3 text-sm">
             <label className="flex min-w-0 cursor-pointer items-center gap-2.5 font-medium text-foreground">
               <Checkbox
@@ -197,7 +200,7 @@ export function InviteWorkFields({
   readonly onPickChange: (next: WorkPick) => void;
 }) {
   return (
-    <fieldset className="flex flex-col gap-2.5">
+    <fieldset className="flex min-w-0 flex-col gap-2.5">
       <legend className="pb-2 text-sm font-medium text-foreground">What can they work on?</legend>
       <RadioGroup
         value={entire ? "entire" : "selected"}

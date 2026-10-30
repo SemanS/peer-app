@@ -516,7 +516,7 @@ checkboxes and **Start agent on N items**.
 
 ## Peer plugins
 
-Each Peer feature is a plugin: team requests, Observe, herdr agents, GitHub, shared capacity, `peer find`,
+Each Peer feature is a plugin: team requests, rooms, Observe, herdr agents, GitHub, shared capacity, `peer find`,
 `peer ask`, Knowledge and Ownership. The owner of an environment turns them off and on in
 **Settings → This computer → Coordination & plugins**, or in **Peer workspaces** on mobile. The choice belongs
 to that environment, survives a restart, and applies at once. Memory is listed only in builds that include it, and starts off.
@@ -1168,6 +1168,25 @@ The task's page, its row and the Team page show the newest result and how many i
 the handoff package carries the newest report's result and counts. On the phone, reports are shown
 read-only. Turn **Test reports** off in **Settings → This computer → Coordination & plugins**; `peer tests`
 is then refused and `peer done` is judged as before.
+
+## Rooms
+
+A task's room is one conversation for the people on the project and their agents, beside the task's diff. Open it from the task's page, its review, or Needs you.
+
+Everyone in a room brings their own agent. Who answers a message depends on who you name in **To**:
+
+- **Team** reaches people only, and starts no agent.
+- **A person** puts the message in their Needs you.
+- **Your agent** answers on your capacity. With a run of yours on the task, that run hears it. Without one, Peer starts a read-only review session in your checkout, on the change. This works after a handoff, when the author's agent has finished, so you can ask about the work without pinging its author.
+- **A colleague's agent** waits for that colleague. They choose **Pass on** or **Decline**, in the room or in Needs you, and nothing reaches their agent until they pass it on, because their subscription runs only the turns they start.
+
+If your run is on the project's shared capacity, you can let the team reach it directly with the switch at the top of the room. It covers that run only, and you can turn it off at any time. A run on your own subscription cannot be opened this way.
+
+An agent answers in the room with `peer room say --reply <n> "<answer>"`, and reads it with `peer room`, or `peer room <n>` for one message whole. An agent's message wakes nobody: agents talk to people here, and to each other only through overlap notes and `peer ask`.
+
+Select a line in the diff to comment on it. An agent told about the message gets the path and line, and a comment made on an earlier version says so instead of pointing at a line that may have moved. The diff is read from git on your computer, never through the Hub: your own run's checkout, or the branch the work was pushed to. Work its author has not pushed is listed by file, and you can watch it when they share it.
+
+The Hub keeps only what was written to a room: no transcripts, no diffs and no code. A room is removed 30 days after its task closes.
 
 ## Handing a task to someone outside the team
 

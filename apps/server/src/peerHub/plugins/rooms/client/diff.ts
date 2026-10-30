@@ -76,11 +76,13 @@ async function baseRef(cwd: string, base: string) {
 
 const DIFF = ["diff", "--no-color", "--no-ext-diff", "--find-renames"] as const;
 
-/** The checkout against the merge base, uncommitted changes included; none for a run on the base. */
+/**
+ * The checkout against the merge base, uncommitted changes included. On the base branch itself that
+ * merge base is `origin/<base>`, so an agent working directly on it shows what is not pushed yet.
+ */
 async function runDiff(root: string, base: string): Promise<PeerRoomDiff | null> {
   const ref = await baseRef(root, base);
   if (ref === null) return null;
-  if ((await quiet(root, ["rev-parse", "--abbrev-ref", "HEAD"])) === base) return null;
   const from = await quiet(root, ["merge-base", ref, "HEAD"]);
   const head = await quiet(root, ["rev-parse", "HEAD"]);
   if (from === "" || head === "") return null;

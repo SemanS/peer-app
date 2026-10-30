@@ -284,14 +284,49 @@ describe("the room's diff", () => {
     ),
   );
 
-  it.effect("skips a run on the base branch, and never takes the base for a pushed ref", () =>
+  it.effect("shows a run on the base branch: what is uncommitted and what is not pushed", () =>
     scoped(
       Effect.gen(function* () {
         const { work } = yield* repositories;
-        NodeFS.writeFileSync(NodePath.join(work, "a.txt"), "someone else's edit\n");
+        const pushed = git(work, "rev-parse", "HEAD");
+        NodeFS.writeFileSync(NodePath.join(work, "a.txt"), "one\ntwo\nunpushed\n");
+        git(work, "commit", "-qam", "not pushed");
+        NodeFS.appendFileSync(NodePath.join(work, "a.txt"), "uncommitted\n");
+        const diff = yield* roomDiff(input({ root: work }));
+        assert.strictEqual(diff.state, "here");
+        if (diff.state !== "here") return;
+        assert.strictEqual(diff.source, "run");
+        assert.strictEqual(diff.base, pushed);
+        assert.include(diff.patch, "+unpushed");
+        assert.include(diff.patch, "+uncommitted");
+      }),
+    ),
+  );
+
+  it.effect("a run on the base branch with nothing new falls through to a pushed ref", () =>
+    scoped(
+      Effect.gen(function* () {
+        const { dir, origin, work } = yield* repositories;
+        pushedBranch(origin, dir);
         const diff = yield* roomDiff(
           input({
             root: work,
+            checkout: { path: work },
+            threads: [{ branch: "ana/tax", email: "ana@acme.test" }],
+          }),
+        );
+        assert.strictEqual(diff.state, "here");
+        if (diff.state === "here") assert.strictEqual(diff.source, "pushed");
+      }),
+    ),
+  );
+
+  it.effect("never takes the base for a pushed ref", () =>
+    scoped(
+      Effect.gen(function* () {
+        const { work } = yield* repositories;
+        const diff = yield* roomDiff(
+          input({
             checkout: { path: work },
             threads: [{ branch: "main", email: "ana@acme.test" }],
           }),

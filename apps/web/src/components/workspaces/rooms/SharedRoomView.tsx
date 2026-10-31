@@ -19,7 +19,7 @@ import { SidebarInset } from "../../ui/sidebar";
 import { Toggle, ToggleGroup } from "../../ui/toggle-group";
 import { PeerPageHeader } from "../PeerPageHeader";
 import { findTask } from "../task/task.logic";
-import { runsRevision } from "../task/runs.logic";
+import { runThreadWorking, runsRevision } from "../task/runs.logic";
 import { useTaskRuns } from "../task/TaskRuns";
 import { useWorkData } from "../useWorkData";
 import { failureMessage } from "../WorkspaceAccess";
@@ -168,7 +168,12 @@ function SharedRoomBody({
           runs={[...reads.values()].flatMap((read) => read.runs)}
           reviewRuns={[...reads.values()].flatMap((read) => read.reviewRuns)}
           jujutsu={false}
-          threadWorking={NOTHING}
+          threadWorking={(run) =>
+            runThreadWorking(
+              run,
+              members.flatMap(({ place }) => taskOf(place)?.threads ?? []),
+            )
+          }
           selected={null}
           onOpenRun={NOTHING}
           onOpenAnchor={() => setSide("diff")}

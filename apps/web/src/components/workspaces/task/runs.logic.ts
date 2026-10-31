@@ -206,6 +206,16 @@ export function runThreadKeys(run: PeerRun): ReadonlyArray<string> {
   return ids.flatMap((id) => [id, `${run.environment}:${id}`]);
 }
 
+/** Whether a run's agent works now; undefined when none of its threads is known here. */
+export function runThreadWorking(
+  run: PeerRun,
+  threads: ReadonlyArray<{ readonly key: string; readonly status: string }>,
+): boolean | undefined {
+  const keys = runThreadKeys(run);
+  const own = threads.filter((thread) => keys.includes(thread.key));
+  return own.length === 0 ? undefined : own.some((thread) => thread.status === "working");
+}
+
 /**
  * The task's chats that no run covers yet (a thread from before runs, or one an older Peer
  * reports), so nothing that was on the page disappears from it.

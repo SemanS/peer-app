@@ -8,6 +8,7 @@ import {
   CONTINUED_HERE,
   ELSEWHERE_RUN_HINT,
   runsChip,
+  runThreadWorking,
   taskRunRows,
 } from "./runs.logic";
 import type { TaskChatRow } from "./taskChats.logic";
@@ -190,6 +191,22 @@ describe("taskRunRows", () => {
     expect(taken).toMatchObject({ handover: CONTINUED_HERE, hint: undefined });
     expect(taken?.open).toBeDefined();
     expect(moved).toMatchObject({ handover: CONTINUED_ELSEWHERE, hint: ELSEWHERE_RUN_HINT });
+  });
+});
+
+describe("runThreadWorking", () => {
+  const herdr = run({ id: "run_H", runtime: "herdr", thread: undefined });
+
+  it("reads the run's own thread, by its session", () => {
+    const key = "herdr:claude:run_H";
+    expect(runThreadWorking(herdr, [{ key, status: "idle" }])).toBe(false);
+    expect(runThreadWorking(herdr, [{ key, status: "working" }])).toBe(true);
+  });
+
+  it("says nothing of a run with no thread known here", () => {
+    expect(runThreadWorking(herdr, [{ key: "herdr:claude:other", status: "working" }])).toBe(
+      undefined,
+    );
   });
 });
 

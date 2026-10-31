@@ -24,7 +24,7 @@ import { AgentTrustQuestion } from "../herdr/AgentTrustQuestion";
 import { FILE_TREE_PATHS_DRAG_TYPE, fileTreePathsOf } from "../../files/fileTreeDragMention";
 import { PeerPageHeader } from "../PeerPageHeader";
 import { findTask } from "../task/task.logic";
-import { runThreadKeys, runsRevision } from "../task/runs.logic";
+import { runThreadWorking, runsRevision } from "../task/runs.logic";
 import { useTaskRuns } from "../task/TaskRuns";
 import { useWorkData } from "../useWorkData";
 import type { WorkOpen, WorkTaskNode } from "../workTree.logic";
@@ -204,11 +204,7 @@ function RoomBody({
   const takesPaths = (event: DragEvent) =>
     canPost && event.dataTransfer.types.includes(FILE_TREE_PATHS_DRAG_TYPE);
 
-  const threadWorking = (candidate: PeerRun) => {
-    const keys = runThreadKeys(candidate);
-    const threads = taskNode.threads.filter((thread) => keys.includes(thread.key));
-    return threads.length === 0 ? undefined : threads.some((thread) => thread.status === "working");
-  };
+  const threadWorking = (candidate: PeerRun) => runThreadWorking(candidate, taskNode.threads);
   const onJujutsu = projectState.repositories.some((repository) => repository.vcs === "jj");
   const agentLabel = run === null ? null : (harnessName(run.agent) ?? "Agent");
   const commentOn = (anchor: PeerRoomAnchor) => {

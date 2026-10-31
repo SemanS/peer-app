@@ -27,6 +27,7 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Sse from "effect/encoding/Sse";
@@ -302,6 +303,19 @@ export type HubCall = <S extends HubAnswer, Missing = never>(
   schema: S,
   input: HubRequest<Missing>,
 ) => Effect.Effect<S["Type"] | Missing, PeerHubError>;
+
+/**
+ * The network comes back a few seconds after a computer wakes, so a call refused at once is asked
+ * again. One that waited out its timeout has already taken long enough and is not.
+ */
+export const retryWhileNetworkReturns = <A, R>(call: Effect.Effect<A, PeerHubError, R>) =>
+  call.pipe(
+    Effect.retry({
+      while: (error) => error.kind === "unreachable" && error.waitedMs === undefined,
+      schedule: Schedule.spaced("2 seconds"),
+      times: 3,
+    }),
+  );
 
 export const make = Effect.gen(function* () {
   const client = yield* HttpClient.HttpClient;

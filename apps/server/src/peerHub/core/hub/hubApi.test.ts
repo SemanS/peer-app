@@ -250,6 +250,44 @@ describe("where a failed Hub call stopped", () => {
       }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 
+  it.effect("asks again while the network returns, but not after a timeout or a refusal", () =>
+    Effect.gen(function* () {
+      const unreachable = new PeerHubError({ detail: "Could not reach.", kind: "unreachable" });
+      const attempts = (failures: ReadonlyArray<PeerHubError>) =>
+        Effect.gen(function* () {
+          let calls = 0;
+          const call = Effect.suspend(() => {
+            const failure = failures[calls++];
+            return failure === undefined ? Effect.succeed("answered") : Effect.fail(failure);
+          });
+          const fiber = yield* HubApi.retryWhileNetworkReturns(call).pipe(
+            Effect.result,
+            Effect.forkScoped,
+          );
+          yield* TestClock.adjust("10 seconds");
+          return { result: yield* Fiber.join(fiber), calls };
+        });
+
+      const woke = yield* attempts([unreachable, unreachable]);
+      assert.isTrue(Result.isSuccess(woke.result));
+      assert.strictEqual(woke.calls, 3);
+
+      const down = yield* attempts(Array.from({ length: 9 }, () => unreachable));
+      assert.isTrue(Result.isFailure(down.result));
+      assert.strictEqual(down.calls, 4);
+
+      const timedOut = new PeerHubError({
+        detail: "Could not reach.",
+        kind: "unreachable",
+        waitedMs: 20_000,
+      });
+      assert.strictEqual((yield* attempts([timedOut])).calls, 1);
+
+      const refused = new PeerHubError({ detail: "No.", kind: "refused" });
+      assert.strictEqual((yield* attempts([refused])).calls, 1);
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("says how long it waited when the Hub stays silent, on the clock the test sets", () =>
     Effect.gen(function* () {
       const asked = yield* Deferred.make<void>();

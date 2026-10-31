@@ -271,7 +271,7 @@ const make = Effect.gen(function* () {
     const { hubUrl, session } = yield* client.session;
     yield* state.updateRuntime((s) => ({ ...s, syncing: true }));
     yield* publish;
-    const me = yield* client.me.pipe(Effect.result);
+    const me = yield* client.me.pipe(HubApi.retryWhileNetworkReturns, Effect.result);
     if (me._tag === "Failure") {
       if (HubApi.isSessionEnded(me.failure)) {
         yield* announce({ kind: "synced", workspaces: [] });

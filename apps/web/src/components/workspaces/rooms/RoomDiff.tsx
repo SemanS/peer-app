@@ -7,9 +7,12 @@ import type {
 import type { CodeViewHandle } from "@pierre/diffs/react";
 import type { NameOf } from "@t3tools/client-runtime/peer/rooms";
 import type { PeerRoomAnchor, PeerRoomDiff, PeerRoomMessage } from "@t3tools/contracts";
+import { ChevronDown, ChevronRight } from "lucide";
+import { GripVerticalIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useTheme } from "~/hooks/useTheme";
+import { areAllDiffFilesCollapsed, toggleAllDiffFiles } from "~/lib/diffCollapse";
 import {
   buildFileDiffContentVersion,
   buildFileDiffIdentityKey,
@@ -19,8 +22,10 @@ import {
   resolveFileDiffPath,
 } from "~/lib/diffRendering";
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
+import { MorphIcon } from "../../MorphIcon";
 import { Button } from "../../ui/button";
 import { StyledDiffCodeView } from "../../diffs/StyledDiffCodeView";
+import { FILE_TREE_PATHS_DRAG_TYPE } from "../../files/fileTreeDragMention";
 import type { WorkOpen } from "../workTree.logic";
 import { authorOf } from "./room.logic";
 import {
@@ -44,7 +49,8 @@ export interface DiffFocus {
 
 /**
  * The task's diff, from git on this computer, with anchored messages at their lines. A line's
- * gutter button or a selection starts a message on it; the composer takes it from there.
+ * gutter button or a selection starts a message on it; the composer takes it from there. A file
+ * folds from its header, and its handle puts its path in the draft, dragged or clicked.
  */
 export function RoomDiff({
   diff,
@@ -58,6 +64,7 @@ export function RoomDiff({
   watch,
   onWatch,
   onComment,
+  onAddPaths,
   onOpenMessage,
 }: {
   readonly diff: PeerRoomDiff | null;
@@ -74,6 +81,8 @@ export function RoomDiff({
   readonly watch: WorkOpen | undefined;
   readonly onWatch: (open: WorkOpen) => void;
   readonly onComment: (anchor: PeerRoomAnchor) => void;
+  /** Absent where this connection cannot write to the room. */
+  readonly onAddPaths: ((paths: ReadonlyArray<string>) => void) | undefined;
   readonly onOpenMessage: (seq: number) => void;
 }) {
   if (diff === null) {
@@ -139,6 +148,7 @@ export function RoomDiff({
       nameOf={nameOf}
       onRefresh={onRefresh}
       onComment={onComment}
+      onAddPaths={onAddPaths}
       onOpenMessage={onOpenMessage}
     />
   );
@@ -153,6 +163,7 @@ function DiffHere({
   nameOf,
   onRefresh,
   onComment,
+  onAddPaths,
   onOpenMessage,
 }: {
   readonly diff: Extract<PeerRoomDiff, { state: "here" }>;
@@ -163,6 +174,7 @@ function DiffHere({
   readonly nameOf: NameOf;
   readonly onRefresh: () => void;
   readonly onComment: (anchor: PeerRoomAnchor) => void;
+  readonly onAddPaths: ((paths: ReadonlyArray<string>) => void) | undefined;
   readonly onOpenMessage: (seq: number) => void;
 }) {
   const { resolvedTheme } = useTheme();
@@ -171,6 +183,7 @@ function DiffHere({
     readonly id: string;
     readonly range: SelectedLineRange;
   } | null>(null);
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const parsed = getRenderablePatch(diff.patch, "room-diff");
   const files = parsed?.kind === "files" ? parsed.files : [];
   const lines = files.map((file) => ({ path: resolveFileDiffPath(file), hunks: file.hunks }));
@@ -184,13 +197,16 @@ function DiffHere({
         lineNumber: line.lineNumber,
         metadata: { messages: line.messages },
       }));
+    const id = buildFileDiffIdentityKey(fileDiff);
+    const collapsed = folded.has(id);
     return {
-      id: buildFileDiffIdentityKey(fileDiff),
+      id,
       type: "diff",
       fileDiff,
       annotations,
+      collapsed,
       version: fnv1a32(
-        `${buildFileDiffContentVersion(fileDiff)}:${annotations
+        `${collapsed ? "1" : "0"}:${buildFileDiffContentVersion(fileDiff)}:${annotations
           .flatMap((annotation) => annotation.metadata.messages.map((row) => row.seq))
           .join(",")}`,
       ),
@@ -205,6 +221,14 @@ function DiffHere({
   const focusItem = focus === null ? undefined : itemIdOf(focus.anchor.path);
   const focusLine = focus === null ? undefined : (focus.anchor.endLine ?? focus.anchor.line);
   const focusSide = focus === null ? undefined : viewerSide(focus.anchor.side);
+  // A folded file has no line to scroll to, so a new ask unfolds it before this render commits.
+  const [focusSeen, setFocusSeen] = useState(focusAsk);
+  if (focusAsk !== focusSeen) {
+    setFocusSeen(focusAsk);
+    if (focusItem !== undefined && folded.has(focusItem)) {
+      setFolded(new Set([...folded].filter((id) => id !== focusItem)));
+    }
+  }
   useEffect(() => {
     if (focusAsk === undefined || focusItem === undefined || focusLine === undefined) return;
     viewer.current?.scrollTo({
@@ -214,7 +238,16 @@ function DiffHere({
       ...(focusSide === undefined ? {} : { side: focusSide }),
       align: "center",
     });
-  }, [focusAsk, focusItem, focusLine, focusSide]);
+  }, [focusAsk, focusItem, focusLine, focusSide, viewer]);
+
+  const itemIds = items.map((item) => item.id);
+  const allFolded = areAllDiffFilesCollapsed(itemIds, folded);
+  const toggleFile = (id: string) =>
+    setFolded((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
 
   const beginComment = (
     range: SelectedLineRange | null,
@@ -230,9 +263,20 @@ function DiffHere({
       <div className="flex shrink-0 flex-col gap-1 border-b border-border/60 px-4 py-2 sm:px-6">
         <div className="flex min-w-0 items-center justify-between gap-2">
           <p className="min-w-0 text-xs text-muted-foreground">{diffSourceText(diff)}</p>
-          <Button size="compact" variant="ghost-muted" onClick={onRefresh}>
-            Refresh
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            {items.length > 1 ? (
+              <Button
+                size="compact"
+                variant="ghost-muted"
+                onClick={() => setFolded(toggleAllDiffFiles(itemIds, folded))}
+              >
+                {allFolded ? "Expand all" : "Collapse all"}
+              </Button>
+            ) : null}
+            <Button size="compact" variant="ghost-muted" onClick={onRefresh}>
+              Refresh
+            </Button>
+          </div>
         </div>
         {diff.truncated ? (
           <p role="status" className="text-xs text-warning-foreground">
@@ -270,6 +314,14 @@ function DiffHere({
             onGutterUtilityClick: beginComment,
             onLineSelectionEnd: beginComment,
           }}
+          renderHeaderPrefix={(item) => (
+            <FileHandles
+              path={item.type === "diff" ? resolveFileDiffPath(item.fileDiff) : item.file.name}
+              collapsed={item.collapsed === true}
+              onToggle={() => toggleFile(item.id)}
+              onAddPaths={onAddPaths}
+            />
+          )}
           renderAnnotation={(annotation) => (
             <ul className="divide-y divide-border/30 border-y border-border/30 bg-background">
               {annotation.metadata?.messages.map((message) => (
@@ -291,6 +343,56 @@ function DiffHere({
         />
       )}
     </div>
+  );
+}
+
+/** A file's header controls: fold it, and hand its path to the conversation. */
+function FileHandles({
+  path,
+  collapsed,
+  onToggle,
+  onAddPaths,
+}: {
+  readonly path: string;
+  readonly collapsed: boolean;
+  readonly onToggle: () => void;
+  readonly onAddPaths: ((paths: ReadonlyArray<string>) => void) | undefined;
+}) {
+  return (
+    <span className="me-1 flex items-center gap-0.5">
+      <Button
+        size="icon-micro"
+        variant="ghost-muted"
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? `Expand ${path}` : `Collapse ${path}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggle();
+        }}
+      >
+        <MorphIcon className="size-4" icon={collapsed ? ChevronRight : ChevronDown} />
+      </Button>
+      {onAddPaths === undefined ? null : (
+        <Button
+          draggable
+          size="icon-micro"
+          variant="ghost-muted"
+          aria-label={`Add ${path} to the message`}
+          title="Drag to the conversation, or click to add"
+          onClick={(event) => {
+            event.stopPropagation();
+            onAddPaths([path]);
+          }}
+          onDragStart={(event) => {
+            event.dataTransfer.setData(FILE_TREE_PATHS_DRAG_TYPE, path);
+            // The conversation names "move", as it must for the tree's drags.
+            event.dataTransfer.effectAllowed = "move";
+          }}
+        >
+          <GripVerticalIcon aria-hidden />
+        </Button>
+      )}
+    </span>
   );
 }
 

@@ -279,6 +279,7 @@ function RoomBody({
                 if (canPost) setLine({ anchor, ask: (line?.ask ?? 0) + 1 });
                 setPane("conversation");
               }}
+              onAddPaths={canPost ? addPaths : undefined}
               onOpenMessage={openMessage}
             />
           </div>

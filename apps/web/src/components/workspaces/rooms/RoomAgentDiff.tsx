@@ -16,55 +16,19 @@ import { useRoomDiff, useRoomSteps, useRoomThread } from "./useRoom";
 
 /**
  * The agent a card opened: its thread as it stood at that message, or following it while it works,
- * and beside that its changes, the checkout of that run read again each time jj reports its change
- * moved, which is after every step the agent takes. On jj its steps list above the diff, each
- * showing only its own lines. A Git checkout reports no step, so it moves with the task's runs and
- * Refresh.
+ * and beside that its changes, read again each time jj reports its change moved, which is after
+ * every step the agent takes. On jj the change is named above its steps, each showing only its own
+ * lines. A Git checkout reports no step, so it moves with the task's runs and Refresh.
  */
 export function RoomAgentDiff({
-  environmentId,
-  place,
-  run,
   until,
-  taskName,
-  jujutsu,
-  revision,
-  ...view
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly place: RoomPlace;
-  readonly run: string;
-  readonly until: string | undefined;
-  /** The name a change reports its task by. */
-  readonly taskName: string;
-  readonly jujutsu: boolean;
-  readonly revision: string;
-} & Omit<ComponentProps<typeof RoomDiff>, "diff" | "error" | "onRefresh" | "focus">) {
-  const live = useEnvironmentQuery(
-    jujutsu
-      ? serverEnvironment.peerChangesLive({
-          environmentId,
-          input: { workspace: place.workspace, project: place.project },
-        })
-      : null,
-  );
-  const moved = (live.data?.changes ?? [])
-    .filter((change) => changeKeyAndTitle(change).key === taskName)
-    .map((change) => change.commitId)
-    .join(",");
-  const changed = `${revision}:${moved}`;
+  ...changes
+}: { readonly until: string | undefined } & RoomAgentChangesProps) {
+  const { environmentId, place, run } = changes;
+  const changed = useChangeRevision(changes);
   const [mode, setMode] = useState<"thread" | "changes">("thread");
   const thread = useRoomThread({ environmentId, place, run, until, revision: changed });
-  const [step, setStep] = useState<string | undefined>(undefined);
-  const steps = useRoomSteps({ environmentId, place, run, revision: changed });
   const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
-  const diff = useRoomDiff({
-    environmentId,
-    place,
-    run,
-    revision: changed,
-    ...(step === undefined ? {} : { step }),
-  });
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 px-4 py-2">
@@ -90,45 +54,114 @@ export function RoomAgentDiff({
       {mode === "thread" ? (
         <AgentThread thread={thread.thread} error={thread.error} run={run} />
       ) : (
-        <>
-          {steps.length === 0 ? null : (
-            <ul
-              aria-label="Steps"
-              className="flex max-h-44 shrink-0 flex-col overflow-y-auto border-b border-border/60 px-2 py-1.5"
-            >
-              <StepRow selected={step === undefined} onSelect={() => setStep(undefined)}>
-                <span className="min-w-0 truncate text-foreground">All steps</span>
-              </StepRow>
-              {steps.map((entry) => {
-                const line = stepLine(entry);
-                return (
-                  <StepRow
-                    key={entry.commit}
-                    selected={step === entry.commit}
-                    onSelect={() => setStep(entry.commit)}
-                  >
-                    <span className="shrink-0 text-muted-foreground tabular-nums">
-                      {formatShortTimestamp(entry.at, timestampFormat)}
-                    </span>
-                    <span className="min-w-0 truncate font-mono text-foreground">{line.name}</span>
-                    <span className="ms-auto shrink-0 text-muted-foreground tabular-nums">
-                      {line.counts}
-                    </span>
-                  </StepRow>
-                );
-              })}
-            </ul>
-          )}
-          <RoomDiff
-            {...view}
-            diff={diff.diff}
-            error={diff.error}
-            onRefresh={diff.refresh}
-            focus={null}
-          />
-        </>
+        <RoomAgentChanges {...changes} />
       )}
     </div>
+  );
+}
+
+type RoomAgentChangesProps = {
+  readonly environmentId: EnvironmentId;
+  readonly place: RoomPlace;
+  readonly run: string;
+  /** The name a change reports its task by. */
+  readonly taskName: string;
+  readonly jujutsu: boolean;
+  readonly revision: string;
+} & Omit<ComponentProps<typeof RoomDiff>, "diff" | "error" | "onRefresh" | "focus">;
+
+/** `revision`, moved also by each step jj reports on the task's changes. */
+function useChangeRevision({
+  environmentId,
+  place,
+  taskName,
+  jujutsu,
+  revision,
+}: Pick<RoomAgentChangesProps, "environmentId" | "place" | "taskName" | "jujutsu" | "revision">) {
+  const live = useEnvironmentQuery(
+    jujutsu
+      ? serverEnvironment.peerChangesLive({
+          environmentId,
+          input: { workspace: place.workspace, project: place.project },
+        })
+      : null,
+  );
+  const moved = (live.data?.changes ?? [])
+    .filter((change) => changeKeyAndTitle(change).key === taskName)
+    .map((change) => change.commitId)
+    .join(",");
+  return `${revision}:${moved}`;
+}
+
+/** The change an agent carries: its id and subject, its steps, and the lines of one or all. */
+export function RoomAgentChanges({
+  environmentId,
+  place,
+  run,
+  taskName,
+  jujutsu,
+  revision,
+  ...view
+}: RoomAgentChangesProps) {
+  const changed = useChangeRevision({ environmentId, place, taskName, jujutsu, revision });
+  const [step, setStep] = useState<string | undefined>(undefined);
+  const { steps, change } = useRoomSteps({ environmentId, place, run, revision: changed });
+  const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
+  const diff = useRoomDiff({
+    environmentId,
+    place,
+    run,
+    revision: changed,
+    ...(step === undefined ? {} : { step }),
+  });
+  return (
+    <>
+      {change === undefined ? null : (
+        <p className="flex min-w-0 shrink-0 items-baseline gap-2 border-b border-border/60 px-4 py-2 sm:px-6">
+          <span className="shrink-0 font-mono text-xs text-muted-foreground">
+            {change.changeId.slice(0, 8)}
+          </span>
+          <span className="min-w-0 truncate text-sm text-foreground">
+            {change.subject === "" ? "No description yet" : change.subject}
+          </span>
+        </p>
+      )}
+      {steps.length === 0 ? null : (
+        <ul
+          aria-label="Steps"
+          className="flex max-h-44 shrink-0 flex-col overflow-y-auto border-b border-border/60 px-2 py-1.5"
+        >
+          <StepRow selected={step === undefined} onSelect={() => setStep(undefined)}>
+            <span className="min-w-0 truncate text-foreground">All steps</span>
+          </StepRow>
+          {steps.map((entry) => {
+            const line = stepLine(entry);
+            return (
+              <StepRow
+                key={entry.commit}
+                selected={step === entry.commit}
+                onSelect={() => setStep(entry.commit)}
+              >
+                <span className="shrink-0 text-muted-foreground tabular-nums">
+                  {formatShortTimestamp(entry.at, timestampFormat)}
+                </span>
+                <span className="min-w-0 truncate font-mono text-foreground">{line.name}</span>
+                <span className="ms-auto shrink-0 text-muted-foreground tabular-nums">
+                  {line.counts}
+                </span>
+              </StepRow>
+            );
+          })}
+        </ul>
+      )}
+      <RoomDiff
+        {...view}
+        diff={diff.diff}
+        error={diff.error}
+        onRefresh={diff.refresh}
+        focus={null}
+      />
+    </>
   );
 }
 

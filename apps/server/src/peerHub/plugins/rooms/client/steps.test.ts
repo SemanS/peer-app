@@ -6,7 +6,7 @@ import * as NodePath from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { patchCounts, stepDiff, workspaceSteps } from "./steps.ts";
+import { changeDiff, patchCounts, stepDiff, workspaceChange, workspaceSteps } from "./steps.ts";
 
 const hasJj = NodeChildProcess.spawnSync("jj", ["--version"]).status === 0;
 
@@ -63,6 +63,20 @@ describe.skipIf(!hasJj)("an agent's steps", () => {
     const diff = await stepDiff(root, steps[1]!.commit);
     expect(diff?.state === "here" && diff.patch).toContain("+two");
     expect(diff?.state === "here" && diff.patch).not.toContain("three");
+  });
+
+  it("reads the whole change the workspace carries", async () => {
+    jj("describe", "-m", "carry two files\n\nthe body stays out");
+    write("a.txt", "one\n");
+    write("b.txt", "two\n");
+
+    const change = await workspaceChange(root);
+    expect(change.subject).toBe("carry two files");
+    expect(change.changeId).toMatch(/^[k-z]{32}$/);
+
+    const diff = await changeDiff(root);
+    expect(diff.state === "here" && diff.patch).toContain("+one");
+    expect(diff.state === "here" && diff.patch).toContain("+two");
   });
 
   it("answers nothing for a commit that is not a step", async () => {

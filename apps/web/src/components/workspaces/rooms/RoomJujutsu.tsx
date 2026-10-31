@@ -3,19 +3,79 @@ import type { RoomPlace } from "@t3tools/client-runtime/peer/rooms";
 import type { EnvironmentId, PeerHubStatus, PeerProjectState } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { GitCompareIcon, HistoryIcon } from "lucide-react";
+import { type ComponentProps, useState } from "react";
 
 import { Button } from "../../ui/button";
+import { Toggle, ToggleGroup } from "../../ui/toggle-group";
 import { jjView } from "../settings/projectRepositories.logic";
 import { useSwitchToJujutsu } from "../useOpenWorkspaceProject";
 import { useWorkData } from "../useWorkData";
 import type { WorkTaskNode } from "../workTree.logic";
+import { RoomAgentChanges } from "./RoomAgentDiff";
 
 /**
- * The task as Jujutsu sees it, where the diff shows what it changed and this shows how it stands:
- * its stack, what moved under it and how it lands, with the project's graph and undo a step away.
- * A Git checkout gets the way to switch, here where its absence is noticed.
+ * The task as Jujutsu sees it, and the change of the agent picked in the conversation, which the
+ * task's stack alone cannot say: several agents can carry their own change on one task.
  */
 export function RoomJujutsu({
+  agent,
+  ...stack
+}: {
+  /** The agent picked in the conversation, with what its change needs to draw. */
+  readonly agent:
+    | ({ readonly label: string } & Omit<
+        ComponentProps<typeof RoomAgentChanges>,
+        "environmentId" | "place" | "jujutsu"
+      >)
+    | null;
+} & ComponentProps<typeof RoomTaskJujutsu>) {
+  const [show, setShow] = useState<"agent" | "task">("agent");
+  const on = stack.projectState.repositories.some((repository) => repository.vcs === "jj");
+  if (agent === null || !on) {
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <RoomTaskJujutsu {...stack} />
+      </div>
+    );
+  }
+  const { label, ...changes } = agent;
+  return (
+    <>
+      <div className="shrink-0 border-b border-border/60 px-4 py-2">
+        <ToggleGroup
+          aria-label="Show"
+          value={[show]}
+          onValueChange={(value) => {
+            const next = value[0];
+            if (next === "agent" || next === "task") setShow(next);
+          }}
+        >
+          <Toggle value="agent">{label}'s change</Toggle>
+          <Toggle value="task">Task's stack</Toggle>
+        </ToggleGroup>
+      </div>
+      {show === "agent" ? (
+        <RoomAgentChanges
+          {...changes}
+          environmentId={stack.environmentId}
+          place={stack.place}
+          jujutsu
+        />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <RoomTaskJujutsu {...stack} />
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * Where the diff shows what the task changed, this shows how it stands: its stack, what moved under
+ * it and how it lands, with the project's graph and undo a step away. A Git checkout gets the way
+ * to switch, here where its absence is noticed.
+ */
+function RoomTaskJujutsu({
   environmentId,
   status,
   place,

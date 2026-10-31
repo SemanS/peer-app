@@ -139,7 +139,7 @@ export function useRoomThread(input: {
   return { thread: query.data, error: query.error };
 }
 
-/** A run's steps on this computer, read again when its change moves. */
+/** A run's steps and the change they make, on this computer, read again when it moves. */
 export function useRoomSteps(input: {
   readonly environmentId: EnvironmentId;
   readonly place: RoomPlace;
@@ -151,7 +151,7 @@ export function useRoomSteps(input: {
     serverEnvironment.peerRooms.steps({ environmentId, input: { ...place, run } }),
   );
   useRefetchOn(revision, query.refresh);
-  return query.data?.steps ?? NO_STEPS;
+  return { steps: query.data?.steps ?? NO_STEPS, change: query.data?.change };
 }
 
 function readStored(key: string): RoomDraft {

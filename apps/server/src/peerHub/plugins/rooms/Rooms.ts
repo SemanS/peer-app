@@ -44,7 +44,7 @@ import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import { checkoutKind } from "../../core/vcs.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { changeToReview, pushedRefs, roomDiff, workRun, worktreeOf } from "./client/diff.ts";
-import { stepDiff, workspaceSteps } from "./client/steps.ts";
+import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/steps.ts";
 import { runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
 import { capacityOf, checkoutOf, openRuns, roomStarts } from "./client/start.ts";
@@ -184,11 +184,19 @@ const make = Effect.gen(function* () {
       return entries.length > 0 ? { entries } : { entries, note: "Its transcript is empty here." };
     });
 
+  const onJj = async (root: string) => (await checkoutKind(root).catch(() => null))?.kind === "jj";
+
   /** A workspace's steps; Git has none to show, and a failed read shows none rather than fails. */
   const runSteps = async (root: string) =>
-    (await checkoutKind(root).catch(() => null))?.kind === "jj"
-      ? workspaceSteps(root).catch(() => [])
-      : [];
+    (await onJj(root))
+      ? {
+          steps: await workspaceSteps(root).catch(() => []),
+          ...(await workspaceChange(root).then(
+            (change) => ({ change }),
+            () => ({}),
+          )),
+        }
+      : { steps: [] };
 
   /** The project's runs that only read the work, as the review starter knows them. */
   const reviewsOf = (place: PeerRoomsPlace) =>
@@ -446,8 +454,7 @@ const make = Effect.gen(function* () {
         const { checkout } = yield* workOf(place);
         const root = (yield* workHere(place, checkout?.path, run))?.root;
         if (root === undefined) return { steps: [] };
-        const steps = yield* Effect.promise(() => runSteps(root));
-        return { steps };
+        return yield* Effect.promise(() => runSteps(root));
       }),
     diff: ({
       run,
@@ -464,6 +471,14 @@ const make = Effect.gen(function* () {
           if (shown !== null) {
             return { ...shown, folder: root };
           }
+        }
+        // A run asked for by name is the change it carries, which only jj can say on jj.
+        if (run !== undefined && here?.root !== undefined) {
+          const root = here.root;
+          const carried = yield* Effect.promise(async () =>
+            (await onJj(root)) ? changeDiff(root).catch(() => null) : null,
+          );
+          if (carried !== null) return { ...carried, folder: root };
         }
         const diff = yield* roomDiff({
           root: here?.root,

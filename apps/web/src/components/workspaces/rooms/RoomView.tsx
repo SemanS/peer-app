@@ -193,6 +193,20 @@ function RoomBody({
     );
   };
 
+  const agentChanges = {
+    taskName: hubTask.key ?? hubTask.id,
+    revision,
+    messages: read.messages,
+    drafting,
+    me,
+    nameOf,
+    watch: watchable(taskNode.threads),
+    onWatch: onOpen,
+    onComment: commentOn,
+    onAddPaths: canPost ? addPaths : undefined,
+    onOpenMessage: openMessage,
+  };
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <RoomReach
@@ -267,7 +281,8 @@ function RoomBody({
               const agent =
                 runs.runs.find((candidate) => candidate.id === id)?.agent ?? message.author.agent;
               setRun({ id, agent, seq: message.seq, until: live ? undefined : message.at });
-              showSide("agent");
+              // Picking an agent while reading Jujutsu keeps Jujutsu, now on that agent's change.
+              showSide(side === "jujutsu" ? "jujutsu" : "agent");
             }}
             onOpenAnchor={(anchor) => {
               showSide("diff");
@@ -340,23 +355,13 @@ function RoomBody({
               )}
             >
               <RoomAgentDiff
+                {...agentChanges}
                 key={`${run.id}:${run.seq}`}
                 environmentId={environmentId}
                 place={place}
                 run={run.id}
                 until={run.until}
-                taskName={hubTask.key ?? hubTask.id}
                 jujutsu={onJujutsu}
-                revision={revision}
-                messages={read.messages}
-                drafting={drafting}
-                me={me}
-                nameOf={nameOf}
-                watch={watchable(taskNode.threads)}
-                onWatch={onOpen}
-                onComment={commentOn}
-                onAddPaths={canPost ? addPaths : undefined}
-                onOpenMessage={openMessage}
               />
             </div>
           )}
@@ -377,12 +382,18 @@ function RoomBody({
           </div>
           <div
             className={cn(
-              "min-h-0 min-w-0 flex-1 flex-col overflow-y-auto",
+              "min-h-0 min-w-0 flex-1 flex-col",
               side === "jujutsu" ? "flex" : "hidden",
             )}
           >
             {opened.has("jujutsu") ? (
               <RoomJujutsu
+                key={run === null ? "" : `${run.id}:${run.seq}`}
+                agent={
+                  run === null || agentLabel === null
+                    ? null
+                    : { ...agentChanges, label: agentLabel, run: run.id }
+                }
                 environmentId={environmentId}
                 status={status}
                 place={place}

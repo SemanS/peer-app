@@ -254,7 +254,11 @@ export const PeerRoomStep = Schema.Struct({
 });
 export type PeerRoomStep = typeof PeerRoomStep.Type;
 
-export const PeerRoomSteps = Schema.Struct({ steps: Schema.Array(PeerRoomStep) });
+export const PeerRoomSteps = Schema.Struct({
+  steps: Schema.Array(PeerRoomStep),
+  /** The change the agent carries; absent off jj and where its workspace is not on this computer. */
+  change: Schema.optional(Schema.Struct({ changeId: Schema.String, subject: Schema.String })),
+});
 export type PeerRoomSteps = typeof PeerRoomSteps.Type;
 
 export const PeerRoomsReadInput = Schema.Struct({

@@ -17,6 +17,9 @@ const COMMIT_ID = /^[0-9a-f]{40,64}$/;
 const LOG =
   'commit.commit_id() ++ "\\t" ++ commit.committer().timestamp().utc().format("%Y-%m-%dT%H:%M:%SZ") ++ "\\n"';
 
+const CHANGE =
+  'change_id ++ "\t" ++ parents.map(|parent| parent.commit_id()).join(",") ++ "\t" ++ commit_id ++ "\t" ++ description.first_line()';
+
 const read = (root: string, args: ReadonlyArray<string>) =>
   runJj(root, ["--ignore-working-copy", ...args], { timeoutMs: JJ_MS, raw: true });
 
@@ -71,6 +74,39 @@ export async function workspaceSteps(root: string): Promise<ReadonlyArray<PeerRo
   return steps;
 }
 
+const carried = async (root: string) => {
+  const [changeId = "", parents = "", commit = "", subject = ""] = (
+    await read(root, ["log", "-r", "@", "--no-graph", "-T", CHANGE])
+  ).split("\t");
+  return { changeId, base: parents.split(",")[0] ?? "", commit, subject };
+};
+
+/** What the workspace at `root` is working on: its change, in the words a person reads. */
+export async function workspaceChange(root: string) {
+  const { changeId, subject } = await carried(root);
+  return { changeId, subject };
+}
+
+const asRoomDiff = (patch: string, base: string, head: string): PeerRoomDiff => {
+  const whole = Buffer.from(patch);
+  const truncated = whole.length > PEER_ROOM_DIFF_MAX_BYTES;
+  const bytes = truncated ? whole.subarray(0, PEER_ROOM_DIFF_MAX_BYTES) : whole;
+  return {
+    state: "here",
+    source: "run",
+    base,
+    head,
+    patch: (truncated ? bytes.subarray(0, bytes.lastIndexOf(10) + 1) : bytes).toString("utf8"),
+    truncated,
+  };
+};
+
+/** The whole change in the workspace, from jj: a secondary workspace has no `.git` to ask. */
+export async function changeDiff(root: string): Promise<PeerRoomDiff> {
+  const { base, commit } = await carried(root);
+  return asRoomDiff(await read(root, ["diff", "--git", "-r", commit]), base || commit, commit);
+}
+
 /** One step's own lines, as the room's viewer draws any diff. */
 export async function stepDiff(root: string, commit: string): Promise<PeerRoomDiff | null> {
   if (!COMMIT_ID.test(commit)) return null;
@@ -78,15 +114,5 @@ export async function stepDiff(root: string, commit: string): Promise<PeerRoomDi
   const at = entries.findIndex((entry) => entry.commit === commit);
   if (at === -1) return null;
   const previous = entries[at + 1]?.commit;
-  const whole = Buffer.from(await stepPatch(root, commit, previous));
-  const truncated = whole.length > PEER_ROOM_DIFF_MAX_BYTES;
-  const bytes = truncated ? whole.subarray(0, PEER_ROOM_DIFF_MAX_BYTES) : whole;
-  return {
-    state: "here",
-    source: "run",
-    base: previous ?? commit,
-    head: commit,
-    patch: (truncated ? bytes.subarray(0, bytes.lastIndexOf(10) + 1) : bytes).toString("utf8"),
-    truncated,
-  };
+  return asRoomDiff(await stepPatch(root, commit, previous), previous ?? commit, commit);
 }

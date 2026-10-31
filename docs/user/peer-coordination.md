@@ -813,7 +813,7 @@ A change stays on its task after its agent stops or Peer restarts, for as long a
 
 In a task's room, **Jujutsu** beside the diff shows how the task stands: its stack, what moved under it and how it lands. A Git checkout offers the switch there.
 
-Each agent reply carries a card with where its run stands. Open it to see that agent beside the conversation: **Thread** shows its work as it stood at that reply, or follows it while it works, on the computer that ran it. **Changes** shows its own diff. On Jujutsu that follows each step the agent takes, and the list above it shows one step's lines at a time; in a Git checkout use **Refresh**.
+Each agent reply carries a card with where its run stands. Open it to see that agent beside the conversation: **Thread** shows its work as it stood at that reply, or follows it while it works, on the computer that ran it. **Changes** shows its own diff. On Jujutsu that follows each step the agent takes, and the list above it shows one step's lines at a time; in a Git checkout use **Refresh**. On Jujutsu, the **Jujutsu** tab shows the same for the agent you picked, under the change it carries, with **Task's stack** beside it; pick an agent while reading that tab and it stays there.
 
 ## Working on Jujutsu
 

@@ -94,6 +94,7 @@ describe("acceptance wire", () => {
     expect(peerPluginStatusFields).toHaveProperty("acceptance");
     expect(AcceptanceRpcScopes).toEqual({
       [PEER_ACCEPTANCE_METHODS.peerAcceptanceView]: AuthOrchestrationReadScope,
+      [PEER_ACCEPTANCE_METHODS.peerAcceptanceSignals]: AuthOrchestrationReadScope,
       [PEER_ACCEPTANCE_METHODS.peerAcceptanceAccept]: AuthOrchestrationOperateScope,
       [PEER_ACCEPTANCE_METHODS.peerAcceptanceWithdraw]: AuthOrchestrationOperateScope,
       [PEER_ACCEPTANCE_METHODS.peerAcceptanceReviewPolicy]: AuthOrchestrationReadScope,

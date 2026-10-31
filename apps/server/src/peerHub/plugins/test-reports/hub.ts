@@ -10,6 +10,7 @@ import {
   PeerHubError,
   PeerTestReport,
   PeerTestReportSummary,
+  PeerTestsInherited,
   type PeerTestReportItem,
   type PeerTestReportResult,
 } from "@t3tools/contracts";
@@ -107,6 +108,15 @@ export function hubCalls(client: PeerHubClient.PeerHubClient["Service"]) {
           unsupported,
         }),
       ).pipe(Effect.map((answer) => answer.removed)),
+    /** What the task's dependencies left to it; nothing from a Hub that keeps no such items. */
+    inherited: (p: Place) =>
+      client
+        .request(PeerTestsInherited, {
+          workspace: p.workspace,
+          path: `${path(p)}/inherited`,
+          unsupported,
+        })
+        .pipe(Effect.map((answer) => answer ?? { items: [], capped: false })),
     /** `stale` when the author filed another report since `number` (409 `stale_report`). */
     setOwner: (
       p: Place,

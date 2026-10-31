@@ -111,6 +111,7 @@ export * from "./peer/mcp.ts";
 export * from "./peer/mcp.rpc.ts";
 
 export * from "./peer/handoff.ts";
+export * from "./peer/handoffOwed.ts";
 export * from "./peer/handoff.rpc.ts";
 export * from "./peer/resources.ts";
 export * from "./peer/resources.rpc.ts";

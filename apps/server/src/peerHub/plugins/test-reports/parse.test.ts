@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 
 import { CliError } from "../../core/plugin.ts";
-import { corrected, parse } from "./parse.ts";
+import { corrected, FORM, itemOf, parse } from "./parse.ts";
 
 const usageOf = (args: ReadonlyArray<string>) => {
   try {
@@ -55,6 +55,19 @@ describe("peer tests, as typed", () => {
     assert.deepStrictEqual(parse(["show", "VL7"]), { kind: "show", task: "VL7" });
     // An unquoted summary still reads as one.
     assert.deepInclude(parse(["pass", "all", "green"]), { summary: "all green" });
+  });
+
+  it("leaves a failed item to a task, and keeps any other @ in its text", () => {
+    assert.deepStrictEqual(itemOf("fail", "malformed revision @task:3.1"), {
+      kind: "fail",
+      text: "malformed revision",
+      task: "3.1",
+    });
+    assert.deepStrictEqual(itemOf("fail", "login fails for @ana"), {
+      kind: "fail",
+      text: "login fails for @ana",
+    });
+    assert.include(FORM, '--fail "<text> [@task:<key>]"');
   });
 
   it("is a usage error when the line is wrong", () => {

@@ -24,5 +24,7 @@ export const acceptanceRpc = (acceptance: Acceptance["Service"]) =>
           wrap.effect(methods.peerAcceptanceReviewPolicy, acceptance.reviewPolicy(input)),
         [methods.peerAcceptanceSetReviewPolicy]: (input) =>
           wrap.effect(methods.peerAcceptanceSetReviewPolicy, acceptance.setReviewPolicy(input)),
+        [methods.peerAcceptanceSignals]: (input) =>
+          wrap.effect(methods.peerAcceptanceSignals, acceptance.signals(input)),
       }),
   }) satisfies NonNullable<PeerContributions["rpc"]>;

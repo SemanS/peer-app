@@ -21,6 +21,8 @@ export const testReportsRpc = (reports: TestReports["Service"]) =>
           wrap.effect(methods.peerTestsRemove, reports.remove(input)),
         [methods.peerTestsSetOwner]: (input) =>
           wrap.effect(methods.peerTestsSetOwner, reports.setOwner(input)),
+        [methods.peerTestsInherited]: (input) =>
+          wrap.effect(methods.peerTestsInherited, reports.inherited(input)),
       }),
   }) satisfies NonNullable<PeerContributions["rpc"]>;
 

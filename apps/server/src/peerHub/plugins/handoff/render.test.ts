@@ -8,14 +8,18 @@ import {
   blockOf,
   agentText,
   earlierCopyNotice,
-  reportLine,
   replyLines,
   deliveryLine,
-  policyLine,
   START,
   START_LINE,
   END,
 } from "./render.ts";
+import {
+  handoffOwed,
+  handoffPolicyLines,
+  handoffReportLine as reportLine,
+} from "@t3tools/contracts";
+
 const p = Schema.decodeUnknownSync(PeerHandoffPackage)(fixture);
 const block = blockOf(p, { names: () => "Ana", pointerOnly: false });
 /** The same sequence of numbers every run, so a failing case can be replayed. */
@@ -251,21 +255,119 @@ describe("delivery and policy", () => {
     expect(deliveryLine(undefined)).toBeNull();
   });
   it("says what the policy made of it", () => {
-    expect(policyLine({ mode: "auto", version: 3, signals: [], accepted: true })).toBe(
+    expect(handoffPolicyLines({ mode: "auto", version: 3, signals: [], accepted: true })).toEqual([
       "Accepted by policy v3.",
-    );
+    ]);
     expect(
-      policyLine({
+      handoffPolicyLines({
         mode: "auto",
         version: 3,
-        signals: ["not-delivered", "unowned"],
+        signals: ["open-overlap"],
         accepted: false,
       }),
-    ).toBe("Waits for a person's review: not-delivered, unowned.");
-    expect(policyLine({ mode: "ask", version: 0, signals: [], accepted: false })).toContain(
-      "every handoff",
-    );
-    expect(policyLine(undefined)).toBeNull();
+    ).toEqual(["Waits for a person's review: open-overlap."]);
+    expect(
+      handoffPolicyLines({ mode: "ask", version: 0, signals: [], accepted: false })[0],
+    ).toContain("every handoff");
+    expect(handoffPolicyLines(undefined)).toEqual([]);
+  });
+  describe("what the agent owes", () => {
+    const owedOf = (facts: Parameters<typeof handoffOwed>[0]) =>
+      handoffOwed(facts, (text) => `"${text}"`);
+    const policy = {
+      mode: "ask" as const,
+      version: 1,
+      signals: ["failed", "unowned"] as const,
+      accepted: false,
+    };
+    const shared = {
+      state: "shared" as const,
+      evidence: {},
+      observedAt: "t",
+      environment: "e",
+      vcs: "git" as const,
+    };
+    const item = (over: object) => ({
+      text: "typecheck",
+      failed: false,
+      kind: "unverified" as const,
+      author: "a",
+      role: "author",
+      number: 1,
+      index: 0,
+      ...over,
+    });
+    const live = {
+      evaluated: true,
+      at: "t",
+      signals: policy.signals,
+      reports: [{ author: "a", role: "author", number: 1, result: "mixed" as const, at: "t" }],
+      items: [
+        item({ kind: "fail", failed: true, text: "Malformed base revision" }),
+        item({}),
+        item({ text: "left", kind: "fail", failed: true, task: "3.1" }),
+        item({ text: "spec or design", owner: "ana@acme.test" }),
+        item({ text: "covered", task: "3.2" }),
+      ],
+      ownerCalls: [
+        { id: "c", owner: "o", state: "declined", paths: ["a.ts"] },
+        { id: "d", owner: "o", state: "pending", paths: ["b.ts"] },
+      ],
+    };
+
+    it("names each item it owes and does not send it to a person", () => {
+      const owed = owedOf({ policy, delivery: shared, live });
+      expect(owed).toEqual([
+        'failed: "Malformed base revision"',
+        'unverified, nobody answers for it: "typecheck"',
+        "an owner declined your call on a.ts",
+      ]);
+      const lines = handoffPolicyLines(policy, owed).join("\n");
+      expect(lines).toContain('- failed: "Malformed base revision"');
+      expect(lines).not.toContain("Waits for a person's review");
+    });
+
+    it("says what the policy does next once nothing is its own", () => {
+      const clear = {
+        ...live,
+        items: [item({ text: "left", kind: "fail", failed: true, task: "3.1" })],
+        ownerCalls: [],
+      };
+      const owed = owedOf({ policy, delivery: shared, live: clear });
+      expect(owed).toEqual([]);
+      expect(handoffPolicyLines(policy, owed)[0]).toContain("Waits for a person's review");
+    });
+
+    it("falls back to the package, which holds a failure's count and not its text", () => {
+      const report = {
+        number: 1,
+        result: "mixed" as const,
+        author: "a",
+        role: "author",
+        at: "t",
+        passed: 0,
+        failed: 2,
+        unverified: 1,
+        unowned: ["typecheck"],
+      };
+      expect(owedOf({ policy, delivery: undefined, report })).toEqual([
+        "delivery: not observed",
+        "2 failed items: see peer tests show",
+        'unverified, nobody answers for it: "typecheck"',
+      ]);
+      expect(owedOf({ policy, delivery: shared })[0]).toContain("no test report");
+    });
+
+    it("leaves an accepted handoff and an older Hub's as they read", () => {
+      expect(owedOf({ policy: { ...policy, accepted: true } })).toEqual([]);
+      expect(owedOf({})).toEqual([]);
+    });
+
+    it("names at most five and points at the rest", () => {
+      const lines = handoffPolicyLines(policy, ["1", "2", "3", "4", "5", "6", "7"]);
+      expect(lines.filter((line) => line.startsWith("- ")).length).toBe(6);
+      expect(lines).toContain("- and 2 more: peer tests show");
+    });
   });
   it("puts both in the reply after the package line, and in peer handoff's text", () => {
     const delivery = {

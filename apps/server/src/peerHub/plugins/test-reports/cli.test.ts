@@ -83,6 +83,50 @@ describe("peer tests", () => {
     ),
   );
 
+  it.effect("leaves a failed item to a task, and says so when the Hub drops the task", () =>
+    run(
+      Effect.gen(function* () {
+        const answer = {
+          current: [
+            200,
+            {
+              report: reportOf({
+                items: [{ kind: "fail", text: "malformed revision" }],
+              }),
+              changed: true,
+            },
+          ] as [number, unknown],
+        };
+        const peer = yield* ready({ route: answering(answer) });
+        const printed = yield* peer.tests(["mixed", "x", "--fail", "malformed revision @task:3.1"]);
+        const [body] = sent(peer.hub, "POST");
+        assert.deepStrictEqual(body?.items, [
+          { kind: "fail", text: "malformed revision", task: "3.1" },
+        ]);
+        assert.include(printed, 'so "malformed revision" has no home');
+      }),
+    ),
+  );
+
+  it.effect("names why a task cannot carry a failed item", () =>
+    run(
+      Effect.gen(function* () {
+        const refused = {
+          current: [
+            400,
+            { error: { code: "not_a_dependent", message: "3.1 does not depend on this task" } },
+          ] as [number, unknown],
+        };
+        const peer = yield* ready({ route: answering(refused) });
+        const failure = yield* peer
+          .tests(["mixed", "x", "--fail", "y @task:3.1"])
+          .pipe(Effect.flip);
+        assert.include(String(failure), "does not depend");
+        assert.include(String(failure.next ?? ""), "depends on this one");
+      }),
+    ),
+  );
+
   it.effect("marks an item Peer saw fail, and a claim it did not see as author-reported", () =>
     run(
       Effect.gen(function* () {

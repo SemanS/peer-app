@@ -17,10 +17,14 @@ import * as PeerWork from "../../core/work/PeerWork.ts";
 import { testsCommand } from "./cli.ts";
 import { testReportsRpc, testsTools } from "./client/transport.ts";
 import { emptyShell, remember } from "./evidence.ts";
+import { inheritedBlock } from "./render.ts";
 import * as TestReports from "./TestReports.ts";
 
 export const START_LINE =
-  'Before peer done, file what you tested: peer tests pass|fail|mixed "<summary>" --pass "<command>" --unverified "<what this task should have checked> @<person>"; what a dependent task covers is "<text> @task:<key>". Every unverified item needs an owner or a task before peer done.';
+  'Before peer done, file what you tested: peer tests pass|fail|mixed "<summary>" --pass "<command>" --unverified "<what it should have checked> @<person>". A dependent task can carry an item: "<text> @task:<key>", on --fail too. Unverified items need an owner or a task, failed ones a task.';
+
+/** A session's start does not wait long for what a slow Hub would add. */
+const INHERITED_MS = 1500;
 
 export const TestReportsPlugin = bindPlugin({
   ...PEER_TEST_REPORTS_PLUGIN,
@@ -37,6 +41,20 @@ export const TestReportsPlugin = bindPlugin({
       agentTools: testsTools,
       hooks: {
         startLine: Effect.succeed(START_LINE),
+        sessionStart: ({ session }) =>
+          session.task === undefined
+            ? Effect.succeed(null)
+            : reports
+                .inherited({
+                  workspace: session.workspace,
+                  project: session.project,
+                  task: session.task,
+                })
+                .pipe(
+                  Effect.timeout(`${INHERITED_MS} millis`),
+                  Effect.map(inheritedBlock),
+                  Effect.orElseSucceed(() => null),
+                ),
         // The session's shell history, for "seen run by Peer"; nothing is said to the agent.
         postTool: (ctx) =>
           ctx.command === undefined

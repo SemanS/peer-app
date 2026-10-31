@@ -53,6 +53,8 @@ describe("test-reports plugin", () => {
           failed: 0,
           unverified: 1,
           unowned: 0,
+          asks: [SLAVO],
+          failedLeft: 0,
         });
 
         // A person files from the task page: the Hub hears of no session and no computer.

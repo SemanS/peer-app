@@ -629,7 +629,8 @@ describe("review package publication", () => {
           assert.notInclude(composed.body, "delivery");
           assert.notInclude(lines.join("\n"), "Delivered:");
         }
-        assert.include(lines.join("\n"), "Waits for a person's review: not-delivered.");
+        assert.notInclude(lines.join("\n"), "Waits for a person's review");
+        assert.include(lines.join("\n"), "Yours before a person reads this handoff:");
         const summary = (yield* s.service.snapshot).summaries[0];
         assert.strictEqual(summary?.policy?.mode, "auto");
         assert.strictEqual(summary?.delivery?.state, revision >= 3 ? "none" : undefined);

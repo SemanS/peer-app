@@ -447,6 +447,7 @@ function RoomBody({
                 error={diff.error}
                 projectName={projectState.project.name}
                 canPost={canPost}
+                revision={revision}
                 onRefresh={diff.refresh}
                 onAdd={(path) => addPaths([path])}
               />

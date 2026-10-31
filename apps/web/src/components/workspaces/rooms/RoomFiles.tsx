@@ -1,13 +1,27 @@
-import type { EnvironmentId, PeerRoomDiff } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import { type EnvironmentId, type PeerRoomDiff, ThreadId } from "@t3tools/contracts";
+import { lazy, Suspense, useState } from "react";
 
+import { DraftId } from "../../../composerDraftStore";
+import {
+  primaryServerAvailableEditorsAtom,
+  primaryServerKeybindingsAtom,
+} from "../../../state/server";
 import { Button } from "../../ui/button";
-import FileBrowserPanel from "../../files/FileBrowserPanel";
 
-const openNothing = () => {};
+const FilePreviewPanel = lazy(() => import("../../files/FilePreviewPanel"));
+
+const ignorePending = () => {};
+
+// A room has no thread. A draft target reads assets by folder and path, so these ids reach nothing.
+const ROOM_THREAD = ThreadId.make("room-files");
+const ROOM_DRAFT = DraftId.make("room-files");
 
 /**
- * The project's files in this computer's checkout of the task's work. A row dragged to the
- * conversation, or added from its menu, goes into the draft as a path; a click opens nothing.
+ * The project's files in this computer's checkout of the task's work. A click shows the file beside
+ * the tree, to read: changes stay with the agents. A row dragged to the conversation, or added from
+ * its menu, goes into the draft as a path.
  */
 export function RoomFiles({
   environmentId,
@@ -15,6 +29,7 @@ export function RoomFiles({
   error,
   projectName,
   canPost,
+  revision,
   onRefresh,
   onAdd,
 }: {
@@ -24,6 +39,8 @@ export function RoomFiles({
   readonly error: string | null;
   readonly projectName: string;
   readonly canPost: boolean;
+  /** Moves as the task's agents work, so an open file and the tree read again. */
+  readonly revision: string;
   readonly onRefresh: () => void;
   readonly onAdd: (path: string) => void;
 }) {
@@ -45,23 +62,67 @@ export function RoomFiles({
     );
   }
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {canPost ? (
-        <p className="shrink-0 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground sm:px-6">
-          Drag a file or folder to the conversation to ask about it.
-        </p>
-      ) : null}
-      <FileBrowserPanel
+    <Suspense fallback={null}>
+      <RoomFileSurface
         key={diff.folder}
         environmentId={environmentId}
-        cwd={diff.folder}
+        folder={diff.folder}
         projectName={projectName}
-        selectedPath={null}
-        selectedPathRevealId={0}
-        onOpenFile={openNothing}
-        {...(canPost ? { onAddToChat: onAdd } : {})}
-        workspaceMutationId={null}
+        revision={revision}
+        {...(canPost ? { onAdd } : {})}
       />
-    </div>
+    </Suspense>
+  );
+}
+
+function RoomFileSurface({
+  environmentId,
+  folder,
+  projectName,
+  revision,
+  onAdd,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly folder: string;
+  readonly projectName: string;
+  readonly revision: string;
+  readonly onAdd?: (path: string) => void;
+}) {
+  const keybindings = useAtomValue(primaryServerKeybindingsAtom);
+  const availableEditors = useAtomValue(primaryServerAvailableEditorsAtom);
+  const [path, setPath] = useState<string | null>(null);
+  const [folderTrail, setFolderTrail] = useState<string | undefined>(undefined);
+  const openFile = (relativePath: string) => {
+    setPath(relativePath);
+    setFolderTrail(undefined);
+  };
+  return (
+    <FilePreviewPanel
+      environmentId={environmentId}
+      cwd={folder}
+      projectName={projectName}
+      threadRef={scopeThreadRef(environmentId, ROOM_THREAD)}
+      composerDraftTarget={ROOM_DRAFT}
+      keybindings={keybindings}
+      availableEditors={availableEditors}
+      relativePath={path}
+      revealLine={null}
+      revealRequestId={0}
+      onOpenFile={openFile}
+      onNavigateFolder={(relativePath, trail) => {
+        setPath(relativePath === "" ? null : relativePath);
+        setFolderTrail(trail === relativePath ? undefined : trail);
+      }}
+      folderTrail={folderTrail}
+      onPendingChange={ignorePending}
+      selectedFilePending={false}
+      workspaceMutationId={revision}
+      readOnly
+      onClose={() => {
+        setPath(null);
+        setFolderTrail(undefined);
+      }}
+      {...(onAdd === undefined ? {} : { onAddToChat: onAdd })}
+    />
   );
 }

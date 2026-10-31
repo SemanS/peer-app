@@ -37,7 +37,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
-import { FolderTree, Globe2, WrapTextIcon } from "lucide-react";
+import { FolderTree, Globe2, WrapTextIcon, XIcon } from "lucide-react";
 import { Code2, Eye, Table2 } from "lucide";
 import * as Schema from "effect/Schema";
 import { useEffect, useRef, useState } from "react";
@@ -137,6 +137,12 @@ interface FilePreviewPanelProps {
   onPendingChange: (relativePath: string, pending: boolean) => void;
   selectedFilePending: boolean;
   workspaceMutationId: string | null;
+  /** For a surface with no thread behind it: no edits, comments or thread-owned preview. */
+  readOnly?: boolean;
+  /** Puts a close action on a surface that has no tab of its own. */
+  onClose?: () => void;
+  /** Passed to the explorer; see `FileBrowserPanel`. */
+  onAddToChat?: (treePath: string) => void;
 }
 
 const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
@@ -982,6 +988,9 @@ export default function FilePreviewPanel({
   onPendingChange,
   selectedFilePending,
   workspaceMutationId,
+  readOnly = false,
+  onClose,
+  onAddToChat,
 }: FilePreviewPanelProps) {
   const relativePath =
     attachment === undefined ? resolveFilePreviewPath(requestedPath, cwd) : requestedPath;
@@ -1098,6 +1107,7 @@ export default function FilePreviewPanel({
       ? setRenderTablePreferred
       : setRenderBrowserFilePreferred;
   const canOpenInBrowser =
+    !readOnly &&
     canOperatePreview &&
     previewPath !== null &&
     attachment === undefined &&
@@ -1275,9 +1285,19 @@ export default function FilePreviewPanel({
               <FolderTree className="size-3.5" />
             </FileSurfaceAction>
           ) : null}
+          {onClose !== undefined && relativePath !== null ? (
+            <FileSurfaceAction label="Close file" onPress={onClose}>
+              <XIcon className="size-3.5" />
+            </FileSurfaceAction>
+          ) : null}
         </div>
       ) : null}
-      {relativePath && !attachment && !isHostFile && !canWriteFiles && !fileAccess.isPending ? (
+      {relativePath &&
+      !attachment &&
+      !readOnly &&
+      !isHostFile &&
+      !canWriteFiles &&
+      !fileAccess.isPending ? (
         <div className="shrink-0 border-b px-3 py-1.5 text-2xs text-muted-foreground">
           Read-only connection. Unsaved edits are kept until write access returns.
         </div>
@@ -1390,7 +1410,7 @@ export default function FilePreviewPanel({
                 relativePath={relativePath}
                 threadRef={threadRef}
                 contents={file.data.contents}
-                readOnly={isHostFile || !canWriteFiles}
+                readOnly={readOnly || isHostFile || !canWriteFiles}
                 onPendingChange={onPendingChange}
               />
             ) : tableDelimiter && renderTable ? (
@@ -1400,7 +1420,7 @@ export default function FilePreviewPanel({
                 text={file.data.contents}
                 delimiter={tableDelimiter}
               />
-            ) : file.data.truncated || isHostFile || !canWriteFiles ? (
+            ) : readOnly || file.data.truncated || isHostFile || !canWriteFiles ? (
               <SourceFilePreview
                 name={relativePath}
                 text={file.data.contents}
@@ -1452,6 +1472,7 @@ export default function FilePreviewPanel({
               {...(previewPath && !isMedia && !isPdf
                 ? { onRefreshSelectedFile: file.refresh }
                 : {})}
+              {...(onAddToChat === undefined ? {} : { onAddToChat })}
             />
           </aside>
         ) : null}

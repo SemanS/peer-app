@@ -55,8 +55,9 @@ interface MemberRead {
 }
 
 /**
- * One room across a workspace's projects: their chats read as one conversation, a message goes to
- * the projects chosen under it, and each project's diff, files and agents stand side by side.
+ * One room across a workspace's projects: a message goes to the first project's chat, whose agent
+ * works in every project's checkout, and each project's diff, files and agents stand side by side.
+ * The other chats hold the rights and the place of that project's work.
  */
 export function SharedRoomView({ group }: { readonly group: string }) {
   const { environmentId, status, tree, actions } = useWorkData();
@@ -109,7 +110,6 @@ function SharedRoomBody({
   const navigate = useNavigate();
   const [reads, setReads] = useState<ReadonlyMap<string, MemberRead>>(new Map());
   const [side, setSide] = useState<"diff" | "files" | "agents">("diff");
-  const [left, setLeft] = useState<ReadonlySet<string>>(new Set());
   const updateTask = useAtomCommand(serverEnvironment.peerHubUpdateTask, { reportFailure: false });
   const canPost = useAtomValue(serverEnvironment.peerRooms.post.permissionAtom(environmentId));
   const canMove = useAtomValue(serverEnvironment.peerRooms.pass.permissionAtom(environmentId));
@@ -124,7 +124,6 @@ function SharedRoomBody({
       messages: reads.get(member.place.project)?.messages ?? [],
     })),
   );
-  const chosen = members.filter((member) => !left.has(member.place.project));
   const closeAll = async () => {
     await Promise.all(
       members.map(({ place }) =>
@@ -176,63 +175,31 @@ function SharedRoomBody({
           shared={(message) => rows.get(message)}
         />
         {canPost && firstState !== undefined ? (
-          <>
-            <div
-              role="group"
-              aria-label="Projects this message goes to"
-              className="flex shrink-0 flex-wrap items-center gap-1 border-t border-border px-4 pt-2 sm:px-6"
-            >
-              <span className="me-1 text-xs text-muted-foreground">In</span>
-              {members.map(({ place, project }) => {
-                const on = !left.has(place.project);
-                return (
-                  <Button
-                    key={place.project}
-                    type="button"
-                    size="compact"
-                    variant={on ? "outline" : "ghost-muted"}
-                    aria-pressed={on}
-                    disabled={on && chosen.length === 1}
-                    onClick={() =>
-                      setLeft((current) => {
-                        const next = new Set(current);
-                        if (!next.delete(place.project)) next.add(place.project);
-                        return next;
-                      })
-                    }
-                  >
-                    {project}
-                  </Button>
-                );
-              })}
-            </div>
-            <RoomComposer
-              environmentId={environmentId}
-              place={first.place}
-              targets={targetsFor(
-                firstState.project,
-                { id: first.place.task, createdBy: me },
-                [],
-                me,
-                {
-                  nameOf: (email) => personName(firstState, email),
-                  chat: true,
-                },
-              )}
-              people={peopleOf(firstState.project.members, me, (email) =>
-                personName(firstState, email),
-              )}
-              personalHarnesses={firstState.project.capacity.personalHarnesses}
-              line={null}
-              paths={null}
-              chat
-              prepare={() => Promise.resolve(chosen.map((member) => member.place))}
-              onDrafting={NOTHING}
-              onSent={() => {
-                for (const read of reads.values()) read.refresh();
-              }}
-            />
-          </>
+          <RoomComposer
+            environmentId={environmentId}
+            place={first.place}
+            targets={targetsFor(
+              firstState.project,
+              { id: first.place.task, createdBy: me },
+              [],
+              me,
+              {
+                nameOf: (email) => personName(firstState, email),
+                chat: true,
+              },
+            )}
+            people={peopleOf(firstState.project.members, me, (email) =>
+              personName(firstState, email),
+            )}
+            personalHarnesses={firstState.project.capacity.personalHarnesses}
+            line={null}
+            paths={null}
+            chat
+            onDrafting={NOTHING}
+            onSent={() => {
+              for (const read of reads.values()) read.refresh();
+            }}
+          />
         ) : null}
       </section>
       <section aria-label="Projects" className="hidden min-h-0 min-w-0 flex-1 flex-col lg:flex">
@@ -399,7 +366,7 @@ export function NewSharedRoom({
   const createTask = useAtomCommand(serverEnvironment.peerHubCreateTask, { reportFailure: false });
   const group = useRef(randomUUID());
   // A post that fails keeps its chats, so sending again adds no second set.
-  const created = useRef<ReadonlyArray<RoomPlace> | null>(null);
+  const created = useRef<RoomPlace | null>(null);
   const first = places[0];
   const state = first === undefined ? undefined : stateOf(status, { ...first, task: "" });
   const me = status.email;
@@ -432,8 +399,8 @@ export function NewSharedRoom({
         return { workspace, project, task };
       }),
     );
-    created.current = made;
-    return made;
+    created.current = made[0]!;
+    return made[0]!;
   };
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col justify-center gap-4 px-4">

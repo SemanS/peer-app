@@ -21,6 +21,7 @@ import {
   type PeerRun,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import * as PeerAgents from "../coordination/PeerAgents.ts";
@@ -28,6 +29,7 @@ import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
 import type { PersistedRun } from "../state/PeerState.ts";
 import * as PeerWork from "./PeerWork.ts";
+import { runRootsData } from "./runRoots.ts";
 import * as PeerRuns from "./runs.ts";
 import { stateOf } from "./runs.ts";
 
@@ -168,6 +170,9 @@ const continueInHerdr = (
           : `Peer: your person continues run ${run.id} on ${name}. Pick it up where you left it.`,
       env: identity.env,
       resume,
+      dirs: (Option.getOrUndefined(yield* runRootsData(peerState).read)?.runs[run.id] ?? []).map(
+        (entry) => entry.root,
+      ),
     });
     yield* Effect.promise(() =>
       runs.book.hold(run.id, started.threadKey, started.paneId).catch(() => undefined),

@@ -33,6 +33,20 @@ const PROMPT_POLL_MS = 500;
 /** After its prompt, for its first hook to arrive before it stops counting as waiting. */
 const SESSION_SETTLES_MS = 30_000;
 
+/** A run across projects is told where the others are: nothing else in its session says so. */
+export const withProjects = (
+  prompt: string,
+  also: ReadonlyArray<{ readonly project: string; readonly root: string }>,
+) =>
+  also.length === 0
+    ? prompt
+    : [
+        prompt,
+        "This work spans several projects. Besides this folder, you work in these, each your own checkout on its own branch:",
+        ...also.map((other) => `- ${other.project}: ${other.root}`),
+        "Run version control per folder (git -C <folder>, or jj -R <folder>); each project commits and lands on its own. Answer in this room.",
+      ].join("\n");
+
 /** Launches task agents in herdr, showing each among herdr's agents at once. */
 export const makeLauncher = (agents: HerdrAgents) =>
   Effect.gen(function* () {
@@ -98,6 +112,25 @@ export const makeLauncher = (agents: HerdrAgents) =>
               `Could not prepare the task checkout: ${messageOf(failure) ?? "check the local repository branch."}`,
             ),
         });
+        const also = yield* Effect.forEach(input.also ?? [], (other) =>
+          Effect.tryPromise({
+            try: async () => {
+              const made = await prepareHerdrTaskWorktree({
+                checkout: other.checkout,
+                baseBranch: other.baseBranch,
+                worktrees: other.worktrees,
+                task: input.task.key ?? input.task.id,
+              });
+              const { dev, ino } = await NodeFSP.stat(made.cwd);
+              return { project: other.project, root: made.cwd, identity: `${dev}:${ino}` };
+            },
+            catch: (failure) =>
+              hubError(
+                `Could not prepare the checkout of ${other.project}: ${messageOf(failure) ?? "check the local repository branch."}`,
+              ),
+          }),
+        );
+        const prompt = withProjects(input.prompt, also);
         const identity = yield* Effect.tryPromise({
           try: () => NodeFSP.stat(tree.cwd),
           catch: () => hubError("The newly created task checkout disappeared before startup."),
@@ -111,6 +144,7 @@ export const makeLauncher = (agents: HerdrAgents) =>
               resume: input.resume,
               model: input.model,
               effort: input.effort,
+              dirs: [...(input.dirs ?? []), ...also.map((other) => other.root)],
             }),
           catch: (failure) => {
             const message = messageOf(failure);
@@ -129,13 +163,13 @@ export const makeLauncher = (agents: HerdrAgents) =>
         else if (agent.status === "blocked") {
           const screen = yield* Effect.promise(() => client.screen(agent.paneId));
           if (screen !== null && trustQuestionOf(screen) !== null)
-            held.set(agent.terminalId, input.prompt);
+            held.set(agent.terminalId, prompt);
           else
             promptError =
               "The agent is waiting for an answer in herdr. Answer it there, then send the task prompt.";
         } else {
           const sent = yield* Effect.tryPromise(() =>
-            client.prompt(agent.name ?? agent.paneId, input.prompt),
+            client.prompt(agent.name ?? agent.paneId, prompt),
           ).pipe(Effect.result);
           if (sent._tag === "Failure")
             promptError = `The task prompt could not be confirmed. Read the agent before retrying: ${sent.failure.cause instanceof Error ? sent.failure.cause.message : "herdr did not answer"}.`;
@@ -146,6 +180,7 @@ export const makeLauncher = (agents: HerdrAgents) =>
           ...(promptError === undefined ? {} : { promptError }),
           threadKey: agent === undefined ? `herdr:${started.terminalId}` : agents.keyOf(agent),
           worktree: { root: tree.cwd, identity: `${identity.dev}:${identity.ino}` },
+          alsoTrees: also.map(({ root, identity: made }) => ({ root, identity: made })),
         };
       }),
     } satisfies PeerTaskLauncher & {

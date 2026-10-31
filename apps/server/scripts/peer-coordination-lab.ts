@@ -102,6 +102,8 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   subscription and runs only after the maintainer agrees; without it scripted stand-ins play both agents.
 //   REAL_SCENARIO=handoff (peer-lab/handoffSteps.ts) measures who moves next after a handoff: scripted and checked by
 //   default; with REAL_AGENTS=1 real agents, reported as one `handoff:` line (LAB_ARM names the build, LAB_REPORT a file).
+//   REAL_SCENARIO=rooms LAB_SHARED=1 REAL_AGENTS=1 (LAB_VCS=jj for Jujutsu) proves one room across two projects: a
+//   message in the room starts one real agent, with a checkout of its own in both, and each project's diff shows its work.
 //   REAL_SCENARIO=rooms (peer-lab/rooms.ts) proves a task's room: Bob names Ana's agent and nothing reaches it until she
 //   passes it on, she declines and Bob's status moves with no new message, Bob withdraws, a hostile message stays
 //   fenced, an agent cannot name an agent, Bob's own agent answers from a review session on his computer after Ana's run
@@ -460,6 +462,8 @@ const FOLLOW = process.env.REAL_SCENARIO === "follow";
 const KNOWLEDGE = process.env.REAL_SCENARIO === "knowledge";
 /** REAL_SCENARIO=rooms (`peer-lab/rooms.ts`): a task's room between two people and their agents. */
 const ROOMS = process.env.REAL_SCENARIO === "rooms";
+/** LAB_SHARED=1: the room of a workspace, two projects and one real agent. */
+const SHARED = ROOMS && REAL && process.env.LAB_SHARED === "1";
 /** REAL_SCENARIO=handoff (`peer-lab/handoffSteps.ts`): what an agent clears after a handoff, what reaches a person. */
 const HANDOFF = process.env.REAL_SCENARIO === "handoff";
 if (process.env.LAB_VCS !== undefined && !["git", "jj"].includes(process.env.LAB_VCS)) {
@@ -670,6 +674,13 @@ const kontext = (() => {
 })();
 
 /** A small project both agents will work on, as a bare origin. */
+/** A second project's repository, a copy of the first's history. */
+function makeSiteOrigin(origin: string): string {
+  const site = NodePath.join(lab, "site.git");
+  NodeChildProcess.execFileSync("git", ["clone", "--quiet", "--bare", origin, site]);
+  return site;
+}
+
 function makeOrigin(): string {
   const work = NodePath.join(lab, "seed");
   NodeFS.mkdirSync(NodePath.join(work, "src"), { recursive: true });
@@ -841,6 +852,7 @@ async function setUpWorkspace() {
     session: admin,
     body: { slug: "acme", name: "Acme", allowedDomains: ["acme.test"] },
   });
+  const origin = makeOrigin();
   await hubCall("/v1/workspaces/acme/config", {
     method: "PUT",
     session: admin,
@@ -849,7 +861,15 @@ async function setUpWorkspace() {
       config: {
         people: { "ana@acme.test": { name: "Ana" }, "bob@acme.test": { name: "Bob" } },
         projects: {
-          lab: { name: "Lab", repositories: [{ id: "app", url: makeOrigin(), branch: "main" }] },
+          lab: { name: "Lab", repositories: [{ id: "app", url: origin, branch: "main" }] },
+          ...(SHARED
+            ? {
+                site: {
+                  name: "Site",
+                  repositories: [{ id: "app", url: makeSiteOrigin(origin), branch: "main" }],
+                },
+              }
+            : {}),
         },
       },
     },
@@ -7254,6 +7274,131 @@ const followProgram = Effect.gen(function* () {
   }
 }).pipe(Effect.scoped);
 
+/** A line in each project: the agent can reach the second one only through the folder it was given. */
+const SHARED_ASK = (project: string) =>
+  `Add the comment \`// marker-shared\` as the first line of src/pricing.ts in this project and also in the ${project} project, whose folder Peer gives you. Do not commit, do not run tests. Then say so in this room with peer room say.`;
+
+/**
+ * LAB_SHARED=1: one room across Lab and Site. Ana's own message in Lab's chat starts one real agent; judged from what
+ * the Hub, her log and each project's room diff say.
+ */
+const sharedRoomProgram = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  writeFakeModel();
+  const herdr = startHerdr("Ana");
+  const ana = yield* startComputer("Ana", "ana@acme.test", herdr.socket);
+  writeClaudeWrapper(herdr, ana);
+  const opened = yield* ana.client[WS_METHODS.peerHubOpenProject]({
+    workspace: "acme",
+    projectId: "site",
+  });
+  const siteCheckout = opened.workspaces[0]?.projects.find((p) => p.project.id === "site")
+    ?.repositories[0];
+  if (siteCheckout?.state !== "ready") throw new Error("Site could not be checked out");
+  if (JJ) colocate(siteCheckout.path);
+  const group = "lab-shared-room";
+  const chat = (projectId: string) =>
+    ana.client[WS_METHODS.peerHubCreateTask]({
+      workspace: "acme",
+      projectId,
+      title: "Across both",
+      chat: true,
+      group,
+    });
+  const lab = yield* chat("lab");
+  const site = yield* chat("site");
+  const place = (project: string, created: typeof lab) => ({
+    workspace: "acme",
+    project,
+    task: created.createdTask?.id ?? "",
+  });
+  const labRoom = place("lab", lab);
+  const siteRoom = place("site", site);
+  const roomPath = `/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(labRoom.task)}/room`;
+  const live: Array<{ computer: Computer; h: HerdrServer; pane: string; label?: string }> = [];
+  const panes = () =>
+    (herdrJson(herdr, "agent", "list").result?.agents ?? []) as ReadonlyArray<{
+      readonly pane_id: string;
+    }>;
+  try {
+    for (const folder of [ana.checkout, siteCheckout.path]) {
+      const pane = yield* Effect.promise(() =>
+        startClaude(herdr, ana, "trust", { cwd: NodeFS.realpathSync(folder) }),
+      );
+      herdrJson(herdr, "agent", "prompt", pane, "/exit");
+      yield* Effect.promise(() => sleep(4000));
+      herdrText(herdr, "pane", "close", pane);
+    }
+    const asked = yield* Effect.promise(() =>
+      Effect.runPromise(
+        ana.client[PEER_ROOMS_METHODS.peerRoomsPost]({
+          ...labRoom,
+          op: "shared-ask",
+          text: SHARED_ASK("Site"),
+          to: [
+            {
+              kind: "agent",
+              email: "ana@acme.test",
+              model: process.env.LAB_MODEL ?? "claude-haiku-5-5",
+            },
+          ],
+        }),
+      ),
+    );
+    const delivery = async () =>
+      deliveryOf(
+        (
+          (await hubCall(`${roomPath}?limit=50`, { session: hubSession }))
+            .messages as ReadonlyArray<PeerRoomMessage>
+        ).find((one) => one.seq === asked.seq),
+        "ana@acme.test",
+      );
+    let answered = false;
+    for (let waited = 0; waited < 6 * 60_000 && !answered; waited += 3000) {
+      yield* Effect.promise(() => sleep(3000));
+      answered = (yield* Effect.promise(delivery))?.state === "answered";
+      for (const { pane_id: pane } of panes()) {
+        if (!live.some((one) => one.pane === pane)) live.push({ computer: ana, h: herdr, pane });
+        const screen = herdrText(herdr, "pane", "read", pane, "--source", "visible");
+        if (screen.includes("Yes, I trust this folder"))
+          herdrText(herdr, "pane", "send-keys", pane, "enter");
+      }
+      approveAll(live);
+    }
+    say("delivery", JSON.stringify(yield* Effect.promise(delivery)));
+    const diffOf = (room: typeof labRoom) =>
+      Effect.promise(() => Effect.runPromise(ana.client[PEER_ROOMS_METHODS.peerRoomsDiff](room)));
+    const labDiff = yield* diffOf(labRoom);
+    const siteDiff = yield* diffOf(siteRoom);
+    const patchOf = (diff: typeof labDiff) => (diff.state === "here" ? diff.patch : "");
+    say("lab diff", `${labDiff.folder} ${patchOf(labDiff).slice(0, 300)}`);
+    say("site diff", `${siteDiff.folder} ${patchOf(siteDiff).slice(0, 300)}`);
+    check(answered, "the agent answered in the room");
+    check(panes().length === 1, "one agent ran");
+    check(patchOf(labDiff).includes("marker-shared"), "Lab's diff shows its edit");
+    check(patchOf(siteDiff).includes("marker-shared"), "Site's diff shows its edit");
+    check(
+      siteDiff.folder !== undefined && !siteDiff.folder.startsWith(siteCheckout.path),
+      "Site's work is in a checkout of its own",
+    );
+  } finally {
+    for (const { pane } of live) {
+      console.log(`\n===== agent ${pane}, last screen =====`);
+      console.log(
+        herdrText(herdr, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "120"),
+      );
+    }
+    for (const entry of events(ana)) {
+      if (/^(hook|edit|claim|rooms)/.test(entry.event))
+        console.log(JSON.stringify(entry).slice(0, 300));
+    }
+    herdrText(herdr, "server", "stop");
+  }
+}).pipe(Effect.scoped);
+
 /**
  * REAL_SCENARIO=rooms REAL_AGENTS=1: real Claude Code on both computers. Peer starts Bob's review session in his real
  * herdr, so its pane runs the lab's `claude` wrapper. What agents do is observed and reported, never failed on, except
@@ -8521,9 +8666,11 @@ try {
             : HANDOFF
               ? handoffProgram
               : ROOMS
-                ? REAL
-                  ? roomsRealProgram
-                  : roomsProgram
+                ? SHARED
+                  ? sharedRoomProgram
+                  : REAL
+                    ? roomsRealProgram
+                    : roomsProgram
                 : KNOWLEDGE
                   ? knowledgeProgram
                   : TASKS

@@ -724,11 +724,22 @@ export interface PeerTaskLauncher {
     readonly model?: string | undefined;
     /** Its reasoning effort, in the harness's own words. */
     readonly effort?: string | undefined;
+    /** Other projects it works in too, each in a new checkout of its own, as `worktree` is here. */
+    readonly also?: ReadonlyArray<{
+      readonly project: string;
+      readonly checkout: string;
+      readonly baseBranch: string;
+      readonly worktrees: string;
+    }>;
+    /** Folders it works in already, for a run that continues: no new checkout. */
+    readonly dirs?: ReadonlyArray<string>;
     /** Provenance is returned only when this launch created a new worktree, never for reuse. */
   }) => Effect.Effect<
     PeerHubStartAgentResult & {
       readonly threadKey: string;
       readonly worktree?: { readonly root: string; readonly identity: string };
+      /** One for each of `also`, in its order. */
+      readonly alsoTrees?: ReadonlyArray<{ readonly root: string; readonly identity: string }>;
     },
     PeerHubError
   >;

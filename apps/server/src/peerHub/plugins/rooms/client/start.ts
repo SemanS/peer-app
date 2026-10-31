@@ -17,12 +17,14 @@ import {
   type PeerRoomInboxItem,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import type * as PeerPlugins from "../../../core/plugins/PeerPlugins.ts";
 import type * as PeerState from "../../../core/state/PeerState.ts";
 import { projectKey } from "../../../core/state/PeerState.ts";
 import type * as PeerWork from "../../../core/work/PeerWork.ts";
+import { runRootsData, type RunRoot } from "../../../core/work/runRoots.ts";
 import { NO_CHECKOUT } from "../follow.ts";
 import { chatRunPrompt, passedRunPrompt, reviewRoomPrompt, type Heard } from "../text.ts";
 
@@ -56,6 +58,9 @@ export const choiceOf = (item: PeerRoomInboxItem, me: string) => {
   );
   return { model: target?.model, effort: target?.effort };
 };
+
+const needsApproval = (project: Pick<PeerProject, "capacity">) =>
+  project.capacity.personal !== "any";
 
 const isModelName = (model: string) => /^[A-Za-z0-9][A-Za-z0-9._:/[\]-]*$/.test(model);
 const isEffort = (effort: string) => /^[a-z]+$/.test(effort);
@@ -128,6 +133,31 @@ export const openRuns = (
       .toSorted((a, b) => b.startedAt.localeCompare(a.startedAt)),
   );
 
+/** The other open chats of a shared room that this computer has a checkout for. */
+const sharedRooms = (
+  state: PeerState.PeerState["Service"],
+  work: PeerWork.PeerWork["Service"],
+  workspace: string,
+  home: string,
+  group: string | undefined,
+) =>
+  Effect.gen(function* () {
+    if (group === undefined) return [];
+    const known = (yield* state.workspaces).find((candidate) => candidate.slug === workspace);
+    const found = [];
+    for (const { id } of known?.manifest?.projects ?? []) {
+      if (id === home) continue;
+      const task = (yield* work.tasks(workspace, id)).find(
+        (candidate) => candidate.group === group && candidate.status !== "done",
+      );
+      if (task === undefined) continue;
+      const { project } = yield* state.project(workspace, id);
+      const checkout = yield* checkoutOf(state, workspace, project);
+      if (checkout !== undefined) found.push({ project, task, checkout });
+    }
+    return found;
+  });
+
 export const roomStarts = (
   state: PeerState.PeerState["Service"],
   work: PeerWork.PeerWork["Service"],
@@ -189,7 +219,9 @@ export const roomStarts = (
         const { project, task, checkout } = yield* placeOf(workspace, item);
         const harness = harnessOf(item, me, project);
         if (!isHarness(harness)) return yield* refusal(`Peer cannot start ${harness} here.`);
-        if (project.capacity.personal !== "any")
+        const others = yield* sharedRooms(state, work, workspace, project.id, task.group);
+        // One agent carries them all, so the strictest project decides what may run it.
+        if ([project, ...others.map((other) => other.project)].some(needsApproval))
           return yield* refusal("This project needs an approved commercial or shared provider.");
         const { model, effort } = choiceOf(item, me);
         if (
@@ -217,10 +249,64 @@ export const roomStarts = (
               harness,
               prompt: task.chat === true ? chatRunPrompt(heard) : passedRunPrompt(heard),
               env,
+              also: others.map((other) => ({
+                project: other.project.name,
+                checkout: other.checkout.path,
+                baseBranch: other.checkout.repository.branch,
+                worktrees: NodePath.join(
+                  state.workspaceRoot,
+                  ".worktrees",
+                  workspace,
+                  other.project.id,
+                  other.checkout.repository.id,
+                ),
+              })),
               ...(model === undefined ? {} : { model }),
               ...(effort === undefined ? {} : { effort }),
             }),
         );
+        const roots: ReadonlyArray<RunRoot> = others.flatMap((other, index) => {
+          const tree = started.alsoTrees?.[index];
+          return tree === undefined
+            ? []
+            : [
+                {
+                  project: other.project.id,
+                  repository: other.checkout.repository.id,
+                  task: other.task.id,
+                  root: tree.root,
+                },
+              ];
+        });
+        if (roots.length > 0) {
+          yield* runRootsData(state)
+            .update((current) => ({
+              runs: { ...Option.getOrUndefined(current)?.runs, [run]: roots },
+            }))
+            .pipe(state.lock.withPermits(1));
+          // The same record as the run's own checkout, so it is cleaned up when its task is done.
+          const contributions = yield* plugins.contributions;
+          yield* Effect.forEach(
+            roots,
+            (root, index) =>
+              Effect.forEach(
+                contributions,
+                (contribution) =>
+                  contribution.taskWorktreeCreated?.({
+                    kind: "task-worktree-created",
+                    workspace,
+                    project: root.project,
+                    repository: root.repository,
+                    task: root.task,
+                    thread: started.threadKey,
+                    root: root.root,
+                    identity: started.alsoTrees?.[index]?.identity ?? "",
+                  }) ?? Effect.void,
+                { discard: true },
+              ),
+            { discard: true },
+          );
+        }
         yield* work.refresh().pipe(state.lock.withPermits(1));
         return { run, typed: started.promptError === undefined };
       }),

@@ -87,11 +87,8 @@ export function RoomComposer({
   readonly chat?: boolean;
   /** What a draft starts as when nothing is kept. */
   readonly emptyDraft?: RoomDraft;
-  /**
-   * Makes the room the first message goes to; fails with the words to show. Several places are one
-   * shared room's: the message goes to each, under one operation, so sending again adds nothing.
-   */
-  readonly prepare?: (text: string) => Promise<RoomPlace | ReadonlyArray<RoomPlace>>;
+  /** Makes the room the first message goes to; fails with the words to show. */
+  readonly prepare?: (text: string) => Promise<RoomPlace>;
   readonly placeholder?: string;
 }) {
   const [draft, onDraftChange] = useRoomDraft(place, emptyDraft);
@@ -160,22 +157,16 @@ export function RoomComposer({
       setBusy(false);
       return;
     }
-    const places = "workspace" in target ? [target] : target;
-    const results = await Promise.all(
-      places.map((room) =>
-        post({
-          environmentId,
-          input: {
-            ...room,
-            op: operation.id,
-            text: draft.text.trim(),
-            to: recipients.to,
-            ...(draft.anchor === undefined ? {} : { anchor: draft.anchor }),
-          },
-        }),
-      ),
-    );
-    const result = results.find((one) => one._tag !== "Success") ?? results[0]!;
+    const result = await post({
+      environmentId,
+      input: {
+        ...target,
+        op: operation.id,
+        text: draft.text.trim(),
+        to: recipients.to,
+        ...(draft.anchor === undefined ? {} : { anchor: draft.anchor }),
+      },
+    });
     setBusy(false);
     const outcome: SendOutcome =
       result._tag === "Success"
@@ -185,7 +176,7 @@ export function RoomComposer({
           : { kind: "failed", reason: failureMessage(result) ?? "the Hub did not take it." };
     onDraftChange(draftAfter(attempt, outcome));
     setNotice(sendNotice(outcome));
-    if (outcome.kind === "sent") onSent(places[0]!);
+    if (outcome.kind === "sent") onSent(target);
     input.current?.focus();
   };
 

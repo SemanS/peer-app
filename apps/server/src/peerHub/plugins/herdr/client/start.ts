@@ -36,8 +36,9 @@ const effortArgs = (harness: HerdrHarness, effort: string) =>
 
 /** The arguments `agent.start` passes on: both harnesses take these before a resume's. */
 export const startArgs = (
-  input: Pick<StartHerdrAgentInput, "harness" | "resume" | "model" | "effort">,
+  input: Pick<StartHerdrAgentInput, "harness" | "resume" | "model" | "effort" | "dirs">,
 ) => [
+  ...(input.dirs ?? []).flatMap((dir) => ["--add-dir", dir]),
   ...(input.model === undefined ? [] : ["--model", input.model]),
   ...(input.effort === undefined ? [] : effortArgs(input.harness, input.effort)),
   ...(input.resume === undefined || input.resume.agent !== input.harness
@@ -51,6 +52,8 @@ export interface StartHerdrAgentInput {
   /** The model it starts on; left out, the harness uses its own default. */
   readonly model?: string | undefined;
   readonly effort?: string | undefined;
+  /** Folders it may work in besides `cwd`; both harnesses take `--add-dir`. */
+  readonly dirs?: ReadonlyArray<string> | undefined;
   /** The first thing the agent is asked, once it is ready for it. */
   readonly prompt?: string | undefined;
   /** Set in the pane's shell, so the agent has it too. */

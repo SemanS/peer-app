@@ -32,6 +32,7 @@ import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
@@ -58,6 +59,7 @@ import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/
 import { fetchPins, newestHandoff, pinnedRoot, readPin, storeOf } from "./client/snapshots.ts";
 import { runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
+import { runRootsData } from "../../core/work/runRoots.ts";
 import { capacityOf, checkoutOf, openRuns, roomStarts } from "./client/start.ts";
 import { actOn, type FollowDeps, type HereRun } from "./follow.ts";
 import { roomsHub, type Place, type PostBody } from "./client/hub.ts";
@@ -224,6 +226,20 @@ const make = Effect.gen(function* () {
     );
 
   /** The checkout of this computer's newest run that does the task's work, detached ones too. */
+  const runsHereToo = (place: PeerRoomsPlace) =>
+    Effect.gen(function* () {
+      const { persisted } = yield* state.read;
+      const stored = Option.getOrUndefined(yield* runRootsData(state).read)?.runs ?? {};
+      for (const [id, roots] of Object.entries(stored)) {
+        if (persisted.runs?.[id]?.endedAt !== undefined) continue;
+        const here = roots.find(
+          (entry) => entry.project === place.project && entry.task === place.task,
+        );
+        if (here !== undefined) return { root: here.root, repository: here.repository };
+      }
+      return undefined;
+    });
+
   const workHere = (place: PeerRoomsPlace, checkout: string | undefined, only?: string) =>
     Effect.gen(function* () {
       // A run asked for by name is shown whatever it does, a review's checkout too.
@@ -243,6 +259,9 @@ const make = Effect.gen(function* () {
         threads: (yield* work.localThreads).get(place.workspace) ?? [],
       });
       if (found?.root !== undefined) return found;
+      // A run of the shared room's other project works here too, in the checkout made for it.
+      const carried = yield* runsHereToo(place);
+      if (carried !== undefined) return { ...found, ...carried };
       const root =
         checkout === undefined
           ? undefined
@@ -453,6 +472,20 @@ const make = Effect.gen(function* () {
         if (sealed !== null) {
           yield* Effect.promise(() => pinWork(sealed, place, messageKey(message.seq)));
           yield* shareWork(plugins, sealed.gitDir, place);
+        }
+        const others = Option.getOrUndefined(yield* runRootsData(state).read)?.runs[run] ?? [];
+        for (const other of others) {
+          const elsewhere = {
+            workspace: place.workspace,
+            project: other.project,
+            task: other.task,
+          };
+          const kept = yield* Effect.promise(() =>
+            sealWork(other.root, at, { id: run, startedAt }).catch(() => null),
+          );
+          if (kept === null) continue;
+          yield* Effect.promise(() => pinWork(kept, elsewhere, messageKey(message.seq)));
+          yield* shareWork(plugins, kept.gitDir, elsewhere);
         }
         return message;
       }),

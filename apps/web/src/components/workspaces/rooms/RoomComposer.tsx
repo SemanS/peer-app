@@ -34,12 +34,19 @@ import {
   type RoomDraft,
   type RoomPerson,
   type SendOutcome,
+  withPaths,
 } from "./room.logic";
 import { useRoomDraft } from "./useRoom";
 
 /** A line the diff asks to comment on; a new `ask` asks again. */
 export interface DraftLine {
   readonly anchor: PeerRoomAnchor;
+  readonly ask: number;
+}
+
+/** Project paths to add to the draft; a new `ask` adds again. */
+export interface DraftPaths {
+  readonly paths: ReadonlyArray<string>;
   readonly ask: number;
 }
 
@@ -55,6 +62,7 @@ export function RoomComposer({
   targets,
   people,
   line: asked,
+  paths,
   onDrafting,
   onSent,
 }: {
@@ -63,6 +71,7 @@ export function RoomComposer({
   readonly targets: ReadonlyArray<RoomTargetChoice>;
   readonly people: ReadonlyArray<RoomPerson>;
   readonly line: DraftLine | null;
+  readonly paths: DraftPaths | null;
   /** Whether the draft sits on a line, so the diff keeps it lit. */
   readonly onDrafting: (drafting: boolean) => void;
   readonly onSent: () => void;
@@ -88,6 +97,18 @@ export function RoomComposer({
     if (line !== undefined) input.current?.focus();
   }, [line]);
   useEffect(() => onDrafting(line !== undefined), [line, onDrafting]);
+
+  const added = useRef(0);
+  useEffect(() => {
+    if (paths === null || paths.ask === added.current) return;
+    added.current = paths.ask;
+    onDraftChange((current) => ({ ...current, text: withPaths(current.text, paths.paths) }));
+    requestAnimationFrame(() => {
+      const end = input.current?.value.length ?? 0;
+      input.current?.focus();
+      input.current?.setSelectionRange(end, end);
+    });
+  });
 
   const recipients = recipientsOf(choices, draft.selected);
   const chosen = chosenKeys(draft);

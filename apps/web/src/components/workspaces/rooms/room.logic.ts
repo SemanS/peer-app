@@ -245,6 +245,12 @@ export function insertMention(
   };
 }
 
+/** Adds paths to a draft in the form an agent and a reader both take for a path. */
+export function withPaths(text: string, paths: ReadonlyArray<string>) {
+  const lead = text === "" || /\s$/.test(text) ? "" : " ";
+  return `${text}${lead}${paths.map((path) => `\`${path}\``).join(" ")} `;
+}
+
 /** Who wrote a message: people and agents differ in type, and an agent also by its name. */
 export function authorOf(
   message: Pick<PeerRoomMessage, "author">,

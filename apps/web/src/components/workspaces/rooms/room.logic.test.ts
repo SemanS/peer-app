@@ -24,6 +24,7 @@ import {
   recipientsOf,
   sendNotice,
   toggleChoice,
+  withPaths,
 } from "./room.logic";
 
 const members = [
@@ -182,6 +183,19 @@ describe("@ in the text", () => {
       text: "hi @Ana !",
       caret: 8,
     });
+  });
+});
+
+describe("paths in a draft", () => {
+  it("adds them after the words, each one readable as a path", () => {
+    expect(withPaths("", ["src/a.ts"])).toBe("`src/a.ts` ");
+    expect(withPaths("What about", ["src/", "b.ts"])).toBe("What about `src/` `b.ts` ");
+    expect(withPaths("Why\n", ["b.ts"])).toBe("Why\n`b.ts` ");
+  });
+
+  it("leaves no @ open, so the people list stays shut", () => {
+    const text = withPaths("", ["src/@scope/a.ts"]);
+    expect(mentionAt(text, text.length)).toBeNull();
   });
 });
 

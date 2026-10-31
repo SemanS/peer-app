@@ -3,6 +3,14 @@ import {
   composerMentionFromTreePath,
 } from "~/components/chat/composerMentionDrag";
 
+/**
+ * The dragged rows as tree paths, one a line, folders with their trailing slash. For a drop that
+ * writes plain text, where the mention's link syntax would show and a folder would not read as one.
+ */
+export const FILE_TREE_PATHS_DRAG_TYPE = "application/x-peer-file-tree-paths";
+
+export const fileTreePathsOf = (data: string) => data.split("\n").filter((path) => path !== "");
+
 interface FileTreeDragTransfer {
   setData(format: string, data: string): void;
 }
@@ -72,6 +80,7 @@ export function createFileTreeDragMentionController(
       }
       draggedPaths = dragged;
       event.dataTransfer.setData(COMPOSER_MENTION_DRAG_TYPE, mentions.join(" "));
+      event.dataTransfer.setData(FILE_TREE_PATHS_DRAG_TYPE, dragged.join("\n"));
     },
     handleDragEnd(deselect) {
       if (draggedPaths.length === 0) {

@@ -376,7 +376,7 @@ const make = Effect.gen(function* () {
         const { project, base, checkout, handoffs, threads } = yield* workOf(place);
         const views = yield* agents.view(place.workspace);
         const here = yield* workHere(place, checkout?.path);
-        return yield* roomDiff({
+        const diff = yield* roomDiff({
           root: here?.root,
           rootBase: project.repositories.find((row) => row.id === here?.repository)?.branch,
           base,
@@ -388,6 +388,8 @@ const make = Effect.gen(function* () {
           ),
           nameOf: (email) => state.nameOf(place.workspace, email),
         });
+        const folder = here?.root ?? checkout?.path;
+        return folder === undefined ? diff : { ...diff, folder };
       }),
     waiting: queues.of,
     /** What a step may tell now, as the Hub says of each message. */

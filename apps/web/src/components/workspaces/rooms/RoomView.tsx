@@ -3,12 +3,13 @@ import { personName } from "@t3tools/client-runtime/peer/needs-you";
 import { targetsFor, type RoomPlace } from "@t3tools/client-runtime/peer/rooms";
 import type { EnvironmentId, PeerHubStatus, PeerProjectState, PeerTask } from "@t3tools/contracts";
 
-import { useState } from "react";
+import { type DragEvent, useState } from "react";
 
 import { cn } from "../../../lib/utils";
 import { serverEnvironment } from "../../../state/server";
 import { SidebarInset } from "../../ui/sidebar";
 import { Toggle, ToggleGroup } from "../../ui/toggle-group";
+import { FILE_TREE_PATHS_DRAG_TYPE, fileTreePathsOf } from "../../files/fileTreeDragMention";
 import { PeerPageHeader } from "../PeerPageHeader";
 import { findTask } from "../task/task.logic";
 import { runsRevision } from "../task/runs.logic";
@@ -16,16 +17,17 @@ import { useTaskRuns } from "../task/TaskRuns";
 import { useWorkData } from "../useWorkData";
 import type { WorkOpen, WorkTaskNode } from "../workTree.logic";
 import { peopleOf, reachRows } from "./room.logic";
-import { RoomComposer, type DraftLine } from "./RoomComposer";
+import { RoomComposer, type DraftLine, type DraftPaths } from "./RoomComposer";
 import { roomMessageId, RoomConversation } from "./RoomConversation";
 import { RoomDiff, type DiffFocus } from "./RoomDiff";
+import { RoomFiles } from "./RoomFiles";
 import { RoomReach } from "./RoomReach";
 import { watchable } from "./roomDiff.logic";
 import { useRoom, useRoomDiff, useRoomMoves } from "./useRoom";
 
 /**
- * A task's room: its conversation between people and their agents, with the task's diff beside it
- * from `lg` and behind a switch below. Peer's own page rather than a chat widget: the conversation
+ * A task's room: its conversation between people and their agents, with the task's diff or the
+ * project's files beside it from `lg` and behind a switch below. Peer's own page rather than a chat widget: the conversation
  * runs in one column, and the composer stays at the bottom as the review's bar does.
  */
 export function RoomView({
@@ -114,10 +116,15 @@ function RoomBody({
   const diff = useRoomDiff({ environmentId, place, revision });
   const moves = useRoomMoves(environmentId, read.refresh);
   // Below `lg` one pane shows at a time; both stay mounted so neither loses its place.
-  const [pane, setPane] = useState<"conversation" | "diff">("conversation");
+  const [pane, setPane] = useState<"conversation" | "side">("conversation");
+  const [side, setSide] = useState<"diff" | "files">("diff");
+  // The tree lists folders from the disk, so a room nobody opens it in lists nothing.
+  const [filesOpened, setFilesOpened] = useState(false);
   const [focus, setFocus] = useState<DiffFocus | null>(null);
   const [line, setLine] = useState<DraftLine | null>(null);
+  const [paths, setPaths] = useState<DraftPaths | null>(null);
   const [drafting, setDrafting] = useState(false);
+  const [dropping, setDropping] = useState(false);
   const canPost = useAtomValue(serverEnvironment.peerRooms.post.permissionAtom(environmentId));
   const canMove = useAtomValue(serverEnvironment.peerRooms.pass.permissionAtom(environmentId));
 
@@ -127,6 +134,20 @@ function RoomBody({
     reaches: read.room?.reaches ?? [],
     nameOf,
   });
+
+  const showSide = (next: "diff" | "files") => {
+    setSide(next);
+    setPane("side");
+    if (next === "files") setFilesOpened(true);
+  };
+
+  const addPaths = (added: ReadonlyArray<string>) => {
+    setPaths((current) => ({ paths: added, ask: (current?.ask ?? 0) + 1 }));
+    setPane("conversation");
+  };
+
+  const takesPaths = (event: DragEvent) =>
+    canPost && event.dataTransfer.types.includes(FILE_TREE_PATHS_DRAG_TYPE);
 
   const openMessage = (seq: number) => {
     setPane("conversation");
@@ -146,14 +167,16 @@ function RoomBody({
       <div className="shrink-0 border-b border-border/60 px-4 py-2 lg:hidden">
         <ToggleGroup
           aria-label="Show"
-          value={[pane]}
+          value={[pane === "conversation" ? "conversation" : side]}
           onValueChange={(value) => {
             const next = value[0];
-            if (next === "conversation" || next === "diff") setPane(next);
+            if (next === "conversation") setPane(next);
+            if (next === "diff" || next === "files") showSide(next);
           }}
         >
           <Toggle value="conversation">Conversation</Toggle>
           <Toggle value="diff">Diff</Toggle>
+          <Toggle value="files">Files</Toggle>
         </ToggleGroup>
       </div>
       <div className="flex min-h-0 min-w-0 flex-1">
@@ -162,7 +185,27 @@ function RoomBody({
           className={cn(
             "min-h-0 min-w-0 flex-1 flex-col lg:flex lg:max-w-[42rem] lg:border-e lg:border-border",
             pane === "conversation" ? "flex" : "hidden",
+            dropping && "ring-2 ring-ring ring-inset",
           )}
+          onDragOver={(event) => {
+            if (!takesPaths(event)) return;
+            event.preventDefault();
+            // The tree limits its drags to "move"; any other effect cancels the drop.
+            event.dataTransfer.dropEffect = "move";
+            setDropping(true);
+          }}
+          onDragLeave={(event) => {
+            if (event.relatedTarget instanceof Node) {
+              if (event.currentTarget.contains(event.relatedTarget)) return;
+            }
+            setDropping(false);
+          }}
+          onDrop={(event) => {
+            if (!takesPaths(event)) return;
+            event.preventDefault();
+            setDropping(false);
+            addPaths(fileTreePathsOf(event.dataTransfer.getData(FILE_TREE_PATHS_DRAG_TYPE)));
+          }}
         >
           <RoomConversation
             place={place}
@@ -177,7 +220,7 @@ function RoomBody({
             loading={read.room === null}
             now={read.now}
             onOpenAnchor={(anchor) => {
-              setPane("diff");
+              showSide("diff");
               setFocus({ anchor, ask: (focus?.ask ?? 0) + 1 });
             }}
           />
@@ -188,6 +231,7 @@ function RoomBody({
               targets={targets}
               people={people}
               line={line}
+              paths={paths}
               onDrafting={setDrafting}
               onSent={read.refresh}
             />
@@ -198,29 +242,61 @@ function RoomBody({
           )}
         </section>
         <section
-          aria-label="Diff"
+          aria-label={side === "diff" ? "Diff" : "Files"}
           className={cn(
             "min-h-0 min-w-0 flex-1 flex-col lg:flex",
-            pane === "diff" ? "flex" : "hidden",
+            pane === "side" ? "flex" : "hidden",
           )}
         >
-          <RoomDiff
-            diff={diff.diff}
-            error={diff.error}
-            onRefresh={diff.refresh}
-            messages={read.messages}
-            drafting={drafting}
-            focus={focus}
-            me={me}
-            nameOf={nameOf}
-            watch={watchable(taskNode.threads)}
-            onWatch={onOpen}
-            onComment={(anchor) => {
-              if (canPost) setLine({ anchor, ask: (line?.ask ?? 0) + 1 });
-              setPane("conversation");
-            }}
-            onOpenMessage={openMessage}
-          />
+          <div className="hidden shrink-0 border-b border-border/60 px-4 py-2 lg:block">
+            <ToggleGroup
+              aria-label="Show beside the conversation"
+              value={[side]}
+              onValueChange={(value) => {
+                const next = value[0];
+                if (next === "diff" || next === "files") showSide(next);
+              }}
+            >
+              <Toggle value="diff">Diff</Toggle>
+              <Toggle value="files">Files</Toggle>
+            </ToggleGroup>
+          </div>
+          <div
+            className={cn("min-h-0 min-w-0 flex-1 flex-col", side === "diff" ? "flex" : "hidden")}
+          >
+            <RoomDiff
+              diff={diff.diff}
+              error={diff.error}
+              onRefresh={diff.refresh}
+              messages={read.messages}
+              drafting={drafting}
+              focus={focus}
+              me={me}
+              nameOf={nameOf}
+              watch={watchable(taskNode.threads)}
+              onWatch={onOpen}
+              onComment={(anchor) => {
+                if (canPost) setLine({ anchor, ask: (line?.ask ?? 0) + 1 });
+                setPane("conversation");
+              }}
+              onOpenMessage={openMessage}
+            />
+          </div>
+          <div
+            className={cn("min-h-0 min-w-0 flex-1 flex-col", side === "files" ? "flex" : "hidden")}
+          >
+            {filesOpened ? (
+              <RoomFiles
+                environmentId={environmentId}
+                diff={diff.diff}
+                error={diff.error}
+                projectName={projectState.project.name}
+                canPost={canPost}
+                onRefresh={diff.refresh}
+                onAdd={(path) => addPaths([path])}
+              />
+            ) : null}
+          </div>
         </section>
       </div>
     </div>

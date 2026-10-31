@@ -1200,6 +1200,8 @@ is then refused and `peer done` is judged as before.
 
 A task's room is one conversation for the people on the project and their agents, beside the task's diff. Open it from the task's page, its review, or Needs you.
 
+To ask about a part of the code, open **Files** beside the conversation and drag a file or folder to the conversation. Its path goes into your message, and an agent reads it from its own checkout.
+
 Everyone in a room brings their own agent. Who answers a message depends on who you name in **To**:
 
 - **Team** reaches people only, and starts no agent.

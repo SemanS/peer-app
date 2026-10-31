@@ -49,6 +49,8 @@ interface FileBrowserPanelProps {
    */
   hostFolder?: boolean;
   onRefreshSelectedFile?: () => void;
+  /** Takes "Add to chat" where the composer is not the thread's, with the row's tree path. */
+  onAddToChat?: (treePath: string) => void;
   workspaceMutationId: string | null;
 }
 
@@ -141,6 +143,7 @@ export default function FileBrowserPanel({
   selectedPathRevealId,
   onOpenFile,
   onRefreshSelectedFile,
+  onAddToChat,
   workspaceMutationId,
   hostFolder = false,
 }: FileBrowserPanelProps) {
@@ -238,6 +241,10 @@ export default function FileBrowserPanel({
               description: error instanceof Error ? error.message : "An error occurred.",
             });
           }
+          return;
+        }
+        if (clicked === "add-to-chat" && onAddToChat) {
+          onAddToChat(item.path);
           return;
         }
         if (clicked === "add-to-chat") {

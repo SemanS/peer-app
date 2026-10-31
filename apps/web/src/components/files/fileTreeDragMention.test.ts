@@ -1,7 +1,11 @@
 import { describe, expect, it } from "@effect/vitest";
 
 import { COMPOSER_MENTION_DRAG_TYPE } from "~/components/chat/composerMentionDrag";
-import { createFileTreeDragMentionController } from "./fileTreeDragMention.ts";
+import {
+  createFileTreeDragMentionController,
+  FILE_TREE_PATHS_DRAG_TYPE,
+  fileTreePathsOf,
+} from "./fileTreeDragMention.ts";
 
 const makeTransfer = (plainText = "") => {
   const data = new Map<string, string>([["text/plain", plainText]]);
@@ -26,6 +30,20 @@ describe("createFileTreeDragMentionController", () => {
     });
     expect(transfer.getData(COMPOSER_MENTION_DRAG_TYPE)).toBe("[index.md](docs/index.md)");
     expect(controller.isDragInProgress()).toBe(true);
+  });
+
+  it("keeps the tree paths, so a folder still reads as one", () => {
+    const controller = createFileTreeDragMentionController({});
+    controller.handleSelectionChange(["docs/", "docs/index.md"]);
+    const transfer = makeTransfer();
+    controller.handleDragStart({
+      dataTransfer: transfer,
+      composedPath: () => [rowNode("docs/")],
+    });
+    expect(fileTreePathsOf(transfer.getData(FILE_TREE_PATHS_DRAG_TYPE))).toEqual([
+      "docs/",
+      "docs/index.md",
+    ]);
   });
 
   it("strips the trailing slash from directory rows", () => {

@@ -274,9 +274,13 @@ export type PeerRoomsSetReachResult = typeof PeerRoomsSetReachResult.Type;
 export const PEER_ROOM_DIFF_MAX_BYTES = 512 * 1024;
 
 /** The task's diff, computed by git on this computer. The Hub never holds one. */
+/** Where this computer holds the task's work, or else the project; absent without a checkout. */
+const PeerRoomFolder = Schema.optional(Schema.String);
+
 export const PeerRoomDiff = Schema.Union([
   Schema.Struct({
     state: Schema.Literal("here"),
+    folder: PeerRoomFolder,
     /** This computer's run on the task, or a ref fetched from the remote. */
     source: Schema.Literals(["run", "pushed"]),
     base: Schema.String,
@@ -286,6 +290,7 @@ export const PeerRoomDiff = Schema.Union([
   }),
   Schema.Struct({
     state: Schema.Literal("notHere"),
+    folder: PeerRoomFolder,
     reason: Schema.String,
     /** The paths the Hub knows; they still take comments on a path. */
     files: Schema.Array(Schema.String),

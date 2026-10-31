@@ -81,6 +81,8 @@ export const PeerTask = Schema.Struct({
   source: Schema.optional(PeerTaskSource),
   /** A conversation rather than work: a room bound to no work item, outside the task tree. */
   chat: Schema.optional(Schema.Boolean),
+  /** Chats of several projects with this mark read as one room. */
+  group: Schema.optional(Schema.String),
   /** Over its executable descendants, at any depth, when it has any. */
   progress: Schema.optional(Schema.Struct({ done: Schema.Number, total: Schema.Number })),
   /** How many of its runs are in each state; absent from a Hub that predates runs. */

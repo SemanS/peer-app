@@ -34,6 +34,7 @@ export function RoomAgents({
   nameOf,
   onOpen,
   place,
+  alone = false,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
@@ -45,6 +46,8 @@ export function RoomAgents({
   readonly nameOf: NameOf;
   readonly onOpen: (open: WorkOpen) => void;
   readonly place: RoomPlace;
+  /** Its own project only: a shared room shows the others beside it. */
+  readonly alone?: boolean;
 }) {
   const { tree } = useWorkData();
   const [sets] = useProjectSets();
@@ -62,7 +65,7 @@ export function RoomAgents({
     clock: (at) => at,
   });
   const groups = roomAgentGroups({ runs, rows, threads, me, nameOf });
-  const elsewhere = tree.filter((project) => others.has(projectScopeKey(project)));
+  const elsewhere = alone ? [] : tree.filter((project) => others.has(projectScopeKey(project)));
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4">
       {groups.length === 0 ? (

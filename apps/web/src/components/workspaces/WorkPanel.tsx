@@ -1,7 +1,7 @@
 import { needsByOpen } from "@t3tools/client-runtime/peer/work";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
-import { useLocation, useNavigate } from "@tanstack/react-router";
-import { FileTextIcon } from "lucide-react";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { FileTextIcon, MessagesSquareIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { Button } from "../ui/button";
@@ -27,6 +27,7 @@ import type { PeerWebPlugin } from "./slots.types";
 import { useWorkData } from "./useWorkData";
 import { WorkNoProjects } from "./WorkNoProjects";
 import { ALL_PROJECTS, inScope, projectScopeKey } from "./workBoard.logic";
+import { sharedRoomsOf } from "./rooms/sharedRoom.logic";
 import type { WorkProjectNode } from "./workTree.logic";
 
 /**
@@ -147,6 +148,14 @@ export function WorkPanel({
               )
             ) : current === undefined ? (
               <section aria-label="Projects" className="flex flex-col gap-1">
+                {members === undefined ? null : (
+                  <SharedRooms
+                    rooms={sharedRoomsOf(
+                      status,
+                      members.map((member) => member.scope),
+                    )}
+                  />
+                )}
                 <WorkSectionLabel>
                   Projects
                   <span className="font-normal tracking-normal normal-case tabular-nums">
@@ -325,5 +334,31 @@ function ProjectDisclosure({
       </summary>
       {open ? <div className="pl-2">{children}</div> : null}
     </details>
+  );
+}
+
+/** A workspace's rooms across its projects, above each project's own work. */
+function SharedRooms({
+  rooms,
+}: {
+  readonly rooms: ReadonlyArray<{ readonly group: string; readonly title: string }>;
+}) {
+  if (rooms.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-0.5 pb-2">
+      <WorkSectionLabel>Rooms</WorkSectionLabel>
+      {rooms.map((room) => (
+        <Link
+          key={room.group}
+          to="/together/$group"
+          params={{ group: room.group }}
+          className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-sm text-foreground hover:bg-accent"
+          activeProps={{ className: "bg-accent" }}
+        >
+          <MessagesSquareIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 truncate">{room.title}</span>
+        </Link>
+      ))}
+    </div>
   );
 }

@@ -869,6 +869,8 @@ export const PeerHubCreateTaskInput = Schema.Struct({
   area: Schema.optional(Schema.String),
   /** A chat: a room bound to no work item. */
   chat: Schema.optional(Schema.Boolean),
+  /** Reads with the chats of other projects that carry the same mark, as one room. */
+  group: Schema.optional(Schema.String),
   ...taskTreeFields,
   source: Schema.optional(PeerTaskSource),
 });

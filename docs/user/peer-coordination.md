@@ -417,7 +417,7 @@ workspace…**, which whoever shared the project from Peer and the workspace's o
 For a project only on this computer it offers **Share with <workspace>…** instead: after you confirm,
 the project moves under that workspace in the menu, its members see it and it gets team tasks.
 
-To work on several projects together, choose a project and then **Add to a workspace with…** in the project button's menu. The new workspace lists its projects behind a chevron under the button and opens them side by side: their files, what changed in their checkouts, and their agents. Under **Tasks** each project's chats, tasks and OpenSpec work stack one under another, and each project starts its own. Rename it, take a project out or ungroup it from the same menu. Your workspaces stay on this computer; your team does not see them.
+To work on several projects together, choose a project and then **Add to a workspace with…** in the project button's menu. The new workspace lists its projects behind a chevron under the button and opens them side by side: their files, what changed in their checkouts, and their agents. Under **Tasks** each project's chats, tasks and OpenSpec work stack one under another, and each project starts its own. A workspace's **Room** page starts one room across its shared projects: one conversation, with a message going to the projects you pick under it and each project's agent working in its own checkout. Rename it, take a project out or ungroup it from the same menu. Your workspaces stay on this computer; your team does not see them.
 
 **Search** (the command palette) and **Overview** (the Work board) sit beside the project button. The
 sidebar's tabs each have one purpose: **Tasks**, **Knowledge** and **Activity**, with Chats by the

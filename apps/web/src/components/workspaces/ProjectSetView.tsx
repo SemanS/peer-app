@@ -21,16 +21,17 @@ import { SidebarInset } from "../ui/sidebar";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { PeerPageHeader } from "./PeerPageHeader";
 import { useProjectScope } from "./projectScope";
-import type { ResolvedProjectScope } from "./projectScope.logic";
+import { isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
 import { checkoutOf, setScope, type ProjectCheckoutRef } from "./projectSets.logic";
 import { ProjectAgents } from "./rooms/RoomAgents";
 import { RoomFileSurface } from "./rooms/RoomFiles";
+import { NewSharedRoom } from "./rooms/SharedRoomView";
 import { ProjectMark } from "./signals";
 import { useWorkData } from "./useWorkData";
 import { projectScopeKey } from "./workBoard.logic";
 import type { WorkOpen, WorkProjectNode } from "./workTree.logic";
 
-const VIEWS = ["files", "diff", "agents"] as const;
+const VIEWS = ["room", "files", "diff", "agents"] as const;
 type View = (typeof VIEWS)[number];
 const isView = (value: unknown): value is View => VIEWS.includes(value as View);
 
@@ -41,9 +42,9 @@ const isView = (value: unknown): value is View => VIEWS.includes(value as View);
 export function ProjectSetView({ setId }: { readonly setId: string }) {
   const groups = useSidebarProjectGroups();
   const scope = useProjectScope(groups);
-  const { status, tree, actions } = useWorkData();
+  const { environmentId, status, tree, actions } = useWorkData();
   const primary = usePrimaryEnvironmentId();
-  const [view, setView] = useState<View>("files");
+  const [view, setView] = useState<View>("room");
   const catalog = groups.flatMap((group) => group.memberProjects);
   const members = scope.scope === setScope(setId) ? scope.members : undefined;
   return (
@@ -64,37 +65,58 @@ export function ProjectSetView({ setId }: { readonly setId: string }) {
                   if (isView(value[0])) setView(value[0]);
                 }}
               >
+                <Toggle value="room">Room</Toggle>
                 <Toggle value="files">Files</Toggle>
                 <Toggle value="diff">Diff</Toggle>
                 <Toggle value="agents">Agents</Toggle>
               </ToggleGroup>
             </div>
-            <div className="flex min-h-0 min-w-0 flex-1 divide-x divide-border overflow-x-auto">
-              {members.map((member) => (
-                <section
-                  key={member.scope}
-                  aria-label={member.name}
-                  className="flex min-h-0 min-w-[24rem] flex-1 basis-0 flex-col"
-                >
-                  <h2 className="flex shrink-0 items-center gap-2 border-b border-border/60 px-4 py-2 text-sm font-medium text-foreground">
-                    <ProjectMark
-                      name={member.name ?? member.scope}
-                      colorKey={member.scope}
-                      className="size-4"
+            {view === "room" ? (
+              environmentId === null || status === null ? null : (
+                <NewSharedRoom
+                  environmentId={environmentId}
+                  status={status}
+                  places={members.flatMap((member) => {
+                    const [workspace, project] = member.scope.split("/");
+                    return isLocalScope(member.scope) ||
+                      workspace === undefined ||
+                      project === undefined
+                      ? []
+                      : [{ workspace, project }];
+                  })}
+                  left={members.flatMap((member) =>
+                    isLocalScope(member.scope) && member.name !== undefined ? [member.name] : [],
+                  )}
+                />
+              )
+            ) : (
+              <div className="flex min-h-0 min-w-0 flex-1 divide-x divide-border overflow-x-auto">
+                {members.map((member) => (
+                  <section
+                    key={member.scope}
+                    aria-label={member.name}
+                    className="flex min-h-0 min-w-[24rem] flex-1 basis-0 flex-col"
+                  >
+                    <h2 className="flex shrink-0 items-center gap-2 border-b border-border/60 px-4 py-2 text-sm font-medium text-foreground">
+                      <ProjectMark
+                        name={member.name ?? member.scope}
+                        colorKey={member.scope}
+                        className="size-4"
+                      />
+                      <span className="min-w-0 truncate">{member.name}</span>
+                    </h2>
+                    <Column
+                      view={view}
+                      member={member}
+                      checkout={checkoutOf(member.refs ?? [], catalog, primary)}
+                      project={tree.find((node) => projectScopeKey(node) === member.scope)}
+                      status={status}
+                      onOpen={actions.open}
                     />
-                    <span className="min-w-0 truncate">{member.name}</span>
-                  </h2>
-                  <Column
-                    view={view}
-                    member={member}
-                    checkout={checkoutOf(member.refs ?? [], catalog, primary)}
-                    project={tree.find((node) => projectScopeKey(node) === member.scope)}
-                    status={status}
-                    onOpen={actions.open}
-                  />
-                </section>
-              ))}
-            </div>
+                  </section>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -110,7 +132,7 @@ function Column({
   status,
   onOpen,
 }: {
-  readonly view: View;
+  readonly view: Exclude<View, "room">;
   readonly member: ResolvedProjectScope;
   readonly checkout: ProjectCheckoutRef | null;
   readonly project: WorkProjectNode | undefined;

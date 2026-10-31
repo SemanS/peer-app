@@ -33,6 +33,7 @@ import {
 } from "./room.logic";
 import { RoomActivity } from "./RoomActivity";
 import type { useRoomMoves } from "./useRoom";
+import type { SharedRow } from "./sharedRoom.logic";
 
 const ACTION_LABEL: Readonly<Record<RoomAction, string>> = {
   pass: "Pass on",
@@ -71,6 +72,7 @@ export function RoomConversation({
   selected,
   onOpenRun,
   onOpenAnchor,
+  shared,
 }: {
   readonly place: RoomPlace;
   readonly messages: ReadonlyArray<PeerRoomMessage>;
@@ -96,6 +98,8 @@ export function RoomConversation({
   readonly selected: number | null;
   readonly onOpenRun: (message: PeerRoomMessage, run: string, live: boolean) => void;
   readonly onOpenAnchor: (anchor: PeerRoomAnchor) => void;
+  /** A shared room's reading of each message: the room it is really in, and its project. */
+  readonly shared?: (message: PeerRoomMessage) => SharedRow | undefined;
 }) {
   const lastOf = lastOfRuns(messages);
   const activityOf = (message: PeerRoomMessage) => {
@@ -109,7 +113,8 @@ export function RoomConversation({
     return { id, ...runActivity(run, { review, jujutsu, threadWorking: threadWorking(run) }) };
   };
   const scroller = useRef<HTMLDivElement>(null);
-  const last = messages.at(-1)?.seq;
+  // Seqs are per room, so a shared room's newest message can have a smaller one than the last.
+  const last = messages.length;
   const atEnd = useRef(true);
   useEffect(() => {
     const element = scroller.current;
@@ -145,8 +150,10 @@ export function RoomConversation({
         ) : null}
         {messages.map((message) => (
           <RoomMessage
-            key={message.seq}
-            place={place}
+            key={`${shared?.(message)?.place.project ?? ""}:${message.seq}`}
+            place={shared?.(message)?.place ?? place}
+            project={shared?.(message)?.project}
+            echo={shared?.(message)?.echo === true}
             message={message}
             me={me}
             nameOf={nameOf}
@@ -167,6 +174,8 @@ export function RoomConversation({
 
 function RoomMessage({
   place,
+  project,
+  echo,
   message,
   me,
   nameOf,
@@ -180,6 +189,10 @@ function RoomMessage({
   onOpenAnchor,
 }: {
   readonly place: RoomPlace;
+  /** In a shared room, the project this message is in. */
+  readonly project: string | undefined;
+  /** In a shared room, the same words as the row before it, in another project: they show once. */
+  readonly echo: boolean;
   readonly message: PeerRoomMessage;
   readonly me: string;
   readonly nameOf: NameOf;
@@ -224,6 +237,7 @@ function RoomMessage({
           )}
           <span className="text-xs">{formatShortTimestamp(message.at, timestampFormat)}</span>
           {author.kind === "agent" ? <Badge variant="outline">{author.name}</Badge> : null}
+          {project === undefined ? null : <Badge variant="outline">{project}</Badge>}
         </p>
         {anchor === undefined ? null : (
           <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
@@ -237,9 +251,11 @@ function RoomMessage({
             {anchorState(anchor, head) === "earlier" ? <span>on an earlier version</span> : null}
           </p>
         )}
-        <p className="text-sm whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]">
-          {message.text}
-        </p>
+        {echo ? null : (
+          <p className="text-sm whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]">
+            {message.text}
+          </p>
+        )}
         {mentions.length === 0 ? null : (
           <p className="text-xs text-muted-foreground">
             To {mentions.map((target) => nameOf(target.email)).join(", ")}

@@ -53,16 +53,40 @@ export async function prepareHerdrTaskWorktree(input: {
     });
     return { cwd, branch, vcs: "jj" };
   }
-  await new Promise<void>((resolve, reject) => {
+  const base = await latestBase(input.checkout, input.baseBranch);
+  await git(
+    input.checkout,
+    ["worktree", "add", "--no-track", "-b", branch, "--", cwd, base],
+    15_000,
+  );
+  return { cwd, branch, vcs: "git" };
+}
+
+const git = (checkout: string, args: ReadonlyArray<string>, timeout: number) =>
+  new Promise<void>((resolve, reject) => {
     NodeChildProcess.execFile(
       "git",
-      ["-C", input.checkout, "worktree", "add", "-b", branch, "--", cwd, input.baseBranch],
-      { timeout: 15_000, maxBuffer: 1024 * 1024, encoding: "utf8", windowsHide: true },
+      ["-C", checkout, ...args],
+      { timeout, maxBuffer: 1024 * 1024, encoding: "utf8", windowsHide: true },
       (error, _stdout, stderr) =>
         error === null ? resolve() : reject(new Error(stderr.trim() || error.message)),
     );
   });
-  return { cwd, branch, vcs: "git" };
+
+/**
+ * What a task starts from: what the team pushed, where this checkout has nothing of its own beyond
+ * it. A teammate's work is on the remote long before anyone pulls here, and an agent started from
+ * the old tip builds without it. No remote, no network or local commits keep the local branch.
+ */
+async function latestBase(checkout: string, base: string) {
+  const remote = `refs/remotes/origin/${base}`;
+  try {
+    await git(checkout, ["fetch", "--quiet", "origin", base], 10_000);
+    await git(checkout, ["merge-base", "--is-ancestor", base, remote], 5_000);
+    return remote;
+  } catch {
+    return base;
+  }
 }
 
 /**

@@ -171,3 +171,62 @@ describe("a jj task checkout on a teammate's bookmark", () => {
     assert.notInclude(bookmarks(bob), "ORD-12");
   });
 });
+
+describe("a task's git checkout", () => {
+  const repositories = () => {
+    const directory = NodeFS.mkdtempSync(NodePath.join(home, "git-"));
+    const origin = NodePath.join(directory, "origin.git");
+    git(directory, "init", "--quiet", "--bare", "--initial-branch=main", origin);
+    const ana = NodePath.join(directory, "ana");
+    git(directory, "clone", "--quiet", origin, ana);
+    NodeFS.writeFileSync(NodePath.join(ana, "order.js"), "export const total = 1;\n");
+    git(ana, "add", ".");
+    git(ana, "commit", "--quiet", "-m", "start");
+    git(ana, "push", "--quiet", "origin", "HEAD:main");
+    const bob = NodePath.join(directory, "bob");
+    git(directory, "clone", "--quiet", origin, bob);
+    return { directory, ana, bob };
+  };
+  const commit = (cwd: string, name: string) => {
+    NodeFS.writeFileSync(NodePath.join(cwd, name), "1\n");
+    git(cwd, "add", ".");
+    git(cwd, "commit", "--quiet", "-m", name);
+  };
+
+  it("starts from what the team pushed, not from an old local tip", async () => {
+    const { directory, ana, bob } = repositories();
+    commit(ana, "ledger.js");
+    git(ana, "push", "--quiet", "origin", "HEAD:main");
+    const tree = await prepareHerdrTaskWorktree({
+      checkout: bob,
+      baseBranch: "main",
+      worktrees: NodePath.join(directory, "trees"),
+      task: "page",
+    });
+    assert.isTrue(NodeFS.existsSync(NodePath.join(tree.cwd, "ledger.js")));
+    assert.throws(() => git(tree.cwd, "config", `branch.${tree.branch}.remote`));
+  });
+
+  it("keeps a local tip with commits of its own, and works without a remote", async () => {
+    const { directory, ana, bob } = repositories();
+    commit(bob, "mine.js");
+    commit(ana, "theirs.js");
+    git(ana, "push", "--quiet", "origin", "HEAD:main");
+    const kept = await prepareHerdrTaskWorktree({
+      checkout: bob,
+      baseBranch: "main",
+      worktrees: NodePath.join(directory, "trees"),
+      task: "kept",
+    });
+    assert.isTrue(NodeFS.existsSync(NodePath.join(kept.cwd, "mine.js")));
+
+    git(ana, "remote", "remove", "origin");
+    const alone = await prepareHerdrTaskWorktree({
+      checkout: ana,
+      baseBranch: "main",
+      worktrees: NodePath.join(directory, "trees"),
+      task: "alone",
+    });
+    assert.isTrue(NodeFS.existsSync(NodePath.join(alone.cwd, "theirs.js")));
+  });
+});

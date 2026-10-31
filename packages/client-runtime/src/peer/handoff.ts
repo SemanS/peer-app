@@ -237,6 +237,16 @@ export const REVIEW_SIGNAL_WORDS: Readonly<Record<PeerReviewSignal, string>> = {
   "owner-call": "An owner's call is pending or declined",
 };
 
+/** The same signals as the review page's first line says them, short enough to read at a glance. */
+const REVIEW_SIGNAL_SHORT: Readonly<Record<PeerReviewSignal, string>> = {
+  "no-report": "no test report",
+  failed: "a test failed",
+  unowned: "an item has no owner",
+  "not-delivered": "not pushed",
+  "open-overlap": "an overlap is open",
+  "owner-call": "an owner's call is open",
+};
+
 /** A class of an open fact: who has to move on it, or `covered` when nobody has to. */
 export type HandoffClass = "agent_action" | "coordination" | "human_decision" | "covered";
 
@@ -750,7 +760,7 @@ export type DecisionAction = "done" | "reopen" | "withdraw";
 /**
  * The review page's first line: who moves next. "With the agent" while only agent actions remain
  * and its run is live, a class that asks someone, the decision the policy asks of the person ("Accept
- * 1.1? 2 signals: not-delivered, unowned"), or that none is asked ("Accepted by policy v3 · waiting to
+ * 1.1? Not pushed, an item has no owner."), or that none is asked ("Accepted by policy v3 · waiting to
  * land", "Accepted by Ana"), with the actions that sit on it. Whether the person may take them is
  * the page's to decide (`mayAccept`).
  */
@@ -834,13 +844,14 @@ export function decisionLine(
   if (headline === "coordination") return line("coordination", HANDOFF_CLASS_LABEL.coordination);
   if (headline === "agent_action" && options.runLive === true)
     return line("with-agent", "With the agent");
-  const name = pkg.key ?? pkg.task;
+  const name = pkg.key ?? "this work";
   const said =
     signals.length > 0
-      ? ` ${plural(signals.length, "signal", "signals")}: ${signals.join(", ")}`
-      : pkg.policy === undefined
-        ? ""
-        : " No signals";
+      ? ` ${signals
+          .map((signal) => REVIEW_SIGNAL_SHORT[signal])
+          .join(", ")
+          .replace(/^./u, (first) => first.toUpperCase())}.`
+      : "";
   return line("ask", `Accept ${name}?${said}`);
 }
 

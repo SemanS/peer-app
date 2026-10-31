@@ -186,6 +186,11 @@ export function WelcomeWizard({
     setStep("agents");
   };
   const stageIndex = Math.max(0, stages.indexOf(step));
+  const firstProject = useProjects()[0];
+  const openedProject =
+    firstProject === undefined
+      ? undefined
+      : scopeProjectRef(firstProject.environmentId, firstProject.id);
   const finish = (
     projectRef?: ScopedProjectRef,
     importWarning?: string,
@@ -354,7 +359,14 @@ export function WelcomeWizard({
               }}
             />
           ) : step === "agents" ? (
-            <AgentsStep environmentIds={setupIds} onContinue={() => setStep("import")} />
+            <AgentsStep
+              environmentIds={setupIds}
+              onContinue={() => {
+                // A team's project is open by now: there is no first project left to choose.
+                if (mode === "team" && openedProject !== undefined) void finish(openedProject);
+                else setStep("import");
+              }}
+            />
           ) : (
             <ImportStep
               scans={scans}
@@ -746,7 +758,7 @@ function AgentsStep({
   return (
     <StepShell
       title="Connect your agents"
-      description="Choose an agent to start coding. You can add more later."
+      description="Peer joins these agents so they can work together. You can add more later."
     >
       <ScrollArea scrollFade className="mt-5 h-auto max-h-[min(32rem,55dvh)]">
         <div className="space-y-5 pr-3">

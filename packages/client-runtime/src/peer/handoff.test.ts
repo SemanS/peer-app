@@ -184,11 +184,11 @@ describe("the review page's decision line", () => {
 
   it("asks the person with the signals named, and offers Mark done and Reopen", () => {
     const line = decisionLine({ ...pkg, policy: policy(["not-delivered", "unowned"]) });
-    expect(line.text).toBe("Accept 1.1? 2 signals: not-delivered, unowned");
+    expect(line.text).toBe("Accept 1.1? Not pushed, an item has no owner.");
     expect(line.kind).toBe("ask");
     expect(line.actions).toEqual(["done", "reopen"]);
     expect(decisionLine({ ...pkg, policy: { ...policy([]), mode: "ask" } }).text).toBe(
-      "Accept 1.1? No signals",
+      "Accept 1.1?",
     );
     // A package from an older Hub has no policy: the question alone.
     expect(decisionLine(pkg).text).toBe("Accept 1.1?");
@@ -738,7 +738,7 @@ describe("decisionLine with next steps", () => {
     expect(live.text).toBe("With the agent");
     expect(live.actions).toEqual(["done", "reopen"]);
     const ended = decisionLine(pkg, null, { ...steps(failed), runLive: false });
-    expect(ended.text).toBe("Accept 1.1? 2 signals: failed, unowned");
+    expect(ended.text).toBe("Accept 1.1? A test failed, an item has no owner.");
   });
 
   it("leads with the first class that has an entry", () => {
@@ -756,7 +756,7 @@ describe("decisionLine with next steps", () => {
 
   it("no longer counts a signal cleared since the handoff, and says it was raised then", () => {
     const line = decisionLine(pkg, null, { signals: ["failed"] });
-    expect(line.text).toBe("Accept 1.1? 1 signal: failed");
+    expect(line.text).toBe("Accept 1.1? A test failed.");
     expect(line.raisedAtHandoff).toEqual(["unowned"]);
   });
 

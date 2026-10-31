@@ -32,7 +32,7 @@ export function forecastAvailable(query: {
   return query.error != null || query.data == null ? "unavailable" : query.data;
 }
 export const forecastSide = (side: PeerForecastSide, me: string | null) =>
-  `${side.email === me ? "you" : side.email} · ${side.title || side.branch} · ${side.branch} (${side.where})`;
+  `${side.email === me ? "you" : side.email} · ${side.title || side.branch}${side.where === "here" ? "" : ` (${side.where})`}`;
 export const forecastPairKey = (pair: PeerForecastPair) =>
   [pair.workspace, pair.project, pair.repository, ...[pair.a.branch, pair.b.branch].sort()].join(
     "/",
@@ -112,6 +112,9 @@ export function forecastSections(snapshot: PeerForecast | "unavailable") {
   if (snapshot === "unavailable" || snapshot.state !== "on") return [];
   const groups = new Map<string, PeerForecastPair[]>();
   for (const pair of snapshot.pairs) {
+    // Two runs of one person's task are a retry, not a conflict with anyone.
+    if (pair.a.task !== undefined && pair.a.task === pair.b.task && pair.a.email === pair.b.email)
+      continue;
     const key = `${pair.workspace}/${pair.project}`,
       rows = groups.get(key) ?? [];
     rows.push(pair);

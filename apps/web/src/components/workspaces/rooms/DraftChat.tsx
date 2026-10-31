@@ -12,7 +12,7 @@ import { Button } from "../../ui/button";
 import { SidebarInset } from "../../ui/sidebar";
 import { PeerPageHeader } from "../PeerPageHeader";
 import { useOrganizationStatus } from "../ActiveOrganization";
-import { failureMessage, usePeerHubStatus } from "../WorkspaceAccess";
+import { failureMessage, usePeerHubSettled, usePeerHubStatus } from "../WorkspaceAccess";
 import { usePeerPlugins } from "../slots";
 import { peopleOf } from "./room.logic";
 import { RoomComposer } from "./RoomComposer";
@@ -43,7 +43,9 @@ export function DraftChat({
   readonly projectId: ProjectId;
   readonly children: ReactNode;
 }) {
-  const status = useOrganizationStatus(usePeerHubStatus(environmentId));
+  const hubStatus = usePeerHubStatus(environmentId);
+  const settled = usePeerHubSettled(hubStatus);
+  const status = useOrganizationStatus(hubStatus);
   const plugins = usePeerPlugins(status);
   const [asThread, setAsThread] = useState(false);
   const hasPrompt = useComposerDraftStore(
@@ -56,6 +58,8 @@ export function DraftChat({
       .map((state) => ({ workspace: workspace.slug, state })),
   )[0];
   const me = status?.email ?? null;
+  // Showing the thread's composer until the status comes would flash it before the chat's.
+  if (!settled && !asThread && !hasPrompt) return null;
   if (
     asThread ||
     hasPrompt ||

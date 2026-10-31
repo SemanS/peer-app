@@ -19,11 +19,14 @@ import {
   type PeerRoomTargetInput,
   type PeerRoomStep,
   type PeerRun,
+  type PeerWorkStatus,
 } from "@t3tools/contracts";
-import { harnessName } from "@t3tools/client-runtime/peer/work";
+import { harnessName, type WorkThreadNode } from "@t3tools/client-runtime/peer/work";
 import * as Schema from "effect/Schema";
 
 import type { SignalTone } from "../signals";
+import { runThreadKeys, type TaskRunRow } from "../task/runs.logic";
+import type { WorkOpen } from "../workTree.logic";
 
 /** The Hub's bound on a message: more is refused with `bad_text`. */
 export const ROOM_TEXT_MAX = 4_000;
@@ -551,4 +554,105 @@ export function reachRows(
               : "This computer cannot tell what carries this run, so Team stays off.",
       };
     });
+}
+
+export interface RoomAgentRow {
+  readonly key: string;
+  readonly agent: string;
+  /** "herdr", "Peer chat", or absent for a thread no run covers. */
+  readonly runtime: string | undefined;
+  readonly status: PeerWorkStatus;
+  /** "Running", "Idle", "Detached", "Ended · handed off". */
+  readonly state: string;
+  readonly stale: boolean;
+  readonly open: WorkOpen | undefined;
+}
+
+export interface RoomAgentGroup {
+  readonly key: string;
+  readonly person: string;
+  readonly mine: boolean;
+  readonly agents: ReadonlyArray<RoomAgentRow>;
+}
+
+const LIVE_LABEL: Readonly<Record<PeerWorkStatus, string>> = {
+  working: "Running",
+  blocked: "Needs input",
+  idle: "Idle",
+  done: "Done",
+  unknown: "Unknown",
+};
+
+/** Who needs a look first; also the order a run's several threads resolve to one state. */
+const STATUS_RANK: Readonly<Record<PeerWorkStatus, number>> = {
+  blocked: 0,
+  working: 1,
+  idle: 2,
+  unknown: 3,
+  done: 4,
+};
+
+const liveStatus = (run: PeerRun, threads: ReadonlyArray<WorkThreadNode>): PeerWorkStatus => {
+  const [first] = threads.toSorted((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status]);
+  if (first !== undefined) return first.status;
+  return run.sessions.some((session) => session.to === undefined) ? "working" : "idle";
+};
+
+/**
+ * The room's agents under the people who run them: only people with an agent here, you first. A run
+ * reads its threads' live state; a thread from before runs keeps its place under its person.
+ */
+export function roomAgentGroups(input: {
+  readonly runs: ReadonlyArray<PeerRun>;
+  readonly rows: ReadonlyArray<TaskRunRow>;
+  readonly threads: ReadonlyArray<WorkThreadNode>;
+  readonly me: string;
+  readonly nameOf: NameOf;
+}): ReadonlyArray<RoomAgentGroup> {
+  const { runs, rows, threads, me, nameOf } = input;
+  const groups = new Map<string, { person: string; mine: boolean; agents: RoomAgentRow[] }>();
+  const add = (email: string, person: string, mine: boolean, row: RoomAgentRow) => {
+    const key = email.toLowerCase();
+    const group = groups.get(key) ?? { person, mine, agents: [] };
+    group.agents.push(row);
+    groups.set(key, group);
+  };
+  const covered = new Set<string>();
+  for (const row of rows) {
+    const run = runs.find((candidate) => candidate.id === row.id);
+    if (run === undefined) continue;
+    const keys = runThreadKeys(run);
+    keys.forEach((key) => covered.add(key));
+    const own = threads.filter((thread) => keys.includes(thread.key));
+    const status =
+      run.state === "running" ? liveStatus(run, own) : run.state === "detached" ? "idle" : "done";
+    add(run.email, nameOf(run.email), same(run.email, me), {
+      key: run.id,
+      agent: row.agent,
+      runtime: row.runtime,
+      status,
+      state: run.state === "running" ? LIVE_LABEL[status] : row.state,
+      stale: run.state === "running" && own.length > 0 && own.every((thread) => thread.stale),
+      open: row.open,
+    });
+  }
+  for (const thread of threads) {
+    if (covered.has(thread.key)) continue;
+    add(thread.email ?? thread.person, thread.person, thread.mine, {
+      key: thread.key,
+      agent: harnessName(thread.harness) ?? thread.title,
+      runtime: undefined,
+      status: thread.status,
+      state: LIVE_LABEL[thread.status],
+      stale: thread.stale,
+      open: thread.open,
+    });
+  }
+  return [...groups.entries()]
+    .map(([key, group]) => ({
+      key,
+      ...group,
+      agents: group.agents.toSorted((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status]),
+    }))
+    .toSorted((a, b) => Number(b.mine) - Number(a.mine) || a.person.localeCompare(b.person));
 }

@@ -1,5 +1,6 @@
 import { targetsFor } from "@t3tools/client-runtime/peer/rooms";
-import type { PeerRoomMessage } from "@t3tools/contracts";
+import type { WorkThreadNode } from "@t3tools/client-runtime/peer/work";
+import type { PeerRoomMessage, PeerRun } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -25,6 +26,7 @@ import {
   reachRows,
   recipientsOf,
   roomAgentEntries,
+  roomAgentGroups,
   withEffortOnly,
   sendNotice,
   toggleChoice,
@@ -34,6 +36,7 @@ import {
   turnDone,
   withPaths,
 } from "./room.logic";
+import type { TaskRunRow } from "../task/runs.logic";
 
 const members = [
   { email: "me@acme.test", name: "Me", role: "member" },
@@ -433,5 +436,74 @@ describe("the agent chosen for Your agent", () => {
       "codex",
     ]);
     expect(roomAgentEntries(entries, ["codex"]).map((e) => e.driverKind)).toEqual(["codex"]);
+  });
+});
+
+describe("roomAgentGroups", () => {
+  const nameOf = (email: string) => email.split("@")[0] ?? email;
+  const run = (id: string, email: string, state: PeerRun["state"], session?: string) =>
+    ({
+      id,
+      email,
+      state,
+      agent: "claude",
+      environment: "env",
+      sessions: session === undefined ? [] : [{ id: session }],
+    }) as unknown as PeerRun;
+  const row = (id: string, state = "Running") =>
+    ({ id, agent: "Claude", runtime: "herdr", state, open: undefined }) as unknown as TaskRunRow;
+  const thread = (key: string, status: WorkThreadNode["status"], email: string) =>
+    ({
+      key,
+      status,
+      email,
+      person: nameOf(email),
+      mine: false,
+      stale: false,
+      title: "Fix it",
+      harness: "codex",
+      open: undefined,
+    }) as unknown as WorkThreadNode;
+
+  it("lists only people with an agent here, one name for one agent", () => {
+    const groups = roomAgentGroups({
+      runs: [run("run_1", "me@acme.test", "running", "s1")],
+      rows: [row("run_1")],
+      threads: [],
+      me: "ME@acme.test",
+      nameOf,
+    });
+    expect(groups.map((group) => [group.person, group.agents.length])).toEqual([["me", 1]]);
+    expect(groups[0]?.agents[0]?.state).toBe("Running");
+  });
+
+  it("reads a run's state from its thread and puts you first", () => {
+    const groups = roomAgentGroups({
+      runs: [
+        run("run_1", "ana@acme.test", "running", "s1"),
+        run("run_2", "me@acme.test", "running", "s2"),
+      ],
+      rows: [row("run_1"), row("run_2")],
+      threads: [thread("herdr:s1", "idle", "ana@acme.test")],
+      me: "me@acme.test",
+      nameOf,
+    });
+    expect(groups.map((group) => group.person)).toEqual(["me", "ana"]);
+    expect(groups[1]?.agents[0]?.state).toBe("Idle");
+  });
+
+  it("keeps an ended run after a live one and a thread no run covers", () => {
+    const groups = roomAgentGroups({
+      runs: [run("run_1", "me@acme.test", "ended"), run("run_2", "me@acme.test", "running", "s2")],
+      rows: [row("run_1", "Ended · done"), row("run_2")],
+      threads: [thread("old", "blocked", "me@acme.test")],
+      me: "me@acme.test",
+      nameOf,
+    });
+    expect(groups[0]?.agents.map((agent) => agent.state)).toEqual([
+      "Needs input",
+      "Running",
+      "Ended · done",
+    ]);
   });
 });

@@ -12,6 +12,7 @@ import {
   chatScopeKeys,
   localProjectGroups,
   localScope,
+  landingProject,
   newChatProject,
   latestScopedChat,
   peerProjectIndex,
@@ -233,5 +234,29 @@ describe("local projects", () => {
       localProjectGroups(catalog.groups, catalog.peer).map((group) => group.displayName),
     ).toEqual(["dotfiles"]);
     expect(localProjectGroups(catalog.groups, []).length).toBe(2);
+  });
+});
+
+describe("landingProject", () => {
+  const project = (id: string, environmentId = "server") =>
+    ({ id, environmentId }) as never as { environmentId: never; id: never };
+  const ref = (id: string) => ({ environmentId: "server", projectId: id }) as never;
+  const every = { scope: "all", name: undefined, refs: null } as never;
+
+  it("opens the scoped project, as the sidebar's + does", () => {
+    const scope = { scope: "w/p", name: "P", refs: [ref("b")] } as never;
+    expect(landingProject(scope, "server", [project("a"), project("b")], [])?.projectId).toBe("b");
+  });
+
+  it("prefers the latest project on a Hub with every project in scope", () => {
+    const peer = [{ refs: [ref("b")] }] as never;
+    const recent = [project("a"), project("b")];
+    expect(landingProject(every, "server", recent, peer)?.projectId).toBe("b");
+  });
+
+  it("falls back to the latest project", () => {
+    const scope = { scope: "w/p", name: "P", refs: [ref("gone")] } as never;
+    expect(landingProject(scope, "server", [project("a")], [])?.projectId).toBe("a");
+    expect(landingProject(every, "server", [], [])).toBeNull();
   });
 });

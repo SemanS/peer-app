@@ -12,7 +12,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { ArrowRightIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { describeOffer } from "@t3tools/client-runtime/peer-domain-offers";
 import { ensureLocalApi } from "../../localApi";
@@ -45,6 +45,21 @@ export function usePeerHubStatus(environmentId: EnvironmentId | null): PeerHubSt
   return useEnvironmentQuery(
     environmentId === null ? null : serverEnvironment.peerHubLive({ environmentId, input: {} }),
   ).data;
+}
+
+const HUB_STATUS_WAIT_MS = 1_500;
+
+/**
+ * Whether a first screen may decide from the Hub's status: it came, or it is late and the screen
+ * goes on without it, since Peer Local works with no Hub at all.
+ */
+export function usePeerHubSettled(status: PeerHubStatus | null): boolean {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setLate(true), HUB_STATUS_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  return status !== null || late;
 }
 
 /** What a failed hub command shows inline; null when it succeeded or was interrupted. */

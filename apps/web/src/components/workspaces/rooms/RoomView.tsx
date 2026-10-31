@@ -33,6 +33,7 @@ import { RoomComposer, type DraftLine, type DraftPaths } from "./RoomComposer";
 import { roomMessageId, RoomConversation } from "./RoomConversation";
 import { RoomDiff, type DiffFocus } from "./RoomDiff";
 import { RoomFiles } from "./RoomFiles";
+import { RoomHerdr } from "./RoomHerdr";
 import { RoomJujutsu } from "./RoomJujutsu";
 import { RoomReach } from "./RoomReach";
 import { watchable } from "./roomDiff.logic";
@@ -40,14 +41,20 @@ import { useRoom, useRoomDiff, useRoomMoves } from "./useRoom";
 
 const NO_RUNS: ReadonlyArray<string> = [];
 
-const SIDE_LABEL = { diff: "Diff", files: "Files", jujutsu: "Jujutsu", agent: "Agent" } as const;
+const SIDE_LABEL = {
+  diff: "Diff",
+  files: "Files",
+  jujutsu: "Jujutsu",
+  herdr: "Herdr",
+  agent: "Agent",
+} as const;
 type RoomSide = keyof typeof SIDE_LABEL;
 const isRoomSide = (value: unknown): value is RoomSide =>
   typeof value === "string" && Object.hasOwn(SIDE_LABEL, value);
 
 /**
  * A task's room: its conversation between people and their agents, with the task's diff, the
- * project's files or its Jujutsu changes beside it from `lg` and behind a switch below. Peer's own page rather than a chat widget: the conversation
+ * project's files, its Jujutsu changes or its agents beside it from `lg` and behind a switch below. Peer's own page rather than a chat widget: the conversation
  * runs in one column, and the composer stays at the bottom as the review's bar does.
  */
 export function RoomView({
@@ -271,6 +278,7 @@ function RoomBody({
           <Toggle value="diff">Diff</Toggle>
           <Toggle value="files">Files</Toggle>
           <Toggle value="jujutsu">Jujutsu</Toggle>
+          <Toggle value="herdr">Herdr</Toggle>
           {agentLabel === null ? null : <Toggle value="agent">{agentLabel}</Toggle>}
         </ToggleGroup>
       </div>
@@ -374,6 +382,7 @@ function RoomBody({
               <Toggle value="diff">Diff</Toggle>
               <Toggle value="files">Files</Toggle>
               <Toggle value="jujutsu">Jujutsu</Toggle>
+              <Toggle value="herdr">Herdr</Toggle>
               {agentLabel === null ? null : <Toggle value="agent">{agentLabel}</Toggle>}
             </ToggleGroup>
           </div>
@@ -454,6 +463,21 @@ function RoomBody({
                 task={taskNode}
               />
             ) : null}
+          </div>
+          <div
+            className={cn("min-h-0 min-w-0 flex-1 flex-col", side === "herdr" ? "flex" : "hidden")}
+          >
+            <RoomHerdr
+              environmentId={environmentId}
+              status={status}
+              projectState={projectState}
+              runs={runs.runs}
+              threads={taskNode.threads}
+              me={me}
+              now={read.now}
+              nameOf={nameOf}
+              onOpen={onOpen}
+            />
           </div>
         </section>
       </div>

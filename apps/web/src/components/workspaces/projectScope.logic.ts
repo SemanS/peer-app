@@ -1,4 +1,10 @@
-import { EnvironmentId, type PeerHubStatus, type ScopedProjectRef } from "@t3tools/contracts";
+import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import {
+  EnvironmentId,
+  type PeerHubStatus,
+  type ProjectId,
+  type ScopedProjectRef,
+} from "@t3tools/contracts";
 
 import { ALL_PROJECTS, projectScopeKey } from "./workBoard.logic";
 
@@ -135,6 +141,24 @@ export function newChatProject(
 ): ScopedProjectRef | null {
   const refs = resolved.refs ?? [];
   return refs.find((ref) => ref.environmentId === primaryEnvironmentId) ?? refs[0] ?? null;
+}
+
+/**
+ * The project the first screen opens, as the sidebar's + would: the scoped project, else with every
+ * project in scope the latest on a Hub, where a new chat has its room, else the latest there is.
+ */
+export function landingProject(
+  scope: ResolvedProjectScope,
+  primaryEnvironmentId: string | null,
+  recent: ReadonlyArray<{ readonly environmentId: EnvironmentId; readonly id: ProjectId }>,
+  peer: ReadonlyArray<Pick<PeerProjectEntry, "refs">>,
+): ScopedProjectRef | null {
+  const refs = recent.map((project) => scopeProjectRef(project.environmentId, project.id));
+  const known = new Set(refs.map(projectRefKey));
+  const scoped = newChatProject(scope, primaryEnvironmentId);
+  if (scoped !== null && known.has(projectRefKey(scoped))) return scoped;
+  const shared = new Set(peer.flatMap((entry) => entry.refs.map(projectRefKey)));
+  return refs.find((ref) => shared.has(projectRefKey(ref))) ?? refs[0] ?? null;
 }
 
 /**

@@ -1,5 +1,4 @@
 import { RefreshIcon } from "~/components/ui/refresh-icon";
-import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { LinkIcon, PlusIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
@@ -12,14 +11,18 @@ import { Button } from "../components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../components/ui/empty";
 import { SidebarInset } from "../components/ui/sidebar";
 import { WorkspacePageHeader } from "../components/WorkspacePageHeader";
+import { landingProject } from "../components/workspaces/projectScope.logic";
+import { useProjectScope, usePeerHub } from "../components/workspaces/projectScope";
+import { usePeerHubSettled } from "../components/workspaces/WorkspaceAccess";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
 import {
   readProject,
   useAllEnvironmentShellsBootstrapped,
   useProjects,
   useThreadShells,
 } from "../state/entities";
-import { useEnvironments } from "../state/environments";
+import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import { APP_DISPLAY_NAME } from "~/branding";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 
@@ -48,17 +51,26 @@ function IndexDraftLanding() {
   const startedAttemptRef = useRef<number | null>(null);
   const [startState, setStartState] = useState({ failed: false, retryRequest: 0 });
 
-  const mostRecentProject = bootstrapped
-    ? (sortScopedProjectsForSidebar(projects, threads, "updated_at")[0] ?? null)
+  const scope = useProjectScope(useSidebarProjectGroups());
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  // The saved scope names a project only the Hub's status can resolve.
+  const hubSettled = usePeerHubSettled(usePeerHub().status);
+  const landing = bootstrapped
+    ? landingProject(
+        scope,
+        primaryEnvironmentId,
+        sortScopedProjectsForSidebar(projects, threads, "updated_at"),
+        scope.peer,
+      )
     : null;
+  const projectRef = hubSettled ? landing : null;
   const attempt = startState.retryRequest;
 
   useEffect(() => {
     // Starting a draft after the user has left would replace the page they picked.
-    if (mostRecentProject === null || startedAttemptRef.current === attempt || !isStillOnIndex()) {
+    if (projectRef === null || startedAttemptRef.current === attempt || !isStillOnIndex()) {
       return;
     }
-    const projectRef = scopeProjectRef(mostRecentProject.environmentId, mostRecentProject.id);
     if (readProject(projectRef) === null) {
       return;
     }
@@ -72,12 +84,12 @@ function IndexDraftLanding() {
       .catch(() => {
         setStartState((state) => ({ ...state, failed: true }));
       });
-  }, [attempt, handleNewThread, mostRecentProject]);
+  }, [attempt, handleNewThread, projectRef]);
 
   if (!bootstrapped) {
     return null;
   }
-  if (mostRecentProject !== null) {
+  if (landing !== null) {
     return startState.failed ? (
       <DraftStartError
         onRetry={() => {

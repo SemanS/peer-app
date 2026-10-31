@@ -63,7 +63,8 @@ export type CapabilitySlot =
   | "gitHost"
   | "taskLauncher"
   | "requestAcceptor"
-  | "reviewStarter";
+  | "reviewStarter"
+  | "wipSharing";
 
 /** The first of `providers` (see `contributions`) that fills `slot`, if any does. */
 export const capability = <K extends CapabilitySlot>(

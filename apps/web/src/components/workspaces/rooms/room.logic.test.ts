@@ -3,6 +3,7 @@ import type { PeerRoomMessage } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  snapshotLine,
   authorOf,
   canSend,
   choicesWithMentions,
@@ -340,5 +341,20 @@ describe("the reach switch", () => {
       capacities: { r1: "shared" },
     });
     expect(rows[0]?.team).toBe(true);
+  });
+});
+
+describe("snapshotLine", () => {
+  it("says the change, how many more and the counts", () => {
+    expect(
+      snapshotLine({ changes: ["pxtwpnkoabcd", "qmwotkrz"], files: 2, added: 92, removed: 1 }),
+    ).toEqual({ change: "pxtwpnko +1", counts: "2 files +92 −1" });
+  });
+
+  it("has no change to name when the agent made none", () => {
+    expect(snapshotLine({ changes: [], files: 0, added: 0, removed: 0 })).toEqual({
+      change: undefined,
+      counts: "0 files",
+    });
   });
 });

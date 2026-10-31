@@ -37,6 +37,7 @@ import {
   replyLines,
 } from "./render.ts";
 import { targetsOf, pullRequest } from "./targets.ts";
+import { handoffKey, pinWork, sealWork, shareWork } from "../../core/workSnapshots.ts";
 import { observeDelivery } from "./client/delivery.ts";
 const Settings = Schema.Struct({
   target: PeerHandoffTarget,
@@ -312,8 +313,28 @@ export const make = Effect.gen(function* () {
         ms: (yield* Clock.currentTimeMillis) - start,
       });
       if (delivery === null) return {};
-      kept.delivery = delivery;
-      return { delivery };
+      const run = session.run;
+      const since =
+        run === undefined ? undefined : (yield* state.read).persisted.runs?.[run]?.startedAt;
+      const sealed =
+        run === undefined
+          ? null
+          : yield* Effect.promise(() =>
+              sealWork(session.root || session.cwd, delivery.observedAt, since).catch(() => null),
+            );
+      const room = { workspace: p.workspace, project: p.projectId, task: p.taskId };
+      if (sealed !== null && run !== undefined) {
+        const key = handoffKey(run, sealed.head);
+        yield* Effect.promise(() => pinWork(sealed, room, key));
+        yield* shareWork(plugins, sealed.gitDir, room);
+      }
+      // The handed-off state by its commit, whatever the delivery could say of it.
+      const sealedDelivery =
+        sealed === null
+          ? delivery
+          : { ...delivery, evidence: { ...delivery.evidence, commit: sealed.head } };
+      kept.delivery = sealedDelivery;
+      return { delivery: sealedDelivery };
     }).pipe(Effect.orElseSucceed((): PeerReviewFacts => ({})));
   const publish = (p: PeerHandoffPlace, session: PeerSessionView | undefined, budget = 10000) =>
     Effect.gen(function* () {

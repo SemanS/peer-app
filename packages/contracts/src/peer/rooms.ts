@@ -330,8 +330,8 @@ export const PeerRoomDiff = Schema.Union([
   Schema.Struct({
     state: Schema.Literal("here"),
     folder: PeerRoomFolder,
-    /** This computer's run on the task, or a ref fetched from the remote. */
-    source: Schema.Literals(["run", "pushed"]),
+    /** This computer's run on the task, a ref fetched from the remote, or a pinned moment. */
+    source: Schema.Literals(["run", "pushed", "snapshot"]),
     base: Schema.String,
     head: Schema.String,
     patch: Schema.String,
@@ -346,3 +346,34 @@ export const PeerRoomDiff = Schema.Union([
   }),
 ]);
 export type PeerRoomDiff = typeof PeerRoomDiff.Type;
+
+export const PeerRoomsSnapshotInput = Schema.Struct({
+  ...RoomPlace,
+  /** `message-<seq>`, or the `handoff` a read of a message named. */
+  key: TrimmedNonEmptyString,
+  /** The run whose repository to look in first, where the project has several. */
+  run: Schema.optional(TrimmedNonEmptyString),
+});
+export type PeerRoomsSnapshotInput = typeof PeerRoomsSnapshotInput.Type;
+
+/** An agent's work as it stood at a message or a handoff; `none` says why it cannot be shown. */
+export const PeerRoomSnapshot = Schema.Union([
+  Schema.Struct({
+    state: Schema.Literal("here"),
+    at: Schema.String,
+    changes: Schema.Array(Schema.String),
+    subject: Schema.String,
+    files: Schema.Number,
+    added: Schema.Number,
+    removed: Schema.Number,
+    diff: PeerRoomDiff,
+    /** The run's newest handoff snapshot, as a `key`. */
+    handoff: Schema.optional(Schema.String),
+  }),
+  Schema.Struct({
+    state: Schema.Literal("none"),
+    reason: Schema.String,
+    handoff: Schema.optional(Schema.String),
+  }),
+]);
+export type PeerRoomSnapshot = typeof PeerRoomSnapshot.Type;

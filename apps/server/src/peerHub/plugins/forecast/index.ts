@@ -73,6 +73,9 @@ export const make = Effect.gen(function* () {
           ? forecast.kick.pipe(Effect.as(null))
           : Effect.succeed(null),
     },
+    wipSharing: {
+      on: Effect.map(forecast.read, (read) => read.state === "on" && read.shareWip === true),
+    },
     rpc: {
       group: WsPeerForecastRpcGroup,
       handlers: (wrap) =>

@@ -144,6 +144,7 @@ function RoomBody({
     readonly seq: number;
     /** The moment its thread opens at; absent while the agent works, to follow it. */
     readonly until: string | undefined;
+    readonly working: boolean;
   } | null>(null);
   const [focus, setFocus] = useState<DiffFocus | null>(null);
   const [line, setLine] = useState<DraftLine | null>(null);
@@ -280,9 +281,16 @@ function RoomBody({
             onOpenRun={(message, id, live) => {
               const agent =
                 runs.runs.find((candidate) => candidate.id === id)?.agent ?? message.author.agent;
-              setRun({ id, agent, seq: message.seq, until: live ? undefined : message.at });
-              // Picking an agent while reading Jujutsu keeps Jujutsu, now on that agent's change.
-              showSide(side === "jujutsu" ? "jujutsu" : "agent");
+              const candidate = runs.runs.find((one) => one.id === id);
+              setRun({
+                id,
+                agent,
+                seq: message.seq,
+                until: live ? undefined : message.at,
+                working: live || (candidate !== undefined && threadWorking(candidate) === true),
+              });
+              // On Jujutsu a message opens the state of the work at that moment.
+              showSide(onJujutsu ? "jujutsu" : "agent");
             }}
             onOpenAnchor={(anchor) => {
               showSide("diff");
@@ -392,7 +400,13 @@ function RoomBody({
                 agent={
                   run === null || agentLabel === null
                     ? null
-                    : { ...agentChanges, label: agentLabel, run: run.id }
+                    : {
+                        ...agentChanges,
+                        label: agentLabel,
+                        run: run.id,
+                        seq: run.seq,
+                        working: run.working,
+                      }
                 }
                 environmentId={environmentId}
                 status={status}

@@ -285,6 +285,8 @@ export interface PeerContributions {
   readonly taskLauncher?: PeerTaskLauncher;
   readonly requestAcceptor?: PeerRequestAcceptor;
   readonly reviewStarter?: import("./plugins/PeerReviewStarter.ts").PeerReviewStarter;
+  /** Whether this person shares unfinished work on origin: nothing else may push it there. */
+  readonly wipSharing?: { readonly on: Effect.Effect<boolean> };
 }
 
 export type PeerLifecycleEvent =

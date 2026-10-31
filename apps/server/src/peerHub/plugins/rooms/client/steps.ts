@@ -101,7 +101,7 @@ const asRoomDiff = (patch: string, base: string, head: string): PeerRoomDiff => 
   };
 };
 
-/** The whole change in the workspace, from jj: a secondary workspace has no `.git` to ask. */
+/** The whole change in the workspace, from jj, which alone knows where `@` stands. */
 export async function changeDiff(root: string): Promise<PeerRoomDiff> {
   const { base, commit } = await carried(root);
   return asRoomDiff(await read(root, ["diff", "--git", "-r", commit]), base || commit, commit);

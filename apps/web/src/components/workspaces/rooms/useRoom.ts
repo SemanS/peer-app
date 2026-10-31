@@ -139,6 +139,23 @@ export function useRoomThread(input: {
   return { thread: query.data, error: query.error };
 }
 
+/** A kept moment of an agent's work: it never changes, so it reads once. */
+export function useRoomSnapshot(input: {
+  readonly environmentId: EnvironmentId;
+  readonly place: RoomPlace;
+  readonly snapshotKey: string;
+  readonly run: string;
+}) {
+  const { environmentId, place, snapshotKey, run } = input;
+  const query = useEnvironmentQuery(
+    serverEnvironment.peerRooms.snapshot({
+      environmentId,
+      input: { ...place, key: snapshotKey, run },
+    }),
+  );
+  return { snapshot: query.data, error: query.error, refresh: query.refresh };
+}
+
 /** A run's steps and the change they make, on this computer, read again when it moves. */
 export function useRoomSteps(input: {
   readonly environmentId: EnvironmentId;

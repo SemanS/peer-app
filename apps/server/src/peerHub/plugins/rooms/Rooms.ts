@@ -17,6 +17,8 @@ import {
   type PeerRoomsPassInput,
   type PeerRoomsDiffInput,
   type PeerRoomsStepsInput,
+  type PeerRoomSnapshot,
+  type PeerRoomsSnapshotInput,
   type PeerRoomsThreadInput,
   type PeerRoomThread,
   type PeerRoomsPlace,
@@ -27,6 +29,7 @@ import {
   type PeerRoomsWithdrawInput,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -38,6 +41,13 @@ import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import type { PeerSessionView } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
+import {
+  handoffRunPrefix,
+  messageKey,
+  pinWork,
+  sealWork,
+  shareWork,
+} from "../../core/workSnapshots.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import { runKeys } from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
@@ -45,6 +55,7 @@ import { checkoutKind } from "../../core/vcs.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { changeToReview, pushedRefs, roomDiff, workRun, worktreeOf } from "./client/diff.ts";
 import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/steps.ts";
+import { fetchPins, newestHandoff, readPin, storeOf } from "./client/snapshots.ts";
 import { runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
 import { capacityOf, checkoutOf, openRuns, roomStarts } from "./client/start.ts";
@@ -407,10 +418,25 @@ const make = Effect.gen(function* () {
     },
     /** An agent's post, from its run; `peer room say` and its tool go through here. */
     postAs: (session: PeerSessionView, run: string, body: Omit<PostBody, "environment" | "run">) =>
-      post(
-        { workspace: session.workspace, project: session.project, task: session.task ?? "" },
-        { ...body, run, environment: state.environmentId },
-      ),
+      Effect.gen(function* () {
+        const place = {
+          workspace: session.workspace,
+          project: session.project,
+          task: session.task ?? "",
+        };
+        // Sealed before the post, so the message is never ahead of the state it shows.
+        const at = DateTime.formatIso(DateTime.makeUnsafe(yield* Clock.currentTimeMillis));
+        const since = (yield* state.read).persisted.runs?.[run]?.startedAt;
+        const sealed = yield* Effect.promise(() =>
+          sealWork(session.root || session.cwd, at, since).catch(() => null),
+        );
+        const message = yield* post(place, { ...body, run, environment: state.environmentId });
+        if (sealed !== null) {
+          yield* Effect.promise(() => pinWork(sealed, place, messageKey(message.seq)));
+          yield* shareWork(plugins, sealed.gitDir, place);
+        }
+        return message;
+      }),
     // What was read leaves Needs you: the Hub's list changes, and no ping says so.
     seen: ({ seq, ...place }: PeerRoomsSeenInput) =>
       hub.seen(place, seq).pipe(after(place.workspace)),
@@ -494,6 +520,48 @@ const make = Effect.gen(function* () {
         });
         const folder = here?.root ?? checkout?.path;
         return folder === undefined ? diff : { ...diff, folder };
+      }),
+    /** The moment `key` pinned, wherever this computer can reach it; never today's state. */
+    snapshot: ({ key, run, ...place }: PeerRoomsSnapshotInput) =>
+      Effect.gen(function* () {
+        const room = { workspace: place.workspace, project: place.project, task: place.task };
+        const { checkout } = yield* workOf(place);
+        const here = run === undefined ? undefined : yield* workHere(place, checkout?.path, run);
+        const folders = [here?.root, checkout?.path].flatMap((folder) => folder ?? []);
+        const now = yield* Clock.currentTimeMillis;
+        return yield* Effect.promise(async (): Promise<PeerRoomSnapshot> => {
+          const stores = [
+            ...new Set((await Promise.all(folders.map(storeOf))).flatMap((store) => store ?? [])),
+          ];
+          const look = async () => {
+            for (const store of stores) {
+              const pin = await readPin(store, room, key).catch(() => null);
+              if (pin !== null) return { pin, store };
+            }
+            return undefined;
+          };
+          const found =
+            (await look()) ??
+            ((await Promise.all(stores.map((store) => fetchPins(store, room, now)))).some(Boolean)
+              ? await look()
+              : undefined);
+          const handoffs = await Promise.all(
+            run === undefined
+              ? []
+              : stores.map((store) => newestHandoff(store, room, handoffRunPrefix(run))),
+          );
+          const handoff = handoffs.find((one) => one !== undefined);
+          const named = handoff === undefined ? {} : { handoff };
+          if (found !== undefined) return { ...found.pin, ...named };
+          return {
+            state: "none",
+            reason:
+              stores.length === 0
+                ? "This computer has no checkout of the project, so it cannot read a kept state."
+                : "Peer kept no state of the work for this moment here. It is kept when an agent posts on Jujutsu, and reaches other computers when its author shares work in progress.",
+            ...named,
+          };
+        });
       }),
     waiting: queues.of,
     /** What a step may tell now, as the Hub says of each message. */

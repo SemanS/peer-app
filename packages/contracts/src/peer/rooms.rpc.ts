@@ -22,6 +22,8 @@ import {
   PeerRoomsDiffInput,
   PeerRoomSteps,
   PeerRoomsStepsInput,
+  PeerRoomSnapshot,
+  PeerRoomsSnapshotInput,
   PeerRoomsThreadInput,
   PeerRoomThread,
   PeerRoomsPostInput,
@@ -43,6 +45,7 @@ export const PEER_ROOMS_METHODS = {
   peerRoomsSetReach: "peer.rooms.setReach",
   peerRoomsDiff: "peer.rooms.diff",
   peerRoomsSteps: "peer.rooms.steps",
+  peerRoomsSnapshot: "peer.rooms.snapshot",
   peerRoomsThread: "peer.rooms.thread",
 } as const;
 
@@ -75,6 +78,11 @@ export const RoomsRpcGroup = RpcGroup.make(
   }),
   Rpc.make(methods.peerRoomsDiff, { payload: PeerRoomsDiffInput, success: PeerRoomDiff, error }),
   Rpc.make(methods.peerRoomsSteps, { payload: PeerRoomsStepsInput, success: PeerRoomSteps, error }),
+  Rpc.make(methods.peerRoomsSnapshot, {
+    payload: PeerRoomsSnapshotInput,
+    success: PeerRoomSnapshot,
+    error,
+  }),
   Rpc.make(methods.peerRoomsThread, {
     payload: PeerRoomsThreadInput,
     success: PeerRoomThread,
@@ -93,5 +101,6 @@ export const RoomsRpcScopes = {
   [methods.peerRoomsSetReach]: AuthOrchestrationOperateScope,
   [methods.peerRoomsDiff]: AuthOrchestrationReadScope,
   [methods.peerRoomsSteps]: AuthOrchestrationReadScope,
+  [methods.peerRoomsSnapshot]: AuthOrchestrationReadScope,
   [methods.peerRoomsThread]: AuthOrchestrationReadScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof RoomsRpcGroup>["_tag"], AuthEnvironmentScope>;

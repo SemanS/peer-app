@@ -9,6 +9,7 @@ import {
   type RoomPlace,
   type RoomTargetChoice,
 } from "@t3tools/client-runtime/peer/rooms";
+import type { PeerRoomSnapshot } from "@t3tools/contracts";
 import {
   PeerRoomAnchor,
   type PeerRoomCapacity,
@@ -333,6 +334,27 @@ export function stepLine(step: Pick<PeerRoomStep, "files" | "added" | "removed">
     counts: [
       ...(step.added > 0 ? [`+${step.added}`] : []),
       ...(step.removed > 0 ? [`−${step.removed}`] : []),
+    ].join(" "),
+  };
+}
+
+/** What a kept state holds, in words: its change, or its first change and how many more. */
+export function snapshotLine(
+  snapshot: Pick<
+    Extract<PeerRoomSnapshot, { state: "here" }>,
+    "changes" | "files" | "added" | "removed"
+  >,
+) {
+  const [first, ...rest] = snapshot.changes;
+  return {
+    change:
+      first === undefined
+        ? undefined
+        : `${first.slice(0, 8)}${rest.length === 0 ? "" : ` +${rest.length}`}`,
+    counts: [
+      `${snapshot.files} ${snapshot.files === 1 ? "file" : "files"}`,
+      ...(snapshot.added > 0 ? [`+${snapshot.added}`] : []),
+      ...(snapshot.removed > 0 ? [`−${snapshot.removed}`] : []),
     ].join(" "),
   };
 }

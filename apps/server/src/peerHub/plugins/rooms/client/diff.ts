@@ -74,7 +74,7 @@ async function baseRef(cwd: string, base: string) {
   return null;
 }
 
-const DIFF = ["diff", "--no-color", "--no-ext-diff", "--find-renames"] as const;
+export const DIFF = ["diff", "--no-color", "--no-ext-diff", "--find-renames"] as const;
 
 /**
  * The checkout against the merge base, uncommitted changes included. On the base branch itself that
@@ -90,7 +90,7 @@ async function runDiff(root: string, base: string): Promise<PeerRoomDiff | null>
   return { state: "here", source: "run", base: from, head, patch, truncated };
 }
 
-const FETCH = ["fetch", "--no-tags", "--no-write-fetch-head", "origin"] as const;
+export const FETCH = ["fetch", "--no-tags", "--no-write-fetch-head", "origin"] as const;
 
 /** Peer's own ref for a fetched branch: no branch moves, and `FETCH_HEAD` is the person's. */
 const privateRef = (ref: string) =>

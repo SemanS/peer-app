@@ -700,6 +700,11 @@ export interface PeerRuntimeProvider {
 export interface PeerTaskLauncher {
   /** Why it cannot launch now ("herdr is not running …"), or null. */
   readonly unavailable: Effect.Effect<string | null>;
+  /**
+   * Whether the agent of one of these threads runs and waits on a person before it can start its
+   * session, so that no hook has said a word of it yet.
+   */
+  readonly waiting?: (threads: ReadonlyArray<string>) => boolean;
   readonly launch: (input: {
     readonly checkout: string;
     readonly baseBranch: string;

@@ -20,6 +20,7 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { Button } from "../../ui/button";
 import { SidebarInset } from "../../ui/sidebar";
 import { Toggle, ToggleGroup } from "../../ui/toggle-group";
+import { AgentTrustQuestion } from "../herdr/AgentTrustQuestion";
 import { FILE_TREE_PATHS_DRAG_TYPE, fileTreePathsOf } from "../../files/fileTreeDragMention";
 import { PeerPageHeader } from "../PeerPageHeader";
 import { findTask } from "../task/task.logic";
@@ -344,6 +345,19 @@ function RoomBody({
               setFocus({ anchor, ask: (focus?.ask ?? 0) + 1 });
             }}
           />
+          {status.agents.list
+            .filter(
+              (agent) =>
+                agent.trust === true &&
+                agent.task === place.task &&
+                agent.projectId === place.project &&
+                agent.workspace === place.workspace,
+            )
+            .map((agent) => (
+              <div key={agent.id} className="border-t border-border p-3">
+                <AgentTrustQuestion environmentId={environmentId} agent={agent} />
+              </div>
+            ))}
           {canPost ? (
             <RoomComposer
               environmentId={environmentId}

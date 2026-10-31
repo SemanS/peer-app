@@ -34,6 +34,8 @@ export interface HereRun {
   readonly running?: boolean;
   /** Its person continues it where it ran (a terminal, an editor); Peer cannot. */
   readonly staysPut?: boolean;
+  /** Its agent runs and waits on its person before its session can start: not lost, however long. */
+  readonly waiting?: boolean;
 }
 
 export type Decision =
@@ -51,6 +53,9 @@ export type Decision =
   | { readonly do: "take-review" }
   | { readonly do: "take-start" }
   | { readonly do: "fail"; readonly reason: string };
+
+/** How often a delivery looks again at an agent that waits on its person. */
+const WAITING_REREAD_MS = 15_000;
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
@@ -92,6 +97,7 @@ export function decide(
   if (delivery.state === "taken") {
     if (named === undefined) return { do: "nothing" };
     if (reached?.live === true) return { do: "offer", run: named };
+    if (reached?.waiting === true) return { do: "wait", ms: WAITING_REREAD_MS };
     return stood >= PEER_ROOM_START_GRACE_MS
       ? { do: "lost", run: named }
       : { do: "wait", ms: PEER_ROOM_START_GRACE_MS - Math.max(0, stood) };

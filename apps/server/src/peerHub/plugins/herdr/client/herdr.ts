@@ -318,6 +318,30 @@ export async function readHerdrAgent(
     : { kind: "unavailable" };
 }
 
+/** What an agent's terminal shows now, which herdr reads whatever the agent does; null when it cannot. */
+export async function readHerdrScreen(
+  paneId: string,
+  socketPath: string = herdrSocketPath(),
+): Promise<string | null> {
+  const result = await call(socketPath, "agent.read", {
+    target: paneId,
+    source: "visible",
+    format: "text",
+    strip_ansi: true,
+  }).catch(() => null);
+  const decoded = decodePaneRead(result);
+  return Option.isSome(decoded) ? decoded.value.read.text : null;
+}
+
+/** Presses keys in an agent's terminal, with herdr's names for them. */
+export async function sendHerdrKeys(
+  target: string,
+  keys: ReadonlyArray<string>,
+  socketPath: string = herdrSocketPath(),
+): Promise<void> {
+  await call(socketPath, "agent.send_keys", { target, keys });
+}
+
 /** What a view says while herdr will not read the agent's history: it can be read once the agent pauses. */
 export function herdrNotIdleHint(status: PeerWorkStatus): string {
   if (status === "blocked") return "blocked — output appears once it is answered";

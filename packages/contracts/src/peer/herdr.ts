@@ -27,6 +27,10 @@ export const PeerLocalAgent = Schema.Struct({
   asks: Schema.optional(
     Schema.Struct({ kind: Schema.Literals(["question", "words"]), text: Schema.String }),
   ),
+  /** It waits on its harness's question whether to trust its folder, which it asks before anything else. */
+  trust: Schema.optional(Schema.Boolean),
+  /** The task of its run, while it waits on `trust`: the room that shows the question. */
+  task: Schema.optional(Schema.String),
   cwd: Schema.optional(Schema.String),
   branch: Schema.optional(Schema.String),
   /** Its repository is Jujutsu, colocated with Git; absent means Git (older Peers and Hubs). */
@@ -74,6 +78,13 @@ export const PeerHubPromptAgentInput = Schema.Struct({
   text: TrimmedNonEmptyString.check(Schema.isMaxLength(20_000)),
 });
 export type PeerHubPromptAgentInput = typeof PeerHubPromptAgentInput.Type;
+
+/** The person's answer to `PeerLocalAgent.trust`. */
+export const PeerHubAnswerAgentTrustInput = Schema.Struct({
+  agentId: TrimmedNonEmptyString,
+  trust: Schema.Boolean,
+});
+export type PeerHubAnswerAgentTrustInput = typeof PeerHubAnswerAgentTrustInput.Type;
 
 /** The coding agents herdr can hook into, to resume them after herdr restarts. */
 export const PeerHerdrIntegrationAgent = Schema.Literals(["claude", "codex"]);

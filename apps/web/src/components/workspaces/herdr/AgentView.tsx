@@ -18,6 +18,7 @@ import { useIsLocalDesktop } from "./localDesktop";
 import { observedPathsLine } from "../vcsWords";
 import { StatusGlyph } from "../workStatus";
 import { failureMessage, usePeerHubStatus } from "../WorkspaceAccess";
+import { AgentTrustQuestion } from "./AgentTrustQuestion";
 
 /**
  * One of this computer's herdr agents, in Peer: what it has done so far (from
@@ -38,6 +39,7 @@ export function AgentView({ agentId }: { readonly agentId: string }) {
   const openWindow = useIsLocalDesktop(environmentId);
   const focusAgent = useAtomCommand(serverEnvironment.peerHubFocusAgent, { reportFailure: false });
   const status = usePeerHubStatus(environmentId);
+  const trust = status?.agents.list.find((agent) => agent.id === agentId && agent.trust === true);
   const local = status?.agents.list.find(
     (agent) => agent.id === agentId || agent.paneId === view?.paneId,
   );
@@ -132,7 +134,15 @@ export function AgentView({ agentId }: { readonly agentId: string }) {
           </div>
         )}
         <AgentTimeline view={view} />
-        <AgentComposer environmentId={environmentId} view={view} />
+        {trust !== undefined && environmentId !== null ? (
+          <div className="border-t border-border px-6 py-3">
+            <div className="mx-auto w-full max-w-3xl">
+              <AgentTrustQuestion environmentId={environmentId} agent={trust} />
+            </div>
+          </div>
+        ) : (
+          <AgentComposer environmentId={environmentId} view={view} />
+        )}
       </div>
     </SidebarInset>
   );

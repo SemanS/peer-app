@@ -90,6 +90,14 @@ describe("decide", () => {
       });
     });
 
+    it("never calls an agent that waits on its person lost, and looks again", () => {
+      const asking = { ...detached, waiting: true };
+      assert.deepStrictEqual(decide(passed(target), target, [asking], BOB, 3_600_000), {
+        do: "wait",
+        ms: 15_000,
+      });
+    });
+
     it("calls it lost after the grace, and never gives it another run", () => {
       assert.deepStrictEqual(decide(passed(target), target, [live], BOB, 120_000), {
         do: "lost",

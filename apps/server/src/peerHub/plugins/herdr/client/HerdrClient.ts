@@ -12,6 +12,8 @@ import {
   listHerdrAgents,
   notifyHerdr,
   promptHerdrAgent,
+  readHerdrScreen,
+  sendHerdrKeys,
   readHerdrAgent,
   wakeHerdrAgent,
   type HerdrAgent,
@@ -39,6 +41,14 @@ export interface HerdrClientShape {
   readonly list: (socketPath?: string) => Promise<ReadonlyArray<HerdrAgent> | null>;
   /** The end of an agent's terminal. */
   readonly read: (paneId: string, socketPath?: string) => Promise<HerdrRead>;
+  /** What an agent's terminal shows now; null when herdr cannot say. */
+  readonly screen: (paneId: string, socketPath?: string) => Promise<string | null>;
+  /** Presses keys in an agent's terminal. */
+  readonly keys: (
+    target: string,
+    keys: ReadonlyArray<string>,
+    socketPath?: string,
+  ) => Promise<void>;
   /** Types a prompt into an agent (by its live name or its pane) and sends it. */
   readonly prompt: (target: string, text: string, socketPath?: string) => Promise<void>;
   /** Wakes an idle agent with `text`, once herdr confirms it is still the one expected. */
@@ -68,6 +78,8 @@ export class HerdrClient extends Context.Reference<HerdrClientShape>(
         }),
       list: (socketPath) => listHerdrAgents(socketPath),
       read: (paneId, socketPath) => readHerdrAgent(paneId, undefined, socketPath),
+      screen: (paneId, socketPath) => readHerdrScreen(paneId, socketPath),
+      keys: (target, keys, socketPath) => sendHerdrKeys(target, keys, socketPath),
       prompt: (target, text, socketPath) => promptHerdrAgent(target, text, socketPath),
       wake: (expected, text, socketPath) => wakeHerdrAgent(expected, text, socketPath),
       focus: (paneId, socketPath) => focusHerdrAgent(paneId, socketPath),
@@ -90,6 +102,8 @@ export function boundHerdrClient(
     follow: (onChange, retryMs, socket) => client.follow(onChange, retryMs, socket ?? socketPath),
     list: (socket) => client.list(socket ?? socketPath()),
     read: (paneId, socket) => client.read(paneId, socket ?? socketPath()),
+    screen: (paneId, socket) => client.screen(paneId, socket ?? socketPath()),
+    keys: (target, keys, socket) => client.keys(target, keys, socket ?? socketPath()),
     prompt: (target, text, socket) => client.prompt(target, text, socket ?? socketPath()),
     wake: (expected, text, socket) => client.wake(expected, text, socket ?? socketPath()),
     focus: (paneId, socket) => client.focus(paneId, socket ?? socketPath()),

@@ -69,6 +69,8 @@ const standInHerdr = (agents: { current: ReadonlyArray<HerdrAgent> | null }) => 
     follow: () => ({ read: async () => agents.current, live: () => false, close: () => undefined }),
     list: async () => agents.current,
     read: async () => ({ kind: "unavailable" }),
+    screen: async () => null,
+    keys: async () => undefined,
     prompt: async (target, text) => void asked.push(`prompt ${target}: ${text}`),
     wake: async (expected, text) => {
       asked.push(`wake ${expected.paneId}: ${text}`);

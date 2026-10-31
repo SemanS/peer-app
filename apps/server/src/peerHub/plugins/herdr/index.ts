@@ -38,6 +38,12 @@ export const HerdrPlugin = bindPlugin({
               wrap.stream(PEER_HERDR_METHODS.peerHubWatchAgent, herdr.watch(input), TRACE),
             [PEER_HERDR_METHODS.peerHubPromptAgent]: (input) =>
               wrap.effect(PEER_HERDR_METHODS.peerHubPromptAgent, herdr.prompt(input), TRACE),
+            [PEER_HERDR_METHODS.peerHubAnswerAgentTrust]: (input) =>
+              wrap.effect(
+                PEER_HERDR_METHODS.peerHubAnswerAgentTrust,
+                herdr.answerTrust(input),
+                TRACE,
+              ),
             [PEER_HERDR_METHODS.peerHerdrSetRuntime]: (input) =>
               wrap.effect(PEER_HERDR_METHODS.peerHerdrSetRuntime, runtime.setRuntime(input), TRACE),
             [PEER_HERDR_METHODS.peerHerdrRestartRuntime]: () =>

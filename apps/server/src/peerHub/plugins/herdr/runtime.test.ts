@@ -41,6 +41,8 @@ const clientAsking = (
   },
   list: async (socket) => (asked.push(`list ${socket}`), listed),
   read: async () => ({ kind: "unavailable" }),
+  screen: async () => null,
+  keys: async () => undefined,
   prompt: async () => undefined,
   wake: async () => ({ status: "queued" }),
   focus: async (pane, socket) => void asked.push(`focus ${pane} ${socket}`),

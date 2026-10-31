@@ -5,9 +5,18 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import { afterEach, assert, describe, it } from "@effect/vitest";
+import type { PeerTask } from "@t3tools/contracts";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as TestClock from "effect/testing/TestClock";
 
+import { HerdrClient, type HerdrClientShape } from "./client/HerdrClient.ts";
+import type { HerdrAgent } from "./client/herdr.ts";
 import { readHerdrChangedPaths } from "./client/observations.ts";
 import { prepareHerdrTaskWorktree } from "./client/worktree.ts";
+import type { HerdrAgents, HerdrAgentState } from "./follower.ts";
+import { makeLauncher } from "./launcher.ts";
+import { HerdrRuntime } from "./runtime.ts";
 
 /** Temporary directories a test made, removed when it ends, even by failing. */
 const removed: Array<string> = [];
@@ -132,4 +141,76 @@ describe("task worktree", () => {
       "KRK-2",
     );
   });
+});
+
+describe("an agent that asks to trust its folder", () => {
+  it.effect("keeps its prompt until the person trusts it, and counts as waiting meanwhile", () =>
+    Effect.gen(function* () {
+      const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-trust-"));
+      removed.push(directory);
+      const checkout = NodePath.join(directory, "checkout");
+      NodeFS.mkdirSync(checkout);
+      const git = (...args: string[]) =>
+        NodeChildProcess.execFileSync("git", ["-C", checkout, ...args], { encoding: "utf8" });
+      git("init", "-b", "main");
+      NodeFS.writeFileSync(NodePath.join(checkout, "base.ts"), "base\n");
+      git("add", ".");
+      git("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "base");
+
+      const agent: HerdrAgentState = {
+        paneId: "w1:p1",
+        terminalId: "t1",
+        name: "peer-1",
+        agent: "claude",
+        status: "blocked",
+        title: "claude",
+        branch: undefined,
+      } as HerdrAgentState;
+      let current: ReadonlyArray<HerdrAgentState> = [agent];
+      const typed: Array<string> = [];
+      const client = {
+        start: async () => ({ paneId: "w1:p1", terminalId: "t1" }),
+        screen: async () =>
+          "one you trust?\n\n ❯ No, exit\n   Yes, I trust this folder\n\n Enter to confirm",
+        prompt: async (_target: string, text: string) => void typed.push(text),
+      } as unknown as HerdrClientShape;
+      const agents = {
+        current: () => current,
+        keyOf: (one: HerdrAgent) => `herdr:${one.terminalId}`,
+        refresh: Effect.void,
+      } as unknown as HerdrAgents;
+      const launcher = yield* makeLauncher(agents).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(HerdrClient, client),
+            Layer.succeed(HerdrRuntime, {
+              blocker: Effect.succeed(null),
+            } as unknown as HerdrRuntime["Service"]),
+          ),
+        ),
+      );
+
+      const started = yield* launcher.launch({
+        checkout,
+        baseBranch: "main",
+        worktrees: NodePath.join(directory, "trees"),
+        task: { id: "task", key: "KRK-1" } as PeerTask,
+        harness: "claude",
+        prompt: "The first prompt.",
+        env: {},
+      });
+      assert.isUndefined(started.promptError);
+      assert.deepStrictEqual(typed, []);
+      assert.isTrue(launcher.waiting(["herdr:t1"]));
+
+      yield* launcher.answered("t1", true);
+      current = [{ ...agent, status: "idle" }];
+      assert.isTrue(launcher.waiting(["herdr:t1"]));
+      yield* TestClock.adjust("1 second");
+      yield* Effect.promise(() => new Promise((resolve) => setImmediate(resolve)));
+      assert.deepStrictEqual(typed, ["The first prompt."]);
+      yield* TestClock.adjust("31 seconds");
+      assert.isFalse(launcher.waiting(["herdr:t1"]));
+    }).pipe(Effect.scoped),
+  );
 });

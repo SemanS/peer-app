@@ -137,6 +137,9 @@ const make = Effect.gen(function* () {
         ),
       );
       const open = yield* openRuns(state, placeOf(workspace, item));
+      const launcher = yield* plugins
+        .require("taskLauncher")
+        .pipe(Effect.orElseSucceed(() => undefined));
       // Before the first work report nothing says which thread carries a run.
       const read = (yield* work.latestPass) !== null;
       return yield* Effect.forEach(
@@ -152,6 +155,7 @@ const make = Effect.gen(function* () {
                 capacity,
                 running: run?.sessions.some((session) => session.to === undefined) === true,
                 staysPut: run?.runtime === "terminal" || run?.runtime === "mcp",
+                waiting: run !== undefined && launcher?.waiting?.(runKeys(run)) === true,
               };
             },
           ),

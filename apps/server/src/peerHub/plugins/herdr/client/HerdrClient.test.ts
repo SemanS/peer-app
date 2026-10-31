@@ -15,6 +15,8 @@ function recordingClient() {
     },
     list: async (socket) => (note("list", socket), null),
     read: async (_pane, socket) => (note("read", socket), { kind: "unavailable" }),
+    screen: async (_paneId, socket) => (note("screen", socket), null),
+    keys: async (_target, _keys, socket) => note("keys", socket),
     prompt: async (_target, _text, socket) => note("prompt", socket),
     wake: async (_agent, _text, socket) => (note("wake", socket), { status: "queued" }),
     focus: async (_pane, socket) => note("focus", socket),

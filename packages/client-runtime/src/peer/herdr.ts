@@ -161,6 +161,10 @@ export function createPeerHerdrAtoms<R, ER>(
       label: "environment-data:peer-hub:prompt-agent",
       tag: WS_METHODS.peerHubPromptAgent,
     }),
+    peerHubAnswerAgentTrust: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:answer-agent-trust",
+      tag: WS_METHODS.peerHubAnswerAgentTrust,
+    }),
     /** Peer's own herdr: turn it off or on, restart it, open a terminal on it, install its hooks. */
     peerHerdrSetRuntime: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-herdr:set-runtime",

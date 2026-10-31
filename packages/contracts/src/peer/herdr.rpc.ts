@@ -20,6 +20,7 @@ import {
   PeerHerdrSetIntegrationInput,
   PeerHerdrSetRuntimeInput,
   PeerHubAgentInput,
+  PeerHubAnswerAgentTrustInput,
   PeerHubFocusAgentInput,
   PeerHubPromptAgentInput,
 } from "./herdr.ts";
@@ -28,6 +29,7 @@ export const PEER_HERDR_METHODS = {
   peerHubFocusAgent: "peerHub.focusAgent",
   peerHubWatchAgent: "peerHub.watchAgent",
   peerHubPromptAgent: "peerHub.promptAgent",
+  peerHubAnswerAgentTrust: "peerHub.answerAgentTrust",
   peerHerdrSetRuntime: "peer.herdr.setRuntime",
   peerHerdrRestartRuntime: "peer.herdr.restartRuntime",
   peerHerdrOpenTerminal: "peer.herdr.openTerminal",
@@ -50,6 +52,12 @@ const WsPeerHubWatchAgentRpc = Rpc.make(PEER_HERDR_METHODS.peerHubWatchAgent, {
 
 const WsPeerHubPromptAgentRpc = Rpc.make(PEER_HERDR_METHODS.peerHubPromptAgent, {
   payload: PeerHubPromptAgentInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerHubAnswerAgentTrustRpc = Rpc.make(PEER_HERDR_METHODS.peerHubAnswerAgentTrust, {
+  payload: PeerHubAnswerAgentTrustInput,
   success: PeerHubStatus,
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
@@ -83,6 +91,7 @@ export const HerdrRpcGroup = RpcGroup.make(
   WsPeerHubFocusAgentRpc,
   WsPeerHubWatchAgentRpc,
   WsPeerHubPromptAgentRpc,
+  WsPeerHubAnswerAgentTrustRpc,
   PeerHerdrSetRuntimeRpc,
   PeerHerdrRestartRuntimeRpc,
   PeerHerdrOpenTerminalRpc,
@@ -97,6 +106,7 @@ export const HerdrRpcScopes = {
   [PEER_HERDR_METHODS.peerHubFocusAgent]: AuthOrchestrationOperateScope,
   [PEER_HERDR_METHODS.peerHubWatchAgent]: AuthOrchestrationReadScope,
   [PEER_HERDR_METHODS.peerHubPromptAgent]: AuthOrchestrationOperateScope,
+  [PEER_HERDR_METHODS.peerHubAnswerAgentTrust]: AuthOrchestrationOperateScope,
   [PEER_HERDR_METHODS.peerHerdrSetRuntime]: AuthOrchestrationOperateScope,
   [PEER_HERDR_METHODS.peerHerdrRestartRuntime]: AuthOrchestrationOperateScope,
   [PEER_HERDR_METHODS.peerHerdrOpenTerminal]: AuthOrchestrationOperateScope,

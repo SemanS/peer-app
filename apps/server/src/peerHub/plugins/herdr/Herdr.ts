@@ -14,6 +14,7 @@ import {
   PeerAgentView,
   PeerHubError,
   type PeerHubAgentInput,
+  type PeerHubAnswerAgentTrustInput,
   type PeerHubFocusAgentInput,
   type PeerHubPromptAgentInput,
   type PeerHubStatus,
@@ -46,9 +47,11 @@ import { boundHerdrClient, HerdrClient } from "./client/HerdrClient.ts";
 import { boundHerdrObservations } from "./client/observations.ts";
 import { makeTaskCheckouts, realDirectory } from "./client/checkouts.ts";
 import { makeHerdrAgents, type HerdrAgentState } from "./follower.ts";
+import { trustKeys, trustQuestionOf } from "./client/trust.ts";
 import { makeLauncher } from "./launcher.ts";
 import * as Runtime from "./runtime.ts";
 
+const TRUST_QUESTION = "Do you trust this folder?";
 const sameAgentView = Schema.toEquivalence(PeerAgentView);
 const hubError = (detail: string) => new PeerHubError({ detail });
 
@@ -71,6 +74,10 @@ export class Herdr extends Context.Service<
     readonly watch: (input: PeerHubAgentInput) => Stream.Stream<PeerAgentView>;
     /** Sends one of this computer's herdr agents a prompt, as if typed in its terminal. */
     readonly prompt: (input: PeerHubPromptAgentInput) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    /** Answers the question whether to trust an agent's folder, once its terminal still shows it. */
+    readonly answerTrust: (
+      input: PeerHubAnswerAgentTrustInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     /**
      * A coordination report with herdr's agents that Peer's hooks did not report, and the files
      * they changed as seen after the fact, within the Hub's bound.
@@ -178,15 +185,41 @@ const make = Effect.gen(function* () {
       return asks;
     });
 
+  /**
+   * Whether a blocked agent asks to trust its folder. It asks before its session starts, so no
+   * transcript or hook knows; the screen is read once per terminal.
+   */
+  const trusting = new Map<string, boolean>();
+  const trustOf = (agent: HerdrAgentState) =>
+    Effect.gen(function* () {
+      if (agent.status !== "blocked" || sessionOf(agent) !== undefined) return false;
+      const known = trusting.get(agent.terminalId);
+      if (known !== undefined) return known;
+      const screen = yield* Effect.promise(() => client.screen(agent.paneId));
+      if (screen === null) return false;
+      const found = trustQuestionOf(screen) !== null;
+      if (trusting.size >= 64) trusting.clear();
+      trusting.set(agent.terminalId, found);
+      return found;
+    });
+
   const agentsNow: Herdr["Service"]["agents"] = Effect.gen(function* () {
     const { persisted } = yield* state.read;
     const list = agents.current();
     const views: PeerLocalAgent[] = [];
     for (const agent of list ?? []) {
       const asks = yield* asksOf(agent);
+      const view = localAgentView(persisted, agent);
+      const trust = yield* trustOf(agent);
+      const task =
+        trust && view.workspace !== undefined && view.projectId !== undefined
+          ? yield* taskOf(`herdr:${agent.terminalId}`, view.workspace, view.projectId)
+          : undefined;
       views.push({
-        ...localAgentView(persisted, agent),
+        ...view,
         ...(asks === undefined ? {} : { asks }),
+        ...(trust ? { trust, asks: { kind: "question" as const, text: TRUST_QUESTION } } : {}),
+        ...(task === undefined ? {} : { task }),
       });
     }
     return {
@@ -449,6 +482,23 @@ const make = Effect.gen(function* () {
     return yield* status.publish;
   });
 
+  const answerTrust: Herdr["Service"]["answerTrust"] = Effect.fn("Herdr.answerTrust")(
+    function* (input) {
+      const agent = agentOf(input.agentId);
+      if (agent === undefined) return yield* hubError("That agent no longer runs in herdr.");
+      const screen = yield* Effect.promise(() => client.screen(agent.paneId));
+      const question = screen === null ? null : trustQuestionOf(screen);
+      if (question === null) return yield* hubError("It no longer asks that.");
+      yield* Effect.tryPromise(() =>
+        client.keys(agent.name ?? agent.paneId, trustKeys(question, input.trust)),
+      ).pipe(Effect.mapError(() => hubError("herdr did not take the answer.")));
+      trusting.delete(agent.terminalId);
+      yield* launcher.answered(agent.terminalId, input.trust);
+      yield* agents.refresh;
+      return yield* status.publish;
+    },
+  );
+
   return Herdr.of({
     agents: agentsNow,
     follow: Effect.forkScoped(checkouts.run).pipe(Effect.andThen(agents.follow)),
@@ -458,6 +508,7 @@ const make = Effect.gen(function* () {
     focus,
     watch,
     prompt,
+    answerTrust,
     reportSessions,
   });
 });

@@ -4,7 +4,8 @@
  * a new branch, the agent in a pane of Peer's own herdr workspace, then its first prompt once it is
  * ready for one. Core has checked the task, taken the team request it answers and created the run
  * the agent starts in; the run holds the agent's thread once it runs. A continued run's agent
- * resumes its last provider session where it is known.
+ * resumes its last provider session where it is known. An agent stopped by its harness's question
+ * whether to trust the new checkout keeps its prompt here until the person answers (`answered`).
  *
  * @module peerHub/plugins/herdr/launcher
  */
@@ -12,9 +13,11 @@ import * as NodeFSP from "node:fs/promises";
 
 import { PeerHubError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 
 import type { PeerTaskLauncher } from "../../core/plugin.ts";
 import { HerdrClient } from "./client/HerdrClient.ts";
+import { trustQuestionOf } from "./client/trust.ts";
 import { prepareHerdrTaskWorktree } from "./client/worktree.ts";
 import type { HerdrAgents } from "./follower.ts";
 import { HerdrRuntime } from "./runtime.ts";
@@ -24,13 +27,60 @@ type LaunchInput = Parameters<PeerTaskLauncher["launch"]>[0];
 const hubError = (detail: string) => new PeerHubError({ detail });
 const messageOf = (failure: unknown) => (failure instanceof Error ? failure.message : undefined);
 
+/** How long a trusted agent gets to come up and take its prompt, polled every `PROMPT_POLL_MS`. */
+const PROMPT_TRIES = 120;
+const PROMPT_POLL_MS = 500;
+/** After its prompt, for its first hook to arrive before it stops counting as waiting. */
+const SESSION_SETTLES_MS = 30_000;
+
 /** Launches task agents in herdr, showing each among herdr's agents at once. */
 export const makeLauncher = (agents: HerdrAgents) =>
   Effect.gen(function* () {
     const client = yield* HerdrClient;
     const runtime = yield* HerdrRuntime;
+    const scope = yield* Effect.scope;
+    /** Terminal → the prompt it gets once trusted, from the launch until its session has settled. */
+    const held = new Map<string, string | undefined>();
+
+    const agentIn = (terminal: string) =>
+      agents.current()?.find((agent) => agent.terminalId === terminal);
+
+    /** Types the held prompt as soon as the agent takes one; herdr refuses until it is ready. */
+    const promptOnceReady = (terminal: string) =>
+      Effect.gen(function* () {
+        const prompt = held.get(terminal) ?? "";
+        for (let tries = 0; prompt !== "" && tries < PROMPT_TRIES; tries++) {
+          yield* Effect.sleep(PROMPT_POLL_MS);
+          yield* agents.refresh;
+          const agent = agentIn(terminal);
+          if (agent === undefined) return;
+          if (agent.status === "blocked" || agent.status === "working") continue;
+          const sent = yield* Effect.tryPromise(() =>
+            client.prompt(agent.name ?? agent.paneId, prompt),
+          ).pipe(Effect.result);
+          if (Result.isSuccess(sent)) break;
+        }
+        yield* Effect.sleep(SESSION_SETTLES_MS);
+      }).pipe(Effect.ensuring(Effect.sync(() => held.delete(terminal))));
+
     return {
       unavailable: runtime.blocker,
+      waiting: (threads: ReadonlyArray<string>) =>
+        (agents.current() ?? []).some(
+          (agent) =>
+            (agent.status === "blocked" || held.has(agent.terminalId)) &&
+            (threads.includes(agents.keyOf(agent)) ||
+              threads.includes(`herdr:${agent.terminalId}`)),
+        ),
+      /** The person answered the agent in `terminal`: a yes delivers what the launch held. */
+      answered: (terminal: string, trust: boolean) =>
+        trust
+          ? Effect.sync(() => void held.set(terminal, held.get(terminal))).pipe(
+              Effect.andThen(promptOnceReady(terminal)),
+              Effect.forkIn(scope),
+              Effect.asVoid,
+            )
+          : Effect.sync(() => void held.delete(terminal)),
       launch: Effect.fn("Herdr.launch")(function* (input: LaunchInput) {
         const harness = input.harness;
         if (harness !== "claude" && harness !== "codex")
@@ -76,10 +126,14 @@ export const makeLauncher = (agents: HerdrAgents) =>
         if (agent === undefined)
           promptError =
             "The agent started but is not visible yet. Check herdr before sending its task prompt.";
-        else if (agent.status === "blocked")
-          promptError =
-            "The agent is waiting for an answer in herdr. Answer it there, then send the task prompt.";
-        else {
+        else if (agent.status === "blocked") {
+          const screen = yield* Effect.promise(() => client.screen(agent.paneId));
+          if (screen !== null && trustQuestionOf(screen) !== null)
+            held.set(agent.terminalId, input.prompt);
+          else
+            promptError =
+              "The agent is waiting for an answer in herdr. Answer it there, then send the task prompt.";
+        } else {
           const sent = yield* Effect.tryPromise(() =>
             client.prompt(agent.name ?? agent.paneId, input.prompt),
           ).pipe(Effect.result);
@@ -94,5 +148,7 @@ export const makeLauncher = (agents: HerdrAgents) =>
           worktree: { root: tree.cwd, identity: `${identity.dev}:${identity.ino}` },
         };
       }),
-    } satisfies PeerTaskLauncher;
+    } satisfies PeerTaskLauncher & {
+      readonly answered: (terminal: string, trust: boolean) => Effect.Effect<void>;
+    };
   });

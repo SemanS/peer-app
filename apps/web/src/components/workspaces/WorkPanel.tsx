@@ -1,5 +1,6 @@
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { needsByOpen } from "@t3tools/client-runtime/peer/work";
-import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
+import type { EnvironmentId, PeerHubStatus, ScopedProjectRef } from "@t3tools/contracts";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { FileTextIcon, MessagesSquareIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -9,7 +10,11 @@ import { SidebarMenu } from "../ui/sidebar";
 import { ProjectHistory } from "./ProjectHistory";
 import { ProjectSection } from "./ProjectSection";
 import { SignalTiles } from "./ProjectSignals";
-import { isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
+import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
+import { useThreadShells } from "../../state/entities";
+import { buildThreadRouteParams } from "../../threadRoutes";
+import { chatScopeKeys, isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
+import type { WorkActions } from "./useWorkActions";
 import { ShareProject } from "./ShareProject";
 import {
   NavRow,
@@ -28,7 +33,6 @@ import { useWorkData } from "./useWorkData";
 import { WorkNoProjects } from "./WorkNoProjects";
 import { ALL_PROJECTS, inScope, projectScopeKey } from "./workBoard.logic";
 import { sharedRoomsOf } from "./rooms/sharedRoom.logic";
-import type { WorkProjectNode } from "./workTree.logic";
 
 /**
  * The team's work in the sidebar, for the project the project button names (`scope`, which the root
@@ -56,8 +60,6 @@ export function WorkPanel({
       : tree.filter((project) =>
           members.some((member) => member.scope === projectScopeKey(project)),
         );
-  // Tasks and rooms live on the Hub, so a set's project that no workspace shares has neither.
-  const unshared = (members ?? []).filter((member) => isLocalScope(member.scope));
   const counts = sidebarNav(
     tree.filter((project) => inScope(scope, project)),
     needs,
@@ -122,13 +124,13 @@ export function WorkPanel({
               <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
             ) : !status.signedIn ? (
               <LocalProjectNote />
-            ) : local || (members !== undefined && listed.length === 0) ? (
+            ) : local ? (
               <LocalProjectNote />
             ) : current === undefined && scope !== ALL_PROJECTS && members === undefined ? (
               <p className="px-2 text-xs leading-relaxed text-muted-foreground">
                 No team tasks yet for this project.
               </p>
-            ) : tree.length === 0 ? (
+            ) : tree.length === 0 && members === undefined ? (
               status.workspaces.length === 0 ? (
                 <p className="px-2 text-xs leading-relaxed text-muted-foreground">
                   Join or create a workspace in Settings → Peer to work with your team.
@@ -162,30 +164,45 @@ export function WorkPanel({
                     {listed.length}
                   </span>
                 </WorkSectionLabel>
-                {listed.map((project) => (
-                  <ProjectDisclosure
-                    key={projectScopeKey(project)}
-                    project={project}
-                    needs={sidebarNav([project], needs).needs}
-                    defaultOpen={members !== undefined}
-                  >
-                    <ProjectSection
-                      environmentId={environmentId}
-                      status={status}
-                      project={project}
-                      plugins={plugins}
-                      activeThread={activeThread}
-                      actions={actions}
-                      needOf={needOf}
-                      heading={members !== undefined}
-                    />
-                  </ProjectDisclosure>
-                ))}
-                {unshared.map((member) => (
-                  <p key={member.scope} className="px-2 py-1 text-xs text-muted-foreground">
-                    {member.name} is only on this computer, so it has no team tasks.
-                  </p>
-                ))}
+                {(
+                  members ??
+                  listed.map((project) => ({
+                    scope: projectScopeKey(project),
+                    name: project.name,
+                    refs: null,
+                  }))
+                ).map((member) => {
+                  const project = listed.find((node) => projectScopeKey(node) === member.scope);
+                  return (
+                    <ProjectDisclosure
+                      key={member.scope}
+                      name={member.name ?? member.scope}
+                      colorKey={member.scope}
+                      needs={project === undefined ? null : sidebarNav([project], needs).needs}
+                      defaultOpen={members !== undefined}
+                    >
+                      {project === undefined ? (
+                        <UnsharedProject
+                          name={member.name ?? member.scope}
+                          refs={member.refs ?? []}
+                          status={status}
+                          actions={actions}
+                        />
+                      ) : (
+                        <ProjectSection
+                          environmentId={environmentId}
+                          status={status}
+                          project={project}
+                          plugins={plugins}
+                          activeThread={activeThread}
+                          actions={actions}
+                          needOf={needOf}
+                          heading={members !== undefined}
+                        />
+                      )}
+                    </ProjectDisclosure>
+                  );
+                })}
               </section>
             ) : (
               <ProjectSection
@@ -306,12 +323,14 @@ function LocalProjectNote() {
 }
 
 function ProjectDisclosure({
-  project,
+  name,
+  colorKey,
   children,
   needs,
   defaultOpen = false,
 }: {
-  readonly project: WorkProjectNode;
+  readonly name: string;
+  readonly colorKey: string;
   readonly children: ReactNode;
   readonly needs: number | null;
   /** A project set's projects stack open: their work is why they are grouped. */
@@ -325,8 +344,8 @@ function ProjectDisclosure({
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 rounded-md px-2 py-2 text-sm font-medium outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
-        <ProjectMark name={project.name} colorKey={projectScopeKey(project)} />
-        <span className="min-w-0 flex-1 truncate">{project.name}</span>
+        <ProjectMark name={name} colorKey={colorKey} />
+        <span className="min-w-0 flex-1 truncate">{name}</span>
         {needs === null ? null : <SignalCount tone="needs" count={needs} label="need you" />}
         <span aria-hidden className="text-muted-foreground group-open/project:rotate-90">
           ›
@@ -359,6 +378,79 @@ function SharedRooms({
           <span className="min-w-0 truncate">{room.title}</span>
         </Link>
       ))}
+    </div>
+  );
+}
+
+const UNSHARED_CHATS = 6;
+
+/**
+ * A workspace's project no Hub workspace shares: tasks and rooms live on the Hub, so it has its
+ * chats here, a new one, and the way to its tasks.
+ */
+function UnsharedProject({
+  name,
+  refs,
+  status,
+  actions,
+}: {
+  readonly name: string;
+  readonly refs: ReadonlyArray<ScopedProjectRef>;
+  readonly status: PeerHubStatus;
+  readonly actions: WorkActions;
+}) {
+  const keys = chatScopeKeys(refs);
+  const chats = useThreadShells()
+    .filter(
+      (thread) =>
+        thread.archivedAt === null &&
+        thread.lineage.relationshipToParent !== "subagent" &&
+        keys?.has(`${thread.environmentId}:${thread.projectId}`) === true,
+    )
+    .toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+    .slice(0, UNSHARED_CHATS);
+  const newThread = useNewThreadHandler();
+  const ref = refs[0];
+  return (
+    <div className="flex flex-col gap-1 pb-2">
+      <p className="px-2 py-0.5 text-xs text-muted-foreground">
+        Only on this computer, so it has no tasks or rooms until you share it.
+      </p>
+      {chats.map((thread) => (
+        <Link
+          key={thread.id}
+          to="/$environmentId/$threadId"
+          params={buildThreadRouteParams(scopeThreadRef(thread.environmentId, thread.id))}
+          className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1 text-sm text-foreground hover:bg-accent"
+          activeProps={{ className: "bg-accent" }}
+        >
+          <MessagesSquareIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 truncate">{thread.title}</span>
+        </Link>
+      ))}
+      {ref === undefined ? null : (
+        <div className="flex flex-wrap gap-1 px-2 pt-1">
+          <Button size="xs" variant="outline" onClick={() => void newThread(ref)}>
+            New chat
+          </Button>
+          {status.workspaces.map((workspace) => (
+            <Button
+              key={workspace.slug}
+              size="xs"
+              variant="outline"
+              onClick={() =>
+                void actions.shareProject(
+                  { id: ref.projectId, environmentId: ref.environmentId },
+                  name,
+                  workspace,
+                )
+              }
+            >
+              Share with {workspace.name}…
+            </Button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

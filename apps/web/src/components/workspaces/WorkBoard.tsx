@@ -103,6 +103,11 @@ export function WorkBoard() {
           members.some((member) => member.scope === projectScopeKey(project)),
         );
   const local = isLocalScope(scope);
+  const unshared = (members ?? []).flatMap((member) =>
+    tree.some((project) => projectScopeKey(project) === member.scope)
+      ? []
+      : [member.name ?? member.scope],
+  );
   const [layout, setLayout] = useLocalStorage("peer:work-board-layout", null, StoredLayout);
   const [whose, setWhose] = useLocalStorage("peer:work-board-whose", null, StoredWhose);
   const [storedTab, setTab] = useLocalStorage("peer:work-list-tab", null, StoredTab);
@@ -203,6 +208,12 @@ export function WorkBoard() {
         </WorkspacePageHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-(--workspace-page-gutter) pt-6 pb-12 sm:pt-8">
+          {unshared.length === 0 ? null : (
+            <p className="text-sm text-muted-foreground">
+              Tasks of {selected.name}. {unshared.join(", ")} only on this computer, so it has no
+              tasks here until you share it from the sidebar.
+            </p>
+          )}
           {status === null ? (
             <p role="status" className="text-sm text-muted-foreground">
               Connecting…

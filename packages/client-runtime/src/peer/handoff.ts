@@ -654,13 +654,15 @@ export function statusHandoffFacts(
 ):
   | { readonly facts: ReadonlyArray<HandoffFact>; readonly at: string; readonly author: string }
   | undefined {
-  const summary = summaryOf(status.handoff, {
-    workspace: place.workspace,
-    projectId: place.project,
-    taskId: place.task,
-  })
+  const summary = [
+    ...summaryOf(status.handoff, {
+      workspace: place.workspace,
+      projectId: place.project,
+      taskId: place.task,
+    }),
+  ]
     .filter((candidate) => candidate.source === "agent" && candidate.policy !== undefined)
-    .toSorted((a, b) => b.composedAt.localeCompare(a.composedAt))[0];
+    .sort((a, b) => b.composedAt.localeCompare(a.composedAt))[0];
   const policy = summary?.policy;
   if (summary === undefined || policy === undefined) return undefined;
   const raised = (signal: PeerReviewSignal) => policy.signals.includes(signal);

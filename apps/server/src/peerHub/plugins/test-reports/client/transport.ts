@@ -42,7 +42,7 @@ export const testsTools = [
   {
     name: "peer_tests",
     description:
-      'File a test report on your task (action file: result pass|fail|mixed, summary, pass/fail/unverified item lists; end an unverified item with " @person" to name its owner), or read a task\'s reports (action show).',
+      'File a test report on your task (action file: result pass|fail|mixed, summary, pass/fail/unverified item lists; end an unverified item with " @person" to name its owner, or an unverified or failed item with " @task:<key>" to leave it to a task that depends on this one), or read a task\'s reports (action show).',
     command: "tests",
     inputSchema: {
       type: "object",

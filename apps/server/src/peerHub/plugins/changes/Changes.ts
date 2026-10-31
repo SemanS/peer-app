@@ -43,9 +43,10 @@ import {
 } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
-import { checkoutKind, forgetCheckoutKind } from "../../core/vcs.ts";
+import { checkoutKind, forgetCheckoutKind, jjWorkspaces } from "../../core/vcs.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import * as Jj from "./client/jj.ts";
+import { parkedRow, taskOfWorkspace } from "./client/parked.ts";
 import { reviewDiffFor } from "./client/review.ts";
 import * as Stack from "./client/stack.ts";
 import { changesHub } from "./hub.ts";
@@ -53,6 +54,8 @@ import { indexText, startLine, type IndexRow, type Voice } from "./text.ts";
 
 /** A session's report goes out at most this often. */
 export const REPORT_EVERY_MS = 10_000;
+/** How long what task workspaces hold is kept: jj is read per view, and nothing else moves it. */
+const PARKED_TTL_MS = 15_000;
 /** A report or withdrawal the Hub could not take is tried again after this long, or at a resync. */
 const RETRY_MS = 30_000;
 /** A report that says what the last one did is not sent again until the Hub's row would age. */
@@ -154,6 +157,7 @@ const make = Effect.gen(function* () {
   const views = new Map<string, Map<string, ReadonlyArray<ChangeRow>>>();
   const readAt = new Map<string, string>();
   const landed = new Map<string, { until: number; value: ProjectChanges["landed"] }>();
+  const parked = new Map<string, { until: number; rows: ReadonlyArray<ChangeRow> }>();
   /** Sessions that ended while the Hub could not hear it. */
   const withdrawals = new Map<string, { workspace: string; project: string; session: string }>();
   let retryAt: number | undefined;
@@ -404,6 +408,57 @@ const make = Effect.gen(function* () {
       }),
     );
 
+  /** The work left in task workspaces here, which no session reports any more. */
+  const parkedOf = (
+    workspace: string,
+    project: string,
+    reported: ReadonlySet<string>,
+  ): Effect.Effect<ReadonlyArray<ChangeRow>> =>
+    Effect.gen(function* () {
+      const key = `${workspace}/${project}`;
+      const at = yield* now;
+      const cached = parked.get(key);
+      if (cached !== undefined && cached.until > at) return cached.rows;
+      const place = yield* checkoutOf(workspace, project).pipe(Effect.option);
+      if (Option.isNone(place)) return [];
+      const persisted = (yield* state.read).persisted;
+      const tasks = yield* work.tasks(workspace, project);
+      const stamp = DateTime.formatIso(DateTime.makeUnsafe(at));
+      const rows = yield* Effect.promise(async () => {
+        const found: Array<ChangeRow> = [];
+        for (const { name, root } of await jjWorkspaces(place.value.cwd).catch(() => [])) {
+          const task = taskOfWorkspace(name, tasks);
+          if (task === undefined) continue;
+          const read = await Jj.attempt(() => Stack.readOwn(root));
+          if (!read.ok) continue;
+          const made = await Jj.attempt(() =>
+            Stack.reportedChanges(root, read.value.own, new Map()),
+          );
+          if (!made.ok) continue;
+          const agent = Object.values(persisted.runs ?? {}).findLast(
+            (run) => run.workspace === workspace && run.project === project && run.task === task.id,
+          )?.agent;
+          found.push(
+            ...made.value.map((change) =>
+              parkedRow(change, {
+                project,
+                task: task.key ?? task.id,
+                email: persisted.email ?? "",
+                agent: agent ?? "agent",
+                at: stamp,
+              }),
+            ),
+          );
+        }
+        return found;
+      });
+      parked.set(key, { until: at + PARKED_TTL_MS, rows });
+      return rows;
+    }).pipe(
+      Effect.map((rows) => rows.filter((row) => !reported.has(row.changeId))),
+      Effect.orElseSucceed((): ReadonlyArray<ChangeRow> => []),
+    );
+
   const compose = (workspace: string, project: string): Effect.Effect<ProjectChanges> =>
     Effect.gen(function* () {
       const live = new Set(
@@ -411,12 +466,20 @@ const make = Effect.gen(function* () {
           .filter((rec) => rec.workspace === workspace && rec.project === project)
           .flatMap((rec) => [...rec.own]),
       );
-      const rows = rowsOf(workspace, project).map((row): ChangeRow => {
-        if (!live.has(row.changeId)) return row;
+      const fromHub = rowsOf(workspace, project);
+      const rows = [
+        ...fromHub,
+        ...(yield* parkedOf(
+          workspace,
+          project,
+          new Set([...live, ...fromHub.map((row) => row.changeId)]),
+        )),
+      ].map((row): ChangeRow => {
+        if (!live.has(row.changeId) && row.sessions.length > 0) return row;
         const stat = Stack.linesOf(row.commitId);
         return {
           ...row,
-          source: "live",
+          ...(row.sessions.length > 0 ? { source: "live" } : {}),
           ...(stat === undefined ? {} : { lines: stat }),
         };
       });
@@ -515,8 +578,13 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const rec = recs.get(session.id);
         recs.delete(session.id);
-        if (rec === undefined || !(rec.reported || rec.queued !== undefined)) return;
-        yield* withdraw({ workspace: rec.workspace, project: rec.project, session: rec.id });
+        if (rec === undefined) return;
+        // What it leaves behind shows at once, not when the last read ages.
+        parked.delete(`${rec.workspace}/${rec.project}`);
+        if (rec.reported || rec.queued !== undefined) {
+          yield* withdraw({ workspace: rec.workspace, project: rec.project, session: rec.id });
+        }
+        yield* PubSub.publish(bus, `${rec.workspace}/${rec.project}`);
       }),
     markReviewed: Effect.fn("Changes.markReviewed")(function* (input: MarkReviewedInput) {
       const place = yield* checkoutOf(input.workspace, input.project);

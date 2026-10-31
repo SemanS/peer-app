@@ -224,6 +224,21 @@ export async function checkoutState(path: string): Promise<CheckoutState> {
 const WORKSPACE_TEMPLATE =
   '"{\\"name\\":" ++ json(name) ++ ",\\"root\\":" ++ json(stringify(root)) ++ "}\\n"';
 
+/** The jj repository's workspaces, as jj lists them from any of them. */
+export async function jjWorkspaces(cwd: string) {
+  const listed = await runJj(
+    cwd,
+    ["workspace", "list", "--ignore-working-copy", "-T", WORKSPACE_TEMPLATE],
+    {
+      timeoutMs: 3000,
+    },
+  );
+  return listed
+    .split("\n")
+    .filter((row) => row !== "")
+    .map((row) => JSON.parse(row) as { readonly name: string; readonly root: string });
+}
+
 /**
  * The bookmark a jj working copy is on, by the rule of the app's branch label (upstream's
  * `resolveWorkspaceRefName`): a thread's workspace names its own; any other a bookmark of the
@@ -256,14 +271,7 @@ async function nearestBookmark(
   // Even a lone bookmark can belong to another managed workspace. Resolve ownership before
   // assigning an agent to its task; a deleted thread bookmark must not redirect it onto main.
   if (shown.length === 0) return undefined;
-  const workspaces = (
-    await runJj(cwd, ["workspace", "list", "--ignore-working-copy", "-T", WORKSPACE_TEMPLATE], {
-      timeoutMs: 3000,
-    })
-  )
-    .split("\n")
-    .filter((row) => row !== "")
-    .map((row) => JSON.parse(row) as { readonly name: string; readonly root: string });
+  const workspaces = await jjWorkspaces(cwd);
   const workspace = workspaces.find((entry) => realpath(entry.root) === checkout.root);
   if (workspace === undefined) return undefined;
   const names = workspaceRefCandidates(

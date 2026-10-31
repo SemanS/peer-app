@@ -7,18 +7,30 @@ import {
   type RoomAction,
   type RoomPlace,
 } from "@t3tools/client-runtime/peer/rooms";
-import type { PeerRoomAnchor, PeerRoomMessage, PeerRoomTarget } from "@t3tools/contracts";
+import { harnessName } from "@t3tools/client-runtime/peer/work";
+import type { PeerRoomAnchor, PeerRoomMessage, PeerRoomTarget, PeerRun } from "@t3tools/contracts";
 import { BotIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useClientSettings } from "../../../hooks/useSettings";
 import { cn } from "../../../lib/utils";
 import { formatShortTimestamp } from "../../../timestampFormat";
+import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { TONE_TEXT } from "../signals";
 import { PersonMark } from "../task/TaskSections";
 import { DeclineDialog } from "./DeclineDialog";
-import { authorOf, deliveriesOf, deliveryTone, mentionsOf, ROOM_PAGE } from "./room.logic";
+import {
+  authorOf,
+  deliveriesOf,
+  deliveryTone,
+  lastOfRuns,
+  mentionsOf,
+  ROOM_PAGE,
+  runActivity,
+  type RunActivity,
+} from "./room.logic";
+import { RoomActivity } from "./RoomActivity";
 import type { useRoomMoves } from "./useRoom";
 
 const ACTION_LABEL: Readonly<Record<RoomAction, string>> = {
@@ -51,6 +63,11 @@ export function RoomConversation({
   error,
   loading,
   now,
+  runs,
+  reviewRuns,
+  jujutsu,
+  selectedRun,
+  onOpenRun,
   onOpenAnchor,
 }: {
   readonly place: RoomPlace;
@@ -67,8 +84,22 @@ export function RoomConversation({
   readonly loading: boolean;
   /** The time a delivery's words are read at. */
   readonly now: number;
+  readonly runs: ReadonlyArray<PeerRun>;
+  readonly reviewRuns: ReadonlyArray<string>;
+  /** The checkout is on Jujutsu. */
+  readonly jujutsu: boolean;
+  readonly selectedRun: string | null;
+  readonly onOpenRun: (run: string) => void;
   readonly onOpenAnchor: (anchor: PeerRoomAnchor) => void;
 }) {
+  const lastOf = lastOfRuns(messages);
+  const activityOf = (message: PeerRoomMessage) => {
+    const id = message.author.run;
+    if (id === undefined || lastOf.get(id) !== message.seq) return undefined;
+    const run = runs.find((candidate) => candidate.id === id);
+    if (run === undefined) return undefined;
+    return { id, ...runActivity(run, { review: reviewRuns.includes(id), jujutsu }) };
+  };
   const scroller = useRef<HTMLDivElement>(null);
   const last = messages.at(-1)?.seq;
   const atEnd = useRef(true);
@@ -115,6 +146,9 @@ export function RoomConversation({
             canAct={canAct}
             moves={moves}
             now={now}
+            activity={activityOf(message)}
+            selectedRun={selectedRun}
+            onOpenRun={onOpenRun}
             onOpenAnchor={onOpenAnchor}
           />
         ))}
@@ -132,6 +166,9 @@ function RoomMessage({
   canAct,
   moves,
   now,
+  activity,
+  selectedRun,
+  onOpenRun,
   onOpenAnchor,
 }: {
   readonly place: RoomPlace;
@@ -142,6 +179,9 @@ function RoomMessage({
   readonly canAct: boolean;
   readonly moves: ReturnType<typeof useRoomMoves>;
   readonly now: number;
+  readonly activity: (RunActivity & { readonly id: string }) | undefined;
+  readonly selectedRun: string | null;
+  readonly onOpenRun: (run: string) => void;
   readonly onOpenAnchor: (anchor: PeerRoomAnchor) => void;
 }) {
   const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
@@ -152,7 +192,7 @@ function RoomMessage({
   return (
     <article
       id={roomMessageId(message.seq)}
-      aria-label={`#${message.seq} from ${author.name}`}
+      aria-label={`From ${author.name}`}
       className="flex min-w-0 scroll-mt-4 gap-3"
     >
       {author.kind === "agent" ? (
@@ -166,20 +206,16 @@ function RoomMessage({
         <PersonMark name={author.name} mine={author.name === "You"} />
       )}
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-muted-foreground">
+        <p className="flex min-w-0 flex-wrap items-center gap-x-2 text-muted-foreground">
           {author.kind === "agent" ? (
-            <span className="font-mono text-xs text-foreground">
-              {author.name}
-              {author.harness === undefined ? null : ` · ${author.harness}`}
+            <span className="text-sm font-semibold text-foreground">
+              {harnessName(author.harness) ?? author.harness ?? "Agent"}
             </span>
           ) : (
             <span className="text-sm font-semibold text-foreground">{author.name}</span>
           )}
           <span className="text-xs">{formatShortTimestamp(message.at, timestampFormat)}</span>
-          <span className="text-xs tabular-nums">#{message.seq}</span>
-          {message.replyTo === undefined ? null : (
-            <span className="text-xs tabular-nums">to #{message.replyTo}</span>
-          )}
+          {author.kind === "agent" ? <Badge variant="outline">{author.name}</Badge> : null}
         </p>
         {anchor === undefined ? null : (
           <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
@@ -218,6 +254,13 @@ function RoomMessage({
           <p role="status" className="text-xs text-warning-foreground">
             {note}
           </p>
+        )}
+        {activity === undefined ? null : (
+          <RoomActivity
+            activity={activity}
+            selected={selectedRun === activity.id}
+            onOpen={() => onOpenRun(activity.id)}
+          />
         )}
       </div>
     </article>

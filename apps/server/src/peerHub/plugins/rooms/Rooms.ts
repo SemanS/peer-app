@@ -149,13 +149,17 @@ const make = Effect.gen(function* () {
       };
     });
 
+  /** The project's runs that only read the work, as the review starter knows them. */
+  const reviewsOf = (place: PeerRoomsPlace) =>
+    plugins.require("reviewStarter").pipe(
+      Effect.flatMap((starter) => starter.reviewRuns(place.workspace, place.project)),
+      Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
+    );
+
   /** The checkout of this computer's newest run that does the task's work, detached ones too. */
   const workHere = (place: PeerRoomsPlace, checkout: string | undefined) =>
     Effect.gen(function* () {
-      const reviews = yield* plugins.require("reviewStarter").pipe(
-        Effect.flatMap((starter) => starter.reviewRuns(place.workspace, place.project)),
-        Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
-      );
+      const reviews = yield* reviewsOf(place);
       const sessions = (yield* agents.sessions).filter(
         (session) =>
           session.workspace === place.workspace &&
@@ -327,6 +331,7 @@ const make = Effect.gen(function* () {
         ...answer,
         hasCheckout: (yield* checkoutOf(state, place.workspace, project)) !== undefined,
         capacities,
+        reviewRuns: [...(yield* reviewsOf(place))],
       } satisfies PeerRoomRead;
     });
 

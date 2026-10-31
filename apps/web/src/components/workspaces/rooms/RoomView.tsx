@@ -26,6 +26,8 @@ import { RoomReach } from "./RoomReach";
 import { watchable } from "./roomDiff.logic";
 import { useRoom, useRoomDiff, useRoomMoves } from "./useRoom";
 
+const NO_RUNS: ReadonlyArray<string> = [];
+
 const SIDE_LABEL = { diff: "Diff", files: "Files", jujutsu: "Jujutsu" } as const;
 type RoomSide = keyof typeof SIDE_LABEL;
 const isRoomSide = (value: unknown): value is RoomSide =>
@@ -132,6 +134,7 @@ function RoomBody({
   const [paths, setPaths] = useState<DraftPaths | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [dropping, setDropping] = useState(false);
+  const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const canPost = useAtomValue(serverEnvironment.peerRooms.post.permissionAtom(environmentId));
   const canMove = useAtomValue(serverEnvironment.peerRooms.pass.permissionAtom(environmentId));
 
@@ -227,6 +230,15 @@ function RoomBody({
             error={read.error}
             loading={read.room === null}
             now={read.now}
+            runs={runs.runs}
+            reviewRuns={read.room?.reviewRuns ?? NO_RUNS}
+            jujutsu={projectState.repositories.some((repository) => repository.vcs === "jj")}
+            selectedRun={selectedRun}
+            onOpenRun={(run) => {
+              setSelectedRun(run);
+              showSide("diff");
+              diff.refresh();
+            }}
             onOpenAnchor={(anchor) => {
               showSide("diff");
               setFocus({ anchor, ask: (focus?.ask ?? 0) + 1 });

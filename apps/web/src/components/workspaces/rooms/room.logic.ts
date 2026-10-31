@@ -18,6 +18,7 @@ import {
   type PeerRoomTargetInput,
   type PeerRun,
 } from "@t3tools/contracts";
+import { harnessName } from "@t3tools/client-runtime/peer/work";
 import * as Schema from "effect/Schema";
 
 import type { SignalTone } from "../signals";
@@ -249,6 +250,57 @@ export function insertMention(
 export function withPaths(text: string, paths: ReadonlyArray<string>) {
   const lead = text === "" || /\s$/.test(text) ? "" : " ";
   return `${text}${lead}${paths.map((path) => `\`${path}\``).join(" ")} `;
+}
+
+export interface RunActivity {
+  readonly kind: "working" | "delivered" | "stopped";
+  /** "Claude · Implementation", "Codex · Review". */
+  readonly title: string;
+  readonly word: string;
+  readonly detail: string;
+  readonly link: string;
+}
+
+/** A run as the conversation shows it, from what its record says and nothing guessed. */
+export function runActivity(
+  run: Pick<PeerRun, "agent" | "state" | "outcome">,
+  input: { readonly review: boolean; readonly jujutsu: boolean },
+): RunActivity {
+  const title = `${harnessName(run.agent) ?? run.agent} · ${input.review ? "Review" : "Implementation"}`;
+  if (run.state === "running") {
+    return {
+      kind: "working",
+      title,
+      word: "Working",
+      detail: input.jujutsu ? "Jujutsu workspace" : "Git checkout",
+      link: "View live changes",
+    };
+  }
+  if (run.outcome === "done" || run.outcome === "handed-off") {
+    return {
+      kind: "delivered",
+      title,
+      word: "Delivered",
+      detail: input.review ? "Review ready" : "Ready for review",
+      link: "View delivered diff",
+    };
+  }
+  return {
+    kind: "stopped",
+    title,
+    word: run.state === "detached" ? "Idle" : "Ended",
+    detail: run.state === "detached" ? "Its session ended. It can continue." : "Nothing delivered",
+    link: "View changes",
+  };
+}
+
+/** Each run's last message, where its activity shows, so a long turn draws it once. */
+export function lastOfRuns(messages: ReadonlyArray<Pick<PeerRoomMessage, "seq" | "author">>) {
+  const last = new Map<string, number>();
+  for (const message of messages) {
+    if (message.author.run !== undefined) last.set(message.author.run, message.seq);
+  }
+  return last;
 }
 
 /** Who wrote a message: people and agents differ in type, and an agent also by its name. */

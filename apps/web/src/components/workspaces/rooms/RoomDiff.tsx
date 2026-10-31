@@ -417,7 +417,6 @@ function AuthorLine({
       >
         {author.name}
       </span>
-      <span className="tabular-nums">#{message.seq}</span>
     </span>
   );
 }

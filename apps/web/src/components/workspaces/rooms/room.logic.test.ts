@@ -24,6 +24,8 @@ import {
   recipientsOf,
   sendNotice,
   toggleChoice,
+  lastOfRuns,
+  runActivity,
   withPaths,
 } from "./room.logic";
 
@@ -196,6 +198,44 @@ describe("paths in a draft", () => {
   it("leaves no @ open, so the people list stays shut", () => {
     const text = withPaths("", ["src/@scope/a.ts"]);
     expect(mentionAt(text, text.length)).toBeNull();
+  });
+});
+
+describe("a run in the conversation", () => {
+  const options = { review: false, jujutsu: true };
+
+  it("says where a run stands", () => {
+    expect(runActivity({ agent: "claude", state: "running" }, options)).toMatchObject({
+      kind: "working",
+      title: "Claude · Implementation",
+      detail: "Jujutsu workspace",
+    });
+    expect(
+      runActivity(
+        { agent: "codex", state: "ended", outcome: "done" },
+        { review: true, jujutsu: false },
+      ),
+    ).toMatchObject({ kind: "delivered", title: "Codex · Review", detail: "Review ready" });
+  });
+
+  it("does not call work delivered that was stopped or left", () => {
+    expect(runActivity({ agent: "claude", state: "detached" }, options).word).toBe("Idle");
+    expect(runActivity({ agent: "claude", state: "ended", outcome: "stopped" }, options).kind).toBe(
+      "stopped",
+    );
+  });
+
+  it("shows once, on the run's last message", () => {
+    const by = (seq: number, run?: string) => ({
+      seq,
+      author: { email: "a@b.c", ...(run === undefined ? {} : { run }) },
+    });
+    expect(lastOfRuns([by(1, "r1"), by(2), by(3, "r2"), by(4, "r1")])).toEqual(
+      new Map([
+        ["r1", 4],
+        ["r2", 3],
+      ]),
+    );
   });
 });
 

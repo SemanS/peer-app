@@ -126,7 +126,8 @@ export function WelcomeWizard({
 }: {
   readonly localAvailable: boolean;
   readonly resumeEnvironmentId?: EnvironmentId | undefined;
-  readonly onDone: (projectRef?: ScopedProjectRef) => void | Promise<void>;
+  /** `work` lands on the team's tasks: someone who just joined reads what is going on first. */
+  readonly onDone: (projectRef?: ScopedProjectRef, landing?: "work") => void | Promise<void>;
 }) {
   const completeOnboarding = useCompleteOnboarding();
   const [mode, setMode] = useState<"local" | "team" | "remote">("local");
@@ -186,15 +187,12 @@ export function WelcomeWizard({
     setStep("agents");
   };
   const stageIndex = Math.max(0, stages.indexOf(step));
-  const firstProject = useProjects()[0];
-  const openedProject =
-    firstProject === undefined
-      ? undefined
-      : scopeProjectRef(firstProject.environmentId, firstProject.id);
+  const hasProject = useProjects().length > 0;
   const finish = (
     projectRef?: ScopedProjectRef,
     importWarning?: string,
     importedThreadCount = 0,
+    landing?: "work",
   ) => {
     if (finishingPromiseRef.current !== null) return finishingPromiseRef.current;
     if (completionErrorToastIdRef.current !== null) {
@@ -208,7 +206,7 @@ export function WelcomeWizard({
           toastManager.close(completionErrorToastIdRef.current);
           completionErrorToastIdRef.current = null;
         }
-        await onDone(projectRef);
+        await onDone(projectRef, landing);
         if (importWarning) {
           toastManager.add({
             type: "warning",
@@ -363,7 +361,7 @@ export function WelcomeWizard({
               environmentIds={setupIds}
               onContinue={() => {
                 // A team's project is open by now: there is no first project left to choose.
-                if (mode === "team" && openedProject !== undefined) void finish(openedProject);
+                if (mode === "team" && hasProject) void finish(undefined, undefined, 0, "work");
                 else setStep("import");
               }}
             />

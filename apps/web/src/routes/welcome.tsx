@@ -40,8 +40,12 @@ function WelcomeRouteView() {
         <WelcomeWizard
           localAvailable={localAvailable}
           resumeEnvironmentId={resumeEnvironmentId}
-          onDone={async (projectRef) => {
+          onDone={async (projectRef, landing) => {
             setDismissed(true);
+            if (landing === "work") {
+              await navigate({ to: "/work", replace: true });
+              return;
+            }
             if (projectRef !== undefined) {
               await openNewThread(projectRef, { replace: true }).catch(() =>
                 navigate({ to: "/", replace: true }),

@@ -748,7 +748,7 @@ describe("knowledge turned off", () => {
       yield* ana.plugins.setPlugin({ id: "knowledge", enabled: false });
       const start = yield* ana.told({ hook_event_name: "SessionStart", source: "startup" });
       assert.include(start, "Other work on this project now");
-      assert.include(start, "Peer keeps your private working context in");
+      assert.include(start, "Your private notes:");
       assert.notInclude(start, "Project knowledge");
       assert.notInclude(start, "guidance on what to mark");
       assert.notInclude(start, "peer knowledge");

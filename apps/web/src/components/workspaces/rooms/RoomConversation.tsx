@@ -42,8 +42,9 @@ const ACTION_LABEL: Readonly<Record<RoomAction, string>> = {
   tryAgain: "Try again",
 };
 
-/** The element a message is on, for what scrolls to it from the diff. */
-export const roomMessageId = (seq: number) => `room-message-${seq}`;
+/** The element a message is on, for what scrolls to it from the diff; seqs are per project. */
+export const roomMessageId = (seq: number, project?: string) =>
+  `room-message-${project === undefined ? "" : `${project}-`}${seq}`;
 
 /** Within this of the end, a new message keeps the reader at the end. */
 const AT_END_PX = 96;
@@ -73,6 +74,7 @@ export function RoomConversation({
   onOpenRun,
   onOpenAnchor,
   shared,
+  acrossOf,
 }: {
   readonly place: RoomPlace;
   readonly messages: ReadonlyArray<PeerRoomMessage>;
@@ -95,11 +97,13 @@ export function RoomConversation({
   /** Whether a run's agent works now, where a thread of it is known here. */
   readonly threadWorking: (run: PeerRun) => boolean | undefined;
   /** The message whose card is open. */
-  readonly selected: number | null;
+  readonly selected: { readonly run: string; readonly seq: number } | null;
   readonly onOpenRun: (message: PeerRoomMessage, run: string, live: boolean) => void;
-  readonly onOpenAnchor: (anchor: PeerRoomAnchor) => void;
+  readonly onOpenAnchor: (anchor: PeerRoomAnchor, message: PeerRoomMessage) => void;
   /** A shared room's reading of each message: the room it is really in, and its project. */
   readonly shared?: (message: PeerRoomMessage) => SharedRow | undefined;
+  /** The projects a run works in, in words, where it works in several. */
+  readonly acrossOf: (run: string) => string | undefined;
 }) {
   const lastOf = lastOfRuns(messages);
   const activityOf = (message: PeerRoomMessage) => {
@@ -153,7 +157,6 @@ export function RoomConversation({
             key={`${shared?.(message)?.place.project ?? ""}:${message.seq}`}
             place={shared?.(message)?.place ?? place}
             project={shared?.(message)?.project}
-            echo={shared?.(message)?.echo === true}
             message={message}
             me={me}
             nameOf={nameOf}
@@ -162,7 +165,8 @@ export function RoomConversation({
             moves={moves}
             now={now}
             activity={activityOf(message)}
-            selected={selected === message.seq}
+            across={message.author.run === undefined ? undefined : acrossOf(message.author.run)}
+            selected={selected?.run === message.author.run && selected?.seq === message.seq}
             onOpenRun={onOpenRun}
             onOpenAnchor={onOpenAnchor}
           />
@@ -175,7 +179,6 @@ export function RoomConversation({
 function RoomMessage({
   place,
   project,
-  echo,
   message,
   me,
   nameOf,
@@ -184,15 +187,14 @@ function RoomMessage({
   moves,
   now,
   activity,
+  across,
   selected,
   onOpenRun,
   onOpenAnchor,
 }: {
   readonly place: RoomPlace;
-  /** In a shared room, the project this message is in. */
+  /** In a shared room, the project this message is in, where that is not the room's own. */
   readonly project: string | undefined;
-  /** In a shared room, the same words as the row before it, in another project: they show once. */
-  readonly echo: boolean;
   readonly message: PeerRoomMessage;
   readonly me: string;
   readonly nameOf: NameOf;
@@ -201,9 +203,10 @@ function RoomMessage({
   readonly moves: ReturnType<typeof useRoomMoves>;
   readonly now: number;
   readonly activity: (RunActivity & { readonly id: string }) | undefined;
+  readonly across: string | undefined;
   readonly selected: boolean;
   readonly onOpenRun: (message: PeerRoomMessage, run: string, live: boolean) => void;
-  readonly onOpenAnchor: (anchor: PeerRoomAnchor) => void;
+  readonly onOpenAnchor: (anchor: PeerRoomAnchor, message: PeerRoomMessage) => void;
 }) {
   const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
   const author = authorOf(message, me, nameOf);
@@ -212,7 +215,7 @@ function RoomMessage({
   const anchor = message.anchor;
   return (
     <article
-      id={roomMessageId(message.seq)}
+      id={roomMessageId(message.seq, project)}
       aria-label={`From ${author.name}`}
       className="flex min-w-0 scroll-mt-4 gap-3"
     >
@@ -244,18 +247,16 @@ function RoomMessage({
             <button
               type="button"
               className="min-w-0 rounded-sm font-mono [overflow-wrap:anywhere] text-foreground/80 underline-offset-2 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-              onClick={() => onOpenAnchor(anchor)}
+              onClick={() => onOpenAnchor(anchor, message)}
             >
               {anchorText(anchor)}
             </button>
             {anchorState(anchor, head) === "earlier" ? <span>on an earlier version</span> : null}
           </p>
         )}
-        {echo ? null : (
-          <p className="text-sm whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]">
-            {message.text}
-          </p>
-        )}
+        <p className="text-sm whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]">
+          {message.text}
+        </p>
         {mentions.length === 0 ? null : (
           <p className="text-xs text-muted-foreground">
             To {mentions.map((target) => nameOf(target.email)).join(", ")}
@@ -282,6 +283,7 @@ function RoomMessage({
         {activity === undefined ? null : (
           <RoomActivity
             activity={activity}
+            across={across}
             selected={selected}
             onOpen={() => onOpenRun(message, activity.id, activity.kind === "working")}
           />

@@ -145,6 +145,10 @@ export const PeerRoomRead = Schema.Struct({
   capacities: Schema.optional(Schema.Record(Schema.String, PeerRoomCapacity)),
   /** This computer's word too: the project's runs that only review. */
   reviewRuns: Schema.optional(Schema.Array(Schema.String)),
+  /** This computer's word too: where a run across projects works besides this one, by run. */
+  runProjects: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
+  /** This computer's word too: projects no Hub workspace shares that the room's agent works in. */
+  folders: Schema.optional(Schema.Array(Schema.String)),
 });
 export type PeerRoomRead = typeof PeerRoomRead.Type;
 

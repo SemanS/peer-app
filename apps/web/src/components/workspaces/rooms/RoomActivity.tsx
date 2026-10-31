@@ -7,10 +7,13 @@ import type { RunActivity } from "./room.logic";
 /** Where a run stands, under its agent's last message; opening it shows the changes beside. */
 export function RoomActivity({
   activity,
+  across,
   selected,
   onOpen,
 }: {
   readonly activity: RunActivity;
+  /** The projects it works in, in words, where it works in several. */
+  readonly across: string | undefined;
   readonly selected: boolean;
   readonly onOpen: () => void;
 }) {
@@ -38,6 +41,9 @@ export function RoomActivity({
         </span>
         <span className="ms-auto shrink-0 text-xs text-muted-foreground">{activity.word}</span>
       </span>
+      {across === undefined ? null : (
+        <span className="text-xs text-foreground">Across {across}</span>
+      )}
       <span className="text-xs text-muted-foreground">{activity.detail}</span>
       <span className="flex items-center gap-1 text-xs text-primary">
         {activity.link}

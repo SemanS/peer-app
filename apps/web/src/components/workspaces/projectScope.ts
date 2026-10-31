@@ -17,6 +17,7 @@ import {
   peerProjectIndex,
   resolveProjectScope,
   scopeOfProject,
+  withSharedProjects,
   type PeerProjectEntry,
   type ScopeGroup,
 } from "./projectScope.logic";
@@ -77,7 +78,8 @@ export function useProjectScope(groups: ReadonlyArray<ScopeGroup>) {
   const [stored, setStored] = useWorkScope();
   const navigate = useNavigate();
   const peer = usePeerProjectIndex();
-  const [sets] = useProjectSets();
+  const [storedSets] = useProjectSets();
+  const sets = withSharedProjects(storedSets, { peer, groups });
   const [chosenWorkspace, setChosenWorkspace] = useChosenWorkspace();
   const location = useLocation();
   const params = useParams({ strict: false });
@@ -117,7 +119,7 @@ export function useProjectScope(groups: ReadonlyArray<ScopeGroup>) {
   const resolved = resolveProjectScope(inSet ? stored : (routeScope ?? stored), {
     peer,
     groups,
-    sets,
+    sets: storedSets,
   });
   const keys = chatScopeKeys(resolved.refs);
   return {
@@ -128,6 +130,14 @@ export function useProjectScope(groups: ReadonlyArray<ScopeGroup>) {
     stored,
     setScope,
   };
+}
+
+/** This computer's project sets, each project under the scope it has now. */
+export function useCurrentProjectSets() {
+  const groups = useSidebarProjectGroups();
+  const peer = usePeerProjectIndex();
+  const [sets] = useProjectSets();
+  return withSharedProjects(sets, { peer, groups });
 }
 
 /** Preserve the saved choice in history even before the project catalogs have arrived. */

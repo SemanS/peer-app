@@ -243,7 +243,10 @@ function ProjectMenuBody({
     sets,
   });
   const set = setOfScope(current.scope, sets);
-  const toAdd = projectsToAdd(sections, set?.projects ?? [current.scope]);
+  const toAdd = projectsToAdd(
+    sections,
+    current.members?.map((member) => member.scope) ?? [current.scope],
+  );
   const saveSets = (next: ReadonlyArray<ProjectSet>, scope: string | undefined) => {
     setSets(next);
     onChangeSets(next, scope);
@@ -346,7 +349,7 @@ function ProjectMenuBody({
                   <MenuItem
                     key={member.scope}
                     onClick={() => {
-                      const left = removeFromSet(sets, set.id, member.scope);
+                      const left = removeFromSet(sets, set.id, member.entry ?? member.scope);
                       saveSets(left.sets, left.scope);
                     }}
                   >

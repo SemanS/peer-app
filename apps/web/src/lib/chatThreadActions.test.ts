@@ -56,6 +56,18 @@ describe("chatThreadActions", () => {
     expect(resolveNewChatAction({ scopedProject: null, projectGroupCount: 3 })).toEqual({
       kind: "choose-project",
     });
+    expect(resolveNewChatAction({ scopedProject, scopedSet: "s1", projectGroupCount: 3 })).toEqual({
+      kind: "workspace",
+      setId: "s1",
+    });
+    expect(
+      resolveNewChatAction({
+        scopedProject,
+        scopedSet: "s1",
+        projectGroupCount: 3,
+        currentProjectRequested: true,
+      }),
+    ).toEqual({ kind: "project", projectRef: scopedProject });
     expect(
       resolveNewChatAction({ scopedProject, projectGroupCount: 3, legacySidebar: true }),
     ).toEqual({ kind: "context" });

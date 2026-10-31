@@ -4,6 +4,7 @@
  * shares are in `client-runtime/peer/rooms`; this only composes them.
  */
 import {
+  agentStartPlace,
   lostStart,
   type NameOf,
   type RoomPlace,
@@ -19,6 +20,7 @@ import {
   type PeerRoomTargetInput,
   type PeerRoomStep,
   type PeerRun,
+  type PeerTask,
   type PeerWorkStatus,
 } from "@t3tools/contracts";
 import { harnessName, type WorkThreadNode } from "@t3tools/client-runtime/peer/work";
@@ -35,6 +37,8 @@ export const ROOM_TEXT_MAX = 4_000;
 export const ROOM_PAGE = 200;
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+const openRun = (run: Pick<PeerRun, "state">) => run.state !== "ended";
 
 /** A message being written, kept until the Hub confirms it. */
 export interface RoomDraft {
@@ -114,17 +118,35 @@ export const draftStorageKey = (place: {
 export const chosenKeys = (draft: Pick<RoomDraft, "selected">): ReadonlyArray<string> =>
   draft.selected.length === 0 ? ["team"] : draft.selected;
 
-/** Picking Team clears the rest; any other chip joins or leaves. A disabled chip does nothing. */
+/**
+ * Picking Team clears the rest; any other chip joins or leaves. A disabled chip does nothing.
+ * `nothing` is what stands for no choice, where none would mean a default other than Team.
+ */
 export function toggleChoice(
   selected: ReadonlyArray<string>,
   choice: Pick<RoomTargetChoice, "key" | "kind" | "disabled">,
+  nothing: ReadonlyArray<string> = [],
 ): ReadonlyArray<string> {
   if (choice.disabled !== undefined) return selected;
-  if (choice.kind === "team") return [];
-  return selected.includes(choice.key)
-    ? selected.filter((key) => key !== choice.key)
-    : [...selected, choice.key];
+  if (choice.kind === "team") return nothing;
+  const others = selected.filter((key) => key !== "team");
+  const next = others.includes(choice.key)
+    ? others.filter((key) => key !== choice.key)
+    : [...others, choice.key];
+  return next.length === 0 ? nothing : next;
 }
+
+/**
+ * Whether what you write in a chat goes to your agent unless you say otherwise: where it is your
+ * chat, or your agent works in it. In a colleague's chat that would start your agent on a reply.
+ */
+export const chatIsYours = (
+  task: Pick<PeerTask, "chat" | "createdBy">,
+  runs: ReadonlyArray<Pick<PeerRun, "email" | "state">>,
+  me: string,
+) =>
+  task.chat === true &&
+  (same(task.createdBy, me) || runs.some((run) => same(run.email, me) && openRun(run)));
 
 /** A project member the `@` list can name, chip or no chip. */
 export interface RoomPerson {
@@ -172,6 +194,8 @@ export function recipientsOf(
   selected: ReadonlyArray<string>,
   agent?: RoomAgentChoice,
   chat = false,
+  /** The projects of a room across a workspace, whose agent works in them all. */
+  across: ReadonlyArray<string> = [],
 ): {
   readonly to: ReadonlyArray<PeerRoomTargetInput>;
   readonly notes: ReadonlyArray<string>;
@@ -195,7 +219,7 @@ export function recipientsOf(
     notes: chosen.flatMap((choice) => {
       if (carries(choice) && agent !== undefined)
         return [
-          `This starts ${agent.label}${agent.effort === undefined ? "" : ` at ${agent.effort} effort`} on this computer, ${chat ? "in its own checkout" : "read-only"}, on your capacity.`,
+          `This starts ${agent.label}${agent.effort === undefined ? "" : ` at ${agent.effort} effort`} on this computer, ${agentStartPlace(chat, across)}, on your capacity.`,
         ];
       return choice.note === undefined ? [] : [choice.note];
     }),
@@ -511,8 +535,6 @@ export function deliveryTone(delivery: PeerRoomTarget, now: number): SignalTone 
   }
   return "neutral";
 }
-
-const openRun = (run: Pick<PeerRun, "state">) => run.state !== "ended";
 
 /** One of the person's open runs on the task, with what the reach switch says of it. */
 export interface ReachRow {

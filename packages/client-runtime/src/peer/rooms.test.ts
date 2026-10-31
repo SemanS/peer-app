@@ -13,6 +13,7 @@ import {
   deliveryOf,
   deliveryWords,
   lostStart,
+  namesInWords,
   needsYouByTask,
   nextLostStart,
   roomBadgeCount,
@@ -174,6 +175,17 @@ describe("waitsOnMe", () => {
   });
 });
 
+describe("namesInWords", () => {
+  it.each([
+    [[], ""],
+    [["a"], "a"],
+    [["a", "b"], "a and b"],
+    [["a", "b", "c"], "a, b and c"],
+  ])("reads %j", (names, words) => {
+    expect(namesInWords(names)).toBe(words);
+  });
+});
+
 describe("targetsFor", () => {
   const project = {
     members: [
@@ -211,6 +223,16 @@ describe("targetsFor", () => {
     const ended = [{ ...runs[0]!, state: "ended" as const }];
     expect(targetsFor(project, task, ended, BOB, { reaches })[3]?.note).toBe(
       "Ana decides whether to pass this on.",
+    );
+  });
+
+  it("says a start across projects names them all", () => {
+    const across = ["peer", "peer-app", "kontext"];
+    expect(targetsFor(project, task, [], BOB, { chat: true, across })[1]?.note).toBe(
+      "This starts your agent on this computer, across peer, peer-app and kontext, in its own checkout of each, on your capacity.",
+    );
+    expect(targetsFor(project, task, [], BOB, { chat: true, across: ["peer"] })[1]?.note).toBe(
+      "This starts your agent on this computer, in its own checkout, on your capacity.",
     );
   });
 

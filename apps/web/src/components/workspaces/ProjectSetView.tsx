@@ -1,7 +1,9 @@
 import type { CodeViewDiffItem } from "@pierre/diffs";
 import { personName } from "@t3tools/client-runtime/peer/needs-you";
 import { EnvironmentId, type PeerHubStatus } from "@t3tools/contracts";
-import { Suspense, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { MessagesSquareIcon } from "lucide-react";
+import { Suspense } from "react";
 
 import { useSidebarProjectGroups } from "~/hooks/useSidebarProjectGroups";
 import { useTheme } from "~/hooks/useTheme";
@@ -19,40 +21,42 @@ import { StyledDiffCodeView } from "../diffs/StyledDiffCodeView";
 import { Button } from "../ui/button";
 import { SidebarInset } from "../ui/sidebar";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
-import { PeerPageHeader } from "./PeerPageHeader";
+import { PeerPageHeader, PeerSectionLabel } from "./PeerPageHeader";
 import { useProjectScope } from "./projectScope";
-import { isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
-import {
-  checkoutOf,
-  setFolders,
-  setOfScope,
-  setScope,
-  type ProjectCheckoutRef,
-} from "./projectSets.logic";
-import { useProjectSets } from "./projectSets";
+import type { ResolvedProjectScope } from "./projectScope.logic";
+import { checkoutOf, setScope, type ProjectCheckoutRef } from "./projectSets.logic";
 import { ProjectAgents } from "./rooms/RoomAgents";
 import { RoomFileSurface } from "./rooms/RoomFiles";
 import { NewSharedRoom } from "./rooms/SharedRoomView";
+import { plannedProjects, sharedRoomsOf } from "./rooms/sharedRoom.logic";
 import { ProjectMark } from "./signals";
 import { useWorkData } from "./useWorkData";
 import { projectScopeKey } from "./workBoard.logic";
 import type { WorkOpen, WorkProjectNode } from "./workTree.logic";
 
 const VIEWS = ["room", "files", "diff", "agents"] as const;
-type View = (typeof VIEWS)[number];
-const isView = (value: unknown): value is View => VIEWS.includes(value as View);
+export type ProjectSetPage = (typeof VIEWS)[number];
+export const isProjectSetView = (value: unknown): value is ProjectSetPage =>
+  VIEWS.includes(value as ProjectSetPage);
 
 /**
- * A project set's projects side by side, one column each: their files, what changed in their
- * checkouts, or their agents. Columns scroll sideways rather than shrink past reading width.
+ * A project set's page: a room across its projects, or the projects side by side, one column each:
+ * their files, what changed in their checkouts, or their agents. Columns scroll sideways rather than
+ * shrink past reading width.
  */
-export function ProjectSetView({ setId }: { readonly setId: string }) {
+export function ProjectSetView({
+  setId,
+  view,
+  onView,
+}: {
+  readonly setId: string;
+  readonly view: ProjectSetPage;
+  readonly onView: (view: ProjectSetPage) => void;
+}) {
   const groups = useSidebarProjectGroups();
-  const [sets] = useProjectSets();
   const scope = useProjectScope(groups);
   const { environmentId, status, tree, actions } = useWorkData();
   const primary = usePrimaryEnvironmentId();
-  const [view, setView] = useState<View>("room");
   const catalog = groups.flatMap((group) => group.memberProjects);
   const members = scope.scope === setScope(setId) ? scope.members : undefined;
   return (
@@ -70,7 +74,7 @@ export function ProjectSetView({ setId }: { readonly setId: string }) {
                 aria-label="Show"
                 value={[view]}
                 onValueChange={(value) => {
-                  if (isView(value[0])) setView(value[0]);
+                  if (isProjectSetView(value[0])) onView(value[0]);
                 }}
               >
                 <Toggle value="room">Room</Toggle>
@@ -80,19 +84,20 @@ export function ProjectSetView({ setId }: { readonly setId: string }) {
               </ToggleGroup>
             </div>
             {view === "room" ? (
-              environmentId === null || status === null ? null : (
+              environmentId === null || status === null ? (
+                <p role="status" className="px-4 py-5 text-sm text-muted-foreground">
+                  Connecting…
+                </p>
+              ) : (
                 <NewSharedRoom
+                  key={setId}
+                  setId={setId}
                   environmentId={environmentId}
                   status={status}
-                  places={members.flatMap((member) => {
-                    const [workspace, project] = member.scope.split("/");
-                    return isLocalScope(member.scope) ||
-                      workspace === undefined ||
-                      project === undefined
-                      ? []
-                      : [{ workspace, project }];
+                  planned={plannedProjects(members, status, (member) => {
+                    const checkout = checkoutOf(member.refs ?? [], catalog, primary);
+                    return checkout?.environmentId === primary ? (checkout?.cwd ?? null) : null;
                   })}
-                  folders={setFolders(setOfScope(scope.scope, sets), groups)}
                 />
               )
             ) : (
@@ -138,7 +143,7 @@ function Column({
   status,
   onOpen,
 }: {
-  readonly view: Exclude<View, "room">;
+  readonly view: Exclude<ProjectSetPage, "room">;
   readonly member: ResolvedProjectScope;
   readonly checkout: ProjectCheckoutRef | null;
   readonly project: WorkProjectNode | undefined;
@@ -157,13 +162,38 @@ function Column({
     if (project === undefined || state === undefined || !status?.email) {
       return <Note>Agents show here once the project is shared with your team.</Note>;
     }
+    const rooms = sharedRoomsOf(status, [member.scope]);
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4">
+        {rooms.length === 0 ? null : (
+          <section aria-label="Rooms" className="flex flex-col gap-1">
+            <PeerSectionLabel>Rooms</PeerSectionLabel>
+            <p className="text-xs text-muted-foreground">Their agents work here too.</p>
+            <ul className="flex flex-col">
+              {rooms.map((room) => (
+                <li key={room.group}>
+                  <Link
+                    to="/together/$group"
+                    params={{ group: room.group }}
+                    className="flex min-h-9 min-w-0 items-center gap-2 rounded-md px-2 py-1 text-sm text-foreground hover:bg-accent"
+                  >
+                    <MessagesSquareIcon
+                      aria-hidden
+                      className="size-3.5 shrink-0 text-muted-foreground"
+                    />
+                    <span className="min-w-0 truncate">{room.title}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
         <ProjectAgents
           project={project}
           me={status.email}
           nameOf={(email) => personName(state, email)}
           onOpen={onOpen}
+          {...(rooms.length === 0 ? {} : { none: null })}
         />
       </div>
     );

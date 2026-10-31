@@ -18,7 +18,6 @@ import { peopleOf } from "./room.logic";
 import { RoomComposer } from "./RoomComposer";
 
 const TITLE_CHARS = 80;
-const OWN_AGENT = { text: "", selected: ["own-agent"] };
 
 /** A chat's name, from the first line of what started it. */
 export const chatTitle = (text: string) => {
@@ -145,7 +144,7 @@ function NewChat({
               line={null}
               paths={null}
               chat
-              emptyDraft={OWN_AGENT}
+              toOwnAgent
               prepare={prepare}
               placeholder="Write to your agent or anyone on the project. @ names a person."
               onDrafting={() => undefined}

@@ -9,6 +9,7 @@ import {
   authorOf,
   canSend,
   choicesWithMentions,
+  chatIsYours,
   chosenKeys,
   deliveryTone,
   draftAfter,
@@ -107,6 +108,39 @@ describe("the To row", () => {
     const shown = choicesWithMentions(choices(), people, ["person:bob@acme.test"]);
     expect(shown.at(-1)).toMatchObject({ label: "Bob", to: [{ email: "bob@acme.test" }] });
     expect(choicesWithMentions(choices(), people, [])).toHaveLength(choices().length);
+  });
+});
+
+describe("who a message goes to with no one chosen", () => {
+  const team = { key: "team", kind: "team" } as const;
+  const own = { key: "own-agent", kind: "own-agent" } as const;
+  const person = { key: "person:bob@acme.test", kind: "person" } as const;
+  const chat = { chat: true, createdBy: "me@acme.test" };
+
+  it("is your agent in your own chat, or where your agent works", () => {
+    expect(chatIsYours(chat, [], "ME@acme.test")).toBe(true);
+    const theirs = { chat: true, createdBy: "ana@acme.test" };
+    const run = { email: "me@acme.test", state: "running" as const };
+    expect(chatIsYours(theirs, [run], "me@acme.test")).toBe(true);
+  });
+
+  it("is nobody's agent in a colleague's chat, as a reply must not start one", () => {
+    const theirs = { chat: true, createdBy: "ana@acme.test" };
+    expect(chatIsYours(theirs, [], "me@acme.test")).toBe(false);
+    const ended = { email: "me@acme.test", state: "ended" as const };
+    expect(chatIsYours(theirs, [ended], "me@acme.test")).toBe(false);
+  });
+
+  it("is nobody's agent in a task's room", () => {
+    expect(chatIsYours({ createdBy: "me@acme.test" }, [], "me@acme.test")).toBe(false);
+  });
+
+  it("lets Team stand as a choice where no choice would mean your agent", () => {
+    const noChoice = ["team"];
+    expect(toggleChoice(["own-agent"], team, noChoice)).toEqual(["team"]);
+    expect(toggleChoice(["own-agent"], own, noChoice)).toEqual(["team"]);
+    expect(toggleChoice(["team"], person, noChoice)).toEqual(["person:bob@acme.test"]);
+    expect(toggleChoice(["team"], own, noChoice)).toEqual(["own-agent"]);
   });
 });
 

@@ -7,7 +7,7 @@ import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime"
 import type { EnvironmentId } from "@t3tools/contracts";
 import { BotIcon, XIcon } from "lucide-react";
 import type { PeerRoomAnchor } from "@t3tools/contracts";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { randomUUID } from "../../../lib/utils";
 import { serverEnvironment } from "../../../state/server";
@@ -68,9 +68,11 @@ export function RoomComposer({
   onDrafting,
   onSent,
   chat = false,
-  emptyDraft,
+  toOwnAgent = false,
   prepare,
   placeholder = "Write to the room. @ names a person.",
+  scope,
+  across,
 }: {
   readonly environmentId: EnvironmentId;
   readonly place: RoomPlace;
@@ -85,14 +87,24 @@ export function RoomComposer({
   readonly onSent: (place: RoomPlace) => void;
   /** The room is a chat: your own agent works there rather than reads. */
   readonly chat?: boolean;
-  /** What a draft starts as when nothing is kept. */
-  readonly emptyDraft?: RoomDraft;
+  /** A message with no one chosen goes to your agent, where this computer can start it. */
+  readonly toOwnAgent?: boolean;
   /** Makes the room the first message goes to; fails with the words to show. */
   readonly prepare?: (text: string) => Promise<RoomPlace>;
   readonly placeholder?: string;
+  /** Above the To row: where the room's agent works, for a room across projects. */
+  readonly scope?: ReactNode;
+  /** Those projects by name, for what is said before sending. */
+  readonly across?: ReadonlyArray<string>;
 }) {
-  const [draft, onDraftChange] = useRoomDraft(place, emptyDraft);
+  const [draft, onDraftChange] = useRoomDraft(place);
   const choices = choicesWithMentions(targets, people, draft.selected);
+  const agentFirst =
+    toOwnAgent &&
+    choices.some((choice) => choice.kind === "own-agent" && choice.disabled === undefined);
+  const selected =
+    draft.selected.length > 0 ? draft.selected : agentFirst ? ["own-agent"] : draft.selected;
+  const noChoice = agentFirst ? ["team"] : [];
   const post = useAtomCommand(serverEnvironment.peerRooms.post, { reportFailure: false });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -125,8 +137,8 @@ export function RoomComposer({
     });
   });
 
-  const recipients = recipientsOf(choices, draft.selected, draft.agent, chat);
-  const chosen = chosenKeys(draft);
+  const recipients = recipientsOf(choices, selected, draft.agent, chat, across);
+  const chosen = chosenKeys({ selected });
   const problem = draftProblem(draft.text, recipients.blocked);
   const ownAgent = choices.find((choice) => choice.kind === "own-agent");
   const disabledChoices = choices.filter((choice) => choice.disabled !== undefined);
@@ -186,9 +198,9 @@ export function RoomComposer({
     onDraftChange({
       ...draft,
       text: next.text,
-      selected: draft.selected.includes(person.key)
-        ? draft.selected
-        : [...draft.selected, person.key],
+      selected: selected.includes(person.key)
+        ? selected
+        : [...selected.filter((key) => key !== "team"), person.key],
     });
     setCaret(next.caret);
     setPicked(0);
@@ -204,6 +216,7 @@ export function RoomComposer({
         void send();
       }}
     >
+      {scope}
       <div role="group" aria-label="To" className="flex flex-wrap items-center gap-1">
         <span className="me-1 text-xs text-muted-foreground">To</span>
         {choices.map((choice) => (
@@ -215,7 +228,7 @@ export function RoomComposer({
             aria-pressed={chosen.includes(choice.key)}
             disabled={busy || choice.disabled !== undefined}
             onClick={() =>
-              onDraftChange({ ...draft, selected: toggleChoice(draft.selected, choice) })
+              onDraftChange({ ...draft, selected: toggleChoice(selected, choice, noChoice) })
             }
           >
             {choice.kind === "own-agent" || choice.kind === "agent" ? (
@@ -236,7 +249,7 @@ export function RoomComposer({
                 agent,
                 selected: current.selected.includes(ownAgent.key)
                   ? current.selected
-                  : [...current.selected, ownAgent.key],
+                  : [...current.selected.filter((key) => key !== "team"), ownAgent.key],
               }))
             }
             onClear={() => onDraftChange(({ agent: _agent, ...rest }) => rest)}

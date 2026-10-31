@@ -63,7 +63,7 @@ import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/
 import { fetchPins, newestHandoff, pinnedRoot, readPin, storeOf } from "./client/snapshots.ts";
 import { runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
-import { projectsText, runRootsData } from "../../core/work/runRoots.ts";
+import { projectsText, roomReach, runRootsData } from "../../core/work/runRoots.ts";
 import { capacityOf, checkoutOf, openRuns, roomStarts } from "./client/start.ts";
 import { actOn, type FollowDeps, type HereRun } from "./follow.ts";
 import { roomsHub, type Place, type PostBody } from "./client/hub.ts";
@@ -230,12 +230,13 @@ const make = Effect.gen(function* () {
     );
 
   /** The checkout of this computer's newest run that does the task's work, detached ones too. */
-  const runsHereToo = (place: PeerRoomsPlace) =>
+  const runsHereToo = (place: PeerRoomsPlace, only: string | undefined) =>
     Effect.gen(function* () {
       const { persisted } = yield* state.read;
       const stored = Option.getOrUndefined(yield* runRootsData(state).read)?.runs ?? {};
       for (const [id, roots] of Object.entries(stored)) {
         if (persisted.runs?.[id]?.endedAt !== undefined) continue;
+        if (only !== undefined && id !== only) continue;
         const here = roots.find(
           (entry) => entry.project === place.project && entry.task === place.task,
         );
@@ -264,7 +265,7 @@ const make = Effect.gen(function* () {
       });
       if (found?.root !== undefined) return found;
       // A run of the shared room's other project works here too, in the checkout made for it.
-      const carried = yield* runsHereToo(place);
+      const carried = yield* runsHereToo(place, only);
       if (carried !== undefined) return { ...found, ...carried };
       const root =
         checkout === undefined
@@ -432,11 +433,25 @@ const make = Effect.gen(function* () {
       const capacities: Record<string, PeerRoomCapacity> = {};
       for (const run of yield* openRuns(state, place))
         capacities[run.id] = yield* capacityOf(state, work, place.workspace, place.project, run.id);
+      const { persisted } = yield* state.read;
+      const roomRuns = Object.entries(persisted.runs ?? {}).flatMap(([id, run]) =>
+        run.workspace === place.workspace &&
+        run.project === place.project &&
+        run.task === place.task
+          ? [id]
+          : [],
+      );
+      const tasks = yield* work.tasks(place.workspace, place.project);
       return {
         ...answer,
         hasCheckout: (yield* checkoutOf(state, place.workspace, project)) !== undefined,
         capacities,
         reviewRuns: [...(yield* reviewsOf(place))],
+        ...roomReach(
+          Option.getOrUndefined(yield* runRootsData(state).read),
+          tasks.find((task) => task.id === place.task)?.group,
+          roomRuns,
+        ),
       } satisfies PeerRoomRead;
     });
 

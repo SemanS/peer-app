@@ -360,7 +360,11 @@ function ProjectDisclosure({
 function SharedRooms({
   rooms,
 }: {
-  readonly rooms: ReadonlyArray<{ readonly group: string; readonly title: string }>;
+  readonly rooms: ReadonlyArray<{
+    readonly group: string;
+    readonly title: string;
+    readonly projects: ReadonlyArray<{ readonly scope: string; readonly name: string }>;
+  }>;
 }) {
   if (rooms.length === 0) return null;
   return (
@@ -375,7 +379,20 @@ function SharedRooms({
           activeProps={{ className: "bg-accent" }}
         >
           <MessagesSquareIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 truncate">{room.title}</span>
+          <span className="min-w-0 flex-1 truncate">{room.title}</span>
+          <span
+            aria-label={`In ${room.projects.map((project) => project.name).join(", ")}`}
+            className="flex shrink-0 -space-x-1"
+          >
+            {room.projects.map((project) => (
+              <ProjectMark
+                key={project.scope}
+                name={project.name}
+                colorKey={project.scope}
+                className="size-3.5"
+              />
+            ))}
+          </span>
         </Link>
       ))}
     </div>

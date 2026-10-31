@@ -1,6 +1,7 @@
 "use client";
 
 import { useOpenProjectPullRequests, useProjectScope } from "./workspaces/projectScope";
+import { useProjectSets } from "./workspaces/projectSets";
 import { useTaskSearchItems } from "./workspaces/useTaskSearchItems";
 
 import { threadPullRequestLinkMode } from "@t3tools/client-runtime/thread-pull-request-compatibility";
@@ -72,6 +73,7 @@ import {
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
+  MessagesSquareIcon,
   MonitorIcon,
   MoonIcon,
   PaletteIcon,
@@ -908,6 +910,7 @@ function OpenCommandPaletteDialog(props: {
     threads,
   });
   const selectedProjectScope = useProjectScope(projectGroups);
+  const [projectSets] = useProjectSets();
   const [searchAllProjects, setSearchAllProjects] = useState(
     openIntent?.kind === "search" && openIntent.linkedThreads !== undefined,
   );
@@ -1680,6 +1683,19 @@ function OpenCommandPaletteDialog(props: {
       icon: <SquarePenIcon className={ITEM_ICON_CLASS} />,
       addonIcon: <SquarePenIcon className={ADDON_ICON_CLASS} />,
       groups: [{ value: "projects", label: "Projects", items: projectThreadItems }],
+    });
+  }
+
+  for (const set of projectSets) {
+    actionItems.push({
+      kind: "action",
+      value: `action:workspace-room:${set.id}`,
+      searchTerms: ["new room", "workspace", "projects", set.name],
+      title: `New room in ${set.name}`,
+      icon: <MessagesSquareIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({ to: "/workspace/$setId", params: { setId: set.id } });
+      },
     });
   }
 

@@ -17,7 +17,9 @@ import {
   latestScopedChat,
   peerProjectIndex,
   resolveProjectScope,
+  roomSetOf,
   scopeOfProject,
+  withSharedProjects,
   type PeerProjectEntry,
   type ProjectCatalog,
   type ScopeGroup,
@@ -279,5 +281,82 @@ describe("a project set's scope", () => {
 
   it("falls back to every project for a set no longer here", () => {
     expect(resolveProjectScope("set:s2", known).scope).toBe("all");
+  });
+});
+
+describe("withSharedProjects", () => {
+  const environmentId = EnvironmentId.make("here");
+  const ref = (id: string): ScopedProjectRef => ({
+    environmentId,
+    projectId: ProjectId.make(id),
+  });
+  const known = {
+    peer: [{ scope: "acme/site", name: "Site", refs: [ref("site")] }],
+    groups: [
+      { projectKey: "site", displayName: "Site", memberProjectRefs: [ref("site")] },
+      { projectKey: "docs", displayName: "Docs", memberProjectRefs: [ref("docs")] },
+    ],
+  };
+
+  it("follows a local project someone shared since", () => {
+    const sets = [{ id: "s", name: "S", projects: ["acme/app", "local:site", "local:docs"] }];
+    expect(withSharedProjects(sets, known)[0]?.projects).toEqual([
+      "acme/app",
+      "acme/site",
+      "local:docs",
+    ]);
+  });
+
+  it("lists a project once when the set already held its workspace project", () => {
+    const sets = [{ id: "s", name: "S", projects: ["acme/site", "local:site"] }];
+    expect(withSharedProjects(sets, known)[0]?.projects).toEqual(["acme/site"]);
+  });
+
+  it("returns the same sets when nothing moved", () => {
+    const sets = [{ id: "s", name: "S", projects: ["acme/site", "local:docs", "local:gone"] }];
+    expect(withSharedProjects(sets, known)).toBe(sets);
+  });
+
+  it("resolves a set's project once, knowing how the set stores it", () => {
+    const sets = [{ id: "s", name: "S", projects: ["acme/site", "local:site", "local:docs"] }];
+    const set = resolveProjectScope("set:s", { ...known, sets });
+    expect(set.members?.map((member) => [member.scope, member.entry])).toEqual([
+      ["acme/site", "acme/site"],
+      ["local:docs", "local:docs"],
+    ]);
+  });
+
+  it("keeps a shared project in its set while the Hub's index is gone", () => {
+    const sets = [{ id: "s", name: "S", projects: ["local:site", "local:docs"] }];
+    const signedOut = { peer: [], groups: known.groups, sets };
+    expect(resolveProjectScope("set:s", signedOut).members).toHaveLength(2);
+    expect(withSharedProjects(sets, signedOut)).toBe(sets);
+  });
+});
+
+describe("roomSetOf", () => {
+  const environmentId = EnvironmentId.make("here");
+  const refs = [{ environmentId, projectId: ProjectId.make("site") }];
+
+  it("is the set of a scope with a shared project open here", () => {
+    const members = [
+      { scope: "acme/site", name: "Site", refs },
+      { scope: "local:docs", name: "Docs", refs: [] },
+    ];
+    expect(roomSetOf({ scope: "set:s", name: "S", refs: [], members })).toBe("s");
+  });
+
+  it("has none for a workspace of local projects: a room lives on the Hub", () => {
+    const members = [{ scope: "local:docs", name: "Docs", refs }];
+    expect(roomSetOf({ scope: "set:s", name: "S", refs: [], members })).toBeNull();
+  });
+
+  it("has none for a shared project this computer has no checkout of", () => {
+    const members = [{ scope: "acme/site", name: "Site", refs: [] }];
+    expect(roomSetOf({ scope: "set:s", name: "S", refs: [], members })).toBeNull();
+  });
+
+  it("has none for one project", () => {
+    expect(roomSetOf({ scope: "acme/site", name: "Site", refs })).toBeNull();
   });
 });

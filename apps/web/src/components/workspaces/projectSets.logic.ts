@@ -17,6 +17,10 @@ export const setScope = (id: string): string => `${SET_SCOPE_PREFIX}${id}`;
 
 export const isSetScope = (scope: string): boolean => scope.startsWith(SET_SCOPE_PREFIX);
 
+/** The id of the set a scope names, or null for any other scope. */
+export const setIdOfScope = (scope: string): string | null =>
+  isSetScope(scope) ? scope.slice(SET_SCOPE_PREFIX.length) : null;
+
 export const setOfScope = (
   scope: string,
   sets: ReadonlyArray<ProjectSet>,
@@ -42,6 +46,18 @@ export const setOfProject = (
   setHolds(stored, project, sets)
     ? setOfScope(stored, sets)
     : sets.find((set) => set.projects.includes(project));
+
+/** The set a room across these projects belongs to: the one in scope, else the first that holds them. */
+export const setOfRoom = (
+  projects: ReadonlyArray<string>,
+  stored: string,
+  sets: ReadonlyArray<ProjectSet>,
+): ProjectSet | undefined => {
+  if (projects.length === 0) return undefined;
+  const holds = (set: ProjectSet) => projects.every((project) => set.projects.includes(project));
+  const inScope = setOfScope(stored, sets);
+  return inScope !== undefined && holds(inScope) ? inScope : sets.find(holds);
+};
 
 /** Not `crypto.randomUUID`: a remote browser on plain http has none. */
 export const newSetId = (): string =>
@@ -138,22 +154,4 @@ export function checkoutOf(
   const found =
     held.find((project) => project.environmentId === primaryEnvironmentId) ?? held[0] ?? null;
   return found === null ? null : { environmentId: found.environmentId, cwd: found.workspaceRoot };
-}
-
-/**
- * A set's projects no Hub workspace shares, with where they are: a shared room's agent has no room
- * in them, so it gets their folders. `groups` is the sidebar's catalog.
- */
-export function setFolders(
-  set: ProjectSet | undefined,
-  groups: ReadonlyArray<{
-    readonly projectKey: string;
-    readonly displayName: string;
-    readonly workspaceRoot: string;
-  }>,
-): ReadonlyArray<{ readonly name: string; readonly folder: string }> {
-  return (set?.projects ?? []).flatMap((scope) => {
-    const group = groups.find((candidate) => `local:${candidate.projectKey}` === scope);
-    return group === undefined ? [] : [{ name: group.displayName, folder: group.workspaceRoot }];
-  });
 }

@@ -45,6 +45,7 @@ export function ProjectSetMembers({
             void navigate({
               to: "/workspace/$setId",
               params: { setId: scope.scope.slice(SET_SCOPE_PREFIX.length) },
+              search: { view: "files" },
             })
           }
         >

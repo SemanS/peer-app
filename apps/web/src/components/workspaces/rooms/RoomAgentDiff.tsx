@@ -22,12 +22,17 @@ import { useRoomDiff, useRoomSteps, useRoomThread } from "./useRoom";
  */
 export function RoomAgentDiff({
   until,
+  threadAt,
   ...changes
-}: { readonly until: string | undefined } & RoomAgentChangesProps) {
-  const { environmentId, place, run } = changes;
+}: {
+  readonly until: string | undefined;
+  /** Where the run lives: a run across projects is read there, whichever project's changes show. */
+  readonly threadAt: RoomPlace;
+} & RoomAgentChangesProps) {
+  const { environmentId, run } = changes;
   const changed = useChangeRevision(changes);
   const [mode, setMode] = useState<"thread" | "changes">("thread");
-  const thread = useRoomThread({ environmentId, place, run, until, revision: changed });
+  const thread = useRoomThread({ environmentId, place: threadAt, run, until, revision: changed });
   const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -54,13 +59,13 @@ export function RoomAgentDiff({
       {mode === "thread" ? (
         <AgentThread thread={thread.thread} error={thread.error} run={run} />
       ) : (
-        <RoomAgentChanges {...changes} />
+        <RoomAgentChanges key={changes.place.project} {...changes} />
       )}
     </div>
   );
 }
 
-type RoomAgentChangesProps = {
+export type RoomAgentChangesProps = {
   readonly environmentId: EnvironmentId;
   readonly place: RoomPlace;
   readonly run: string;

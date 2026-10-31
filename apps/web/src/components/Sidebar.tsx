@@ -276,7 +276,7 @@ import {
 } from "./workspaces/SidebarViewSwitch";
 import { sidebarScopeLine, type SidebarView } from "./workspaces/SidebarViewSwitch.logic";
 import { useProjectScope } from "./workspaces/projectScope";
-import { newChatProject, scopeOfProject } from "./workspaces/projectScope.logic";
+import { newChatProject, roomSetOf, scopeOfProject } from "./workspaces/projectScope.logic";
 import { routeForView } from "./workspaces/sidebarRoutes.logic";
 import { ALL_PROJECTS } from "./workspaces/workBoard.logic";
 import { ActiveOrganization } from "./workspaces/ActiveOrganization";
@@ -4390,15 +4390,21 @@ export default function Sidebar() {
     updateThreadJumpHintsVisibility(shouldShowJumpHintsNow);
   }, [shouldShowJumpHintsNow, updateThreadJumpHintsVisibility]);
 
-  // A new chat starts in the project the sidebar is scoped to; with all projects it starts where
-  // a new thread does.
+  // A new chat starts in the project the sidebar is scoped to, or across a workspace's projects;
+  // with all projects it starts where a new thread does.
   const scopedChatProject = newChatProject(projectScope, primaryEnvironmentId);
   const handleNewChatClick = (event?: ReactMouseEvent) => {
     const action = resolveNewChatAction({
       scopedProject: scopedChatProject,
+      scopedSet: roomSetOf(projectScope),
       projectGroupCount: projectGroups.length,
       currentProjectRequested: event?.shiftKey ?? false,
     });
+    if (action.kind === "workspace") {
+      if (isMobile) setOpenMobile(false);
+      void router.navigate({ to: "/workspace/$setId", params: { setId: action.setId } });
+      return;
+    }
     if (action.kind === "project") {
       if (isMobile) setOpenMobile(false);
       void newThreadContext.handleNewThread(action.projectRef);

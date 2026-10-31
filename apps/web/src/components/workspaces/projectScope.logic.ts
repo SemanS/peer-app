@@ -6,7 +6,7 @@ import {
   type ScopedProjectRef,
 } from "@t3tools/contracts";
 
-import { isSetScope, setOfScope, type ProjectSet } from "./projectSets.logic";
+import { isSetScope, setIdOfScope, setOfScope, type ProjectSet } from "./projectSets.logic";
 import { ALL_PROJECTS, projectScopeKey } from "./workBoard.logic";
 
 /**
@@ -75,6 +75,8 @@ export interface ResolvedProjectScope {
   readonly refs: ReadonlyArray<ScopedProjectRef> | null;
   /** A project set's projects, in order; a project gone from the catalog drops out. */
   readonly members?: ReadonlyArray<ResolvedProjectScope>;
+  /** How a set stores this project, which `scope` outgrows once a local project is shared. */
+  readonly entry?: string;
 }
 
 const EVERY_PROJECT: ResolvedProjectScope = { scope: ALL_PROJECTS, name: undefined, refs: null };
@@ -93,8 +95,11 @@ export function resolveProjectScope(stored: string, known: ProjectCatalog): Reso
     const set = setOfScope(stored, known.sets ?? []);
     if (set === undefined) return EVERY_PROJECT;
     const members = set.projects
-      .map((project) => resolveProjectScope(project, known))
-      .filter((member) => member.scope !== ALL_PROJECTS);
+      .map((project) => ({ ...resolveProjectScope(project, known), entry: project }))
+      .filter((member) => member.scope !== ALL_PROJECTS)
+      .filter(
+        (member, index, all) => all.findIndex((other) => other.scope === member.scope) === index,
+      );
     return {
       scope: stored,
       name: set.name,
@@ -119,6 +124,41 @@ export function resolveProjectScope(stored: string, known: ProjectCatalog): Reso
   return project === undefined
     ? EVERY_PROJECT
     : { scope: stored, name: project.name, refs: project.refs };
+}
+
+/**
+ * The sets as they stand now: a local project someone shared since is its workspace project, so
+ * what compares a set's projects with a project's scope finds it. Never saved: without the Hub's
+ * index only the `local:` scope still resolves, and a workspace would lose the project at sign-out.
+ */
+export function withSharedProjects(
+  sets: ReadonlyArray<ProjectSet>,
+  known: Pick<ProjectCatalog, "peer" | "groups">,
+): ReadonlyArray<ProjectSet> {
+  const moved = (project: string) => {
+    if (!isLocalScope(project)) return project;
+    const { scope } = resolveProjectScope(project, known);
+    return scope === ALL_PROJECTS ? project : scope;
+  };
+  const followed = sets.map((set) => {
+    const projects = [...new Set(set.projects.map(moved))];
+    return projects.length === set.projects.length &&
+      projects.every((project, index) => project === set.projects[index])
+      ? set
+      : { ...set, projects };
+  });
+  return followed.every((set, index) => set === sets[index]) ? sets : followed;
+}
+
+/**
+ * The set a new chat in scope is a room across. A room lives on the Hub, so a set with no shared
+ * project on this computer has none, and a new chat there starts in one of its projects as ever.
+ */
+export function roomSetOf(scope: ResolvedProjectScope): string | null {
+  const shared = scope.members?.some(
+    (member) => !isLocalScope(member.scope) && (member.refs?.length ?? 0) > 0,
+  );
+  return shared === true ? setIdOfScope(scope.scope) : null;
 }
 
 /** The projects the Chats list keeps, for `filterSidebarV2VisibleThreads`; null keeps every project. */

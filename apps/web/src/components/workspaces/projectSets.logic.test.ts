@@ -6,9 +6,10 @@ import {
   joinProjects,
   removeFromSet,
   renameSet,
-  setFolders,
   setHolds,
+  setIdOfScope,
   setOfProject,
+  setOfRoom,
   setScope,
   type ProjectSet,
 } from "./projectSets.logic";
@@ -82,10 +83,27 @@ describe("checkoutOf", () => {
   });
 });
 
-describe("setFolders", () => {
-  it("gives a shared room the folders of the set's unshared projects", () => {
-    const groups = [{ projectKey: "site", displayName: "Site", workspaceRoot: "/w/site" }];
-    expect(setFolders(pair, groups)).toEqual([{ name: "Site", folder: "/w/site" }]);
-    expect(setFolders(undefined, groups)).toEqual([]);
+describe("setIdOfScope", () => {
+  it("names the set of a set's scope and nothing else", () => {
+    expect(setIdOfScope(setScope("s1"))).toBe("s1");
+    expect(setIdOfScope("acme/app")).toBeNull();
+  });
+});
+
+describe("setOfRoom", () => {
+  const other: ProjectSet = { id: "s2", name: "All", projects: ["acme/app", "local:site", "a/b"] };
+
+  it("prefers the set in scope, else the first that holds the projects", () => {
+    const projects = ["acme/app", "local:site"];
+    expect(setOfRoom(projects, setScope("s2"), [pair, other])).toBe(other);
+    expect(setOfRoom(projects, "acme/app", [pair, other])).toBe(pair);
+  });
+
+  it("has none once no set holds them all", () => {
+    expect(setOfRoom(["acme/app", "x/y"], "acme/app", [pair, other])).toBeUndefined();
+  });
+
+  it("has none for a room it knows nothing of yet, which every set would hold", () => {
+    expect(setOfRoom([], setScope("s2"), [pair, other])).toBeUndefined();
   });
 });

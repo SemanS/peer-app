@@ -4,7 +4,7 @@ import type { EnvironmentId, PeerHubStatus, PeerProjectState, PeerRun } from "@t
 
 import { cn } from "../../../lib/utils";
 import { PeerSectionLabel } from "../PeerPageHeader";
-import { useProjectSets } from "../projectSets";
+import { useCurrentProjectSets } from "../projectScope";
 import { setOfProject } from "../projectSets.logic";
 import { taskRunRows } from "../task/runs.logic";
 import { useWorkData } from "../useWorkData";
@@ -20,8 +20,8 @@ import {
 } from "./room.logic";
 
 /**
- * The room's agents under the people who run them, each with its state; in a project set, the
- * agents of its other projects under them, since the work there moves with this task.
+ * The room's agents under the people who run them, each with its state; in a project set, or a room
+ * across projects, the agents of the other projects under them, since the work there moves with this.
  */
 export function RoomAgents({
   environmentId,
@@ -34,7 +34,7 @@ export function RoomAgents({
   nameOf,
   onOpen,
   place,
-  alone = false,
+  across,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
@@ -46,14 +46,14 @@ export function RoomAgents({
   readonly nameOf: NameOf;
   readonly onOpen: (open: WorkOpen) => void;
   readonly place: RoomPlace;
-  /** Its own project only: a shared room shows the others beside it. */
-  readonly alone?: boolean;
+  /** A room across projects' other projects: its agent works there, with or without a run. */
+  readonly across?: ReadonlyArray<string>;
 }) {
   const { tree } = useWorkData();
-  const [sets] = useProjectSets();
+  const sets = useCurrentProjectSets();
   const [stored] = useWorkScope();
   const here = projectScopeKey({ workspace: place.workspace, projectId: place.project });
-  const others = new Set(setOfProject(here, stored, sets)?.projects);
+  const others = new Set(across ?? setOfProject(here, stored, sets)?.projects);
   others.delete(here);
   const rows = taskRunRows(runs, {
     me,
@@ -65,7 +65,7 @@ export function RoomAgents({
     clock: (at) => at,
   });
   const groups = roomAgentGroups({ runs, rows, threads, me, nameOf });
-  const elsewhere = alone ? [] : tree.filter((project) => others.has(projectScopeKey(project)));
+  const elsewhere = tree.filter((project) => others.has(projectScopeKey(project)));
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 py-4">
       {groups.length === 0 ? (
@@ -80,7 +80,16 @@ export function RoomAgents({
           className="flex flex-col gap-3 border-t border-border/60 pt-4"
         >
           <h3 className="text-sm font-medium text-foreground">{project.name}</h3>
-          <ProjectAgents project={project} me={me} nameOf={nameOf} onOpen={onOpen} />
+          {across === undefined ? null : (
+            <p className="text-sm text-muted-foreground">The room&rsquo;s agent works here too.</p>
+          )}
+          <ProjectAgents
+            project={project}
+            me={me}
+            nameOf={nameOf}
+            onOpen={onOpen}
+            {...(across === undefined ? {} : { none: null })}
+          />
         </section>
       ))}
     </div>
@@ -93,15 +102,20 @@ export function ProjectAgents({
   me,
   nameOf,
   onOpen,
+  none = "No agents here yet.",
 }: {
   readonly project: WorkProjectNode;
   readonly me: string;
   readonly nameOf: NameOf;
   readonly onOpen: (open: WorkOpen) => void;
+  /** What the list says when it holds nobody; null says nothing. */
+  readonly none?: string | null;
 }) {
   const groups = projectAgentGroups(project, me, nameOf);
   return groups.length === 0 ? (
-    <p className="text-sm text-muted-foreground">No agents here yet.</p>
+    none === null ? null : (
+      <p className="text-sm text-muted-foreground">{none}</p>
+    )
   ) : (
     <AgentGroups groups={groups} onOpen={onOpen} />
   );

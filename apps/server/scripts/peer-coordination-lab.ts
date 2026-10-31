@@ -7328,7 +7328,11 @@ const sharedRoomProgram = Effect.gen(function* () {
   const group = "lab-shared-room";
   yield* ana.client[PEER_ROOMS_METHODS.peerRoomsFolders]({
     group,
-    folders: [{ name: "Notes", folder: localFolder }],
+    folders: [
+      { name: "Notes", folder: localFolder },
+      // A workspace can still name a project as a folder after it was shared.
+      { name: "Site", folder: siteCheckout.path },
+    ],
   });
   const chat = (projectId: string) =>
     ana.client[WS_METHODS.peerHubCreateTask]({
@@ -7399,6 +7403,49 @@ const sharedRoomProgram = Effect.gen(function* () {
       approveAll(live);
     }
     say("delivery", JSON.stringify(yield* Effect.promise(delivery)));
+    // A follow-up to the room reaches the agent that runs, and starts no second one.
+    const followed = yield* Effect.promise(() =>
+      Effect.runPromise(
+        ana.client[PEER_ROOMS_METHODS.peerRoomsPost]({
+          ...labRoom,
+          op: "shared-follow-up",
+          text: "In one short sentence, name the folders you work in, in the room.",
+          to: [{ kind: "agent", email: "ana@acme.test" }],
+        }),
+      ),
+    );
+    const followUp = async () =>
+      deliveryOf(
+        (
+          (await hubCall(`${roomPath}?limit=50`, { session: hubSession }))
+            .messages as ReadonlyArray<PeerRoomMessage>
+        ).find((one) => one.seq === followed.seq),
+        "ana@acme.test",
+      );
+    let heard = false;
+    for (let waited = 0; waited < 3 * 60_000 && !heard; waited += 3000) {
+      yield* Effect.promise(() => sleep(3000));
+      heard = (yield* Effect.promise(followUp))?.state === "answered";
+      approveAll(live);
+    }
+    say("follow-up", JSON.stringify(yield* Effect.promise(followUp)));
+    check(heard, "a follow-up in the room reached the agent");
+    check(panes().length === 1, "the follow-up started no second agent");
+    const read = yield* Effect.promise(() =>
+      Effect.runPromise(ana.client[PEER_ROOMS_METHODS.peerRoomsRead]({ ...labRoom, limit: 50 })),
+    );
+    say("run's projects", JSON.stringify(read.runProjects));
+    const reached = Object.values(read.runProjects ?? {})[0] ?? [];
+    check(
+      reached.toSorted().join() === "Notes,site",
+      "the room says the run works in Site and Notes, once each",
+    );
+    check(
+      !(NodeFS.readdirSync(NodePath.join(lab, "ana"), { recursive: true }) as string[]).some(
+        (entry) => entry.includes(`_folders${NodePath.sep}${NodePath.basename(siteCheckout.path)}`),
+      ),
+      "a shared project named as a folder gets no second checkout",
+    );
     const diffOf = (room: typeof labRoom) =>
       Effect.promise(() => Effect.runPromise(ana.client[PEER_ROOMS_METHODS.peerRoomsDiff](room)));
     const labDiff = yield* diffOf(labRoom);

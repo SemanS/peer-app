@@ -1,5 +1,5 @@
 import { RefreshIcon } from "~/components/ui/refresh-icon";
-import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, Navigate, useRouter } from "@tanstack/react-router";
 import { LinkIcon, PlusIcon } from "lucide-react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
@@ -11,7 +11,7 @@ import { Button } from "../components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../components/ui/empty";
 import { SidebarInset } from "../components/ui/sidebar";
 import { WorkspacePageHeader } from "../components/WorkspacePageHeader";
-import { landingProject } from "../components/workspaces/projectScope.logic";
+import { landingProject, roomSetOf } from "../components/workspaces/projectScope.logic";
 import { useProjectScope, usePeerHub } from "../components/workspaces/projectScope";
 import { usePeerHubSettled } from "../components/workspaces/WorkspaceAccess";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
@@ -63,7 +63,9 @@ function IndexDraftLanding() {
         scope.peer,
       )
     : null;
-  const projectRef = hubSettled ? landing : null;
+  // A workspace's first screen is its room, across all its projects.
+  const setId = roomSetOf(scope);
+  const projectRef = hubSettled && setId === null ? landing : null;
   const attempt = startState.retryRequest;
 
   useEffect(() => {
@@ -86,6 +88,9 @@ function IndexDraftLanding() {
       });
   }, [attempt, handleNewThread, projectRef]);
 
+  if (setId !== null) {
+    return <Navigate to="/workspace/$setId" params={{ setId }} replace />;
+  }
   if (!bootstrapped) {
     return null;
   }

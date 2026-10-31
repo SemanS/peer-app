@@ -53,6 +53,33 @@ export const rootHolding = (roots: ReadonlyArray<RunRoot>, path: string): RunRoo
   });
 };
 
+/**
+ * The room's folders no checkout covers yet. A folder stays stored after its project is shared, and
+ * the agent would then get that project twice, a checkout of each on a branch of its own.
+ */
+export const foldersBeyond = <Folder extends { readonly folder: string }>(
+  folders: ReadonlyArray<Folder>,
+  checkouts: ReadonlyArray<string>,
+): ReadonlyArray<Folder> => {
+  const taken = new Set(checkouts.map(real));
+  return folders.filter(({ folder }) => !taken.has(real(folder)));
+};
+
+/** What a room's reader is told of where its agents work, by its `group` and its runs here. */
+export const roomReach = (
+  stored: typeof RunRoots.Type | undefined,
+  group: string | undefined,
+  runs: ReadonlyArray<string>,
+) => ({
+  folders: (group === undefined ? [] : (stored?.folders?.[group] ?? [])).map(({ name }) => name),
+  runProjects: Object.fromEntries(
+    runs.flatMap((run) => {
+      const roots = stored?.runs[run] ?? [];
+      return roots.length === 0 ? [] : [[run, [...new Set(roots.map((root) => root.project))]]];
+    }),
+  ),
+});
+
 /** What tells a run where its other projects are, which nothing else in its session says. */
 export const projectsText = (
   also: ReadonlyArray<{ readonly project: string; readonly root: string }>,

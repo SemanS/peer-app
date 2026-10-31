@@ -1,5 +1,5 @@
 import { AuthPreviewOperateScope } from "@t3tools/contracts";
-import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import { Outlet, createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useAtomValue } from "@effect/atom-react";
 import { useEffect } from "react";
 
@@ -15,7 +15,7 @@ import { useProjects } from "../state/entities";
 import { selectProjectGroupingSettings } from "../logicalProject";
 import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
 import { useProjectScope } from "../components/workspaces/projectScope";
-import { newChatProject } from "../components/workspaces/projectScope.logic";
+import { newChatProject, roomSetOf } from "../components/workspaces/projectScope.logic";
 import { dispatchPreviewAction } from "../components/preview/previewActionBus";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useScratchProject } from "../hooks/useScratchProject";
@@ -58,6 +58,8 @@ function ChatRouteGlobalShortcuts() {
   const projectScope = useProjectScope(projectGroups);
   const projectGroupCount = projectGroups.length;
   const scopedProject = newChatProject(projectScope, primaryEnvironmentId);
+  const scopedSet = roomSetOf(projectScope);
+  const navigate = useNavigate();
   const terminalOpen = useTerminalUiStateStore((state) =>
     routeThreadRef
       ? selectThreadTerminalUiState(state.terminalUiStateByThreadKey, routeThreadRef).terminalOpen
@@ -132,9 +134,14 @@ function ChatRouteGlobalShortcuts() {
         event.stopPropagation();
         const action = resolveNewChatAction({
           scopedProject,
+          scopedSet,
           projectGroupCount,
           legacySidebar: legacySidebarEnabled,
         });
+        if (action.kind === "workspace") {
+          void navigate({ to: "/workspace/$setId", params: { setId: action.setId } });
+          return;
+        }
         if (action.kind === "project") {
           void handleNewThread(action.projectRef);
           return;
@@ -206,10 +213,12 @@ function ChatRouteGlobalShortcuts() {
     handleNewThread,
     keybindings,
     defaultProjectRef,
+    navigate,
     previewOpen,
     primaryEnvironmentId,
     projectGroupCount,
     scopedProject,
+    scopedSet,
     routeThreadRef,
     scratchEnvironmentId,
     selectedThreadKeysSize,

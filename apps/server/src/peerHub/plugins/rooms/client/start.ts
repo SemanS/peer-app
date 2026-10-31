@@ -24,7 +24,7 @@ import type * as PeerPlugins from "../../../core/plugins/PeerPlugins.ts";
 import type * as PeerState from "../../../core/state/PeerState.ts";
 import { projectKey } from "../../../core/state/PeerState.ts";
 import type * as PeerWork from "../../../core/work/PeerWork.ts";
-import { runRootsData, type RunRoot } from "../../../core/work/runRoots.ts";
+import { foldersBeyond, runRootsData, type RunRoot } from "../../../core/work/runRoots.ts";
 import { run } from "../../../core/local.ts";
 import { NO_CHECKOUT } from "../follow.ts";
 import { chatRunPrompt, passedRunPrompt, reviewRoomPrompt, type Heard } from "../text.ts";
@@ -174,11 +174,16 @@ const baseOf = async (folder: string) => {
 };
 
 /** The folders a shared room's agent works in besides its Hub projects, as `launch` takes them. */
-const roomFolders = (state: PeerState.PeerState["Service"], group: string | undefined) =>
+const roomFolders = (
+  state: PeerState.PeerState["Service"],
+  group: string | undefined,
+  checkouts: ReadonlyArray<string>,
+) =>
   Effect.gen(function* () {
     if (group === undefined) return [];
     const stored = Option.getOrUndefined(yield* runRootsData(state).read);
-    return yield* Effect.forEach(stored?.folders?.[group] ?? [], ({ name, folder }) =>
+    const folders = foldersBeyond(stored?.folders?.[group] ?? [], checkouts);
+    return yield* Effect.forEach(folders, ({ name, folder }) =>
       Effect.promise(async () => ({
         project: name,
         checkout: folder,
@@ -264,7 +269,10 @@ export const roomStarts = (
           (effort !== undefined && !isEffort(effort))
         )
           return yield* refusal("Peer cannot start that model.");
-        const folders = yield* roomFolders(state, task.group);
+        const folders = yield* roomFolders(state, task.group, [
+          checkout.path,
+          ...others.map((other) => other.checkout.path),
+        ]);
         const launcher = yield* plugins.require("taskLauncher");
         const unavailable = yield* launcher.unavailable;
         if (unavailable !== null) return yield* refusal(unavailable);

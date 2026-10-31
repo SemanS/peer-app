@@ -38,10 +38,15 @@ export interface ChatThreadActionContext {
 
 export function resolveNewChatAction(input: {
   readonly scopedProject: ScopedProjectRef | null;
+  /** The project set in scope: a new chat there is a room across its projects. */
+  readonly scopedSet?: string | null;
   readonly projectGroupCount: number;
   readonly currentProjectRequested?: boolean;
   readonly legacySidebar?: boolean;
 }) {
+  if (!input.legacySidebar && !input.currentProjectRequested && input.scopedSet) {
+    return { kind: "workspace" as const, setId: input.scopedSet };
+  }
   if (!input.legacySidebar && input.scopedProject !== null) {
     return { kind: "project" as const, projectRef: input.scopedProject };
   }

@@ -214,6 +214,20 @@ export interface RoomTargetChoice {
 
 const runOpen = (run: Pick<PeerRun, "state">) => run.state !== "ended";
 
+/** "a", "a and b", "a, b and c". */
+export const namesInWords = (names: ReadonlyArray<string>) =>
+  names.length < 2
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+
+/** Where a start puts an agent, for the line said before sending. */
+export const agentStartPlace = (chat: boolean, across: ReadonlyArray<string> = []) =>
+  across.length > 1
+    ? `across ${namesInWords(across)}, in its own checkout of each`
+    : chat
+      ? "in its own checkout"
+      : "read-only";
+
 /**
  * The To row: Team first, which is the default; your agent; then each person on the task with
  * their agent. People on the task are those with a run on it, and who created it.
@@ -230,6 +244,8 @@ export function targetsFor(
     readonly nameOf?: NameOf;
     /** A chat: anyone on the project can be named, and your agent works in its own checkout. */
     readonly chat?: boolean;
+    /** The projects a room across a workspace's projects works in, names in order. */
+    readonly across?: ReadonlyArray<string>;
   } = {},
 ): ReadonlyArray<RoomTargetChoice> {
   const nameOf: NameOf =
@@ -263,9 +279,7 @@ export function targetsFor(
         ? {
             note: ownRun
               ? "Your agent on this task reads this at its next step."
-              : options.chat === true
-                ? "This starts your agent on this computer, in its own checkout, on your capacity."
-                : "This starts your agent on this computer, read-only, on your capacity.",
+              : `This starts your agent on this computer, ${agentStartPlace(options.chat === true, options.across)}, on your capacity.`,
           }
         : { disabled: "This computer has no checkout of the project." }),
     },

@@ -101,3 +101,57 @@ describe("checkout authority changes", () => {
     }
   });
 });
+
+describe("the task a session works on", () => {
+  const onTask = (branch: { current: string }) =>
+    brokerFixture(() => ({
+      branchOf: async () => branch.current,
+      taskOf: (_workspace, _project, _keys, texts) =>
+        texts.some((text) => /evn-1/i.test(text ?? "")) ? "evn-1" : undefined,
+    }));
+
+  it("follows a branch made during its one prompt", async () => {
+    const branch = { current: "main" };
+    const fixture = await onTask(branch);
+    try {
+      await fixture.register("one");
+      const session = fixture.broker.sessions.get("claude:one")!;
+      expect(session.task).toBeUndefined();
+      branch.current = "evn-1-ledger";
+      await fixture.broker["hook"](
+        {
+          hook_event_name: "PostToolUse",
+          session_id: "one",
+          cwd: fixture.root,
+          tool_name: "Bash",
+          tool_input: { command: "git checkout -b evn-1-ledger" },
+        },
+        { "x-peer-agent": "claude" },
+      );
+      expect(session.branch).toBe("evn-1-ledger");
+      expect(fixture.broker.taskFor(session, undefined)).toBe("evn-1");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("takes the task its person's first prompt names", async () => {
+    const fixture = await onTask({ current: "main" });
+    try {
+      await fixture.register("one");
+      const session = fixture.broker.sessions.get("claude:one")!;
+      await fixture.broker["hook"](
+        {
+          hook_event_name: "UserPromptSubmit",
+          session_id: "one",
+          cwd: fixture.root,
+          prompt: "EVN-1: build the ledger core",
+        },
+        { "x-peer-agent": "claude" },
+      );
+      expect(fixture.broker.taskFor(session, undefined)).toBe("evn-1");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+});

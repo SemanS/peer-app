@@ -459,6 +459,9 @@ export async function answerHook(
       // changed no file, and is no approval of the ask before it.
       const failed = event === "PostToolUseFailure";
       if (body.tool_name === "Bash" || failed) {
+        // The command may have made the branch that names its task: one prompt can be a whole run.
+        session.branch =
+          (await this.host.branchOf(session.root).catch(() => undefined)) ?? session.branch;
         // What git sees the command changed is what the plugins hear it edited.
         const changed = await this.readShellChanges(session);
         const finishing = step();

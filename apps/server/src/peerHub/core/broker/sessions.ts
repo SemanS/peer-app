@@ -564,7 +564,7 @@ export function holder(this: CoordinationBroker, session: LocalSession): Context
 
 /**
  * The task a session works on now: the one its Peer thread or runtime agent was
- * put on, or the one its branch or its runtime's title names.
+ * put on, or the one its branch, its runtime's title or what its person first asked names.
  */
 export function taskFor(
   this: CoordinationBroker,
@@ -581,7 +581,7 @@ export function taskFor(
         ...(session.thread === undefined ? [] : [session.thread]),
         session.runtimeKey ?? `herdr:${session.id}`,
       ],
-      [session.branch, title],
+      [session.branch, title, session.labelFromPrompt ? session.label : undefined],
     )
   );
 }

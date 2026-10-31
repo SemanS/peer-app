@@ -615,6 +615,8 @@ const make = Effect.gen(function* () {
       return yield* hubError(`${project.name} has no such repository.`);
     }
     // Forced off by this computer, it refuses here, before any checkout changes.
+    // It takes the state lock itself, and `changeCheckout` guards the checkout, so this holds none:
+    // jj on a large repository takes a while, and syncing should not wait for it.
     yield* plugins.setPlugin({ id: "jujutsu", enabled: true });
     const { persisted } = yield* state.read;
     for (const repo of repositories) {
@@ -629,7 +631,7 @@ const make = Effect.gen(function* () {
       );
     }
     return yield* publish;
-  }, lock.withPermits(1));
+  });
 
   const shareProject: PeerWorkspaces["Service"]["shareProject"] = Effect.fn(
     "PeerWorkspaces.shareProject",

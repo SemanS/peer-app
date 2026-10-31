@@ -155,6 +155,8 @@ const started = (
     }).pipe(Effect.provide(core));
   });
 
+const hasJj = NodeChildProcess.spawnSync("jj", ["--version"]).status === 0;
+
 describe("Peer workspaces", () => {
   it.effect("reads advertised editions and keeps older or unavailable editions unknown", () =>
     Effect.gen(function* () {
@@ -525,6 +527,23 @@ describe("Peer workspaces", () => {
       assert.deepStrictEqual(yield* Queue.takeAll(heard), ["signing-out with a session"]);
       assert.isTrue(Option.isNone(yield* client.storedSession));
       assert.isTrue(hub.calls.some((call) => call.url === "/v1/auth/signout"));
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect.skipIf(!hasJj)("put a cloned checkout on Jujutsu and turn its plugin on", () =>
+    Effect.gen(function* () {
+      const { dir, origin } = yield* bareRepository;
+      const root = NodePath.join(dir, "Peer");
+      const { workspaces, state } = yield* started(origin, {
+        root,
+        plugins: [plugin("jujutsu", Effect.succeed({}))],
+      });
+      yield* workspaces.sync;
+      yield* workspaces.openProject({ workspace: "acme", projectId: "pay" });
+      const status = yield* workspaces.useJujutsu({ workspace: "acme", projectId: "pay" });
+      assert.strictEqual(status.workspaces[0]?.projects[0]?.repositories[0]?.vcs, "jj");
+      assert.isTrue(NodeFS.existsSync(NodePath.join(root, "acme", "pay", "api", ".jj")));
+      assert.strictEqual((yield* state.read).persisted.plugins?.jujutsu, true);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

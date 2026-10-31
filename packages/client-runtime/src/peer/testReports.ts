@@ -17,6 +17,7 @@ import {
   type PeerTestReportItem,
   type PeerTestReportSummary,
   type PeerTestsFileInput,
+  type PeerTestsInherited,
   type PeerTestsPlace,
   type PeerTestsSetOwnerResult,
   type PeerWorkspaceState,
@@ -50,7 +51,27 @@ export function createPeerTestReportsAtoms<R, ER>(
         task: input.task,
       }),
   });
+  const inherited = createEnvironmentQueryAtomFamily(runtime, {
+    label: "peer:testReports:inherited",
+    staleTimeMs: 0,
+    idleTtlMs: 0,
+    execute: (input: PeerTestsPlace & { readonly revision: string }) =>
+      request(WS_METHODS.peerTestsInherited, {
+        workspace: input.workspace,
+        project: input.project,
+        task: input.task,
+      }),
+  });
   return {
+    peerTestsInherited: (target: {
+      readonly environmentId: EnvironmentId;
+      readonly input: PeerTestsPlace;
+      readonly revision: string;
+    }) =>
+      inherited({
+        environmentId: target.environmentId,
+        input: { ...target.input, revision: target.revision },
+      }),
     peerTestsList: (target: {
       readonly environmentId: EnvironmentId;
       readonly input: PeerTestsPlace;
@@ -125,6 +146,39 @@ export const testReportsRevision = (status: Summaries, place: PeerTestsPlace) =>
     .map((s) => `${s.author}:${s.number}:${s.unowned}:${(s.asks ?? []).length}`)
     .sort()
     .join("|");
+
+/** The cache key of what a task inherits: any report of its project moved. */
+export const projectReportsRevision = (
+  status: Summaries,
+  place: Pick<PeerTestsPlace, "workspace" | "project">,
+) =>
+  (status.testReports?.summaries ?? [])
+    .filter((s) => s.workspace === place.workspace && s.project === place.project)
+    .map((s) => `${s.task}:${s.author}:${s.number}`)
+    .sort()
+    .join("|");
+
+/** One item a dependency left to a task, as web and the phone list it. */
+export interface InheritedRow {
+  readonly key: string;
+  readonly kind: "failed" | "unverified";
+  readonly text: string;
+  /** "From 1.1 · report 2 · Ana". */
+  readonly source: string;
+}
+
+/** What a task inherited, with the source task and report. */
+export function inheritedRows(
+  inherited: PeerTestsInherited,
+  nameOf: (email: string) => string,
+): ReadonlyArray<InheritedRow> {
+  return inherited.items.map((item) => ({
+    key: `${item.task}:${item.author}:${item.number}:${item.index}`,
+    kind: item.failed ? "failed" : "unverified",
+    text: item.text,
+    source: `From ${item.key ?? item.title} · report ${item.number} · ${nameOf(item.author)}`,
+  }));
+}
 
 /** A task's reports as its page lists them: newest first. */
 export const orderedReports = (reports: ReadonlyArray<PeerTestReport>) =>

@@ -5,6 +5,7 @@ import {
   boardCards,
   buildWorkTree,
   byActivity,
+  handoffMove,
   projectScopeKey,
   rollup,
   type BoardCard,
@@ -190,6 +191,8 @@ export type WorkCardAction =
   | { readonly kind: "thread"; readonly environmentId: EnvironmentId; readonly threadId: ThreadId }
   | { readonly kind: "agent"; readonly environmentId: EnvironmentId; readonly agentId: string }
   | { readonly kind: "request"; readonly item: Extract<NeedsYouItem, { kind: "request" }> }
+  /** The person answers on a computer or in Needs you, where the task's card has its details. */
+  | { readonly kind: "answer" }
   /** The person decides it in the owner's call sheet, as Needs you does. */
   | { readonly kind: "owner-call"; readonly item: Extract<NeedsYouItem, { kind: "owner-call" }> }
   /** The person settles it in Needs you; the overlap's page is on web and desktop. */
@@ -211,6 +214,8 @@ export function workCardAction(
       return { kind: "stale", item: card.item };
     case "owner-call":
       return { kind: "owner-call", item: card.item };
+    case "answer":
+      return { kind: "answer" };
     case "thread":
       break;
   }
@@ -306,7 +311,8 @@ export function workEmptyText(
  * what the person does with a review ("In review · decide") where the row opens it.
  */
 export function taskStateWords(
-  task: Pick<WorkTaskNode, "done" | "inReview" | "accepted">,
+  task: Pick<WorkTaskNode, "done" | "inReview" | "accepted"> &
+    Partial<Pick<WorkTaskNode, "handoffNext" | "runs" | "threads">>,
   decide = false,
 ): string {
   if (task.done) return "Done";
@@ -314,6 +320,11 @@ export function taskStateWords(
     return task.accepted === "policy"
       ? "Accepted by policy · waiting to land"
       : "Accepted · waiting to land";
+  const open = handoffMove({ ...task, threads: task.threads ?? [] });
+  if (open !== undefined) {
+    const yours = open.move === "human_decision" || !open.live;
+    return decide && yours ? `${open.label} · decide` : open.label;
+  }
   if (task.inReview === true) return decide ? "In review · decide" : "In review";
   return "Open";
 }

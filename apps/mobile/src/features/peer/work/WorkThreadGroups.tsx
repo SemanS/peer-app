@@ -122,6 +122,12 @@ function cardText(
         detail: card.item.call.paths.join(", "),
         chips: [{ tone: "needs", label: "Owner's call" }],
       };
+    case "answer":
+      return {
+        title: card.item.title,
+        detail: card.item.taskName,
+        chips: [{ tone: "needs", label: "You answer for" }],
+      };
   }
 }
 
@@ -141,6 +147,8 @@ function actionLabel(card: BoardCard, action: WorkCardAction): string | null {
       return "Inspect changed inputs";
     case "overlap":
       return "Settle in Needs you";
+    case "answer":
+      return "Open in Needs you";
     case "unavailable":
       return null;
   }

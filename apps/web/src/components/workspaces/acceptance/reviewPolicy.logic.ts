@@ -69,7 +69,11 @@ export function reviewPolicyView(
     setBy:
       policy.version === 0 || policy.updatedBy === undefined
         ? "Nobody set a rule yet: a person reviews every handoff."
-        : `Set by ${nameOf(policy.updatedBy)}${policy.updatedAt === undefined ? "" : ` · ${date(policy.updatedAt)}`} (version ${policy.version}).`,
+        : `Set by ${nameOf(policy.updatedBy)}${policy.updatedAt === undefined ? "" : ` · ${date(policy.updatedAt)}`} (version ${policy.version}).${
+            policy.leadLeft === true
+              ? " They no longer lead this project, so it accepts nothing until a lead saves it again."
+              : ""
+          }`,
     canSave: mayAct,
   };
 }

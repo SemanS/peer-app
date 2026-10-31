@@ -22,7 +22,7 @@ import {
   createEnvironmentRpcQueryAtomFamily,
 } from "../state/runtime.ts";
 import type { DependentsGroup } from "./readiness.ts";
-import { governingSummaries, itemFailed } from "./testReports.ts";
+import { governingSummaries, itemFailed, testReportsRevision } from "./testReports.ts";
 export function createPeerHandoffAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ) {
@@ -475,6 +475,45 @@ export function handoffNextSteps(facts: ReadonlyArray<HandoffFact>): HandoffNext
   };
 }
 
+/** What a step says when its fact has no words of its own. */
+const STEP_WORDS: Readonly<Record<string, string>> = {
+  "no-report": "No test report was filed",
+  "not-observed": "The delivery was not observed",
+  "not-shared": "The work is not shared",
+  "failed-no-home": "A failed item",
+  "failed-left-to-dependent": "A failed item",
+  "unverified-nobody": "An unverified item nobody answers for",
+  "unverified-person": "An unverified item",
+  "unverified-task": "An unverified item",
+  "call-pending": "An owner's call",
+  "call-declined": "A declined owner's call",
+};
+
+/** One open fact as the page and the phone list it. */
+export interface HandoffStepRow {
+  readonly key: string;
+  readonly text: string;
+  /** "left to 3.1", "Ana's". */
+  readonly who: string | null;
+  readonly next: string | null;
+}
+
+export function handoffStepRow(
+  step: HandoffStep,
+  index: number,
+  nameOf: (email: string) => string,
+  taskName: (id: string) => string,
+): HandoffStepRow {
+  const { who } = step;
+  const left = step.rule === "failed-left-to-dependent" || step.rule === "unverified-task";
+  return {
+    key: `${step.rule}:${index}`,
+    text: step.label ?? STEP_WORDS[step.rule] ?? step.rule,
+    who: who === null ? null : left ? `left to ${taskName(who)}` : `${nameOf(who)}’s`,
+    next: step.next,
+  };
+}
+
 const OWNER_CALL_STATES = ["pending", "accepted", "declined", "withdrawn", "expired"] as const;
 
 const ownerCallState = (state: string) =>
@@ -673,6 +712,34 @@ export function statusHandoffFacts(
           }))),
     ],
   };
+}
+
+/**
+ * The cache key of a handoff's current signals, moved by what the Hub pings: a report filed or an
+ * item given an owner, an acceptance, an overlap, an owner's call. It is never sent.
+ */
+export function handoffSignalsRevision(
+  status: StatusFacts & Pick<PeerHubStatus, "acceptance">,
+  place: { readonly workspace: string; readonly project: string; readonly task: string },
+) {
+  return [
+    testReportsRevision(status, place),
+    ...(status.acceptance?.accepted ?? [])
+      .filter((row) => row.project === place.project && row.task === place.task)
+      .map((row) => `accepted:${row.at}`),
+    ...(status.coordination.enabled ? status.coordination.overlaps : [])
+      .filter(
+        (overlap) => overlap.workspace === place.workspace && overlap.project === place.project,
+      )
+      .map((overlap) => `${overlap.id}:${overlap.state}`)
+      .sort(),
+    ...(status.ownership?.projects ?? [])
+      .filter((entry) => entry.workspace === place.workspace && entry.project === place.project)
+      .flatMap((entry) => entry.calls)
+      .filter((call) => call.task === place.task)
+      .map((call) => `${call.id}:${call.state}`)
+      .sort(),
+  ].join(";");
 }
 
 /** What the decision line offers: Mark done, Reopen with a note, Withdraw acceptance. */

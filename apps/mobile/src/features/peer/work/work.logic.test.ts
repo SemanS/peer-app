@@ -378,6 +378,33 @@ describe("the phone's Work", () => {
   });
 });
 
+describe("a handoff's steps on the phone", () => {
+  const base = { done: false, inReview: true, accepted: undefined, threads: [] };
+  const next = (over: object) => ({
+    agentActions: 0,
+    coordination: 0,
+    humanDecisions: 0,
+    at: "t",
+    ...over,
+  });
+  const running = { running: 1, detached: 0, ended: 0 };
+
+  it("says the same words as web, and asks only what is the person's", () => {
+    expect(
+      taskStateWords({ ...base, handoffNext: next({ agentActions: 1 }), runs: running }, true),
+    ).toBe("With the agent");
+    expect(taskStateWords({ ...base, handoffNext: next({ agentActions: 2 }) }, true)).toBe(
+      "The agent stopped · 2 steps open · decide",
+    );
+    expect(taskStateWords({ ...base, handoffNext: next({ coordination: 1 }), runs: running })).toBe(
+      "Coordination needed",
+    );
+    expect(
+      taskStateWords({ ...base, handoffNext: next({ humanDecisions: 1 }), runs: running }, true),
+    ).toBe("Human decision needed · decide");
+  });
+});
+
 describe("a task's state on the phone", () => {
   const task = (overrides: Partial<Parameters<typeof taskStateWords>[0]> = {}) => ({
     done: false,

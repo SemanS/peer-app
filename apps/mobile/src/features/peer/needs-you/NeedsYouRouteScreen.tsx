@@ -78,6 +78,14 @@ export function NeedsYouRouteScreen({
           focused={item.key === focused?.key}
           onRequest={setRequest}
           onTask={(() => {
+            if (item.kind === "answer") {
+              const project = `${item.workspace}/${item.project}`;
+              return work.tree.some(
+                (candidate) => projectScopeKey(candidate) === project && work.sources.has(project),
+              )
+                ? () => setSelectedTask({ project, task: item.task })
+                : undefined;
+            }
             if (item.kind !== "thread" && item.kind !== "agent") return undefined;
             for (const project of work.tree) {
               const task = project.areas

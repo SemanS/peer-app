@@ -8,7 +8,12 @@ import type {
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { handoffPresentation, reviewFactsFrom, reviewPresentation } from "./handoffPresentation";
+import {
+  handoffPresentation,
+  reviewFactsFrom,
+  reviewPresentation,
+  type ReviewFacts,
+} from "./handoffPresentation";
 
 const PACKAGE: PeerHandoffPackage = {
   number: 2,
@@ -205,9 +210,10 @@ describe("the review page as a decision page", () => {
     // The agent's blocker is its own note, under the disclosure that starts closed.
     expect(view.notesOpen).toBe(false);
     expect(view.notes.map((note) => note.title)).toEqual(["Blockers the agent named", "Next"]);
-    // Needs attention holds Peer's facts only: here the signals.
+    // The classes hold Peer's facts only, and the agent's blocker is not among them.
     expect(view.signals.map((entry) => entry.signal)).toEqual(["not-delivered", "unowned"]);
-    expect(view.needsAttention).toBe(true);
+    expect(view.groups.map((group) => group.label)).toEqual(["Agent action needed"]);
+    expect(view.atHandoff).toBe(true);
   });
 
   it("says nobody is asked once the policy accepted it, and offers to withdraw that", () => {
@@ -223,7 +229,7 @@ describe("the review page as a decision page", () => {
       text: "Accepted by policy v3 · waiting to land",
       actions: ["withdraw"],
     });
-    expect(view.needsAttention).toBe(false);
+    expect(view.groups).toEqual([]);
   });
 
   it("follows the status over the package once an acceptance was withdrawn", () => {
@@ -276,7 +282,101 @@ describe("the review page as a decision page", () => {
     );
     expect(view.changedInputs).toHaveLength(1);
     expect(view.openOverlaps).toHaveLength(1);
-    expect(view.needsAttention).toBe(true);
+    expect(view.groups.map((group) => group.label)).toEqual(["Coordination needed"]);
+  });
+});
+
+describe("who moves next on the review page", () => {
+  const FACT = { ...FACTS, acceptance: null, status: "review" as const };
+  const pkg = {
+    ...PACKAGE,
+    key: "1.1",
+    source: "agent" as const,
+    policy: { mode: "ask" as const, version: 2, signals: ["unowned" as const], accepted: false },
+  };
+  const live = (items: ReadonlyArray<object>, signals: ReadonlyArray<string> = []) =>
+    ({
+      available: true,
+      signals: {
+        evaluated: true,
+        at: "t",
+        signals,
+        reports: [{ author: "a", role: "author", number: 1, result: "mixed", at: "t" }],
+        handoff: { delivery: { state: "shared" } },
+        items,
+      },
+    }) as unknown as NonNullable<ReviewFacts["live"]>;
+  const base = { text: "x", author: "a", role: "author", number: 1, index: 0 };
+
+  it("sorts three owners under their classes", () => {
+    const view = reviewPresentation(pkg, {
+      ...FACT,
+      nameOf: () => "Ana",
+      taskName: (id) => (id === "t31" ? "3.1" : id),
+      live: live([
+        { ...base, text: "malformed", kind: "fail", failed: true, task: "t31" },
+        { ...base, text: "typecheck", kind: "unverified", failed: false },
+        { ...base, text: "spec or design", kind: "unverified", failed: false, owner: "a" },
+      ]),
+    });
+    expect(
+      view.groups.map((group) => [group.label, group.steps.map((step) => [step.text, step.who])]),
+    ).toEqual([
+      ["Human decision needed", [["spec or design", "Ana’s"]]],
+      ["Coordination needed", [["malformed", "left to 3.1"]]],
+      ["Agent action needed", [["typecheck", null]]],
+    ]);
+    expect(view.decision?.text).toBe("Human decision needed");
+  });
+
+  it("says With the agent while the run is live, and offers Continue once it ended", () => {
+    const facts = {
+      ...FACT,
+      live: live([{ ...base, kind: "unverified", failed: false }], ["unowned"]),
+    };
+    const running = reviewPresentation(pkg, { ...facts, runLive: true });
+    expect(running.decision?.text).toBe("With the agent");
+    expect(running.decision?.actions).toContain("done");
+    expect(running.agentStopped).toBe(false);
+    const ended = reviewPresentation(pkg, { ...facts, runLive: false });
+    expect(ended.decision?.text).toBe("Accept 1.1? 1 signal: unowned");
+    expect(ended.agentStopped).toBe(true);
+  });
+
+  it("no longer counts a signal cleared since, and says it was raised at handoff", () => {
+    const view = reviewPresentation(pkg, { ...FACT, live: live([]) });
+    expect(view.decision?.text).toBe("Accept 1.1? No signals");
+    expect(view.raisedAtHandoff.map((entry) => entry.signal)).toEqual(["unowned"]);
+    expect(view.atHandoff).toBe(false);
+    expect(view.groups).toEqual([]);
+  });
+
+  it("keeps the package's signals labelled at handoff when the Hub cannot say", () => {
+    const view = reviewPresentation(pkg, { ...FACT, live: { available: false } });
+    expect(view.atHandoff).toBe(true);
+    expect(view.decision?.text).toBe("Accept 1.1? 1 signal: unowned");
+  });
+
+  it("drops a package's overlap and input the Hub no longer holds open", () => {
+    const view = reviewPresentation(
+      {
+        ...pkg,
+        overlaps: [{ state: "open", files: ["a"], partner: null, at: "t" }],
+        inputs: [{ scope: "task:x", readVersion: 1, currentVersion: 2 }],
+      },
+      { ...FACT, live: live([]) },
+    );
+    expect(view.openOverlaps).toEqual([]);
+    expect(view.changedInputs).toEqual([]);
+  });
+
+  it("claims no handoff after a person's move", () => {
+    const view = reviewPresentation(pkg, {
+      ...FACT,
+      live: { available: true, signals: { evaluated: false, at: "t", signals: [] } },
+    });
+    expect(view.groups).toEqual([]);
+    expect(view.decision?.signals).toEqual([]);
   });
 });
 

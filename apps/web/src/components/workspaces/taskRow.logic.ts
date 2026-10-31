@@ -1,3 +1,4 @@
+import { HANDOFF_CLASS_LABEL } from "@t3tools/client-runtime/peer/handoff";
 import type { ReviewRoute } from "@t3tools/client-runtime/peer/ownership";
 import {
   TASK_STATES_NEEDING_YOU,
@@ -52,6 +53,8 @@ const LOOK: Readonly<Record<TaskStateKind, TaskStateLook>> = {
   review: { tone: "needs", hollow: false },
   approval: { tone: "needs", hollow: false },
   input: { tone: "needs", hollow: false },
+  agent_action: { tone: "working", hollow: false },
+  coordination: { tone: "working", hollow: true },
   working: { tone: "working", hollow: false },
   waiting: { tone: "working", hollow: true },
   paused: { tone: "neutral", hollow: false },
@@ -106,7 +109,7 @@ function chipOf(
   needOf: ReadonlyMap<string, AgentNeed>,
 ): TaskRowChip | undefined {
   if (!TASK_STATES_NEEDING_YOU.has(state.kind)) return undefined;
-  if (state.kind === "review") {
+  if (state.kind === "review" || state.label === HANDOFF_CLASS_LABEL.human_decision) {
     return {
       label: "Review",
       target: {

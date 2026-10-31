@@ -17,7 +17,7 @@ import {
   teamFact,
   testReportsRevision,
 } from "./testReports.ts";
-import { governingSummaries } from "./testReports.ts";
+import { governingSummaries, inheritedRows } from "./testReports.ts";
 
 const ANA = "ana@acme.test";
 const SLAVO = "slavo@acme.test";
@@ -276,5 +276,39 @@ describe("governingSummaries", () => {
       { workspace: "w", project: "p", task: "t" },
     );
     expect(rows.map((row) => row.author)).toEqual(["b", "r"]);
+  });
+});
+
+describe("inheritedRows", () => {
+  it("names each item with its source task and report", () => {
+    const rows = inheritedRows(
+      {
+        items: [
+          {
+            task: "t1",
+            key: "1.1",
+            title: "Contract",
+            author: "ana@acme.test",
+            role: "author",
+            number: 2,
+            index: 0,
+            kind: "fail",
+            text: "malformed revision",
+            failed: true,
+            at: "t",
+          },
+        ],
+        capped: false,
+      },
+      () => "Ana",
+    );
+    expect(rows).toEqual([
+      {
+        key: "t1:ana@acme.test:2:0",
+        kind: "failed",
+        text: "malformed revision",
+        source: "From 1.1 · report 2 · Ana",
+      },
+    ]);
   });
 });

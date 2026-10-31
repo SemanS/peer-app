@@ -26,6 +26,8 @@ const STATE_RANK: Readonly<Record<TaskStateKind, number>> = {
   review: 0,
   approval: 0,
   input: 0,
+  agent_action: 1,
+  coordination: 1,
   working: 1,
   waiting: 1,
   accepted: 1,

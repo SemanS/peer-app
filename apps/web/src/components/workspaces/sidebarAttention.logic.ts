@@ -36,5 +36,17 @@ export function sidebarAttention(card: TaskCard): AttentionRow {
       return { ...place, title: card.item.title, ask: "Your call", target: undefined };
     case "stale":
       return { ...place, title: card.item.title, ask: "Inputs changed", target: undefined };
+    case "answer":
+      return {
+        ...place,
+        title: card.item.title,
+        ask: "You answer for this",
+        target: {
+          kind: "task",
+          workspace: card.item.workspace,
+          project: card.item.project,
+          task: card.item.task,
+        },
+      };
   }
 }

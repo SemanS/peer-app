@@ -118,11 +118,9 @@ describe("peer tests", () => {
           ] as [number, unknown],
         };
         const peer = yield* ready({ route: answering(refused) });
-        const failure = yield* peer
-          .tests(["mixed", "x", "--fail", "y @task:3.1"])
-          .pipe(Effect.flip);
-        assert.include(String(failure), "does not depend");
-        assert.include(String(failure.next ?? ""), "depends on this one");
+        const exit = yield* Effect.exit(peer.tests(["mixed", "x", "--fail", "y @task:3.1"]));
+        assert.include(String(exit), "does not depend");
+        assert.include(String(exit), "depends on this one");
       }),
     ),
   );

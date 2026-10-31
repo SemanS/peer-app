@@ -28,7 +28,10 @@ export interface ReportItemView {
   readonly mark: string | null;
   /** Peer saw the command end the other way than the item says. */
   readonly disagrees: boolean;
-  /** An unverified item's owner line: "Owner: Slavo", "Needs an owner"; null for a claim. */
+  /**
+   * Who answers for it: "Owner: Slavo", "Needs an owner", "Left to 3.1"; null for a claim nobody
+   * has to answer for.
+   */
   readonly owner: string | null;
   readonly needsOwner: boolean;
 }
@@ -93,8 +96,11 @@ export function reportViews(
     readonly members: ReadonlyArray<Member>;
     readonly me: string | null;
     readonly now: number;
+    /** A task as the phone names it, for what is left to one. */
+    readonly taskName?: (id: string) => string;
   },
 ): ReadonlyArray<ReportView> {
+  const taskName = context.taskName ?? ((id: string) => id);
   return orderedReports(reports).map((report) => {
     const counts = reportCounts(report);
     const when = filedAt(report.at, context.now);
@@ -121,12 +127,19 @@ export function reportViews(
         mark: itemMark(item),
         disagrees: markDisagrees(item),
         owner:
-          item.kind !== "unverified"
+          item.kind === "pass"
             ? null
-            : item.owner === undefined || item.owner === ""
-              ? "Needs an owner"
-              : `Owner: ${personLabel(item.owner, context.members, context.me)}`,
-        needsOwner: item.kind === "unverified" && (item.owner === undefined || item.owner === ""),
+            : item.owner !== undefined && item.owner !== ""
+              ? `Owner: ${personLabel(item.owner, context.members, context.me)}`
+              : item.task !== undefined
+                ? `Left to ${taskName(item.task)}`
+                : item.kind === "fail"
+                  ? null
+                  : "Needs an owner",
+        needsOwner:
+          item.kind === "unverified" &&
+          item.task === undefined &&
+          (item.owner === undefined || item.owner === ""),
       })),
     };
   });

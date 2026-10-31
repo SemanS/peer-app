@@ -66,6 +66,8 @@ const STATE_TONE: Readonly<Record<TaskStateKind, SignalTone>> = {
   accepted: "delivery",
   approval: "needs",
   input: "needs",
+  agent_action: "working",
+  coordination: "coordination",
   working: "working",
   waiting: "team",
   paused: "neutral",

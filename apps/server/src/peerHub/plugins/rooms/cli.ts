@@ -162,26 +162,41 @@ export const roomCommand = (
   return {
     name: "room",
     usage:
-      'room | room <n> | room say "<text>" [--reply <n>] [--to <person>]... [--at <path>:<line>]',
-    summary: "read your task's room, or post in it as your person's agent",
+      'room | room <n> | room <task> [<n>] | room say "<text>" [--reply <n>] [--to <person>]... [--at <path>:<line>]',
+    summary: "read your task's room or another's, or post in yours as your person's agent",
     run: ({ session, args, plain }) =>
       Effect.gen(function* () {
         const task = session.task;
+        const [verb, ...rest] = plain;
+        // Another task's room reads as one's own: a review or a decision made there is for the
+        // agents who build on that task too, and it is the only place it may be written.
+        if (verb !== undefined && verb !== "say" && !/^[1-9]\d*$/.test(verb)) {
+          const tasks = yield* work.tasks(session.workspace, session.project);
+          const other = tasks.find(
+            (candidate) =>
+              candidate.id === verb || candidate.key?.toLowerCase() === verb.toLowerCase(),
+          );
+          if (other === undefined)
+            return yield* Effect.fail(
+              usage(`there is no peer room ${verb.slice(0, 40)}`, `run ${FORM}.`),
+            );
+          const [seq] = rest;
+          return seq === undefined
+            ? yield* read(session, other.id)
+            : /^[1-9]\d*$/.test(seq)
+              ? yield* readOne(session, other.id, Number(seq))
+              : yield* Effect.fail(usage(`${seq.slice(0, 40)} is no message`, `run ${FORM}.`));
+        }
         if (task === undefined)
           return yield* Effect.fail(
             usage(NO_TASK, "ask your person to put this session on a task."),
           );
-        const [verb, ...rest] = plain;
         if (verb === undefined) {
           if (args.length > 0)
             return yield* Effect.fail(usage("peer room takes no flags", `run ${FORM}.`));
           return yield* read(session, task);
         }
         if (/^[1-9]\d*$/.test(verb)) return yield* readOne(session, task, Number(verb));
-        if (verb !== "say")
-          return yield* Effect.fail(
-            usage(`there is no peer room ${verb.slice(0, 40)}`, `run ${FORM}.`),
-          );
         return yield* say(session, args, rest.join(" "));
       }),
   };

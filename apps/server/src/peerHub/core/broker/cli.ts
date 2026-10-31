@@ -427,7 +427,7 @@ export async function runCli(
       if (targets.length === 0) {
         throw refused(
           "you share no files with another agent right now, so there is no one to note to",
-          "run peer status to see who is at work.",
+          'peer room say "<text>" reaches your task\'s people and agents; peer ask <task> "<question>" another task\'s agents.',
         );
       }
       // One command, one op; each overlap's note carries it with the overlap's id, so that it is

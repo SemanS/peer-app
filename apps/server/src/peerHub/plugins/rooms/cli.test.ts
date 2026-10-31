@@ -38,7 +38,10 @@ const stand = (over: Partial<Rooms["Service"]> = {}) => {
     settled: (_run: string | undefined, ref: string) => void settled.push(ref),
     ...over,
   } as unknown as Rooms["Service"];
-  const work = { taskName: () => Effect.succeed("VL-7 · Order totals") };
+  const work = {
+    taskName: () => Effect.succeed("VL-7 · Order totals"),
+    tasks: () => Effect.succeed([{ id: "vl-7", key: "VL-7", title: "Order totals" }]),
+  };
   const state = {
     email: Effect.succeed(BOB),
     nameOf: (_workspace: string, email: string) => (email === EVA ? "Eva" : "Bob"),
@@ -153,6 +156,27 @@ describe("peer room", () => {
       assert.include(said, "y".repeat(3000));
       assert.strictEqual(said.match(/<shared-context>/g)?.length, 1);
       assert.notInclude(said, "cut at");
+    }),
+  );
+
+  it.effect("reads another task's room by its key, and refuses a task it does not know", () =>
+    Effect.gen(function* () {
+      const read: string[] = [];
+      const rooms = {
+        read: ({ task }: { readonly task: string }) => {
+          read.push(task);
+          return Effect.succeed({
+            seq: 1,
+            seen: 0,
+            messages: [messageOf({ seq: 1 })],
+            reaches: [],
+          });
+        },
+      } as unknown as Partial<Rooms["Service"]>;
+      const { command } = stand(rooms);
+      assert.include(yield* peerRoom(command, ["vl-7"]), "Room of VL-7");
+      assert.strictEqual(read.at(-1), "vl-7");
+      assert.include(yield* peerRoom(command, ["VL-99"]), "there is no peer room VL-99");
     }),
   );
 

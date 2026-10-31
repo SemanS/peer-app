@@ -234,12 +234,6 @@ export function WorkTaskList({
           onClose={() => setLaunching(null)}
         />
       )}
-      <p className="text-xs text-muted-foreground">
-        {tab === "done"
-          ? "The latest first."
-          : "Grouped by status: what needs you first, then running work and the backlog."}{" "}
-        Reviews open at the decision; other rows open task details.
-      </p>
     </div>
   );
 }

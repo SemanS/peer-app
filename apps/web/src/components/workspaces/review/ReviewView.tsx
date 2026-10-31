@@ -487,8 +487,7 @@ function ReviewActionsBar({
         </form>
       ) : null}
       <p className="text-sm text-muted-foreground">
-        Task status is an administrative choice. Agent handoff checks run through peer review and
-        peer done.
+        Changing the status here skips the agent’s handoff checks.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         {writing ? (

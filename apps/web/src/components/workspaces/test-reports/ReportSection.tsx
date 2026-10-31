@@ -219,10 +219,7 @@ function TaskReports({
       <div className="flex flex-col gap-1">
         <PeerSectionLabel>Test reports</PeerSectionLabel>
         <p className="max-w-prose text-sm text-muted-foreground">
-          What this task was tested against. “Seen run by Peer” means Peer saw the agent’s session
-          run that exact command; everything else is what its author says. An agent finishes the
-          task only once every unverified item has an owner and every failed item a task to carry
-          it.
+          “Seen run by Peer” means Peer saw that exact command run. The rest is its author’s word.
         </p>
       </div>
       <InheritedItems

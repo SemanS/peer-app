@@ -169,7 +169,7 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
         const name = (t: string | undefined) =>
           t === undefined ? "no task" : this.host.taskName(session.workspace, session.project, t);
         session.pending.push(
-          `Peer: your person put you on ${name(task)} (you were on ${name(from)}). Its shared context is ${this.cli} context${task === undefined ? "" : ` ${this.handleOf(session.workspace, session.project, scopeOf(task))}`}; your working context stays ${session.ownContextPath}.`,
+          `Peer: you are on ${name(task)} now (you were on ${name(from)}). Its shared context is ${this.cli} context${task === undefined ? "" : ` ${this.handleOf(session.workspace, session.project, scopeOf(task))}`}; your working context stays ${session.ownContextPath}.`,
         );
       }
     }

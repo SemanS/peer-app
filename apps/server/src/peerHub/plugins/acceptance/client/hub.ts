@@ -14,6 +14,7 @@ import * as NodeCrypto from "node:crypto";
 import {
   PeerAcceptanceEvent,
   PeerAcceptanceVia,
+  PeerHandoffSignals,
   PeerHubError,
   PeerReviewPolicy,
   type PeerAcceptanceInput,
@@ -97,6 +98,7 @@ const policyOf = (row: PeerReviewPolicy): PeerReviewPolicy => ({
   version: row.version,
   ...(row.updatedAt === undefined ? {} : { updatedAt: row.updatedAt }),
   ...(row.updatedBy === undefined ? {} : { updatedBy: row.updatedBy }),
+  ...(row.leadLeft === undefined ? {} : { leadLeft: row.leadLeft }),
 });
 const decodeStale = Schema.decodeUnknownOption(Schema.Struct({ policy: PeerReviewPolicy }));
 const policyPath = (project: string) => `/acceptance/${encodeURIComponent(project)}/policy`;
@@ -154,6 +156,21 @@ export function hubCalls(client: PeerHubClient.PeerHubClient["Service"]) {
           ),
         ),
     keepsPolicy,
+    /** A handoff's current signals (`acceptance` 3); null from a Hub that does not read them. */
+    signals: (place: {
+      readonly workspace: string;
+      readonly project: string;
+      readonly task: string;
+    }) =>
+      Effect.gen(function* () {
+        const { acceptance = 0 } = yield* client.features;
+        if (acceptance < 3) return null;
+        return yield* client.request(PeerHandoffSignals, {
+          workspace: place.workspace,
+          path: `/acceptance/${encodeURIComponent(place.project)}/${encodeURIComponent(place.task)}/signals`,
+          unsupported,
+        });
+      }),
     /** A project's review policy; null from a Hub that keeps none. */
     policy: (place: PeerReviewPolicyPlace) =>
       Effect.gen(function* () {

@@ -11,6 +11,7 @@ import {
   type PeerTestReport,
   type PeerTestReportSummary,
   type PeerTestsFileInput,
+  type PeerTestsInherited,
   type PeerTestsSetOwnerInput,
   type PeerTestsSetOwnerResult,
 } from "@t3tools/contracts";
@@ -27,6 +28,8 @@ import { summaryOf } from "./render.ts";
 
 /** How many summaries the status carries, newest first. */
 const SHOWN = 100;
+/** How many reports a resync reads whole for what only their items tell. */
+const READ_WHOLE = 30;
 
 export class TestReports extends Context.Service<
   TestReports,
@@ -47,6 +50,8 @@ export class TestReports extends Context.Service<
       PeerHubError
     >;
     readonly list: (place: Place) => Effect.Effect<ReadonlyArray<PeerTestReport>, PeerHubError>;
+    /** What the task's dependencies left to it. */
+    readonly inherited: (place: Place) => Effect.Effect<PeerTestsInherited, PeerHubError>;
     readonly remove: (place: Place) => Effect.Effect<{ readonly removed: boolean }, PeerHubError>;
     readonly setOwner: (
       input: PeerTestsSetOwnerInput,
@@ -79,18 +84,19 @@ const make = Effect.gen(function* () {
 
   const put = (p: Place, reports: ReadonlyArray<PeerTestReport>) =>
     Effect.gen(function* () {
+      const me = yield* state.email;
       if (reports.length === 0) known.delete(placeKey(p));
       else
         known.set(
           placeKey(p),
-          new Map(reports.map((report) => [report.author, summaryOf(p.workspace, report)])),
+          new Map(reports.map((report) => [report.author, summaryOf(p.workspace, report, me)])),
         );
       yield* status.publish;
     });
   const putOne = (p: Place, report: PeerTestReport) =>
     Effect.gen(function* () {
       const row = known.get(placeKey(p)) ?? new Map<string, PeerTestReportSummary>();
-      row.set(report.author, summaryOf(p.workspace, report));
+      row.set(report.author, summaryOf(p.workspace, report, yield* state.email));
       known.set(placeKey(p), row);
       yield* status.publish;
     });
@@ -113,17 +119,33 @@ const make = Effect.gen(function* () {
     );
   const read = (p: Place) => list(p).pipe(Effect.ignore);
   const readAll = Effect.gen(function* () {
+    const me = (yield* state.email)?.toLowerCase();
     for (const { slug } of yield* state.workspaces) {
       const rows = yield* hub.summaries(slug).pipe(Effect.orElseSucceed(() => null));
       if (rows === null) continue;
-      for (const key of known.keys()) if (workspaceOf(key) === slug) known.delete(key);
+      const before = new Map([...known].filter(([key]) => workspaceOf(key) === slug));
+      for (const key of before.keys()) known.delete(key);
+      const whole: Place[] = [];
       for (const row of rows) {
-        const key = placeKey({ workspace: slug, project: row.project, task: row.task });
+        const place = { workspace: slug, project: row.project, task: row.task };
+        const key = placeKey(place);
         const authors = known.get(key) ?? new Map<string, PeerTestReportSummary>();
-        authors.set(row.author, { ...row, workspace: slug });
+        const old = before.get(key)?.get(row.author);
+        // What only a whole report tells stands while its report does.
+        const told =
+          old?.number === row.number
+            ? {
+                ...(old.failedLeft === undefined ? {} : { failedLeft: old.failedLeft }),
+                ...(old.yours === undefined ? {} : { yours: old.yours }),
+              }
+            : {};
+        authors.set(row.author, { ...row, workspace: slug, ...told });
         known.set(key, authors);
+        const asked = row.asks?.some((email) => email.toLowerCase() === me) === true;
+        if (old?.number !== row.number && (row.failed > 0 || asked)) whole.push(place);
       }
       yield* status.publish;
+      yield* Queue.offerAll(queued, whole.slice(0, READ_WHOLE));
     }
   });
   const forget = (workspace?: string) =>
@@ -147,6 +169,7 @@ const make = Effect.gen(function* () {
         })),
       }),
     list,
+    inherited: (p) => member(p).pipe(Effect.andThen(hub.inherited(p))),
     remove: (p) =>
       Effect.gen(function* () {
         yield* member(p);

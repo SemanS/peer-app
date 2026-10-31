@@ -12,6 +12,23 @@ const read = (policy: PeerProjectReviewPolicy["policy"], available = true) => ({
   policy,
 });
 
+describe("a policy whose lead left", () => {
+  it("says a lead must save it again", () => {
+    const view = reviewPolicyView(
+      {
+        workspace: "w",
+        project: "p",
+        available: true,
+        policy: { mode: "auto", version: 2, updatedBy: "a", leadLeft: true },
+      },
+      true,
+      (email) => email,
+      (at) => at,
+    );
+    expect(view.kind === "ready" && view.setBy).toContain("until a lead saves it again");
+  });
+});
+
 describe("the review policy section", () => {
   it("lets a lead save and shows a member the rule and who set it", () => {
     const policy = read({

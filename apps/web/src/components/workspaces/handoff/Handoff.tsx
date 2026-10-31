@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { activePlugin } from "@t3tools/client-runtime/peer/plugins";
+import { canContinue } from "@t3tools/client-runtime/peer/runs";
 import { orderedReports, testReportsRevision } from "@t3tools/client-runtime/peer/test-reports";
 import { useNavigate } from "@tanstack/react-router";
 import { useContext, useState } from "react";
@@ -8,6 +9,7 @@ import type {
   EnvironmentId,
   PeerHandoffPackage,
   PeerHandoffPlace,
+  PeerHandoffSignalsRead,
   PeerHubStatus,
   PeerPlansView,
   PeerProjectState,
@@ -25,6 +27,7 @@ import {
   outcomeText,
   keyedLines,
   handoffRevision,
+  handoffSignalsRevision,
   summaryOf,
   TARGET_SWITCH_NOTE,
   type ContextMovedOn,
@@ -302,6 +305,69 @@ function ContextMovedBanner({
 interface ReviewReads {
   readonly reports: ReadonlyArray<PeerTestReport> | undefined;
   readonly plans: PeerPlansView | undefined;
+  /** The Hub's current signals; none while they cannot be read, and the package stands. */
+  readonly live: PeerHandoffSignalsRead | null | undefined;
+}
+
+/** Continues the task's run that stopped, for the person whose run it is. */
+function ContinueRun({
+  environmentId,
+  place,
+  me,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly place: PeerHandoffPlace;
+  readonly me: string | null;
+}) {
+  const { workspace, projectId, taskId } = place;
+  const runs = useEnvironmentQuery(
+    serverEnvironment.peerRunsList({ environmentId, input: { workspace, projectId, taskId } }),
+  );
+  const command = useAtomCommand(serverEnvironment.peerRunsContinue, { reportFailure: false });
+  const allowed = useAtomValue(serverEnvironment.peerRunsContinue.permissionAtom(environmentId));
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const run = (runs.data?.runs ?? []).find((candidate) => canContinue(candidate, me));
+  if (run === undefined || !allowed)
+    return <p className="text-xs text-muted-foreground">Its person continues it.</p>;
+  return (
+    <>
+      <Button
+        size="xs"
+        variant="outline"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          void withFinally(
+            async () => {
+              const result = await command({
+                environmentId,
+                input: { workspace, projectId, runId: run.id },
+              });
+              setNote(
+                result._tag === "Success"
+                  ? result.value.started
+                    ? null
+                    : (result.value.reason ?? "It could not continue.")
+                  : failureMessage(result),
+              );
+              runs.refresh();
+            },
+            () => {
+              setBusy(false);
+            },
+          );
+        }}
+      >
+        Continue
+      </Button>
+      {note === null ? null : (
+        <p role="alert" className="text-xs text-muted-foreground">
+          {note}
+        </p>
+      )}
+    </>
+  );
 }
 
 /** Connects the report to this environment's links, context comparisons and original chat. */
@@ -358,6 +424,7 @@ function HandoffPackageView({
     nameOf,
     reports: reads?.reports,
     plans: reads?.plans,
+    live: reads?.live,
   });
   const openContext = (scope: string) =>
     void navigate({
@@ -380,6 +447,15 @@ function HandoffPackageView({
         acceptance?.actions.includes("withdraw") === true
           ? () => openAcceptanceDialog({ kind: "withdraw", environmentId, ...acceptance.place })
           : undefined
+      }
+      nextAction={
+        reads === undefined ? undefined : (
+          <ContinueRun
+            environmentId={environmentId}
+            place={{ workspace, projectId: project, taskId: pkg.task }}
+            me={me}
+          />
+        )
       }
       onCompare={compareContext}
       onOpenPull={(url) => void openLink(url)}
@@ -459,6 +535,15 @@ export function HandoffReview(props: TaskContextSlotProps) {
         })
       : null,
   );
+  const live = useEnvironmentQuery(
+    task?.status === "review" && activePlugin(status, "acceptance")
+      ? serverEnvironment.peerAcceptanceSignals({
+          environmentId,
+          input: reportsPlace,
+          revision: handoffSignalsRevision(status, reportsPlace),
+        })
+      : null,
+  );
   const plans = usePlansView({
     environmentId,
     status,
@@ -478,6 +563,7 @@ export function HandoffReview(props: TaskContextSlotProps) {
               ? undefined
               : orderedReports(reports.data),
           plans: plans.view,
+          live: live.data,
         }}
         data={data}
         value={value}

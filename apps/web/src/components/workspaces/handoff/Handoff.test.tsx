@@ -24,6 +24,9 @@ vi.mock("../../../state/server", () => ({
     peerHandoffSetTarget: "setTarget",
     peerHandoffRead: (query: unknown) => query,
     peerAcceptanceAccept: { permissionAtom: () => "acceptance-permission" },
+    peerAcceptanceSignals: () => null,
+    peerRunsContinue: { permissionAtom: () => "runs-permission" },
+    peerRunsList: () => null,
   },
 }));
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => true }));
@@ -248,10 +251,11 @@ describe("the decision on a handoff", () => {
     ];
     await show(true);
     expect(words(section("Decision"))).toBe("Accept VL7? 1 signal: not-delivered");
-    expect(words(section("Needs attention"))).toContain(
-      "The change is not shared: delivery absent, none or local",
-    );
-    expect(words(section("Needs attention"))).not.toContain("VL8 is a separate task");
+    expect(words(section("Agent action needed"))).toContain("The delivery was not observed");
+    expect(words(section("Agent action needed"))).not.toContain("VL8 is a separate task");
+    expect(
+      renderer!.root.findAll((node) => node.props["aria-label"] === "Needs attention"),
+    ).toEqual([]);
     expect(words(section("Delivered"))).toContain("not observed");
     expect(button("The agent’s notes")).toBeDefined();
   });

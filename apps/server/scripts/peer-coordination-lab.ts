@@ -100,6 +100,8 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   works. It reports whether Bob's final tree is right, whether an edit was lost, how many converges ran, the
 //   moved notices Bob's agent heard and the characters Peer added. With REAL_AGENTS=1 it spends the person's
 //   subscription and runs only after the maintainer agrees; without it scripted stand-ins play both agents.
+//   REAL_SCENARIO=handoff (peer-lab/handoffSteps.ts) measures who moves next after a handoff: scripted and checked by
+//   default; with REAL_AGENTS=1 real agents, reported as one `handoff:` line (LAB_ARM names the build, LAB_REPORT a file).
 //   REAL_SCENARIO=rooms (peer-lab/rooms.ts) proves a task's room: Bob names Ana's agent and nothing reaches it until she
 //   passes it on, she declines and Bob's status moves with no new message, Bob withdraws, a hostile message stays
 //   fenced, an agent cannot name an agent, Bob's own agent answers from a review session on his computer after Ana's run
@@ -211,6 +213,7 @@ import { RpcClient, RpcSerialization } from "effect/rpc";
 
 import {
   ORCHESTRATION_PROTOCOL_VERSION,
+  PEER_ACCEPTANCE_METHODS,
   PEER_FORECAST_METHODS,
   PEER_JUJUTSU_METHODS,
   PEER_ROOMS_METHODS,
@@ -248,7 +251,19 @@ import {
   type RoomsPerson,
   type RoomsRun,
 } from "./peer-lab/rooms.ts";
-import { toldTexts } from "./peer-lab/told.ts";
+import {
+  HANDOFF_A_DONE_PROMPT,
+  HANDOFF_A_PROMPT,
+  HANDOFF_B_PROMPT,
+  HANDOFF_TASKS,
+  conflictInChat,
+  measure,
+  transcriptCost,
+  transcriptOf,
+  writeHandoffSeed,
+  type LabItem,
+} from "./peer-lab/handoffSteps.ts";
+import { plainSession, toldTexts } from "./peer-lab/told.ts";
 import {
   dependencyBlocks,
   withDependencyEvidence,
@@ -445,6 +460,8 @@ const FOLLOW = process.env.REAL_SCENARIO === "follow";
 const KNOWLEDGE = process.env.REAL_SCENARIO === "knowledge";
 /** REAL_SCENARIO=rooms (`peer-lab/rooms.ts`): a task's room between two people and their agents. */
 const ROOMS = process.env.REAL_SCENARIO === "rooms";
+/** REAL_SCENARIO=handoff (`peer-lab/handoffSteps.ts`): what an agent clears after a handoff, what reaches a person. */
+const HANDOFF = process.env.REAL_SCENARIO === "handoff";
 if (process.env.LAB_VCS !== undefined && !["git", "jj"].includes(process.env.LAB_VCS)) {
   throw new Error(`LAB_VCS must be git or jj, not ${process.env.LAB_VCS}`);
 }
@@ -660,7 +677,8 @@ function makeOrigin(): string {
   if (CONTRACT) (CONTRACT_HIDDEN ? writeHiddenSeed : writeSeed)(work);
   // The follow scenario starts from the hidden seed: orderTotal() in euros, used by the receipt and VAT.
   if (FOLLOW) writeHiddenSeed(work);
-  if (!CONTRACT && !FOLLOW) {
+  if (HANDOFF) writeHandoffSeed(work, NodePath.join(repoRoot, "node_modules/.bin/tsc"));
+  if (!CONTRACT && !FOLLOW && !HANDOFF) {
     NodeFS.writeFileSync(
       NodePath.join(work, "src/pricing.ts"),
       "export function price(items: number[]): number {\n  return items.reduce((sum, item) => sum + item, 0);\n}\n",
@@ -670,7 +688,7 @@ function makeOrigin(): string {
       'import { price } from "./pricing";\n\nexport const cartTotal = (items: number[]) => price(items);\n',
     );
   }
-  if (REAL && !OWNERS && !CONTRACT && !FOLLOW) {
+  if (REAL && !OWNERS && !CONTRACT && !FOLLOW && !HANDOFF) {
     // Prices are integer cents, and other files rely on it: something worth keeping.
     NodeFS.writeFileSync(
       NodePath.join(work, "src/format.ts"),
@@ -683,9 +701,9 @@ function makeOrigin(): string {
   }
   git(work, "init", "--quiet", "--initial-branch", "main");
   // The project keeps knowledge with kontext, when it is installed here.
-  if (kontext && !CONTRACT && !FOLLOW)
+  if (kontext && !CONTRACT && !FOLLOW && !HANDOFF)
     NodeChildProcess.execFileSync("kontext", ["init", "--no-hooks"], { cwd: work });
-  if (REAL && !OWNERS && kontext && !CONTRACT && !FOLLOW) {
+  if (REAL && !OWNERS && kontext && !CONTRACT && !FOLLOW && !HANDOFF) {
     NodeFS.mkdirSync(NodePath.join(work, ".ai", "conventions"), { recursive: true });
     NodeFS.writeFileSync(
       NodePath.join(work, ".ai", "conventions", "what-agents-mark-for-the-project.md"),
@@ -843,7 +861,7 @@ async function setUpWorkspace() {
         session: admin,
         body: { title: task.title, key: task.key },
       });
-  } else if (REAL && !OWNERS && !FOLLOW && !ROOMS) {
+  } else if (REAL && !OWNERS && !FOLLOW && !ROOMS && !HANDOFF) {
     const krk1 = await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
       method: "POST",
       session: admin,
@@ -8148,6 +8166,348 @@ const teamProgram = Effect.gen(function* () {
   }
 }).pipe(Effect.scoped);
 
+/**
+ * REAL_SCENARIO=handoff (`peer-lab/handoffSteps.ts`): Bob's agent hands INV-1 off, Ana's builds INV-2 on it, and Ana, a
+ * person, reads the handoff's live signals from her own Peer and accepts it. Scripted stand-ins with every line checked,
+ * or with REAL_AGENTS=1 real Claude Code, measured and reported as one `handoff:` line. Real agents' work is never
+ * failed on: only the lab's own steps can fail such a run.
+ */
+const handoffProgram = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  writeFakeModel();
+  const anaHerdr = REAL ? startHerdr("Ana") : undefined;
+  const bobHerdr = REAL ? startHerdr("Bob") : undefined;
+  const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr?.socket);
+  const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr?.socket);
+  const tasksPath = "/v1/workspaces/acme/projects/lab/tasks";
+  const make = (task: { title: string; key: string }) =>
+    hubCall(tasksPath, {
+      method: "POST",
+      session: hubSession,
+      body: { title: task.title, key: task.key },
+    }).then((created) => String(created.id));
+  const taskA = yield* Effect.promise(() => make(HANDOFF_TASKS.a));
+  const taskB = yield* Effect.promise(() => make(HANDOFF_TASKS.b));
+  yield* Effect.promise(() =>
+    hubCall(`${tasksPath}/${encodeURIComponent(taskB)}/dependencies`, {
+      method: "PATCH",
+      session: hubSession,
+      body: { add: [taskA], remove: [] },
+    }),
+  );
+  for (const computer of [ana, bob]) {
+    git(computer.checkout, "config", "user.name", computer.name);
+    git(computer.checkout, "config", "user.email", `${computer.name.toLowerCase()}@acme.test`);
+    yield* Effect.promise(() =>
+      until(
+        `${computer.name}'s Peer knows both tasks`,
+        async () => {
+          const synced = await Effect.runPromise(computer.client[WS_METHODS.peerHubSync]({}));
+          return (
+            synced.workspaces[0]?.projects
+              .find((p) => p.project.id === "lab")
+              ?.work.tasks.some((one) => one.key === HANDOFF_TASKS.b.key) === true
+          );
+        },
+        30_000,
+      ),
+    );
+  }
+  branchOff(bob.checkout, HANDOFF_TASKS.a.branch);
+  branchOff(ana.checkout, HANDOFF_TASKS.b.branch);
+  const place = { workspace: "acme", project: "lab", task: taskA };
+  const rpc = <A>(effect: Effect.Effect<A, unknown>, ms = 15_000) =>
+    Promise.race([
+      Effect.runPromise(effect),
+      sleep(ms).then(() => Promise.reject(new Error(`no answer in ${ms} ms`))),
+    ]);
+  /** What Ana's own Peer says the handoff's signals are now; an older build or Hub cannot say. */
+  const liveSignals = () =>
+    rpc(ana.client[PEER_ACCEPTANCE_METHODS.peerAcceptanceSignals](place)).catch((error) => ({
+      available: false,
+      signals: undefined,
+      error: String(error).slice(0, 200),
+    }));
+  const newestReport = async (id: string) => {
+    const read = (await hubCall(`/v1/workspaces/acme/tests/lab/${encodeURIComponent(id)}`, {
+      session: hubSession,
+    }).catch(() => ({}))) as { reports?: ReadonlyArray<Record<string, any>> };
+    return read.reports?.[0] as { items: ReadonlyArray<LabItem>; [field: string]: any } | undefined;
+  };
+  const passes = (cwd: string, command: string, ...args: string[]) =>
+    NodeChildProcess.spawnSync(command, args, { cwd, encoding: "utf8" }).status === 0;
+  const delivered = (cwd: string, branch: string) => {
+    if (git(cwd, "status", "--porcelain").trim() !== "") return false;
+    const remote = git(cwd, "ls-remote", "origin", `refs/heads/${branch}`).split(/\s/)[0];
+    return remote === git(cwd, "rev-parse", "HEAD").trim();
+  };
+  const finding = async () => ({
+    items: (await newestReport(taskA))?.items,
+    delivered: delivered(bob.checkout, HANDOFF_TASKS.a.branch),
+    typecheckClean: passes(bob.checkout, "bin/typecheck"),
+  });
+  const packageOf = (id: string) =>
+    hubCall(`/v1/workspaces/acme/handoffs/lab/${encodeURIComponent(id)}`, {
+      session: hubSession,
+    }).catch(() => ({}));
+  const cli = (computer: Computer, command: string) =>
+    events(computer).filter((entry) => entry.event === "cli" && entry.command === command);
+  const live: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [];
+  const allow = [
+    "git add",
+    "git commit",
+    "git push",
+    "git fetch",
+    "git merge",
+    "node",
+    "bin/typecheck",
+  ];
+  const cost = (computer: Computer) => {
+    const sessions = new Set(
+      events(computer)
+        .filter((entry) => entry.event === "hook" && String(entry.session).startsWith("claude:"))
+        .map((entry) => plainSession(entry.session)),
+    );
+    return [...sessions].map((session) => {
+      const text = transcriptOf(session);
+      return text === undefined ? { session, missing: true } : transcriptCost(text);
+    });
+  };
+  let doneOutcome: unknown = null;
+  let saidInChat: boolean | null = null;
+  let afterHandoff: Awaited<ReturnType<typeof finding>>;
+  let afterDone: Awaited<ReturnType<typeof finding>> | undefined;
+  try {
+    if (REAL) {
+      const pane = yield* Effect.promise(() => startClaude(bobHerdr!, bob, "bob", { allow }));
+      live.push({ computer: bob, h: bobHerdr!, pane });
+      herdrJson(bobHerdr!, "agent", "prompt", pane, HANDOFF_A_PROMPT);
+      say("Bob's agent prompted", HANDOFF_A_PROMPT);
+      yield* Effect.promise(() => quietUntil(live, 10 * 60_000));
+      afterHandoff = yield* Effect.promise(finding);
+      saidInChat = conflictInChat(
+        herdrText(bobHerdr!, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "60"),
+      );
+      herdrJson(bobHerdr!, "agent", "prompt", pane, HANDOFF_A_DONE_PROMPT);
+      say("Bob's agent prompted", HANDOFF_A_DONE_PROMPT);
+      yield* Effect.promise(() => quietUntil(live, 4 * 60_000));
+      afterDone = yield* Effect.promise(finding);
+      const dones = cli(bob, "done");
+      doneOutcome = dones.map((entry) => [entry.outcome, String(entry.reason ?? "").slice(0, 200)]);
+    } else {
+      const fees = NodePath.join(bob.checkout, "src/fees.ts");
+      NodeFS.writeFileSync(
+        fees,
+        [
+          "const rate = 0.015;",
+          "",
+          "/** The service fee of an amount, both in cents. */",
+          "export const serviceFee = (cents: number): number => Math.ceil(cents * rate);",
+          "",
+        ].join("\n"),
+      );
+      const a = agent(bob, "lab-handoff-a", "w30:p1");
+      a.start();
+      a.edit("PreToolUse", "src/fees.ts");
+      a.edit("PostToolUse", "src/fees.ts");
+      check(
+        passes(bob.checkout, "bin/typecheck"),
+        "the seed's typecheck failure is INV-1's to fix",
+      );
+      const receipt = "receipt test fails: cents shown as euros";
+      const conflict = "the spec rounds up, the design rounds to the nearest cent";
+      a.peer(
+        "tests",
+        "fail",
+        "one test fails",
+        "--pass",
+        "bin/typecheck",
+        "--fail",
+        receipt,
+        "--unverified",
+        conflict,
+      );
+      const first = a.peer("review");
+      told("Bob's agent (first peer review)", first);
+      check(
+        first.includes("Yours before a person reads this handoff:") &&
+          !first.includes("Waits for a person's review"),
+        "the reply names what the agent owes and no wait for a person",
+      );
+      check(first.includes(`failed: "${receipt}"`), "the owed items name the failure");
+      check(
+        first.includes(`nobody answers for it: "${conflict}"`),
+        "and the question nobody answers for",
+      );
+      check(first.includes("commit and push the work"), "and the undelivered work");
+      const beforeAtHub = yield* Effect.promise(liveSignals);
+      told("Ana's Peer reads the live signals", JSON.stringify(beforeAtHub.signals?.signals));
+      a.peer(
+        "tests",
+        "fail",
+        "one test fails",
+        "--pass",
+        "bin/typecheck",
+        "--fail",
+        receipt,
+        "--unverified",
+        `${conflict} @ana`,
+      );
+      const refused = a.peer("done");
+      told("Bob's agent (peer done)", refused);
+      const doneStatus = a.peerStatus;
+      check(doneStatus === 3, "peer done is refused while a failure has no home");
+      check(/failed/i.test(refused), "and the refusal says why");
+      const wrong = a.peer(
+        "tests",
+        "fail",
+        "x",
+        "--fail",
+        `${receipt} @task:${HANDOFF_TASKS.a.key}`,
+      );
+      told("Bob's agent (a home that is not a dependent)", wrong);
+      check(a.peerStatus !== 0, "a failure cannot be left to a task that does not depend on it");
+      a.peer(
+        "tests",
+        "mixed",
+        "one test is INV-2's",
+        "--pass",
+        "bin/typecheck",
+        "--fail",
+        `${receipt} @task:${HANDOFF_TASKS.b.key}`,
+        "--unverified",
+        `${conflict} @ana`,
+      );
+      const between = yield* Effect.promise(liveSignals);
+      check(
+        beforeAtHub.signals?.signals.includes("unowned") === true &&
+          between.signals?.signals.includes("unowned") === false,
+        "a second computer's read sees the unowned signal clear with no new handoff",
+      );
+      check(
+        between.signals?.items?.some((item) => item.failed && item.task !== undefined) === true,
+        "and the failure's home",
+      );
+      git(bob.checkout, "add", "-A");
+      git(bob.checkout, "commit", "--quiet", "-m", "INV-1: service fee");
+      git(bob.checkout, "push", "--quiet", "origin", HANDOFF_TASKS.a.branch);
+      const second = a.peer("review");
+      told("Bob's agent (second peer review)", second);
+      check(!second.includes("Yours before a person"), "nothing is the agent's any more");
+      check(second.includes("Waits for a person's review"), "and the person is asked");
+      afterHandoff = yield* Effect.promise(finding);
+      const scored = measure(afterHandoff);
+      check(
+        scored.owedCleared === 4 && scored.questions === 1,
+        "the intended path clears all owed items and asks the person one thing",
+      );
+      check(scored.wrongEscapes === 0 && scored.wrongCalls === 0, "and makes no wrong call");
+    }
+
+    // INV-2's agent, told or not of what INV-1 left it.
+    if (REAL) {
+      const pane = yield* Effect.promise(() => startClaude(anaHerdr!, ana, "ana", { allow }));
+      const it = { computer: ana, h: anaHerdr!, pane };
+      live.push(it);
+      herdrJson(anaHerdr!, "agent", "prompt", pane, HANDOFF_B_PROMPT);
+      say("Ana's agent prompted", HANDOFF_B_PROMPT);
+      yield* Effect.promise(() => quietUntil([it], 8 * 60_000));
+    } else {
+      const b = agent(ana, "lab-handoff-b", "w31:p1");
+      const started = b.start().told;
+      told("Ana's agent (start)", started);
+      check(
+        started?.includes("Left to this task by what it depends on:") === true &&
+          started.includes("receipt test fails"),
+        "INV-2's agent starts with the failure it inherited, fenced",
+      );
+      NodeFS.writeFileSync(
+        NodePath.join(ana.checkout, "src/receipt.ts"),
+        NodeFS.readFileSync(NodePath.join(ana.checkout, "src/receipt.ts"), "utf8").replace(
+          "`€${cents}`",
+          "`€${(cents / 100).toFixed(2)}`",
+        ),
+      );
+    }
+    const bStart = toldTexts(events(ana) as never).some((text) =>
+      text.includes("Left to this task by what it depends on:"),
+    );
+
+    // Ana, a person, on her own Peer: a second Peer process on this machine, not a second computer.
+    const signals = yield* Effect.promise(liveSignals);
+    say("Ana's Peer reads the live signals", JSON.stringify(signals).slice(0, 1500));
+    const before = (yield* Effect.promise(() =>
+      hubCall("/v1/workspaces/acme/work", { session: hubSession }),
+    )).projects as Record<string, { tasks: ReadonlyArray<{ key?: string; status: string }> }>;
+    const statusA = before.lab?.tasks.find((one) => one.key === HANDOFF_TASKS.a.key)?.status;
+    let accepted: unknown = `not accepted: INV-1 is ${statusA}`;
+    if (statusA === "review") {
+      const taken = yield* Effect.promise(() =>
+        rpc(
+          ana.client[PEER_ACCEPTANCE_METHODS.peerAcceptanceAccept]({
+            ...place,
+            note: "Round up; the spec wins.",
+            op: "lab-accept",
+          }),
+        ),
+      );
+      accepted = taken;
+      const onBob = yield* Effect.promise(() =>
+        rpc(bob.client[PEER_ACCEPTANCE_METHODS.peerAcceptanceView](place)),
+      );
+      say("Bob's Peer reads the acceptance", JSON.stringify(onBob).slice(0, 600));
+      if (!REAL)
+        check(
+          taken.current?.by === "ana@acme.test" && onBob.current?.by === "ana@acme.test",
+          "Ana's Accept stands, and Bob's Peer reads it",
+        );
+    } else if (!REAL) check(false, "INV-1 is in review for Ana to accept");
+
+    yield* Effect.promise(() => sleep(1500));
+    const report = {
+      arm: process.env.LAB_ARM ?? "unnamed",
+      model: REAL ? (process.env.LAB_CLAUDE_MODEL ?? "sonnet") : "stand-in",
+      handoff: measure(afterHandoff),
+      afterDone: afterDone === undefined ? null : measure(afterDone),
+      finding: afterHandoff,
+      afterDoneItems: afterDone?.items,
+      reviews: cli(bob, "review").length,
+      testsFiled: cli(bob, "tests").length,
+      doneOutcome,
+      saidInChat,
+      statusA,
+      packageA: yield* Effect.promise(() => packageOf(taskA)),
+      inheritedTold: bStart,
+      receiptFixedByB: passes(ana.checkout, "node", "--test", "test/receipt.test.ts"),
+      bReport: yield* Effect.promise(() => newestReport(taskB)),
+      bDelivered: delivered(ana.checkout, HANDOFF_TASKS.b.branch),
+      liveSignals: signals,
+      accepted,
+      costBob: cost(bob),
+      costAna: cost(ana),
+    };
+    say("handoff", JSON.stringify(report));
+    if (process.env.LAB_REPORT)
+      NodeFS.writeFileSync(process.env.LAB_REPORT, `${JSON.stringify(report, null, 2)}\n`);
+  } finally {
+    for (const { computer, h, pane } of live) {
+      console.log(`\n===== ${computer.name}'s agent, last screen =====`);
+      console.log(
+        herdrText(h, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "260"),
+      );
+    }
+    for (const computer of [bob, ana]) {
+      console.log(`\n===== ${computer.name}'s peer commands =====`);
+      for (const entry of events(computer))
+        if (entry.event === "cli") console.log(JSON.stringify(entry).slice(0, 1500));
+    }
+    for (const herdr of [anaHerdr, bobHerdr]) if (herdr) herdrText(herdr, "server", "stop");
+  }
+}).pipe(Effect.scoped);
+
 try {
   await Effect.runPromise(
     TEAM
@@ -8158,21 +8518,23 @@ try {
           ? contractProgram
           : FOLLOW
             ? followProgram
-            : ROOMS
-              ? REAL
-                ? roomsRealProgram
-                : roomsProgram
-              : KNOWLEDGE
-                ? knowledgeProgram
-                : TASKS
-                  ? realTasksProgram
-                  : SETTLE
-                    ? realSettleProgram
-                    : SETTINGS_SCENARIO
-                      ? realSettingsProgram
-                      : process.env.REAL_AGENTS === "1"
-                        ? realProgram
-                        : program,
+            : HANDOFF
+              ? handoffProgram
+              : ROOMS
+                ? REAL
+                  ? roomsRealProgram
+                  : roomsProgram
+                : KNOWLEDGE
+                  ? knowledgeProgram
+                  : TASKS
+                    ? realTasksProgram
+                    : SETTLE
+                      ? realSettleProgram
+                      : SETTINGS_SCENARIO
+                        ? realSettingsProgram
+                        : process.env.REAL_AGENTS === "1"
+                          ? realProgram
+                          : program,
   );
   say("PASS");
   process.exitCode = 0;

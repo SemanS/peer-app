@@ -19,6 +19,7 @@ import { threadRuntimeIsActive, type EnvironmentThreadShell } from "../state/mod
 import { peerLaunchBlocker } from "./herdr.ts";
 import { overlapEndedReason, overlapSessionsAtWork } from "./needsYouControls.ts";
 import { ownerCallsWaitingOn, ownerName, projectOwnership } from "./ownershipRules.ts";
+import { governingSummaries } from "./testReports.ts";
 
 export type WorkOpen =
   | { readonly kind: "thread"; readonly environmentId: EnvironmentId; readonly threadId: ThreadId }
@@ -298,7 +299,57 @@ export type NeedsYouItem = NeedsYouBase &
         /** The person decides for an owner who left, as a lead. */
         readonly onBehalf: boolean;
       }
+    /** The person answers for an unverified item of a task's report. It starts nothing. */
+    | {
+        readonly kind: "answer";
+        readonly workspace: string;
+        readonly project: string;
+        readonly task: string;
+        /** The task as lists name it. */
+        readonly taskName: string;
+      }
   );
+
+/**
+ * The tasks, open or in review, whose governing reports name the signed-in person on an unverified
+ * item. A newer report that no longer does, or another owner, takes the row away.
+ */
+function answersOf(status: PeerHubStatus) {
+  const me = status.email?.toLowerCase();
+  if (me === undefined) return [];
+  const places = new Map(
+    (status.testReports?.summaries ?? [])
+      .filter((summary) => (summary.asks ?? []).some((email) => email.toLowerCase() === me))
+      .map((s) => [`${s.workspace}/${s.project}/${s.task}`, s] as const),
+  );
+  return [...places.values()].flatMap((summary) => {
+    const place = { workspace: summary.workspace, project: summary.project, task: summary.task };
+    const governing = governingSummaries(status, place).filter((row) =>
+      (row.asks ?? []).some((email) => email.toLowerCase() === me),
+    );
+    const newest = governing[0];
+    const task = status.workspaces
+      .find((workspace) => workspace.slug === place.workspace)
+      ?.projects.find((project) => project.project.id === place.project)
+      ?.work.tasks.find((candidate) => candidate.id === place.task);
+    if (newest === undefined || task === undefined || task.status === "done") return [];
+    const taskName = taskLabel(task);
+    const yours = governing.flatMap((row) => row.yours ?? []);
+    const [first] = yours;
+    return [
+      {
+        ...place,
+        taskName,
+        title:
+          first === undefined
+            ? `You answer for: an item of ${taskName}`
+            : `You answer for: ${first}${yours.length > 1 ? ` and ${yours.length - 1} more` : ""}`,
+        since: newest.at,
+        rank: 3,
+      },
+    ];
+  });
+}
 
 /** Only a recipient's pending requests and overlaps involving their sessions enter the list. */
 export function deriveNeedsYou(input: {
@@ -445,6 +496,19 @@ export function deriveNeedsYou(input: {
           rank: 2,
         });
       }
+    }
+    for (const row of answersOf(status)) {
+      const key = needsYouKey.answer(row.workspace, row.project, row.task);
+      const old = items.get(key);
+      items.set(key, {
+        ...base,
+        ...(old === undefined
+          ? {}
+          : { offline: old.offline && base.offline, hubError: old.hubError && base.hubError }),
+        ...row,
+        key,
+        kind: "answer",
+      });
     }
     if (status.coordination.enabled)
       for (const overlap of status.coordination.overlaps) {

@@ -22,8 +22,20 @@ import {
   providesChip,
   pullRequestName,
   verifiedChip,
+  HANDOFF_RULES,
+  handoffNextSteps,
+  handoffRule,
+  liveHandoffFacts,
+  packageHandoffFacts,
+  statusHandoffFacts,
+  type HandoffFact,
 } from "./handoff.ts";
-import type { PeerHandoffDelivery, PeerTestReportItem } from "@t3tools/contracts";
+import type {
+  PeerHandoffDelivery,
+  PeerHandoffSignals,
+  PeerHubStatus,
+  PeerTestReportItem,
+} from "@t3tools/contracts";
 const p = Schema.decodeUnknownSync(PeerHandoffPackage)(fixture);
 describe("reviewer facts", () => {
   it("offers any own harness, hides done/other people's work and shows earlier contexts", () => {
@@ -193,6 +205,7 @@ describe("the review page's decision line", () => {
       text: "Accepted by policy v3 · waiting to land",
       signals: [],
       actions: ["withdraw"],
+      raisedAtHandoff: [],
     });
   });
 
@@ -211,6 +224,7 @@ describe("the review page's decision line", () => {
       text: "Done",
       signals: [],
       actions: [],
+      raisedAtHandoff: [],
     });
   });
 });
@@ -312,5 +326,453 @@ describe("the review page's chips", () => {
     });
     expect(providesChip([], "Locks surveys", []).lines).toEqual(["Locks surveys"]);
     expect(providesChip([], null, []).source).toBe("none");
+  });
+});
+
+describe("handoffNextSteps", () => {
+  // Every case of docs/decision-model/examples.yaml in the Hub repository.
+  const CASES: ReadonlyArray<{
+    readonly name: string;
+    readonly facts: ReadonlyArray<HandoffFact>;
+    readonly expect: {
+      readonly headline: "agent_action" | "coordination" | "human_decision" | null;
+      readonly agent_action: number;
+      readonly coordination: number;
+      readonly human_decision: number;
+      readonly covered: number;
+    };
+  }> = [
+    {
+      name: "formbricks 1.1 as filed",
+      facts: [
+        { fact: "report", exists: true },
+        { fact: "delivery", state: "shared" },
+        { fact: "failed_item", home: "none", label: "Malformed base revision" },
+        { fact: "unverified_item", answered_by: "nobody", label: "full typecheck" },
+        { fact: "unverified_item", answered_by: "nobody", label: "D3 or CE spec" },
+        { fact: "unverified_item", answered_by: "task", label: "integration with actions" },
+      ],
+      expect: {
+        headline: "agent_action",
+        agent_action: 3,
+        coordination: 0,
+        human_decision: 0,
+        covered: 1,
+      },
+    },
+    {
+      name: "formbricks 1.1 after the agent sorted it",
+      facts: [
+        { fact: "report", exists: true },
+        { fact: "delivery", state: "shared" },
+        { fact: "failed_item", home: "dependent_task", label: "Malformed base revision" },
+        { fact: "unverified_item", answered_by: "person", label: "D3 or CE spec" },
+        { fact: "unverified_item", answered_by: "task", label: "integration with actions" },
+      ],
+      expect: {
+        headline: "human_decision",
+        agent_action: 0,
+        coordination: 1,
+        human_decision: 1,
+        covered: 1,
+      },
+    },
+    {
+      name: "clean handoff",
+      facts: [
+        { fact: "report", exists: true },
+        { fact: "delivery", state: "shared" },
+      ],
+      expect: { headline: null, agent_action: 0, coordination: 0, human_decision: 0, covered: 0 },
+    },
+    {
+      name: "concurrent work and a moved input",
+      facts: [
+        { fact: "report", exists: true },
+        { fact: "delivery", state: "local" },
+        { fact: "overlap", state: "open" },
+        { fact: "changed_input", state: "changed" },
+      ],
+      expect: {
+        headline: "coordination",
+        agent_action: 1,
+        coordination: 2,
+        human_decision: 0,
+        covered: 0,
+      },
+    },
+    {
+      name: "owner has not answered",
+      facts: [
+        { fact: "report", exists: true },
+        { fact: "delivery", state: "shared" },
+        { fact: "owner_call", state: "pending" },
+      ],
+      expect: {
+        headline: "human_decision",
+        agent_action: 0,
+        coordination: 0,
+        human_decision: 1,
+        covered: 0,
+      },
+    },
+    {
+      name: "owner declined",
+      facts: [
+        { fact: "report", exists: true },
+        { fact: "delivery", state: "shared" },
+        { fact: "owner_call", state: "declined" },
+      ],
+      expect: {
+        headline: "agent_action",
+        agent_action: 1,
+        coordination: 0,
+        human_decision: 0,
+        covered: 0,
+      },
+    },
+  ];
+
+  it.each(CASES)("classifies $name", ({ facts, expect: want }) => {
+    const next = handoffNextSteps(facts);
+    expect({
+      headline: next.headline,
+      agent_action: next.agent_action.length,
+      coordination: next.coordination.length,
+      human_decision: next.human_decision.length,
+      covered: next.covered.length,
+    }).toEqual(want);
+  });
+
+  it("keeps the sixteen rule ids of the decision model and every value meets one rule", () => {
+    expect(HANDOFF_RULES.map((rule) => rule.id)).toEqual([
+      "no-report",
+      "has-report",
+      "not-observed",
+      "not-shared",
+      "delivered",
+      "failed-no-home",
+      "failed-left-to-dependent",
+      "unverified-nobody",
+      "unverified-task",
+      "unverified-person",
+      "overlap-open",
+      "overlap-resolved",
+      "call-pending",
+      "call-declined",
+      "call-settled",
+      "input-moved",
+    ]);
+    const facts: ReadonlyArray<HandoffFact> = [
+      { fact: "report", exists: true },
+      { fact: "report", exists: false },
+      ...(["absent", "none", "local", "shared", "landed"] as const).map((state) => ({
+        fact: "delivery" as const,
+        state,
+      })),
+      { fact: "failed_item", home: "none" },
+      { fact: "failed_item", home: "dependent_task" },
+      { fact: "unverified_item", answered_by: "nobody" },
+      { fact: "unverified_item", answered_by: "task" },
+      { fact: "unverified_item", answered_by: "person" },
+      { fact: "overlap", state: "open" },
+      { fact: "overlap", state: "resolved" },
+      ...(["pending", "accepted", "declined", "withdrawn", "expired"] as const).map((state) => ({
+        fact: "owner_call" as const,
+        state,
+      })),
+      { fact: "changed_input", state: "changed" },
+      { fact: "changed_input", state: "gone" },
+    ];
+    expect(new Set(facts.map((fact) => handoffRule(fact).id)).size).toBe(HANDOFF_RULES.length);
+  });
+
+  it("gives what someone answers for no step and never reads an item's text", () => {
+    const covered = handoffNextSteps([
+      { fact: "unverified_item", answered_by: "task", label: "Ask Ana to decide this" },
+    ]);
+    expect(covered.steps).toEqual([
+      {
+        rule: "unverified-task",
+        class: "covered",
+        actor: null,
+        next: null,
+        label: "Ask Ana to decide this",
+        who: null,
+      },
+    ]);
+    expect(covered.headline).toBeNull();
+  });
+
+  it("says a delivery was not observed without claiming the agent failed to deliver", () => {
+    const [step] = handoffNextSteps([{ fact: "delivery", state: "absent" }]).agent_action;
+    expect(step?.rule).toBe("not-observed");
+    expect(step?.next).toBe("Report the delivery; an older app may not send it");
+  });
+});
+
+describe("a handoff's facts", () => {
+  const live: PeerHandoffSignals = {
+    evaluated: true,
+    at: "2026-10-31T10:00:00Z",
+    signals: ["failed", "unowned", "owner-call"],
+    handoff: {
+      email: "ana@acme.test",
+      session: "s1",
+      environment: "e1",
+      at: "2026-10-31T09:00:00Z",
+      mode: "ask",
+      version: 1,
+      signals: ["failed", "unowned", "owner-call"],
+      accepted: false,
+    },
+    reports: [{ author: "a", role: "author", number: 2, result: "mixed", at: "t" }],
+    items: [
+      { ...base("left"), kind: "fail", failed: true, task: "3.1" },
+      { ...base("typecheck"), kind: "unverified", failed: false },
+      { ...base("spec"), kind: "unverified", failed: false, owner: "ana@acme.test" },
+      { ...base("saw it fail"), kind: "pass", failed: true },
+    ],
+    overlaps: [{ id: "o", sessions: ["s1"], files: ["a.ts"] }],
+    ownerCalls: [
+      { id: "c1", owner: "eva@acme.test", state: "pending", paths: ["b.ts"], task: "t" },
+      { id: "c2", owner: "eva@acme.test", state: "declined", paths: ["c.ts"], task: "t" },
+    ],
+    changedInputs: [{ scope: "task:t", readVersion: 1, currentVersion: null }],
+  };
+  function base(text: string) {
+    return { text, author: "a", role: "author", number: 2, index: 0 };
+  }
+
+  it("tells three owners apart from the Hub's current facts", () => {
+    const next = handoffNextSteps(liveHandoffFacts(live));
+    expect(next.headline).toBe("human_decision");
+    expect(next.agent_action.map((step) => step.rule)).toEqual([
+      "not-observed",
+      "unverified-nobody",
+      "failed-no-home",
+      "call-declined",
+    ]);
+    expect(next.coordination.map((step) => step.rule)).toEqual([
+      "failed-left-to-dependent",
+      "overlap-open",
+      "input-moved",
+    ]);
+    expect(next.human_decision.map((step) => [step.rule, step.who])).toEqual([
+      ["unverified-person", "ana@acme.test"],
+      ["call-pending", "eva@acme.test"],
+    ]);
+  });
+
+  it("has none when no agent handoff was evaluated", () => {
+    expect(liveHandoffFacts({ evaluated: false, at: "t", signals: [] })).toEqual([]);
+  });
+
+  it("falls back to what the package recorded, keeping a call with a person", () => {
+    const next = handoffNextSteps(
+      packageHandoffFacts({
+        ...p,
+        source: "agent",
+        policy: { mode: "ask", version: 1, signals: ["failed", "owner-call"], accepted: false },
+        report: {
+          number: 1,
+          result: "mixed",
+          author: "a",
+          role: "author",
+          at: "t",
+          passed: 0,
+          failed: 1,
+          unverified: 1,
+          unowned: ["typecheck"],
+        },
+        overlaps: [],
+        inputs: [],
+      }),
+    );
+    expect(next.agent_action.map((step) => step.label)).toEqual([null, null, "typecheck"]);
+    expect(next.human_decision.map((step) => step.rule)).toEqual(["call-pending"]);
+  });
+
+  it("claims nothing about a person's handoff but its overlaps and inputs", () => {
+    const facts = packageHandoffFacts({
+      ...p,
+      source: "person",
+      policy: undefined,
+      overlaps: [{ state: "open", files: ["a"], partner: null, at: "t" }],
+      inputs: [],
+    });
+    expect(facts.map((fact) => fact.fact)).toEqual(["overlap"]);
+  });
+
+  describe("from the status", () => {
+    const place = { workspace: "w", project: "p", task: "t" };
+    const summary = {
+      project: "p",
+      task: "t",
+      author: "a@acme.test",
+      number: 1,
+      composedAt: "2026-10-31T09:00:00Z",
+      contextVersion: null,
+      pullRequests: 0,
+      source: "agent" as const,
+      workspace: "w",
+      delivery: {
+        state: "shared" as const,
+        evidence: {},
+        observedAt: "t",
+        environment: "e",
+        vcs: "git" as const,
+      },
+    };
+    const tests = (over: object) => ({
+      workspace: "w",
+      project: "p",
+      task: "t",
+      author: "a@acme.test",
+      number: 1,
+      result: "mixed" as const,
+      role: "author",
+      at: "t",
+      passed: 0,
+      failed: 0,
+      unverified: 0,
+      unowned: 0,
+      ...over,
+    });
+    const status = (
+      signals: ReadonlyArray<string>,
+      summaries: ReadonlyArray<ReturnType<typeof tests>>,
+    ) =>
+      ({
+        handoff: {
+          target: "none",
+          projectTargets: {},
+          deliveries: [],
+          summaries: [
+            {
+              ...summary,
+              policy: { mode: "ask", version: 1, signals, accepted: false },
+            },
+          ],
+        },
+        testReports: { summaries },
+        coordination: { enabled: true, overlaps: [] },
+      }) as unknown as PeerHubStatus;
+
+    it("reads report counts, which move, over the signals frozen at the handoff", () => {
+      const read = statusHandoffFacts(
+        status(["unowned"], [tests({ asks: ["ana@acme.test"], unverified: 1 })]),
+        place,
+      );
+      const next = handoffNextSteps(read?.facts ?? []);
+      expect(next.agent_action).toEqual([]);
+      expect(next.human_decision.map((step) => step.who)).toEqual(["ana@acme.test"]);
+      expect(read?.at).toBe("2026-10-31T09:00:00Z");
+    });
+
+    it("tells a failure with a home from one without, once this computer read the report", () => {
+      const read = statusHandoffFacts(
+        status(["failed"], [tests({ failed: 2, failedLeft: 1 })]),
+        place,
+      );
+      const next = handoffNextSteps(read?.facts ?? []);
+      expect(next.agent_action.map((step) => step.rule)).toEqual(["failed-no-home"]);
+      expect(next.coordination.map((step) => step.rule)).toEqual(["failed-left-to-dependent"]);
+    });
+
+    it("lets a review session's failure stand over an author's later pass", () => {
+      const read = statusHandoffFacts(
+        status(
+          ["failed"],
+          [
+            tests({ author: "r@acme.test", role: "review", failed: 1, at: "2026-10-31T08:00:00Z" }),
+            tests({ result: "pass", at: "2026-10-31T09:00:00Z" }),
+          ],
+        ),
+        place,
+      );
+      expect(handoffNextSteps(read?.facts ?? []).agent_action).toHaveLength(1);
+    });
+
+    it("drops an overlap the status no longer holds open", () => {
+      const read = statusHandoffFacts(status(["open-overlap"], [tests({})]), place);
+      expect(handoffNextSteps(read?.facts ?? []).coordination).toEqual([]);
+    });
+
+    it("has nothing to say of a person's handoff", () => {
+      const person = status([], []);
+      expect(
+        statusHandoffFacts(
+          {
+            ...person,
+            handoff: {
+              target: "none",
+              projectTargets: {},
+              deliveries: [],
+              summaries: [{ ...summary, source: "person" }],
+            },
+          },
+          place,
+        ),
+      ).toBeUndefined();
+    });
+  });
+});
+
+describe("decisionLine with next steps", () => {
+  const pkg = {
+    task: "t",
+    key: "1.1",
+    policy: {
+      mode: "ask" as const,
+      version: 1,
+      signals: ["failed", "unowned"] as const,
+      accepted: false,
+    },
+  };
+  const steps = (...facts: ReadonlyArray<HandoffFact>) => ({ steps: handoffNextSteps(facts) });
+  const failed: HandoffFact = { fact: "failed_item", home: "none" };
+
+  it("reads With the agent only while its run can act, and keeps Mark done", () => {
+    const live = decisionLine(pkg, null, { ...steps(failed), runLive: true });
+    expect(live.text).toBe("With the agent");
+    expect(live.actions).toEqual(["done", "reopen"]);
+    const ended = decisionLine(pkg, null, { ...steps(failed), runLive: false });
+    expect(ended.text).toBe("Accept 1.1? 2 signals: failed, unowned");
+  });
+
+  it("leads with the first class that has an entry", () => {
+    const line = (...facts: ReadonlyArray<HandoffFact>) =>
+      decisionLine(pkg, null, { ...steps(...facts), runLive: true }).text;
+    expect(line(failed, { fact: "overlap", state: "open" })).toBe("Coordination needed");
+    expect(
+      line(
+        failed,
+        { fact: "overlap", state: "open" },
+        { fact: "unverified_item", answered_by: "person" },
+      ),
+    ).toBe("Human decision needed");
+  });
+
+  it("no longer counts a signal cleared since the handoff, and says it was raised then", () => {
+    const line = decisionLine(pkg, null, { signals: ["failed"] });
+    expect(line.text).toBe("Accept 1.1? 1 signal: failed");
+    expect(line.raisedAtHandoff).toEqual(["unowned"]);
+  });
+
+  it("lets an acceptance stand over any open step", () => {
+    const line = decisionLine(pkg, { by: "a", via: "person" }, { ...steps(failed), runLive: true });
+    expect(line.kind).toBe("accepted");
+  });
+});
+
+describe("verifiedChip and seen failures", () => {
+  it("counts a pass Peer saw fail as failed, never as seen run by Peer", () => {
+    const chip = verifiedChip({
+      items: [{ kind: "pass", text: "x", seen: { failed: true, at: "t" } }],
+    });
+    expect(chip.counts?.failed).toBe(1);
+    expect(chip.counts?.seen).toBe(0);
+    expect(chip.attention).toBe(true);
   });
 });

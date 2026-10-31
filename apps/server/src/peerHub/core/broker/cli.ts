@@ -126,13 +126,15 @@ export function commandArguments(args: ReadonlyArray<string>): CommandArguments 
 
 /**
  * The way out of a Hub refusal of `peer review` or `peer done`, by its code: a stale input is reread,
- * a review session never hands over, an unverified item gets an owner. Any other code reads as a
+ * a review session never hands over, an unverified item gets an owner, a failed item a home. Any other code reads as a
  * stale input, the refusal the Hub gives most.
  */
 const HANDOFF_NEXT: Readonly<Record<string, string>> = {
   review_session: "a review session hands nothing over; ask your person to move the task in Peer.",
   unverified_unowned:
     'give each unverified item an owner with peer tests … --unverified "<text> @<person>", leave what a dependent task covers to it with "<text> @task:<key>", or ask your person to on the task page, then retry.',
+  failed_unresolved:
+    'fix each failed item and file again, leave it to a task that depends on this one with --fail "<text> @task:<key>", or ask your person: a person may still move the task.',
   other: "read the changed inputs with peer context <task>, recheck the result and retry.",
 };
 

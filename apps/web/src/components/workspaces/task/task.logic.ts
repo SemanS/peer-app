@@ -1,3 +1,4 @@
+import { HANDOFF_CLASS_LABEL } from "@t3tools/client-runtime/peer/handoff";
 /**
  * What a task's page says, worked out from the Work tree and the Hub's status: the task's state in
  * words, what waits on the person, its chats (theirs to open, a colleague's only to ask about), the
@@ -7,6 +8,7 @@ import { summaryOf } from "@t3tools/client-runtime/peer/handoff";
 import {
   openKey,
   taskOwnership,
+  handoffMove,
   taskState,
   type AgentNeed,
   type TaskState,
@@ -76,8 +78,10 @@ export function taskStateLook(kind: TaskStateKind): {
     case "input":
       return { tone: "needs", hollow: false };
     case "working":
+    case "agent_action":
       return { tone: "working", hollow: false };
     case "waiting":
+    case "coordination":
       return { tone: "working", hollow: true };
     case "paused":
       return { tone: "neutral", hollow: false };
@@ -203,8 +207,11 @@ function waitsOn(input: {
   const { task, state, chats, needs, handoff, status, now } = input;
   if (state.kind === "done") return [];
   const waits: TaskWait[] = [];
-  if (state.kind === "review") {
+  const decision = state.label === HANDOFF_CLASS_LABEL.human_decision;
+  if (state.kind === "review" || decision) {
     const moved = contextMovedOn(task.context, handoff);
+    const open = handoffMove(task);
+    const stopped = open?.move === "agent_action" && !open.live;
     waits.push({
       kind: "review",
       key: "review",
@@ -212,7 +219,13 @@ function waitsOn(input: {
         handoff === undefined
           ? "This task waits for your review"
           : `${handoffAuthor(handoff, status, input.workspace)} handed this task off ${agoLabel(handoff.composedAt, now)}`,
-      detail: `Review it to mark the task done, or reopen it with a note for the agent.${
+      detail: `${
+        stopped
+          ? "Its agent stopped with steps open: continue its run below, or review what it left."
+          : decision
+            ? "Someone named on it has to decide before it can be accepted."
+            : "Review it to mark the task done, or reopen it with a note for the agent."
+      }${
         moved === null
           ? ""
           : ` The task context changed after the handoff (v${moved.read} → v${moved.latest}).`
@@ -286,15 +299,18 @@ function primaryOf(
   waits: ReadonlyArray<TaskWait>,
   chats: ReadonlyArray<TaskChatRow>,
 ): TaskPrimary {
-  if (state.kind === "review") {
+  if (state.kind === "review" || state.label === HANDOFF_CLASS_LABEL.human_decision) {
     return {
       kind: "review",
       label: handoff === undefined ? "Review" : `Review handoff #${handoff.number}`,
     };
   }
-  // Accepted and waiting to land: nothing to decide, but the review page holds the facts and the
-  // way to withdraw the acceptance.
-  if (state.kind === "accepted" && handoff !== undefined) {
+  // Accepted and waiting to land, or with the agent: nothing to decide, but the review page holds
+  // the facts and the way on.
+  if (
+    (state.kind === "accepted" || state.kind === "agent_action" || state.kind === "coordination") &&
+    handoff !== undefined
+  ) {
     return { kind: "review", label: `Open handoff #${handoff.number}` };
   }
   if (state.kind === "approval" || state.kind === "input") {

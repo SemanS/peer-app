@@ -23,6 +23,7 @@ import {
   PeerTaskAcceptance,
 } from "./acceptance.ts";
 import { PeerHubError } from "./base.ts";
+import { PeerHandoffSignalsRead } from "./handoff.ts";
 
 export const PEER_ACCEPTANCE_METHODS = {
   peerAcceptanceView: "peer.acceptance.view",
@@ -30,6 +31,7 @@ export const PEER_ACCEPTANCE_METHODS = {
   peerAcceptanceWithdraw: "peer.acceptance.withdraw",
   peerAcceptanceReviewPolicy: "peer.acceptance.reviewPolicy",
   peerAcceptanceSetReviewPolicy: "peer.acceptance.setReviewPolicy",
+  peerAcceptanceSignals: "peer.acceptance.signals",
 } as const;
 
 const methods = PEER_ACCEPTANCE_METHODS;
@@ -61,6 +63,11 @@ export const AcceptanceRpcGroup = RpcGroup.make(
     success: PeerSetReviewPolicyResult,
     error,
   }),
+  Rpc.make(methods.peerAcceptanceSignals, {
+    payload: PeerAcceptancePlace,
+    success: PeerHandoffSignalsRead,
+    error,
+  }),
 );
 
 /**
@@ -73,4 +80,5 @@ export const AcceptanceRpcScopes = {
   [methods.peerAcceptanceWithdraw]: AuthOrchestrationOperateScope,
   [methods.peerAcceptanceReviewPolicy]: AuthOrchestrationReadScope,
   [methods.peerAcceptanceSetReviewPolicy]: AuthOrchestrationOperateScope,
+  [methods.peerAcceptanceSignals]: AuthOrchestrationReadScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof AcceptanceRpcGroup>["_tag"], AuthEnvironmentScope>;

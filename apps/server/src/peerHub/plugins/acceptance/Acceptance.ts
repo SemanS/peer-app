@@ -13,6 +13,7 @@ import {
   type PeerAcceptanceInput,
   type PeerAcceptancePlace,
   type PeerAcceptanceSummary,
+  type PeerHandoffSignalsRead,
   type PeerProjectReviewPolicy,
   type PeerReviewPolicyPlace,
   type PeerSetReviewPolicyInput,
@@ -58,6 +59,10 @@ export class Acceptance extends Context.Service<
     readonly setReviewPolicy: (
       input: PeerSetReviewPolicyInput,
     ) => Effect.Effect<PeerSetReviewPolicyResult, PeerHubError>;
+    /** A handoff's current signals; `available: false` from a Hub that does not read them. */
+    readonly signals: (
+      place: PeerAcceptancePlace,
+    ) => Effect.Effect<PeerHandoffSignalsRead, PeerHubError>;
     /** What this computer knows of a task's acceptance, without asking the Hub. */
     readonly known: (place: PeerAcceptancePlace) => PeerTaskAcceptance | undefined;
     /** Reads a workspace again soon; a burst reads it once. */
@@ -163,6 +168,13 @@ const make = Effect.gen(function* () {
               detail: "This Peer Hub does not keep a review policy yet.",
               refused: true,
             }),
+        ),
+      ),
+    signals: (p) =>
+      member(p).pipe(
+        Effect.andThen(hub.signals(p)),
+        Effect.map((signals) =>
+          signals === null ? { available: false } : { available: true, signals },
         ),
       ),
     view: (p) =>

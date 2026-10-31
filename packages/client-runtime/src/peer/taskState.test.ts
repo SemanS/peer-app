@@ -129,6 +129,124 @@ describe("taskState", () => {
     expect(taskState(task([idle], { inReview: true })).kind).toBe("review");
   });
 
+  describe("a handoff's open steps", () => {
+    const at = "2026-10-31T09:00:00Z";
+    const next = (over: object) => ({
+      agentActions: 0,
+      coordination: 0,
+      humanDecisions: 0,
+      at,
+      ...over,
+    });
+    const idle = thread({ key: "a", status: "idle" });
+    const working = thread({ key: "a", status: "working" });
+
+    it("is with the agent while its run is live, and asks nobody yet", () => {
+      const state = taskState(
+        task([idle], {
+          inReview: true,
+          handoffNext: next({ agentActions: 2 }),
+          runs: { running: 1, detached: 0, ended: 0 },
+        }),
+      );
+      expect(state).toEqual({
+        kind: "agent_action",
+        label: "With the agent",
+        waitingOn: undefined,
+        since: at,
+      });
+      expect(TASK_STATES_NEEDING_YOU.has(state.kind)).toBe(false);
+      expect(taskColumn(state)).toBe("working");
+    });
+
+    it("comes back to its person, naming the steps, when the run ends", () => {
+      const state = taskState(
+        task([idle], {
+          inReview: true,
+          handoffNext: next({ agentActions: 2 }),
+          runs: { running: 0, detached: 1, ended: 0 },
+        }),
+      );
+      expect(state.kind).toBe("review");
+      expect(state.label).toBe("The agent stopped · 2 steps open");
+      expect(taskColumn(state)).toBe("needs");
+    });
+
+    it("counts a chat at work as live where the Hub has no runs", () => {
+      const state = taskState(
+        task([working], { inReview: true, handoffNext: next({ agentActions: 1 }) }),
+      );
+      expect(state.kind).toBe("agent_action");
+    });
+
+    it("reads coordination under work in progress, and returns it to the person after the run", () => {
+      const live = taskState(
+        task([working], {
+          inReview: true,
+          handoffNext: next({ coordination: 1, agentActions: 1 }),
+        }),
+      );
+      expect(live.kind).toBe("coordination");
+      expect(live.label).toBe("Coordination needed");
+      expect(taskColumn(live)).toBe("working");
+      const ended = taskState(
+        task([idle], { inReview: true, handoffNext: next({ coordination: 1 }) }),
+      );
+      expect(ended).toEqual({
+        kind: "review",
+        label: "Coordination needed",
+        waitingOn: undefined,
+      });
+    });
+
+    it("maps a human decision to input at once, whatever the run does", () => {
+      const state = taskState(
+        task([working], {
+          inReview: true,
+          handoffNext: next({ humanDecisions: 1, coordination: 1, agentActions: 1 }),
+        }),
+      );
+      expect(state).toEqual({
+        kind: "input",
+        label: "Human decision needed",
+        waitingOn: undefined,
+      });
+    });
+
+    it("is a plain review with no step open, and an acceptance beats any step", () => {
+      expect(taskState(task([working], { inReview: true, handoffNext: next({}) })).kind).toBe(
+        "review",
+      );
+      expect(
+        taskState(
+          task([working], {
+            inReview: true,
+            accepted: "person",
+            handoffNext: next({ agentActions: 1 }),
+          }),
+        ).kind,
+      ).toBe("accepted");
+    });
+
+    it("puts your own waiting chat first and says the agent's move to anyone", () => {
+      const waiting = thread({ key: "b", status: "blocked" });
+      expect(
+        taskState(
+          task([waiting], {
+            inReview: true,
+            handoffNext: next({ agentActions: 1 }),
+            runs: { running: 1, detached: 0, ended: 0 },
+          }),
+        ).kind,
+      ).toBe("input");
+      const route = { audience: "owner", names: ["Ana"], forMe: false } as const;
+      const live = task([working], { inReview: true, handoffNext: next({ agentActions: 1 }) });
+      expect(taskState(live, new Map(), route).kind).toBe("agent_action");
+      const ended = task([idle], { inReview: true, handoffNext: next({ agentActions: 1 }) });
+      expect(taskState(ended, new Map(), route).label).toBe("Ready for Ana's review");
+    });
+  });
+
   it("names the states that wait on the person", () => {
     expect([...TASK_STATES_NEEDING_YOU].toSorted()).toEqual(["approval", "input", "review"]);
   });

@@ -35,6 +35,28 @@ const report = (extra: Partial<PeerTestReport> = {}): PeerTestReport => ({
 
 const now = new Date(2026, 9, 28, 16, 0).getTime();
 
+describe("what is left to a task on the phone", () => {
+  it("says which task carries an item, and needs no owner for it", () => {
+    const [view] = reportViews(
+      [
+        report({
+          items: [
+            { kind: "fail", text: "malformed revision", task: "t31" },
+            { kind: "fail", text: "login" },
+            { kind: "unverified", text: "actions", task: "t31" },
+          ],
+        }),
+      ],
+      { members, me: null, now: 0, taskName: () => "3.1" },
+    );
+    expect(view?.items.map((item) => [item.owner, item.needsOwner])).toEqual([
+      ["Left to 3.1", false],
+      [null, false],
+      ["Left to 3.1", false],
+    ]);
+  });
+});
+
 describe("a task's reports on the phone", () => {
   it("shows a report's result, author, role, time and counts", () => {
     const [view] = reportViews([report()], { members, me: null, now });

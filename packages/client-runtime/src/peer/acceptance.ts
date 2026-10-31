@@ -41,6 +41,18 @@ import {
 export function createPeerAcceptanceAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ) {
+  // Always fresh: a current signal is the point of the read, and `revision` is never sent.
+  const signals = createEnvironmentQueryAtomFamily(runtime, {
+    label: "peer:acceptance:signals",
+    staleTimeMs: 0,
+    idleTtlMs: 0,
+    execute: (input: PeerAcceptancePlace & { readonly revision: string }) =>
+      request(WS_METHODS.peerAcceptanceSignals, {
+        workspace: input.workspace,
+        project: input.project,
+        task: input.task,
+      }),
+  });
   const view = createEnvironmentQueryAtomFamily(runtime, {
     label: "peer:acceptance:view",
     staleTimeMs: 0,
@@ -59,6 +71,15 @@ export function createPeerAcceptanceAtoms<R, ER>(
       readonly revision: string;
     }) =>
       view({
+        environmentId: target.environmentId,
+        input: { ...target.input, revision: target.revision },
+      }),
+    peerAcceptanceSignals: (target: {
+      readonly environmentId: EnvironmentId;
+      readonly input: PeerAcceptancePlace;
+      readonly revision: string;
+    }) =>
+      signals({
         environmentId: target.environmentId,
         input: { ...target.input, revision: target.revision },
       }),

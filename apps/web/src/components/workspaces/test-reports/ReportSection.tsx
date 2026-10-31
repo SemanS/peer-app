@@ -7,6 +7,8 @@ import {
   ownReport,
   staleOwnerLine,
   type ReportDraft,
+  inheritedRows,
+  projectReportsRevision,
 } from "@t3tools/client-runtime/peer/test-reports";
 import type {
   PeerTask,
@@ -16,6 +18,7 @@ import type {
 } from "@t3tools/contracts";
 import { useState } from "react";
 
+import { useEnvironmentQuery } from "../../../state/query";
 import { ensureLocalApi } from "../../../localApi";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
@@ -64,6 +67,49 @@ export function ReportSection(props: TaskSlotProps) {
       taskName={props.task.key ?? props.task.title}
       tasks={state.work.tasks}
     />
+  );
+}
+
+/** What the task's dependencies left to it: what a task inherits is read with its project's reports. */
+function InheritedItems({
+  environmentId,
+  status,
+  place,
+  members,
+}: Pick<TaskSlotProps, "environmentId" | "status"> & {
+  readonly place: { readonly workspace: string; readonly project: string; readonly task: string };
+  readonly members: ReadonlyArray<Member>;
+}) {
+  const read = useEnvironmentQuery(
+    serverEnvironment.peerTestsInherited({
+      environmentId,
+      input: place,
+      revision: projectReportsRevision(status, place),
+    }),
+  );
+  const rows = inheritedRows(
+    read.data ?? { items: [], capped: false },
+    (email) => members.find((member) => member.email === email)?.name ?? "a teammate",
+  );
+  if (rows.length === 0) return null;
+  return (
+    <section aria-label="Left to this task" className="flex flex-col gap-1.5">
+      <h4 className="text-sm font-semibold text-foreground">Left to this task</h4>
+      <ul className="flex flex-col gap-1.5 text-sm text-foreground">
+        {rows.map((row) => (
+          <li key={row.key} className="flex flex-col [overflow-wrap:anywhere]">
+            <span>
+              {row.kind === "failed" ? "Failed: " : "Unverified: "}
+              {row.text}
+            </span>
+            <span className="text-xs text-muted-foreground">{row.source}</span>
+          </li>
+        ))}
+      </ul>
+      {read.data?.capped === true ? (
+        <p className="text-xs text-muted-foreground">There may be more than these.</p>
+      ) : null}
+    </section>
   );
 }
 
@@ -175,9 +221,16 @@ function TaskReports({
         <p className="max-w-prose text-sm text-muted-foreground">
           What this task was tested against. “Seen run by Peer” means Peer saw the agent’s session
           run that exact command; everything else is what its author says. An agent finishes the
-          task only once every unverified item has an owner.
+          task only once every unverified item has an owner and every failed item a task to carry
+          it.
         </p>
       </div>
+      <InheritedItems
+        environmentId={environmentId}
+        status={status}
+        place={place}
+        members={members}
+      />
       {error === null ? null : (
         <div className="flex flex-wrap items-center gap-2">
           <p role="alert" className="text-sm text-destructive-foreground">

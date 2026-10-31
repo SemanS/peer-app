@@ -9,6 +9,7 @@ import {
   type PeerHandoffOutcome,
   type PeerHandoffStatus,
   type PeerHandoffPlace,
+  type PeerHandoffSignals,
   type PeerHubStatus,
   type PeerTask,
   type PeerWorkContext,
@@ -21,6 +22,7 @@ import {
   createEnvironmentRpcQueryAtomFamily,
 } from "../state/runtime.ts";
 import type { DependentsGroup } from "./readiness.ts";
+import { governingSummaries, itemFailed, testReportsRevision } from "./testReports.ts";
 export function createPeerHandoffAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ) {
@@ -223,8 +225,8 @@ export const inputState = (input: Pick<HandoffInput, "readVersion" | "currentVer
       : "changed";
 
 /**
- * A review policy's signals in words, for the settings section and the review page's Needs
- * attention: what in the Hub's facts asks for a person.
+ * A review policy's signals in words, for the settings section and the review page: what in the
+ * Hub's facts raises a signal.
  */
 export const REVIEW_SIGNAL_WORDS: Readonly<Record<PeerReviewSignal, string>> = {
   "no-report": "The task has no test report",
@@ -235,20 +237,537 @@ export const REVIEW_SIGNAL_WORDS: Readonly<Record<PeerReviewSignal, string>> = {
   "owner-call": "An owner's call is pending or declined",
 };
 
+/** A class of an open fact: who has to move on it, or `covered` when nobody has to. */
+export type HandoffClass = "agent_action" | "coordination" | "human_decision" | "covered";
+
+/** The classes that name a next step, as the page, the board and Needs you label them. */
+export const HANDOFF_CLASS_LABEL = {
+  agent_action: "Agent action needed",
+  coordination: "Coordination needed",
+  human_decision: "Human decision needed",
+} as const;
+
+/** The page leads with the first class that has an entry. */
+export const HANDOFF_HEADLINE_ORDER = ["human_decision", "coordination", "agent_action"] as const;
+
+export type HandoffHeadline = (typeof HANDOFF_HEADLINE_ORDER)[number];
+
+export type HandoffActor =
+  | "author_agent"
+  | "dependent_task"
+  | "named_person"
+  | "sessions"
+  | "owner";
+
+/**
+ * One structured fact of a handoff. A rule reads only these fields, never `label`: an item's text
+ * cannot change its class, since Peer does not read prose.
+ */
+export type HandoffFact = {
+  /** The item's own words, or what the page calls the fact. */
+  readonly label?: string | undefined;
+  /** Who is named on it: the person who answers, the owner asked, the task it is left to. */
+  readonly who?: string | undefined;
+} & (
+  | { readonly fact: "report"; readonly exists: boolean }
+  | {
+      readonly fact: "delivery";
+      readonly state: "absent" | "none" | "local" | "shared" | "landed";
+    }
+  | { readonly fact: "failed_item"; readonly home: "none" | "dependent_task" }
+  | { readonly fact: "unverified_item"; readonly answered_by: "nobody" | "task" | "person" }
+  | { readonly fact: "overlap"; readonly state: "open" | "resolved" }
+  | {
+      readonly fact: "owner_call";
+      readonly state: "pending" | "accepted" | "declined" | "withdrawn" | "expired";
+    }
+  | { readonly fact: "changed_input"; readonly state: "changed" | "gone" }
+);
+
+interface HandoffRule {
+  readonly id: string;
+  readonly fact: HandoffFact["fact"];
+  /** The values of the fact's one field this rule takes. */
+  readonly when: ReadonlyArray<boolean | string>;
+  readonly class: HandoffClass | null;
+  readonly actor?: HandoffActor;
+  readonly next?: string;
+}
+
+/**
+ * The classification of `docs/decision-model/proposed.yaml` in the Hub repository, rule for rule and
+ * under the same ids. It is exhaustive: every value of every fact meets exactly one rule. A rule with
+ * no class is a fact that asks nothing.
+ */
+export const HANDOFF_RULES: ReadonlyArray<HandoffRule> = [
+  {
+    id: "no-report",
+    fact: "report",
+    when: [false],
+    class: "agent_action",
+    actor: "author_agent",
+    next: "File a test report",
+  },
+  { id: "has-report", fact: "report", when: [true], class: null },
+  {
+    id: "not-observed",
+    fact: "delivery",
+    when: ["absent"],
+    class: "agent_action",
+    actor: "author_agent",
+    next: "Report the delivery; an older app may not send it",
+  },
+  {
+    id: "not-shared",
+    fact: "delivery",
+    when: ["none", "local"],
+    class: "agent_action",
+    actor: "author_agent",
+    next: "Commit and push the work",
+  },
+  { id: "delivered", fact: "delivery", when: ["shared", "landed"], class: null },
+  {
+    id: "failed-no-home",
+    fact: "failed_item",
+    when: ["none"],
+    class: "agent_action",
+    actor: "author_agent",
+    next: "Fix it, or leave it to a dependent task, or name the person who decides",
+  },
+  {
+    id: "failed-left-to-dependent",
+    fact: "failed_item",
+    when: ["dependent_task"],
+    class: "coordination",
+    actor: "dependent_task",
+    next: "The dependent task carries it",
+  },
+  {
+    id: "unverified-nobody",
+    fact: "unverified_item",
+    when: ["nobody"],
+    class: "agent_action",
+    actor: "author_agent",
+    next: "Run the check, or leave it to a task, or name the person who decides",
+  },
+  { id: "unverified-task", fact: "unverified_item", when: ["task"], class: "covered" },
+  {
+    id: "unverified-person",
+    fact: "unverified_item",
+    when: ["person"],
+    class: "human_decision",
+    actor: "named_person",
+    next: "Answer the question",
+  },
+  {
+    id: "overlap-open",
+    fact: "overlap",
+    when: ["open"],
+    class: "coordination",
+    actor: "sessions",
+    next: "Settle it with peer resolve, then the partner's person",
+  },
+  { id: "overlap-resolved", fact: "overlap", when: ["resolved"], class: null },
+  {
+    id: "call-pending",
+    fact: "owner_call",
+    when: ["pending"],
+    class: "human_decision",
+    actor: "owner",
+    next: "Decide the call",
+  },
+  {
+    id: "call-declined",
+    fact: "owner_call",
+    when: ["declined"],
+    class: "agent_action",
+    actor: "author_agent",
+    next: "Change the work or take the call back",
+  },
+  {
+    id: "call-settled",
+    fact: "owner_call",
+    when: ["accepted", "withdrawn", "expired"],
+    class: null,
+  },
+  {
+    id: "input-moved",
+    fact: "changed_input",
+    when: ["changed", "gone"],
+    class: "coordination",
+    actor: "author_agent",
+    next: "Read the new version with peer inputs",
+  },
+];
+
+function factValue(fact: HandoffFact): boolean | string {
+  switch (fact.fact) {
+    case "report":
+      return fact.exists;
+    case "failed_item":
+      return fact.home;
+    case "unverified_item":
+      return fact.answered_by;
+    case "delivery":
+    case "overlap":
+    case "owner_call":
+    case "changed_input":
+      return fact.state;
+  }
+}
+
+/** The one rule a fact meets. */
+export function handoffRule(fact: HandoffFact): HandoffRule {
+  const value = factValue(fact);
+  const rule = HANDOFF_RULES.find(
+    (candidate) => candidate.fact === fact.fact && candidate.when.includes(value),
+  );
+  // The rules cover every value the type allows.
+  if (rule === undefined) throw new Error(`no handoff rule for ${fact.fact}: ${String(value)}`);
+  return rule;
+}
+
+/** An open fact with what follows from it. `next` is null for one somebody already answers for. */
+export interface HandoffStep {
+  readonly rule: string;
+  readonly class: HandoffClass;
+  readonly actor: HandoffActor | null;
+  readonly next: string | null;
+  readonly label: string | null;
+  readonly who: string | null;
+}
+
+export interface HandoffNextSteps {
+  readonly steps: ReadonlyArray<HandoffStep>;
+  /** The first class of `HANDOFF_HEADLINE_ORDER` with an entry; null when nothing asks anything. */
+  readonly headline: HandoffHeadline | null;
+  readonly agent_action: ReadonlyArray<HandoffStep>;
+  readonly coordination: ReadonlyArray<HandoffStep>;
+  readonly human_decision: ReadonlyArray<HandoffStep>;
+  readonly covered: ReadonlyArray<HandoffStep>;
+}
+
+/** Who each open fact waits for, per fact and never per handoff. Nothing here is stored. */
+export function handoffNextSteps(facts: ReadonlyArray<HandoffFact>): HandoffNextSteps {
+  const steps = facts.flatMap((fact): ReadonlyArray<HandoffStep> => {
+    const rule = handoffRule(fact);
+    return rule.class === null
+      ? []
+      : [
+          {
+            rule: rule.id,
+            class: rule.class,
+            actor: rule.actor ?? null,
+            next: rule.next ?? null,
+            label: fact.label ?? null,
+            who: fact.who ?? null,
+          },
+        ];
+  });
+  const of = (klass: HandoffClass) => steps.filter((step) => step.class === klass);
+  return {
+    steps,
+    headline: HANDOFF_HEADLINE_ORDER.find((klass) => of(klass).length > 0) ?? null,
+    agent_action: of("agent_action"),
+    coordination: of("coordination"),
+    human_decision: of("human_decision"),
+    covered: of("covered"),
+  };
+}
+
+/** What a step says when its fact has no words of its own. */
+const STEP_WORDS: Readonly<Record<string, string>> = {
+  "no-report": "No test report was filed",
+  "not-observed": "The delivery was not observed",
+  "not-shared": "The work is not shared",
+  "failed-no-home": "A failed item",
+  "failed-left-to-dependent": "A failed item",
+  "unverified-nobody": "An unverified item nobody answers for",
+  "unverified-person": "An unverified item",
+  "unverified-task": "An unverified item",
+  "call-pending": "An owner's call",
+  "call-declined": "A declined owner's call",
+};
+
+/** One open fact as the page and the phone list it. */
+export interface HandoffStepRow {
+  readonly key: string;
+  readonly text: string;
+  /** "left to 3.1", "Ana's". */
+  readonly who: string | null;
+  readonly next: string | null;
+}
+
+export function handoffStepRow(
+  step: HandoffStep,
+  index: number,
+  nameOf: (email: string) => string,
+  taskName: (id: string) => string,
+): HandoffStepRow {
+  const { who } = step;
+  const left = step.rule === "failed-left-to-dependent" || step.rule === "unverified-task";
+  return {
+    key: `${step.rule}:${index}`,
+    text: step.label ?? STEP_WORDS[step.rule] ?? step.rule,
+    who: who === null ? null : left ? `left to ${taskName(who)}` : `${nameOf(who)}’s`,
+    next: step.next,
+  };
+}
+
+const OWNER_CALL_STATES = ["pending", "accepted", "declined", "withdrawn", "expired"] as const;
+
+const ownerCallState = (state: string) =>
+  OWNER_CALL_STATES.find((candidate) => candidate === state) ?? "pending";
+
+/** Today's facts of a handoff as the Hub reads them; none when no agent handoff was evaluated. */
+export function liveHandoffFacts(live: PeerHandoffSignals): ReadonlyArray<HandoffFact> {
+  if (!live.evaluated) return [];
+  return [
+    { fact: "report", exists: (live.reports ?? []).length > 0 },
+    { fact: "delivery", state: live.handoff?.delivery?.state ?? "absent" },
+    ...(live.items ?? []).map((item): HandoffFact =>
+      item.failed
+        ? {
+            fact: "failed_item",
+            home: item.task === undefined ? "none" : "dependent_task",
+            label: item.text,
+            who: item.task,
+          }
+        : {
+            fact: "unverified_item",
+            answered_by:
+              item.owner !== undefined ? "person" : item.task !== undefined ? "task" : "nobody",
+            label: item.text,
+            who: item.owner ?? item.task,
+          },
+    ),
+    ...(live.overlaps ?? []).map((overlap): HandoffFact => ({
+      fact: "overlap",
+      state: "open",
+      label: overlap.files.join(", "),
+    })),
+    ...(live.ownerCalls ?? []).map((call): HandoffFact => ({
+      fact: "owner_call",
+      state: ownerCallState(call.state),
+      label: call.paths.join(", "),
+      who: call.owner,
+    })),
+    ...(live.changedInputs ?? []).map((input): HandoffFact => ({
+      fact: "changed_input",
+      state: input.currentVersion === null ? "gone" : "changed",
+      label: input.scope,
+    })),
+  ];
+}
+
+/**
+ * What a package recorded, as facts, for when current signals cannot be read. `report` is the
+ * task's newest report with its items when the page read it. An owner's call is known here only as
+ * its signal, which does not tell pending from declined, so it stays with a person. Only an agent's
+ * evaluated handoff speaks for its report and delivery: a person's, or an older Hub's, does not.
+ */
+export function packageHandoffFacts(
+  pkg: Pick<
+    PeerHandoffPackage,
+    "source" | "policy" | "report" | "delivery" | "overlaps" | "inputs"
+  >,
+  report?: Pick<PeerTestReport, "items"> | undefined,
+): ReadonlyArray<HandoffFact> {
+  const signals = pkg.policy?.signals ?? [];
+  const evaluated: ReadonlyArray<HandoffFact> =
+    pkg.source !== "agent" || pkg.policy === undefined
+      ? []
+      : [
+          { fact: "report", exists: report !== undefined || pkg.report !== undefined },
+          { fact: "delivery", state: pkg.delivery?.state ?? "absent" },
+          ...(report !== undefined
+            ? report.items.flatMap((item): ReadonlyArray<HandoffFact> => {
+                if (itemFailed(item))
+                  return [
+                    {
+                      fact: "failed_item",
+                      home: item.task === undefined ? "none" : "dependent_task",
+                      label: item.text,
+                      who: item.task,
+                    },
+                  ];
+                if (item.kind !== "unverified") return [];
+                return [
+                  {
+                    fact: "unverified_item",
+                    answered_by:
+                      item.owner !== undefined
+                        ? "person"
+                        : item.task !== undefined
+                          ? "task"
+                          : "nobody",
+                    label: item.text,
+                    who: item.owner ?? item.task,
+                  },
+                ];
+              })
+            : [
+                ...Array.from({ length: pkg.report?.failed ?? 0 }, (): HandoffFact => ({
+                  fact: "failed_item",
+                  home: "none",
+                })),
+                ...(pkg.report?.unowned ?? []).map((label): HandoffFact => ({
+                  fact: "unverified_item",
+                  answered_by: "nobody",
+                  label,
+                })),
+              ]),
+          ...(signals.includes("owner-call")
+            ? [{ fact: "owner_call", state: "pending" } as const]
+            : []),
+        ];
+  return [
+    ...evaluated,
+    ...pkg.overlaps
+      .filter((overlap) => overlap.state === "open")
+      .map((overlap): HandoffFact => ({
+        fact: "overlap",
+        state: "open",
+        label: overlap.files.join(", "),
+        who: overlap.partner ?? undefined,
+      })),
+    ...pkg.inputs.flatMap((input): ReadonlyArray<HandoffFact> => {
+      const state = inputState(input);
+      return state === "current"
+        ? []
+        : [{ fact: "changed_input", state, label: inputLabel(input) }];
+    }),
+  ];
+}
+
+type StatusFacts = Pick<PeerHubStatus, "handoff" | "testReports" | "coordination" | "ownership">;
+
+/**
+ * What the board knows of a task's handoff without a read per task: the status's summaries, whose
+ * report counts move with the Hub's pings, over the signals frozen at the handoff for what no
+ * summary carries. Undefined with no agent handoff, or from a Hub without a review policy. Inputs
+ * that changed are not in the status, so only the task's page shows them.
+ */
+export function statusHandoffFacts(
+  status: StatusFacts,
+  place: { readonly workspace: string; readonly project: string; readonly task: string },
+):
+  | { readonly facts: ReadonlyArray<HandoffFact>; readonly at: string; readonly author: string }
+  | undefined {
+  const summary = [
+    ...summaryOf(status.handoff, {
+      workspace: place.workspace,
+      projectId: place.project,
+      taskId: place.task,
+    }),
+  ]
+    .filter((candidate) => candidate.source === "agent" && candidate.policy !== undefined)
+    .sort((a, b) => b.composedAt.localeCompare(a.composedAt))[0];
+  const policy = summary?.policy;
+  if (summary === undefined || policy === undefined) return undefined;
+  const raised = (signal: PeerReviewSignal) => policy.signals.includes(signal);
+  const reports = governingSummaries(status, place);
+  const known = status.testReports !== undefined;
+  const count = <T>(n: number, fact: T) => Array.from({ length: Math.max(0, n) }, () => fact);
+  const failed = reports.reduce((sum, report) => sum + report.failed, 0);
+  const left = reports.reduce((sum, report) => sum + (report.failedLeft ?? 0), 0);
+  const unowned = reports.reduce((sum, report) => sum + report.unowned, 0);
+  const asks = [...new Set(reports.flatMap((report) => report.asks ?? []))];
+  const overlapOpen = status.coordination.enabled
+    ? raised("open-overlap") &&
+      status.coordination.overlaps.some(
+        (overlap) =>
+          overlap.state === "open" &&
+          overlap.workspace === place.workspace &&
+          overlap.project === place.project,
+      )
+    : raised("open-overlap");
+  const calls = status.ownership?.projects
+    ?.find((project) => project.workspace === place.workspace && project.project === place.project)
+    ?.calls.filter((call) => call.task === place.task);
+  return {
+    at: summary.composedAt,
+    author: summary.author,
+    facts: [
+      { fact: "report", exists: known ? reports.length > 0 : !raised("no-report") },
+      { fact: "delivery", state: summary.delivery?.state ?? "absent" },
+      // A pass Peer saw fail counts in no summary; only the frozen signal says so.
+      ...count<HandoffFact>(known ? failed - left : raised("failed") ? 1 : 0, {
+        fact: "failed_item",
+        home: "none",
+      }),
+      ...count<HandoffFact>(left, { fact: "failed_item", home: "dependent_task" }),
+      ...count<HandoffFact>(known ? unowned : raised("unowned") ? 1 : 0, {
+        fact: "unverified_item",
+        answered_by: "nobody",
+      }),
+      ...asks.map((who): HandoffFact => ({ fact: "unverified_item", answered_by: "person", who })),
+      ...(overlapOpen ? [{ fact: "overlap", state: "open" } as const] : []),
+      ...(calls === undefined
+        ? raised("owner-call")
+          ? [{ fact: "owner_call", state: "pending" } as const]
+          : []
+        : calls.map((call): HandoffFact => ({
+            fact: "owner_call",
+            state: ownerCallState(call.state),
+            who: call.owner,
+          }))),
+    ],
+  };
+}
+
+/**
+ * The cache key of a handoff's current signals, moved by what the Hub pings: a report filed or an
+ * item given an owner, an acceptance, an overlap, an owner's call. It is never sent.
+ */
+export function handoffSignalsRevision(
+  status: StatusFacts & Pick<PeerHubStatus, "acceptance">,
+  place: { readonly workspace: string; readonly project: string; readonly task: string },
+) {
+  return [
+    testReportsRevision(status, place),
+    ...(status.acceptance?.accepted ?? [])
+      .filter((row) => row.project === place.project && row.task === place.task)
+      .map((row) => `accepted:${row.at}`),
+    ...(status.coordination.enabled ? status.coordination.overlaps : [])
+      .filter(
+        (overlap) => overlap.workspace === place.workspace && overlap.project === place.project,
+      )
+      .map((overlap) => `${overlap.id}:${overlap.state}`)
+      .sort(),
+    ...(status.ownership?.projects ?? [])
+      .filter((entry) => entry.workspace === place.workspace && entry.project === place.project)
+      .flatMap((entry) => entry.calls)
+      .filter((call) => call.task === place.task)
+      .map((call) => `${call.id}:${call.state}`)
+      .sort(),
+  ].join(";");
+}
+
 /** What the decision line offers: Mark done, Reopen with a note, Withdraw acceptance. */
 export type DecisionAction = "done" | "reopen" | "withdraw";
 
 /**
- * The review page's first line: the decision the policy asks of the person ("Accept 1.1? 2
- * signals: not-delivered, unowned"), or that none is asked ("Accepted by policy v3 · waiting to
+ * The review page's first line: who moves next. "With the agent" while only agent actions remain
+ * and its run is live, a class that asks someone, the decision the policy asks of the person ("Accept
+ * 1.1? 2 signals: not-delivered, unowned"), or that none is asked ("Accepted by policy v3 · waiting to
  * land", "Accepted by Ana"), with the actions that sit on it. Whether the person may take them is
  * the page's to decide (`mayAccept`).
  */
 export interface DecisionLine {
-  readonly kind: "ask" | "accepted-by-policy" | "accepted" | "done";
+  readonly kind:
+    | "ask"
+    | "with-agent"
+    | "coordination"
+    | "human-decision"
+    | "accepted-by-policy"
+    | "accepted"
+    | "done";
   readonly text: string;
   readonly signals: ReadonlyArray<PeerReviewSignal>;
   readonly actions: ReadonlyArray<DecisionAction>;
+  /** What the package recorded and is no longer so: the line does not count them. */
+  readonly raisedAtHandoff: ReadonlyArray<PeerReviewSignal>;
 }
 
 /** A current acceptance as the decision line reads it: the package's, the status's or the task's. */
@@ -262,7 +781,8 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 /**
  * The decision line of a package. `acceptance` is the task's current acceptance (the package's
  * own by default; pass null when it was withdrawn or given before reopening); `status` the task's
- * (review by default).
+ * (review by default). `signals` are the current ones where the Hub offers them, the package's
+ * otherwise; `steps` and `runLive` say who moves next.
  */
 export function decisionLine(
   pkg: Pick<PeerHandoffPackage, "task" | "key" | "policy" | "acceptance">,
@@ -270,11 +790,16 @@ export function decisionLine(
   options: {
     readonly status?: "open" | "review" | "done";
     readonly nameOf?: (email: string) => string;
+    readonly signals?: ReadonlyArray<PeerReviewSignal> | undefined;
+    readonly steps?: HandoffNextSteps | undefined;
+    readonly runLive?: boolean | undefined;
   } = {},
 ): DecisionLine {
   const status = options.status ?? "review";
   const nameOf = options.nameOf ?? ((email: string) => email);
-  const signals = pkg.policy?.signals ?? [];
+  const recorded = pkg.policy?.signals ?? [];
+  const signals = options.signals ?? recorded;
+  const raisedAtHandoff = recorded.filter((signal) => !signals.includes(signal));
   if (acceptance !== null && acceptance !== undefined) {
     if (acceptance.via === "policy") {
       const version = pkg.policy === undefined ? "" : ` v${pkg.policy.version}`;
@@ -283,6 +808,7 @@ export function decisionLine(
         text: `Accepted by policy${version}${status === "review" ? " · waiting to land" : ""}`,
         signals,
         actions: ["withdraw"],
+        raisedAtHandoff,
       };
     }
     return {
@@ -290,9 +816,24 @@ export function decisionLine(
       text: `Accepted by ${nameOf(acceptance.by)}`,
       signals,
       actions: ["withdraw"],
+      raisedAtHandoff,
     };
   }
-  if (status === "done") return { kind: "done", text: "Done", signals, actions: [] };
+  if (status === "done")
+    return { kind: "done", text: "Done", signals, actions: [], raisedAtHandoff };
+  const line = (kind: DecisionLine["kind"], text: string): DecisionLine => ({
+    kind,
+    text,
+    signals,
+    actions: ["done", "reopen"],
+    raisedAtHandoff,
+  });
+  const headline = options.steps?.headline ?? null;
+  if (headline === "human_decision")
+    return line("human-decision", HANDOFF_CLASS_LABEL.human_decision);
+  if (headline === "coordination") return line("coordination", HANDOFF_CLASS_LABEL.coordination);
+  if (headline === "agent_action" && options.runLive === true)
+    return line("with-agent", "With the agent");
   const name = pkg.key ?? pkg.task;
   const said =
     signals.length > 0
@@ -300,7 +841,7 @@ export function decisionLine(
       : pkg.policy === undefined
         ? ""
         : " No signals";
-  return { kind: "ask", text: `Accept ${name}?${said}`, signals, actions: ["done", "reopen"] };
+  return line("ask", `Accept ${name}?${said}`);
 }
 
 /** Counts of a report's items by where their claim comes from. */
@@ -341,7 +882,7 @@ export function verifiedChip(report: Pick<PeerTestReport, "items"> | undefined):
     (counts as { -readonly [K in keyof VerifiedCounts]: number })[key] += 1;
   };
   for (const item of report.items) {
-    if (item.kind === "fail") add("failed");
+    if (itemFailed(item)) add("failed");
     else if (item.kind === "pass") add(item.seen === undefined ? "authorReported" : "seen");
     else if (item.task !== undefined) add("leftToTasks");
     else if (item.owner !== undefined) add("owned");

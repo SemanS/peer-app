@@ -102,6 +102,9 @@ export function WorkRouteScreen() {
           navigation.navigate("NeedsYou", focus === null ? {} : { focus });
           return;
         }
+        case "answer":
+          navigation.navigate("NeedsYou", {});
+          return;
         case "unavailable":
           return;
       }

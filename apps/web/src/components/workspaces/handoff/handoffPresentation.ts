@@ -1,8 +1,14 @@
 import {
   decisionLine,
   deliveredChip,
+  HANDOFF_CLASS_LABEL,
+  HANDOFF_HEADLINE_ORDER,
   handoffLines,
+  handoffNextSteps,
+  handoffStepRow,
   inputState,
+  liveHandoffFacts,
+  packageHandoffFacts,
   providesChip,
   REVIEW_SIGNAL_WORDS,
   verifiedChip,
@@ -17,7 +23,7 @@ import {
   readinessFacts,
   type DependentsGroup,
 } from "@t3tools/client-runtime/peer/readiness";
-import { handoffReportLine, itemMark } from "@t3tools/client-runtime/peer/test-reports";
+import { handoffReportLine, itemFailed, itemMark } from "@t3tools/client-runtime/peer/test-reports";
 import { taskBrief } from "../task/taskBrief.logic";
 import {
   contextBlockerText,
@@ -25,6 +31,7 @@ import {
   type PeerPlansView,
   type PeerProjectState,
   type PeerHandoffPackage,
+  type PeerHandoffSignalsRead,
   type PeerReviewSignal,
   type PeerTestReport,
 } from "@t3tools/contracts";
@@ -87,6 +94,12 @@ export interface ReviewFacts {
   /** The computer a delivery was observed on, from its environment id. */
   readonly computer: (environment: string) => string;
   readonly nameOf: (email: string) => string;
+  /** A task as the page names it, for what is left to one. */
+  readonly taskName?: ((id: string) => string) | undefined;
+  /** The Hub's current signals, when the page read them. */
+  readonly live?: PeerHandoffSignalsRead | null | undefined;
+  /** The task's run can still act. */
+  readonly runLive?: boolean | undefined;
 }
 
 /** One item of the evidence: the report's own words with where its claim comes from. */
@@ -107,7 +120,11 @@ function evidenceItems(
   return report.items.map((item, index) => {
     const claim = itemMark(item);
     const mark =
-      claim ??
+      (claim === null
+        ? null
+        : item.task === undefined
+          ? claim
+          : `${claim}, left to ${taskName(item.task)}`) ??
       (item.task !== undefined
         ? `left to ${taskName(item.task)}`
         : item.owner !== undefined
@@ -119,7 +136,7 @@ function evidenceItems(
       text: item.text,
       mark,
       attention:
-        item.kind === "fail" ||
+        itemFailed(item) ||
         (item.kind === "unverified" && item.task === undefined && item.owner === undefined),
     };
   });
@@ -127,19 +144,35 @@ function evidenceItems(
 
 /**
  * The review page as a decision page (D4): the decision line, the Verified, Delivered and Provides
- * chips, the evidence, the agent's notes (closed by default under a decision) and Needs attention
- * with Peer's own facts only: open overlaps, changed inputs and the policy's signals.
+ * chips, the evidence, the agent's notes (closed by default under a decision) and each class's open
+ * facts, from Peer's own facts only, current where the Hub offers them and labelled at handoff where
+ * it does not.
  */
 export function reviewPresentation(
   pkg: PeerHandoffPackage,
   facts: ReviewFacts,
-  taskName: (id: string) => string = (id) => id,
+  taskName: (id: string) => string = facts.taskName ?? ((id) => id),
 ) {
   const base = handoffPresentation(pkg);
+  const live = facts.live?.available === true ? facts.live.signals : undefined;
+  const steps = handoffNextSteps(
+    live === undefined
+      ? packageHandoffFacts(pkg, facts.report)
+      : live.evaluated
+        ? liveHandoffFacts(live)
+        : // A person moved the task since: no handoff stands, whatever the package recorded.
+          packageHandoffFacts({ ...pkg, policy: undefined }),
+  );
   const decision: DecisionLine = decisionLine(
     pkg,
     facts.acceptance === undefined ? pkg.acceptance : facts.acceptance,
-    { status: facts.status ?? "review", nameOf: facts.nameOf },
+    {
+      status: facts.status ?? "review",
+      nameOf: facts.nameOf,
+      signals: live?.signals,
+      steps,
+      runLive: facts.runLive,
+    },
   );
   const verified =
     facts.report !== undefined
@@ -151,9 +184,33 @@ export function reviewPresentation(
             attention: pkg.report.failed > 0 || pkg.report.unowned.length > 0,
           }
         : verifiedChip(undefined);
-  const signals: ReadonlyArray<{ readonly signal: PeerReviewSignal; readonly words: string }> = (
-    pkg.policy?.signals ?? []
-  ).map((signal) => ({ signal, words: REVIEW_SIGNAL_WORDS[signal] }));
+  const wordsOf = (signal: PeerReviewSignal) => ({ signal, words: REVIEW_SIGNAL_WORDS[signal] });
+  const signals = decision.signals.map(wordsOf);
+  const openOverlaps =
+    live === undefined || (live.overlaps ?? []).length > 0 ? base.openOverlaps : [];
+  const changedInputs =
+    live === undefined
+      ? base.changedInputs
+      : (live.changedInputs ?? []).map(
+          (input) => pkg.inputs.find((candidate) => candidate.scope === input.scope) ?? input,
+        );
+  // The page draws overlaps and inputs with their own words and actions.
+  const groupSteps = (klass: (typeof HANDOFF_HEADLINE_ORDER)[number]) =>
+    steps[klass]
+      .filter(
+        (step) =>
+          step.rule !== "input-moved" &&
+          (step.rule !== "overlap-open" || openOverlaps.length === 0),
+      )
+      .map((step, index) => handoffStepRow(step, index, facts.nameOf, taskName));
+  const accepted = decision.kind === "accepted" || decision.kind === "accepted-by-policy";
+  const groups = accepted
+    ? []
+    : HANDOFF_HEADLINE_ORDER.flatMap((klass) =>
+        steps[klass].length === 0
+          ? []
+          : [{ class: klass, label: HANDOFF_CLASS_LABEL[klass], steps: groupSteps(klass) }],
+      );
   const notes = NOTE_ORDER.flatMap((name) => {
     const section = base.sections.find((candidate) => candidate.name === name);
     return section === undefined ? [] : [{ ...section, title: NOTE_TITLE[name] }];
@@ -162,6 +219,21 @@ export function reviewPresentation(
   return {
     ...base,
     decision: decided ? decision : null,
+    groups,
+    /** What someone already answers for: facts on the page, nobody's next step. */
+    covered: steps.covered.map((step, index) =>
+      handoffStepRow(step, index, facts.nameOf, taskName),
+    ),
+    /** What the package recorded and the Hub no longer says. */
+    raisedAtHandoff: decision.raisedAtHandoff.map(wordsOf),
+    /** The page could not read current signals, so what it shows is the package's. */
+    atHandoff: live === undefined && pkg.policy !== undefined,
+    /** Agent actions remain and its run has ended: it is the person's to continue. */
+    agentStopped:
+      !accepted &&
+      (facts.status ?? "review") === "review" &&
+      facts.runLive !== true &&
+      steps.agent_action.length > 0,
     verified,
     delivered: deliveredChip(pkg.delivery, { computer: facts.computer }),
     provides: providesChip(facts.planLines ?? [], facts.briefOutcome, facts.dependents ?? []),
@@ -171,8 +243,8 @@ export function reviewPresentation(
     /** The agent's notes start closed when the page states a decision above them. */
     notesOpen: !decided,
     signals,
-    needsAttention:
-      base.openOverlaps.length > 0 || base.changedInputs.length > 0 || signals.length > 0,
+    openOverlaps,
+    changedInputs,
   };
 }
 
@@ -196,6 +268,7 @@ export function reviewFactsFrom(input: {
   /** The task's reports, newest first, when the page read them. */
   readonly reports?: ReadonlyArray<PeerTestReport> | undefined;
   readonly plans?: PeerPlansView | undefined;
+  readonly live?: PeerHandoffSignalsRead | null | undefined;
 }): ReviewFacts {
   const { pkg, status, workspace, state, nameOf } = input;
   const project = state.project.id;
@@ -241,5 +314,13 @@ export function reviewFactsFrom(input: {
           ? "your other computer"
           : `${nameOf(pkg.author)}’s computer`,
     nameOf,
+    taskName: (id) => {
+      const named = state.work.tasks.find((candidate) => candidate.id === id);
+      return named?.key ?? named?.title ?? id;
+    },
+    live: input.live,
+    runLive:
+      (task?.runs?.running ?? 0) > 0 ||
+      state.work.threads.some((thread) => thread.task === pkg.task && thread.status === "working"),
   };
 }

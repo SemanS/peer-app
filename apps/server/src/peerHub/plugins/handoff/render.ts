@@ -1,10 +1,18 @@
-import type {
-  PeerHandoffDelivery,
-  PeerHandoffPackage,
-  PeerHandoffOutcome,
-  PeerHandoffPolicy,
+import {
+  handoffOwed,
+  handoffPolicyLines,
+  handoffReportLine as reportLine,
+  type HandoffFacts,
+  type PeerHandoffDelivery,
+  type PeerHandoffPackage,
+  type PeerHandoffOutcome,
 } from "@t3tools/contracts";
-import { neutral } from "../../peerText.ts";
+import { neutral, plain } from "../../peerText.ts";
+const owed = (facts: HandoffFacts) =>
+  handoffPolicyLines(
+    facts.policy,
+    handoffOwed(facts, (text) => `"${plain(text, 100)}"`),
+  );
 /** The handoff plugin's sentence in an agent's start text (design D6), at most 300 characters. */
 export const START_LINE =
   "peer review records whether your work is delivered (untracked, committed, pushed, merged) as Peer sees it in git or jj. Where the project's review policy allows, a handoff with a test report, delivered work and no open overlap or owner's call is accepted by policy; otherwise a person reviews it.";
@@ -77,25 +85,6 @@ const fence = (text: string) => {
   const mark = "`".repeat(longest + 1);
   return `${mark}text\n${clean}\n${mark}`;
 };
-/**
- * The task's newest test report in one line, apart from the author's own checks: its result, the
- * counts, and the unverified items nobody answers for (`escape` makes their text safe where it goes;
- * without it, as in a pointer-only block, only how many).
- */
-export function reportLine(
-  report: PeerHandoffPackage["report"],
-  escape?: (text: string) => string,
-): string {
-  if (report === undefined) return "No test report was filed.";
-  const counts = `${report.passed} passed, ${report.failed} failed, ${report.unverified} unverified`;
-  const unowned =
-    report.unowned.length === 0
-      ? ""
-      : escape === undefined
-        ? ` · ${report.unowned.length} ${report.unowned.length === 1 ? "needs" : "need"} an owner`
-        : ` · needs an owner: ${report.unowned.map(escape).join(", ")}`;
-  return `Tests: ${report.result} · ${counts}${unowned}.`;
-}
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const prNumbers = (urls: ReadonlyArray<string> | undefined) =>
   (urls ?? []).map((url) => `PR #${url.split("/").at(-1)}`).join(", ");
@@ -139,14 +128,6 @@ export function deliveryLine(d: PeerHandoffDelivery | undefined): string | null 
     case "landed":
       return `Delivered: landed · ${prs ? `${prs} merged` : "on trunk"}.`;
   }
-}
-
-/** What the project's review policy made of the handoff, in one line; null from an older Hub. */
-export function policyLine(p: PeerHandoffPolicy | undefined): string | null {
-  if (p === undefined) return null;
-  if (p.accepted) return `Accepted by policy v${p.version}.`;
-  if (p.signals.length > 0) return `Waits for a person's review: ${p.signals.join(", ")}.`;
-  return "Waits for a person's review: the project asks one for every handoff.";
 }
 
 export function blockOf(
@@ -200,7 +181,7 @@ export function agentText(packages: ReadonlyArray<PeerHandoffPackage>, contextNo
           p.delivery === undefined
             ? "Delivered: not observed."
             : `${deliveryLine(p.delivery)} Observed by Peer on ${p.delivery.environment} at ${p.delivery.observedAt}.`,
-          policyLine(p.policy),
+          ...owed(p),
         ]
           .filter((line) => line !== null)
           .join("\n")}\n${JSON.stringify(p)}`,
@@ -210,22 +191,17 @@ export function agentText(packages: ReadonlyArray<PeerHandoffPackage>, contextNo
 }
 /**
  * What `peer review` and `peer handoff withdraw` answer. `facts` are the package's delivery (or,
- * when the Hub kept none, the one Peer observed) and the policy's outcome.
+ * when the Hub kept none, the one Peer observed), the policy's outcome and what the agent owes.
  */
-export function replyLines(
-  o: PeerHandoffOutcome,
-  facts: {
-    readonly delivery?: PeerHandoffDelivery | undefined;
-    readonly policy?: PeerHandoffPolicy | undefined;
-  } = {},
-) {
+export function replyLines(o: PeerHandoffOutcome, facts: HandoffFacts = {}) {
   return [
     o.notices.includes("Own handoff package withdrawn; task status unchanged.")
       ? "Handoff package withdrawn."
       : o.stored
         ? `Handoff package #${o.number}${o.contextVersion === null ? "" : `, shared context v${o.contextVersion}`} ${o.changed ? "stored" : "already current"}.`
         : "Handoff package not stored. Run peer review again.",
-    ...[deliveryLine(facts.delivery), policyLine(facts.policy)].filter((line) => line !== null),
+    ...[deliveryLine(facts.delivery)].filter((line) => line !== null),
+    ...owed(facts),
     ...o.notices,
     ...o.targets.map(
       (t) => `${t.url}: ${t.reason}${t.kind === "not-finished" ? "; run peer review again" : ""}.`,

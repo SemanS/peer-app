@@ -16,6 +16,7 @@ const hub = vi.hoisted(() => ({
 vi.mock("../../../state/server", () => ({
   serverEnvironment: {
     peerTestsList: (query: unknown) => query,
+    peerTestsInherited: () => "inherited",
     peerTestsFile: { name: "file", permissionAtom: () => "allowed" },
     peerTestsRemove: { name: "remove", permissionAtom: () => "allowed" },
     peerTestsSetOwner: { name: "setOwner", permissionAtom: () => "allowed" },
@@ -26,7 +27,10 @@ vi.mock("../../../state/use-atom-command", () => ({
   useAtomCommand: (atom: { name: string }) => (atom.name === "setOwner" ? hub.setOwner : vi.fn()),
 }));
 vi.mock("../../../state/query", () => ({
-  useEnvironmentQuery: () => ({ data: hub.reports, error: null, refresh: hub.refresh }),
+  useEnvironmentQuery: (query: unknown) =>
+    query === "inherited"
+      ? { data: { items: [], capped: false }, error: null, refresh: hub.refresh }
+      : { data: hub.reports, error: null, refresh: hub.refresh },
 }));
 vi.mock("../../../localApi", () => ({
   ensureLocalApi: () => ({ dialogs: { confirm: async () => true } }),

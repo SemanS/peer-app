@@ -15,6 +15,7 @@ import {
 import { PeerHubError } from "./base.ts";
 import {
   PeerTestReport,
+  PeerTestsInherited,
   PeerTestsFileInput,
   PeerTestsFileResult,
   PeerTestsPlace,
@@ -27,6 +28,7 @@ export const PEER_TEST_REPORTS_METHODS = {
   peerTestsFile: "peer.testReports.file",
   peerTestsRemove: "peer.testReports.remove",
   peerTestsSetOwner: "peer.testReports.setOwner",
+  peerTestsInherited: "peer.testReports.inherited",
 } as const;
 
 const methods = PEER_TEST_REPORTS_METHODS;
@@ -53,6 +55,11 @@ export const TestReportsRpcGroup = RpcGroup.make(
     success: PeerTestsSetOwnerResult,
     error,
   }),
+  Rpc.make(methods.peerTestsInherited, {
+    payload: PeerTestsPlace,
+    success: PeerTestsInherited,
+    error,
+  }),
 );
 
 /** Reading is orchestration-read; reports and their owners are shared work, so changing them is operating. */
@@ -61,6 +68,7 @@ export const TestReportsRpcScopes = {
   [methods.peerTestsFile]: AuthOrchestrationOperateScope,
   [methods.peerTestsRemove]: AuthOrchestrationOperateScope,
   [methods.peerTestsSetOwner]: AuthOrchestrationOperateScope,
+  [methods.peerTestsInherited]: AuthOrchestrationReadScope,
 } as const satisfies Record<
   RpcGroup.Rpcs<typeof TestReportsRpcGroup>["_tag"],
   AuthEnvironmentScope

@@ -1,4 +1,9 @@
-import { taskSummaries, testReportsRevision } from "@t3tools/client-runtime/peer/test-reports";
+import {
+  inheritedRows,
+  projectReportsRevision,
+  taskSummaries,
+  testReportsRevision,
+} from "@t3tools/client-runtime/peer/test-reports";
 import { useState } from "react";
 import { View } from "react-native";
 
@@ -88,13 +93,46 @@ export function ReportSection({ environmentId, status, workspace, project, task 
         }),
   );
   const members = project.project.members;
+  const inherited = useEnvironmentQuery(
+    serverEnvironment.peerTestsInherited({
+      environmentId,
+      input: place,
+      revision: projectReportsRevision(status, place),
+    }),
+  );
+  const taskName = (id: string) => {
+    const named = project.work.tasks.find((candidate) => candidate.id === id);
+    return named?.key ?? named?.title ?? id;
+  };
   const views =
-    query.data === null ? null : reportViews(query.data, { members, me: status.email, now });
+    query.data === null
+      ? null
+      : reportViews(query.data, { members, me: status.email, now, taskName });
+  const left = inheritedRows(
+    inherited.data ?? { items: [], capped: false },
+    (email) => members.find((member) => member.email === email)?.name ?? "a teammate",
+  );
   return (
     <View className="gap-2">
       <AppText accessibilityRole="header" className="font-t3-medium text-foreground">
         Test reports
       </AppText>
+      {left.length === 0 ? null : (
+        <View className="gap-1.5 rounded-xl border border-border bg-card p-3">
+          <AppText className="text-sm font-t3-medium">Left to this task</AppText>
+          {left.map((row) => (
+            <View key={row.key} className="gap-0.5">
+              <AppText className="text-sm text-foreground">
+                <AppText className="font-t3-medium">
+                  {row.kind === "failed" ? "Failed: " : "Unverified: "}
+                </AppText>
+                {row.text}
+              </AppText>
+              <AppText className="text-xs text-foreground-muted">{row.source}</AppText>
+            </View>
+          ))}
+        </View>
+      )}
       {summaries.length === 0 ? (
         <AppText className="text-sm text-foreground-muted">
           No test report on this task yet.

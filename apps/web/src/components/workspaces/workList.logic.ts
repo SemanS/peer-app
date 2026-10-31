@@ -111,6 +111,8 @@ export function taskStateTone(kind: TaskStateKind): SignalTone {
       return "needs";
     case "working":
     case "waiting":
+    case "agent_action":
+    case "coordination":
       return "working";
     case "done":
     case "accepted":

@@ -1,6 +1,7 @@
 import {
   type PeerHandoffDelivery,
   PeerHandoffPackage,
+  PeerHandoffSignals,
   PeerHandoffSummary,
   PeerHubError,
   type PeerHandoffPlace,
@@ -60,6 +61,13 @@ export function hubCalls(c: PeerHubClient.PeerHubClient["Service"]) {
           }),
         ),
       ),
+    /** The Hub's current facts, with each item's text; null before `acceptance` 3. */
+    signals: (p: PeerHandoffPlace) =>
+      c.request(PeerHandoffSignals, {
+        workspace: p.workspace,
+        path: `/acceptance/${encodeURIComponent(p.projectId)}/${encodeURIComponent(p.taskId)}/signals`,
+        unsupported,
+      }),
     read: (p: PeerHandoffPlace) =>
       supported(
         c.request(Schema.Struct({ packages: Schema.Array(Package) }), {

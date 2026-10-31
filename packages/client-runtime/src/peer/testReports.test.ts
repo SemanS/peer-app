@@ -17,6 +17,7 @@ import {
   teamFact,
   testReportsRevision,
 } from "./testReports.ts";
+import { governingSummaries, inheritedRows } from "./testReports.ts";
 
 const ANA = "ana@acme.test";
 const SLAVO = "slavo@acme.test";
@@ -243,5 +244,71 @@ describe("the report in a handoff package", () => {
       "Tests: mixed, 1 passed, 0 failed, 1 unverified",
     );
     expect(handoffReportLine(undefined)).toBeNull();
+  });
+});
+
+describe("governingSummaries", () => {
+  const summary = (author: string, role: string, at: string) => ({
+    workspace: "w",
+    project: "p",
+    task: "t",
+    author,
+    number: 1,
+    result: "pass" as const,
+    role,
+    at,
+    passed: 1,
+    failed: 0,
+    unverified: 0,
+    unowned: 0,
+  });
+  it("keeps the newest of each role", () => {
+    const rows = governingSummaries(
+      {
+        testReports: {
+          summaries: [
+            summary("a", "author", "2026-10-01T00:00:00Z"),
+            summary("b", "author", "2026-10-02T00:00:00Z"),
+            summary("r", "review", "2026-09-01T00:00:00Z"),
+          ],
+        },
+      },
+      { workspace: "w", project: "p", task: "t" },
+    );
+    expect(rows.map((row) => row.author)).toEqual(["b", "r"]);
+  });
+});
+
+describe("inheritedRows", () => {
+  it("names each item with its source task and report", () => {
+    const rows = inheritedRows(
+      {
+        items: [
+          {
+            task: "t1",
+            key: "1.1",
+            title: "Contract",
+            author: "ana@acme.test",
+            role: "author",
+            number: 2,
+            index: 0,
+            kind: "fail",
+            text: "malformed revision",
+            failed: true,
+            at: "t",
+          },
+        ],
+        capped: false,
+      },
+      () => "Ana",
+    );
+    expect(rows).toEqual([
+      {
+        key: "t1:ana@acme.test:2:0",
+        kind: "failed",
+        text: "malformed revision",
+        source: "From 1.1 · report 2 · Ana",
+      },
+    ]);
   });
 });

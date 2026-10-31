@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Alert, Linking, Pressable, View } from "react-native";
 import { useAtomValue } from "@effect/atom-react";
-import { canChangePeerPlugins } from "@t3tools/client-runtime/peer/plugins";
+import { activePlugin, canChangePeerPlugins } from "@t3tools/client-runtime/peer/plugins";
 import {
   canHandOff,
   contextMovedLine,
@@ -10,7 +10,14 @@ import {
   outcomeText,
   packageRows,
   keyedLines,
+  HANDOFF_CLASS_LABEL,
+  HANDOFF_HEADLINE_ORDER,
+  handoffNextSteps,
   handoffRevision,
+  handoffSignalsRevision,
+  handoffStepRow,
+  liveHandoffFacts,
+  packageHandoffFacts,
   summaryOf,
   TARGET_SWITCH_NOTE,
 } from "@t3tools/client-runtime/peer/handoff";
@@ -45,6 +52,42 @@ export function PeerHandoff({
         })
       : null,
   );
+  const reportsPlace = { workspace, project: project.project.id, task: task.id };
+  const live = useEnvironmentQuery(
+    task.status === "review" && activePlugin(status, "acceptance")
+      ? serverEnvironment.peerAcceptanceSignals({
+          environmentId,
+          input: reportsPlace,
+          revision: handoffSignalsRevision(status, reportsPlace),
+        })
+      : null,
+  );
+  const nameOf = (email: string) =>
+    project.project.members.find((m) => m.email === email)?.name ?? "A teammate";
+  const taskName = (id: string) => {
+    const named = project.work.tasks.find((candidate) => candidate.id === id);
+    return named?.key ?? named?.title ?? id;
+  };
+  const stepsOf = (p: NonNullable<typeof query.data>[number]) => {
+    const current = live.data?.signals;
+    const next = handoffNextSteps(
+      current === undefined ? packageHandoffFacts(p) : liveHandoffFacts(current),
+    );
+    return task.status !== "review" || p.acceptance !== undefined
+      ? []
+      : HANDOFF_HEADLINE_ORDER.flatMap((klass) =>
+          next[klass].length === 0
+            ? []
+            : [
+                {
+                  label: HANDOFF_CLASS_LABEL[klass],
+                  rows: next[klass].map((step, index) =>
+                    handoffStepRow(step, index, nameOf, taskName),
+                  ),
+                },
+              ],
+        );
+  };
   const label = canHandOff(task, project.work.threads, status.email),
     current = currentContextVersion(status.coordination, place);
   const act = async (remove = false) => {
@@ -92,6 +135,21 @@ export function PeerHandoff({
           {contextMovedLine(p, current) ? (
             <Text className="text-foreground-muted">{contextMovedLine(p, current)}</Text>
           ) : null}
+          {stepsOf(p).map((group) => (
+            <View key={group.label} className="gap-0.5">
+              <Text className="font-t3-medium text-foreground">
+                {group.label}
+                {live.data?.signals === undefined ? " · at handoff" : ""}
+              </Text>
+              {group.rows.map((row) => (
+                <Text key={row.key} className="text-foreground-muted">
+                  {row.text}
+                  {row.who === null ? "" : ` · ${row.who}`}
+                  {row.next === null ? "" : `. ${row.next}`}
+                </Text>
+              ))}
+            </View>
+          ))}
           {keyedLines(
             packageRows(
               p,

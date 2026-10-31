@@ -9,13 +9,14 @@ export const NEEDS_YOU_KINDS = [
   "overlap",
   "stale",
   "owner-call",
+  "answer",
 ] as const;
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
 /**
- * The kinds that alert a phone: a thread is on the computer already, and an owner's call alerts no
- * one yet (phone alerts for it are the needs-you plugin's to add).
+ * The kinds that alert a phone: a thread is on the computer already, and an owner's call or an item
+ * a person answers for alerts no one yet (phone alerts for them are the needs-you plugin's to add).
  */
-export type NeedsYouAlertKind = Exclude<NeedsYouKind, "thread" | "owner-call">;
+export type NeedsYouAlertKind = Exclude<NeedsYouKind, "thread" | "owner-call" | "answer">;
 const key = (kind: NeedsYouKind, parts: ReadonlyArray<string>) =>
   `${kind}:${parts.map(encodeURIComponent).join("/")}`;
 export const needsYouKey = {
@@ -27,6 +28,8 @@ export const needsYouKey = {
   stale: (environment: string, session: string) => key("stale", [environment, session]),
   ownerCall: (workspace: string, project: string, call: string) =>
     key("owner-call", [workspace, project, call]),
+  answer: (workspace: string, project: string, task: string) =>
+    key("answer", [workspace, project, task]),
 };
 export const NEEDS_YOU_PUSH_PREFIX = "peer-needs-you.";
 const pushPattern = /^peer-needs-you\.(agent|request|overlap|stale)\.[a-f0-9]{16}$/;

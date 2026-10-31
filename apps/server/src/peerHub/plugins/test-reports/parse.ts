@@ -1,6 +1,6 @@
 /**
  * `peer tests` as an agent types it: `pass|fail|mixed "<summary>" [--for <task>] [--pass "<text>"]...
- * [--fail "<text>"]... [--unverified "<text> [@<person>|@task:<key>]"]...`, or `show [<task>]`. Flags
+ * [--fail "<text> [@task:<key>]"]... [--unverified "<text> [@<person>|@task:<key>]"]...`, or `show [<task>]`. Flags
  * repeat, so the command reads its own arguments rather than core's one-value `flag`.
  *
  * @module peerHub/plugins/test-reports/parse
@@ -10,7 +10,7 @@ import type { PeerTestReportItemKind, PeerTestReportResult } from "@t3tools/cont
 import { usage } from "../../core/plugin.ts";
 
 export const FORM =
-  'peer tests pass|fail|mixed "<summary>" [--for <task>] [--pass "<text>"]... [--fail "<text>"]... [--unverified "<text> [@<person>|@task:<key>]"]..., or peer tests show [<task>]';
+  'peer tests pass|fail|mixed "<summary>" [--for <task>] [--pass "<text>"]... [--fail "<text> [@task:<key>]"]... [--unverified "<text> [@<person>|@task:<key>]"]..., or peer tests show [<task>]';
 
 export interface ParsedItem {
   readonly kind: PeerTestReportItemKind;
@@ -37,18 +37,22 @@ const ITEM_FLAGS: Readonly<Record<string, PeerTestReportItemKind>> = {
   "--fail": "fail",
   "--unverified": "unverified",
 };
-/** A trailing `@ana` or `@ana@acme.test` names who answers for the item; `@task:3.1` the task that covers it. */
+/** A trailing `@ana` or `@ana@acme.test` names who answers for the item; `@task:3.1` the task that carries it. */
 const OWNER = /^(.*\S)\s+@([^\s@]+(?:@[^\s@]+)?)$/;
 const TASK = /^task:(.+)$/i;
 
 const bad = (reason: string) => usage(reason, `run ${FORM}.`);
 
-/** An unverified item's text and its owner, or the task it is left to, when it names one. */
+/**
+ * An item's text and what it names at its end: an unverified item its owner or the task it is left
+ * to, a failed item only the dependent task that carries it. Anything else after @ is its text.
+ */
 export function itemOf(kind: PeerTestReportItemKind, raw: string): ParsedItem {
   const text = raw.trim();
-  const owned = kind === "unverified" ? OWNER.exec(text) : null;
+  const owned = kind === "pass" ? null : OWNER.exec(text);
   if (owned === null) return { kind, text };
   const task = TASK.exec(owned[2]!);
+  if (kind === "fail" && task === null) return { kind, text };
   return task === null
     ? { kind, text: owned[1]!, owner: owned[2]! }
     : { kind, text: owned[1]!, task: task[1]! };
@@ -70,7 +74,11 @@ export function parse(args: ReadonlyArray<string>): Parsed {
   for (let at = 0; at < rest.length; at++) {
     const arg = rest[at]!;
     if (!arg.startsWith("--")) {
-      words.push(arg);
+      const flag = ITEM_FLAGS[rest[at - 2] ?? ""];
+      // `--fail "<text>" @task:<key>`, the closing quote one word early: left in the summary, the item would quietly lose its home.
+      if (flag !== undefined && arg.startsWith("@"))
+        items[items.length - 1] = itemOf(flag, `${rest[at - 1]} ${arg}`);
+      else words.push(arg);
       continue;
     }
     const value = rest[at + 1];

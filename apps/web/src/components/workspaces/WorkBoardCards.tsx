@@ -59,6 +59,8 @@ const STATE_DOT: Readonly<Record<TaskStateKind, string>> = {
   review: "border-warning bg-warning",
   approval: "border-warning bg-warning",
   input: "border-warning bg-warning",
+  agent_action: "border-info bg-info",
+  coordination: "border-info",
   working: "border-info bg-info",
   waiting: "border-info",
   paused: "border-muted-foreground/60 bg-muted-foreground/60",
@@ -196,11 +198,13 @@ export function TaskCardView({
     card.state.kind === "approval" ||
     card.state.kind === "input" ||
     card.state.kind === "paused" ||
+    card.state.kind === "agent_action" ||
     ((card.state.kind === "review" || card.state.kind === "waiting") && handoff !== undefined);
   // An accepted task sits among work in progress; its card says it waits only to land.
   const showState =
     card.state.kind === "waiting" ||
     card.state.kind === "accepted" ||
+    card.state.kind === "coordination" ||
     (card.column === "needs" && !showDetail);
   const area = compact ? card.area : null;
   // A group's items stay in their own columns; the group says how far they are.
@@ -470,6 +474,30 @@ export function NeedCardView({
         </CardFrame>
       );
     }
+    case "answer":
+      return (
+        <CardFrame compact={compact} tone="needs">
+          <NeedPlace card={card} showProject={showProject} />
+          {title}
+          <p className="line-clamp-1 text-xs text-muted-foreground">{card.item.taskName}</p>
+          <CardButtons>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() =>
+                actions.openTarget({
+                  kind: "task",
+                  workspace: card.item.workspace,
+                  project: card.item.project,
+                  task: card.item.task,
+                })
+              }
+            >
+              Open task
+            </Button>
+          </CardButtons>
+        </CardFrame>
+      );
     case "owner-call": {
       const model = ownerCallCard({ ownership: card.project.ownership, item: card.item, now });
       return (

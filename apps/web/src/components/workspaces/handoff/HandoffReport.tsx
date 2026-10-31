@@ -162,9 +162,12 @@ const ACTION_LABEL = { done: "Mark task done", withdraw: "Withdraw acceptance…
  */
 function DecisionRow({
   decision,
+  since,
   onWithdrawAcceptance,
 }: {
   readonly decision: NonNullable<ReviewPresentation["decision"]>;
+  /** How long it has been with the agent. */
+  readonly since: string | undefined;
   readonly onWithdrawAcceptance: (() => void) | undefined;
 }) {
   const page = useContext(ReviewDecisionContext);
@@ -189,10 +192,17 @@ function DecisionRow({
             ? decision.signals.length > 0
               ? "text-warning-foreground"
               : "text-foreground"
-            : "text-success-foreground",
+            : decision.kind === "with-agent"
+              ? "text-info-foreground"
+              : decision.kind === "human-decision" || decision.kind === "coordination"
+                ? "text-warning-foreground"
+                : "text-success-foreground",
         )}
       >
         {decision.text}
+        {since === undefined ? null : (
+          <span className="font-normal text-muted-foreground"> · {since}</span>
+        )}
       </p>
       {actions.length === 0 ? null : (
         <div className="flex flex-wrap gap-2">
@@ -262,6 +272,7 @@ export function HandoffReport({
   mine,
   busy,
   contextWarning,
+  nextAction,
   onCompare,
   onOpenPull,
   onOpenChat,
@@ -269,6 +280,8 @@ export function HandoffReport({
   onWithdrawAcceptance,
 }: {
   readonly pkg: PeerHandoffPackage;
+  /** The way to continue a run that stopped with agent actions open. */
+  readonly nextAction?: ReactNode;
   /** What the page knows besides the package, and how it names people and computers. */
   readonly facts: ReviewFacts;
   readonly mine: boolean;
@@ -297,7 +310,15 @@ export function HandoffReport({
     >
       <div className="flex flex-col gap-5 p-4 sm:p-6">
         {view.decision === null ? null : (
-          <DecisionRow decision={view.decision} onWithdrawAcceptance={onWithdrawAcceptance} />
+          <DecisionRow
+            decision={view.decision}
+            since={
+              view.decision.kind === "with-agent"
+                ? formatRelativeTimeLabel(pkg.composedAt)
+                : undefined
+            }
+            onWithdrawAcceptance={onWithdrawAcceptance}
+          />
         )}
         <header className="flex min-w-0 flex-col gap-1.5">
           <h3 className="text-lg leading-snug font-semibold break-words text-foreground">
@@ -393,67 +414,115 @@ export function HandoffReport({
         </section>
 
         {contextWarning}
-        {view.needsAttention ? (
+        {view.groups.map((group) => (
           <section
-            aria-label="Needs attention"
-            className={cn("flex flex-col gap-3 rounded-lg border p-4", TONE_SURFACE.needs)}
-          >
-            <h4 className="flex items-center gap-2 text-sm font-semibold text-warning-foreground">
-              <TriangleAlertIcon aria-hidden className="size-4 shrink-0" />
-              Needs attention
-            </h4>
-            {view.signals.length === 0 ? null : (
-              <ul className="flex flex-col gap-1 text-sm leading-relaxed text-foreground">
-                {view.signals.map(({ signal, words }) => (
-                  <li key={signal}>
-                    {words} <span className="font-mono text-xs">({signal})</span>
-                  </li>
-                ))}
-              </ul>
+            key={group.class}
+            aria-label={group.label}
+            className={cn(
+              "flex flex-col gap-3 rounded-lg border p-4",
+              group.class === "agent_action" ? TONE_SURFACE.working : TONE_SURFACE.needs,
             )}
-            {view.openOverlaps.map((overlap) => (
-              <p
-                key={`${overlap.partner}:${overlap.at}:${overlap.files.join(",")}`}
-                className="text-sm leading-relaxed text-foreground"
-              >
-                Unresolved overlap with{" "}
-                {overlap.partner === null ? "a teammate" : nameOf(overlap.partner)}.
-                {overlap.agreement ? (
-                  <>
-                    {" "}
-                    <InlineMarkdown text={overlap.agreement} />
-                  </>
-                ) : (
-                  " The agents have not recorded an agreement."
-                )}
-              </p>
-            ))}
-            {view.changedInputs.length === 0 ? null : (
-              <ul aria-label="Changed inputs" className="flex flex-col gap-3">
-                {view.changedInputs.map((input) => (
-                  <li key={input.scope} className="flex flex-wrap items-center gap-2">
-                    <span className="min-w-0 flex-1 basis-48 text-sm break-words text-foreground">
-                      Changed after the agent read it: {inputLabel(input)}, read v
-                      {input.readVersion}
-                      {input.currentVersion === null
-                        ? ", no longer exists"
-                        : `, now v${input.currentVersion}`}
+          >
+            <h4
+              className={cn(
+                "flex items-center gap-2 text-sm font-semibold",
+                group.class === "agent_action" ? "text-info-foreground" : "text-warning-foreground",
+              )}
+            >
+              <TriangleAlertIcon aria-hidden className="size-4 shrink-0" />
+              {group.label}
+            </h4>
+            {group.steps.length === 0 ? null : (
+              <ul className="flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+                {group.steps.map((step) => (
+                  <li key={step.key} className="flex flex-col gap-0.5">
+                    <span className="[overflow-wrap:anywhere]">
+                      {step.text}
+                      {step.who === null ? null : (
+                        <span className="text-muted-foreground"> · {step.who}</span>
+                      )}
                     </span>
-                    {contextComparison(input.readVersion, input.currentVersion ?? undefined) ===
-                    null ? null : (
-                      <Button
-                        size="xs"
-                        variant="warning-outline"
-                        onClick={() => onCompare(input.scope, input.readVersion)}
-                      >
-                        Compare
-                      </Button>
+                    {step.next === null ? null : (
+                      <span className="text-xs text-muted-foreground">{step.next}</span>
                     )}
                   </li>
                 ))}
               </ul>
             )}
+            {group.class !== "coordination" ? null : (
+              <>
+                {view.openOverlaps.map((overlap) => (
+                  <p
+                    key={`${overlap.partner}:${overlap.at}:${overlap.files.join(",")}`}
+                    className="text-sm leading-relaxed text-foreground"
+                  >
+                    Unresolved overlap with{" "}
+                    {overlap.partner === null ? "a teammate" : nameOf(overlap.partner)}.
+                    {overlap.agreement ? (
+                      <>
+                        {" "}
+                        <InlineMarkdown text={overlap.agreement} />
+                      </>
+                    ) : (
+                      " The agents have not recorded an agreement."
+                    )}
+                  </p>
+                ))}
+                {view.changedInputs.length === 0 ? null : (
+                  <ul aria-label="Changed inputs" className="flex flex-col gap-3">
+                    {view.changedInputs.map((input) => (
+                      <li key={input.scope} className="flex flex-wrap items-center gap-2">
+                        <span className="min-w-0 flex-1 basis-48 text-sm break-words text-foreground">
+                          Changed after the agent read it: {inputLabel(input)}, read v
+                          {input.readVersion}
+                          {input.currentVersion === null
+                            ? ", no longer exists"
+                            : `, now v${input.currentVersion}`}
+                        </span>
+                        {contextComparison(input.readVersion, input.currentVersion ?? undefined) ===
+                        null ? null : (
+                          <Button
+                            size="xs"
+                            variant="warning-outline"
+                            onClick={() => onCompare(input.scope, input.readVersion)}
+                          >
+                            Compare
+                          </Button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            )}
           </section>
+        ))}
+        {view.agentStopped && nextAction !== undefined && nextAction !== null ? (
+          <section aria-label="Continue the agent" className="flex flex-wrap items-center gap-3">
+            <p className="min-w-0 flex-1 basis-48 text-sm text-foreground">
+              The agent stopped with this still open.
+            </p>
+            {nextAction}
+          </section>
+        ) : null}
+        {view.covered.length === 0 ? null : (
+          <p className="text-xs leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
+            Someone answers for:{" "}
+            {view.covered
+              .map((step) => (step.who === null ? step.text : `${step.text} (${step.who})`))
+              .join("; ")}
+          </p>
+        )}
+        {view.raisedAtHandoff.length === 0 ? null : (
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Raised at handoff, since cleared:{" "}
+            {view.raisedAtHandoff.map(({ words }) => words).join("; ")}.
+          </p>
+        )}
+        {view.atHandoff && view.signals.length > 0 ? (
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            As recorded at handoff: {view.signals.map(({ words }) => words).join("; ")}.
+          </p>
         ) : null}
 
         {view.notes.length === 0 && (pkg.context?.projectLines.length ?? 0) === 0 ? null : (

@@ -42,6 +42,11 @@ function failure(error: PeerHubError, filing: boolean): CliError {
       error.detail,
       'name a task of this project by its key after @task: (as --unverified "<text> @task:SEC-3-1"), or an item of the same OpenSpec change by its number (@task:3.1); the report\'s own task does not count.',
     );
+  if (error.code === "not_a_dependent")
+    return refused(
+      error.detail,
+      "a failed item can only be left to a task that depends on this one and is not done: fix it, or name such a task after @task:.",
+    );
   // A Hub from before items could be left to a task refuses the field whole.
   if (error.status === 400 && /unknown field `task`/.test(error.detail))
     return refused(
@@ -85,7 +90,7 @@ export const testsCommand = (
   return {
     name: "tests",
     usage:
-      'tests pass|fail|mixed "<summary>" [--for <task>] [--pass "<text>"]... [--fail "<text>"]... [--unverified "<text> [@<person>|@task:<key>]"]... | show [<task>]',
+      'tests pass|fail|mixed "<summary>" [--for <task>] [--pass "<text>"]... [--fail "<text> [@task:<key>]"]... [--unverified "<text> [@<person>|@task:<key>]"]... | show [<task>]',
     summary: "file a test report on your task, or read a task's reports (reference)",
     run: ({ session, args }) =>
       Effect.gen(function* () {
@@ -155,6 +160,19 @@ export const testsCommand = (
           filed: parsed.result,
           report: answer.report,
           changed: answer.changed,
+          homeless: parsed.items
+            .filter(
+              (item) =>
+                item.kind === "fail" &&
+                item.task !== undefined &&
+                !answer.report.items.some(
+                  (stored) =>
+                    stored.kind === "fail" &&
+                    stored.text === item.text &&
+                    stored.task !== undefined,
+                ),
+            )
+            .map((item) => item.text),
         }).join("\n");
       }),
   };

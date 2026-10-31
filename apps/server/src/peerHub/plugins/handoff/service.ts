@@ -503,10 +503,20 @@ export const make = Effect.gen(function* () {
         ms: (yield* Clock.currentTimeMillis) - start,
         budgetLeft: Math.max(0, budget - ((yield* Clock.currentTimeMillis) - start)),
       });
+      // An agent hears what it owes by text, which the package keeps only in part.
+      const live = pack.policy?.accepted === false && session !== undefined;
+      const read = yield* live
+        ? hub.signals(p).pipe(
+            Effect.timeout("1500 millis"),
+            Effect.orElseSucceed(() => null),
+          )
+        : Effect.succeed(null);
       return {
         o,
         delivery: pack.delivery ?? (session ? observed(session).delivery : undefined),
         policy: pack.policy,
+        report: pack.report,
+        live: read ?? undefined,
       };
     });
   return HandoffService.of({

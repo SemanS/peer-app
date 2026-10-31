@@ -499,7 +499,9 @@ function ListRow({
             needsYou ||
             card.state.kind === "working" ||
             card.state.kind === "waiting" ||
-            card.state.kind === "accepted" ? (
+            card.state.kind === "accepted" ||
+            card.state.kind === "agent_action" ||
+            card.state.kind === "coordination" ? (
               <span key="state" className={TONE_TEXT[taskStateTone(card.state.kind)]}>
                 {stateText(card)}
               </span>

@@ -53,6 +53,8 @@ describe("test-reports plugin", () => {
           failed: 0,
           unverified: 1,
           unowned: 0,
+          asks: [SLAVO],
+          failedLeft: 0,
         });
 
         // A person files from the task page: the Hub hears of no session and no computer.
@@ -164,6 +166,50 @@ describe("test-reports plugin", () => {
           Effect.map(Option.getOrThrow),
         );
         assert.deepStrictEqual(seen, [{ ...row, workspace: "acme" }]);
+      }),
+    ),
+  );
+
+  it.effect("names what a task inherited at an agent's start, as fenced team data", () =>
+    run(
+      Effect.gen(function* () {
+        const peer = yield* ready({
+          route: (url) =>
+            url.endsWith("/inherited")
+              ? [
+                  200,
+                  {
+                    items: [
+                      {
+                        task: "t-1",
+                        key: "1.1",
+                        title: "Contract",
+                        author: ANA,
+                        role: "author",
+                        number: 2,
+                        index: 0,
+                        kind: "fail",
+                        text: "malformed revision",
+                        failed: true,
+                        at: "t",
+                      },
+                    ],
+                    capped: false,
+                  },
+                ]
+              : undefined,
+        });
+        const inherited = yield* peer.rpc[methods.peerTestsInherited](place);
+        assert.strictEqual(inherited.items[0]?.key, "1.1");
+        const hooks = (yield* peer.peer.plugins.active)[0]!.contributions.hooks;
+        const session = { workspace: "acme", project: "pay", task: "vl-7" };
+        const text = yield* hooks!.sessionStart!({ session } as never);
+        assert.include(String(text), "<shared-context>");
+        assert.include(String(text), "- failed on 1.1: malformed revision");
+        const none = yield* hooks!.sessionStart!({
+          session: { ...session, task: undefined },
+        } as never);
+        assert.isNull(none);
       }),
     ),
   );

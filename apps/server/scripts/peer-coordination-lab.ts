@@ -7436,6 +7436,8 @@ const sharedRoomProgram = Effect.gen(function* () {
     }
     const reviews = events(ana).filter((entry) => entry.event === "cli");
     say("cli", JSON.stringify(reviews.slice(-4)).slice(0, 900));
+    const reviewed = (yield* Effect.promise(siteTask))?.status;
+    check(reviewed === "review", "peer review from Site's folder handed Site's task off");
     say(
       "Site's task after peer review",
       JSON.stringify(yield* Effect.promise(siteTask)).slice(0, 300),

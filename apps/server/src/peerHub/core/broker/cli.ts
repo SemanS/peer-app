@@ -599,10 +599,14 @@ export async function runCli(
     case "review":
     case "done": {
       if (args.length > 0) throw usage(`${command} takes no arguments`, `run peer ${command}.`);
+      if (session.task === undefined) {
+        // Its branch may name a task the next sync has not read yet.
+        session.task = this.taskFor(session, plugins.runtime);
+      }
       if (session.task === undefined || this.host.finishTask === undefined)
         throw refused(
           "this session must be on a task to hand it off",
-          "ask your person to assign this thread to a task in Peer.",
+          "name the task's key in your branch, or ask your person to put this thread on a task in Peer.",
         );
       const unread = await this.landingRefusal(session, plugins, command);
       if (unread !== null) throw unread;

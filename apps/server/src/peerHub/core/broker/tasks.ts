@@ -6,7 +6,7 @@
  *
  * @module peerHub/core/broker/tasks
  */
-import { isExecutable } from "@t3tools/contracts";
+import { isExecutable, PEER_LOCAL_WORKSPACE } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
 import { plain as fenced } from "../../peerText.ts";
@@ -204,6 +204,13 @@ export async function taskCommand(
 ): Promise<string> {
   const [form = "list", ...rest] = plainOf(args);
   const { workspace, project } = session;
+  // Tasks live in a workspace: here even a list would read as "no tasks" and a change as the Hub
+  // failing, when the project is simply on this computer alone.
+  if (workspace === PEER_LOCAL_WORKSPACE)
+    throw refused(
+      "this project is only on this computer, and tasks live in a workspace",
+      "run peer share to share it, then peer task again.",
+    );
   const tasks = () => host.tasks(workspace, project);
   const flags = new Set(args.filter((arg) => arg.startsWith("--")));
   const allowed = (...names: ReadonlyArray<string>) => {

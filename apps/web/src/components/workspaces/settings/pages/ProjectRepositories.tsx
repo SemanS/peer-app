@@ -3,11 +3,16 @@ import { PlusIcon } from "lucide-react";
 import { useId, useState } from "react";
 
 import { Button } from "../../../ui/button";
-import { projectCheckout, useOpenWorkspaceProject } from "../../useOpenWorkspaceProject";
+import {
+  projectCheckout,
+  useOpenWorkspaceProject,
+  useSwitchToJujutsu,
+} from "../../useOpenWorkspaceProject";
 import { DraftSaveBar } from "../DraftBar";
 import type { ProjectPageProps } from "../pageProps";
 import {
   MAX_REPOSITORIES,
+  jjView,
   addRepository,
   cloneView,
   githubChecksOn,
@@ -43,6 +48,7 @@ export function ProjectRepositories({ environmentId, status, workspace, state }:
     projectId: project.id,
     name: project.name,
   });
+  const jujutsu = useSwitchToJujutsu(environmentId);
   const headingId = useId();
   const [adding, setAdding] = useState(false);
 
@@ -63,14 +69,19 @@ export function ProjectRepositories({ environmentId, status, workspace, state }:
   const knowledge = inDocument
     ? draft.get(["knowledge", "kontext"]) !== false
     : project.knowledge.kontext;
-  const rows: ReadonlyArray<RepositoryRowModel> = listed.map((entry, index) => ({
-    ...entry,
-    knowledge: index === 0 && knowledge,
-    notSaved: unsaved && !saved.some((repository) => repository.id === entry.id),
-    pr: prVerification(entry.url, checksOn),
-    clone: cloneView(state.repositories.find((repository) => repository.id === entry.id)),
-  }));
-  const busy = projectCheckout(state).cloning || opener.opening;
+  const rows: ReadonlyArray<RepositoryRowModel> = listed.map((entry, index) => {
+    const here = state.repositories.find((repository) => repository.id === entry.id);
+    const jj = jjView(here, status.jj);
+    return {
+      ...entry,
+      knowledge: index === 0 && knowledge,
+      notSaved: unsaved && !saved.some((repository) => repository.id === entry.id),
+      pr: prVerification(entry.url, checksOn),
+      clone: cloneView(here),
+      jj: jj.kind === "offer" && !jujutsu.allowed ? { kind: "none" } : jj,
+    };
+  });
+  const busy = projectCheckout(state).cloning || opener.opening || jujutsu.busy;
   const full = listed.length >= MAX_REPOSITORIES;
 
   const removed = saved.filter((entry) => !listed.some((repository) => repository.id === entry.id));
@@ -129,6 +140,13 @@ export function ProjectRepositories({ environmentId, status, workspace, state }:
             }
             onRemove={(id) => change(removeRepository(draft.get(["repositories"]), id))}
             onClone={() => void opener.open()}
+            onSwitchToJj={(repository) =>
+              void jujutsu.switchTo({
+                workspace: workspace.slug,
+                projectId: project.id,
+                repository,
+              })
+            }
           />
         </section>
         {mayChange && adding && !full ? (

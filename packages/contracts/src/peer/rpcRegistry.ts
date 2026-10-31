@@ -74,6 +74,7 @@ import {
   PeerHubInviteInput,
   PeerHubInviteResult,
   PeerHubProjectInput,
+  PeerHubUseJujutsuInput,
   PeerHubStartSignInInput,
   PeerHubStatus,
   PeerHubWorkspaceInput,
@@ -175,6 +176,7 @@ export const PEER_CORE_METHODS = {
   peerHubBindCheckout: "peerHub.bindCheckout",
   peerHubInvite: "peerHub.invite",
   peerHubOpenProject: "peerHub.openProject",
+  peerHubUseJujutsu: "peerHub.useJujutsu",
   peerHubSetCoordination: "peerHub.setCoordination",
   peerHubSetPlugin: "peerHub.setPlugin",
   peerHubNoteOverlap: "peerHub.noteOverlap",
@@ -244,6 +246,12 @@ const WsPeerHubInviteRpc = Rpc.make(PEER_CORE_METHODS.peerHubInvite, {
 
 const WsPeerHubOpenProjectRpc = Rpc.make(PEER_CORE_METHODS.peerHubOpenProject, {
   payload: PeerHubProjectInput,
+  success: PeerHubStatus,
+  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
+});
+
+const WsPeerHubUseJujutsuRpc = Rpc.make(PEER_CORE_METHODS.peerHubUseJujutsu, {
+  payload: PeerHubUseJujutsuInput,
   success: PeerHubStatus,
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
@@ -506,6 +514,7 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubBindCheckoutRpc,
   WsPeerHubInviteRpc,
   WsPeerHubOpenProjectRpc,
+  WsPeerHubUseJujutsuRpc,
   WsPeerHubSetCoordinationRpc,
   WsPeerHubSetPluginRpc,
   WsPeerHubNoteOverlapRpc,
@@ -543,6 +552,8 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubBindCheckout]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubSync]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubOpenProject]: AuthOrchestrationOperateScope,
+  // It turns the plugin on, as peerHubSetPlugin does.
+  [PEER_CORE_METHODS.peerHubUseJujutsu]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubSetCoordination]: AuthAccessWriteScope,
   // Which plugins run here is the environment owner's choice, like coordination itself.
   [PEER_CORE_METHODS.peerHubSetPlugin]: AuthAccessWriteScope,

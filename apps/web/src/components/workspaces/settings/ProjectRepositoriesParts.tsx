@@ -14,6 +14,7 @@ import {
   shortUrl,
   uniqueRepositoryId,
   type CloneView,
+  type JjView,
   type RepositoryEntry,
 } from "./projectRepositories.logic";
 
@@ -25,6 +26,7 @@ export interface RepositoryRowModel extends RepositoryEntry {
   readonly notSaved: boolean;
   readonly pr: "verified" | "reported";
   readonly clone: CloneView;
+  readonly jj: JjView;
 }
 
 function Problem({ children }: { readonly children: ReactNode }) {
@@ -159,6 +161,7 @@ function RepositoryRow({
   onBranch,
   onRemove,
   onClone,
+  onSwitchToJj,
 }: {
   readonly row: RepositoryRowModel;
   readonly editable: boolean;
@@ -166,6 +169,7 @@ function RepositoryRow({
   readonly onBranch: (branch: string) => void;
   readonly onRemove: () => void;
   readonly onClone: () => void;
+  readonly onSwitchToJj: () => void;
 }) {
   const failure =
     row.clone.kind === "clone"
@@ -180,12 +184,27 @@ function RepositoryRow({
           <span className="font-mono text-sm font-medium text-foreground">{row.id}</span>
           {row.knowledge ? <Badge variant="knowledge">Project knowledge</Badge> : null}
           {row.notSaved ? <Badge variant="info">Not saved</Badge> : null}
+          {row.jj.kind === "on" ? <Badge variant="info">Jujutsu</Badge> : null}
         </span>
         <span className="truncate text-xs text-muted-foreground">{shortUrl(row.url)}</span>
         {failure === undefined ? null : (
           <span className="text-xs text-destructive-foreground">{failure}</span>
         )}
+        {row.jj.kind === "offer" && row.jj.blocked !== null ? (
+          <span className="text-xs text-muted-foreground">{row.jj.blocked}</span>
+        ) : null}
       </div>
+      {row.jj.kind === "offer" ? (
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={busy || row.jj.blocked !== null}
+          title="Adds Jujutsu beside Git. .git, the remotes and unfinished work stay."
+          onClick={onSwitchToJj}
+        >
+          Switch to Jujutsu
+        </Button>
+      ) : null}
       <BranchChip id={row.id} branch={row.branch} editable={editable} onChange={onBranch} />
       <Badge variant={row.pr === "verified" ? "success" : "warning"} size="lg">
         {PR_LABEL[row.pr]}
@@ -215,6 +234,7 @@ export function RepositoryList({
   onBranch,
   onRemove,
   onClone,
+  onSwitchToJj,
 }: {
   readonly rows: ReadonlyArray<RepositoryRowModel>;
   readonly editable: boolean;
@@ -223,6 +243,7 @@ export function RepositoryList({
   readonly onBranch: (id: string, branch: string) => void;
   readonly onRemove: (id: string) => void;
   readonly onClone: () => void;
+  readonly onSwitchToJj: (id: string) => void;
 }) {
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground">No repositories yet.</p>;
@@ -241,6 +262,7 @@ export function RepositoryList({
           onBranch={(branch) => onBranch(row.id, branch)}
           onRemove={() => onRemove(row.id)}
           onClone={onClone}
+          onSwitchToJj={() => onSwitchToJj(row.id)}
         />
       ))}
     </ul>

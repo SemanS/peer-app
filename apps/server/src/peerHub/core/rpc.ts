@@ -290,6 +290,12 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
               workspaces.openProject(input),
               PEER_TRACE,
             ),
+          [PEER_CORE_METHODS.peerHubUseJujutsu]: (input) =>
+            wrap.effect(
+              PEER_CORE_METHODS.peerHubUseJujutsu,
+              workspaces.useJujutsu(input),
+              PEER_TRACE,
+            ),
           [PEER_CORE_METHODS.peerHubSetCoordination]: (input) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubSetCoordination,

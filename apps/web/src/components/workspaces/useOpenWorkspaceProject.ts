@@ -1,4 +1,11 @@
-import type { EnvironmentId, PeerHubStatus, PeerProjectState, ProjectId } from "@t3tools/contracts";
+import { useAtomValue } from "@effect/atom-react";
+import type {
+  EnvironmentId,
+  PeerHubStatus,
+  PeerHubUseJujutsuInput,
+  PeerProjectState,
+  ProjectId,
+} from "@t3tools/contracts";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { useEffect, useRef, useState } from "react";
 
@@ -47,6 +54,29 @@ export function projectCheckout(state: PeerProjectState): ProjectCheckout {
     onlyUnsupported: state.repositories.length > 0 && usable.length === 0,
     gitHubSignIn: usable.some((repo) => repo.state === "error" && repo.gitHubSignIn === true),
   };
+}
+
+/** Puts a project's checkouts here on Jujutsu; a refusal arrives as a toast with its reason. */
+export function useSwitchToJujutsu(environmentId: EnvironmentId) {
+  const command = useAtomCommand(serverEnvironment.peerHubUseJujutsu, { reportFailure: false });
+  const allowed = useAtomValue(serverEnvironment.peerHubUseJujutsu.permissionAtom(environmentId));
+  const [busy, setBusy] = useState(false);
+  const switchTo = async (input: PeerHubUseJujutsuInput) => {
+    setBusy(true);
+    const message = failureMessage(await command({ environmentId, input }));
+    setBusy(false);
+    if (message !== null) {
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Could not switch to Jujutsu",
+          description: message,
+        }),
+      );
+    }
+    return message === null;
+  };
+  return { allowed, busy, switchTo };
 }
 
 function projectState(status: PeerHubStatus, workspace: string, projectId: string) {

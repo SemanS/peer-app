@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import type { ChangesPageModel, GitTeammateRow } from "@t3tools/client-runtime/peer/changes";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { useParams } from "@tanstack/react-router";
 import { GitBranchIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -10,6 +11,7 @@ import { useAtomCommand } from "../../../state/use-atom-command";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { PeerCard } from "../PeerPageHeader";
+import { useSwitchToJujutsu } from "../useOpenWorkspaceProject";
 import { useWorkData } from "../useWorkData";
 import { failureMessage } from "../WorkspaceAccess";
 
@@ -113,6 +115,7 @@ export function ChangesNote({
         >
           <p className="text-sm text-muted-foreground">{page.note.body}</p>
           <Copy command={page.note.fix} />
+          {page.note.kind === "notColocated" ? <MakeColocated /> : null}
         </StateCard>
       );
     case "hubOlder":
@@ -153,6 +156,41 @@ export function ChangesNote({
         </div>
       );
   }
+}
+
+/** Runs the note's fix on this computer, for the project on the page. */
+function MakeColocated() {
+  const { environmentId } = useWorkData();
+  const { workspace, project } = useParams({ strict: false });
+  if (environmentId === null || workspace === undefined || project === undefined) return null;
+  return (
+    <MakeColocatedButton environmentId={environmentId} workspace={workspace} project={project} />
+  );
+}
+
+function MakeColocatedButton({
+  environmentId,
+  workspace,
+  project,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly workspace: string;
+  readonly project: string;
+}) {
+  const { allowed, busy, switchTo } = useSwitchToJujutsu(environmentId);
+  if (!allowed) return null;
+  return (
+    <div>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy}
+        onClick={() => void switchTo({ workspace, projectId: project })}
+      >
+        {busy ? "Making it colocated…" : "Make it colocated"}
+      </Button>
+    </div>
+  );
 }
 
 /** A change that holds two versions at once: both, and what to do about it. */

@@ -153,7 +153,7 @@ export function jujutsuProblem(
       kind: "notColocated",
       word: "Problem",
       title: "This jj repository has no .git beside it",
-      body: "Peer works with colocated repositories only, and never converts one itself. Make it colocated in a terminal, or open a colocated checkout.",
+      body: "Peer works with colocated repositories only. Make this one colocated here, or in a terminal.",
       fix: "jj git colocation enable",
     };
   }

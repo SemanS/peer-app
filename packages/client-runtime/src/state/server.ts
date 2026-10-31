@@ -1253,6 +1253,10 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:open-project",
       tag: WS_METHODS.peerHubOpenProject,
     }),
+    peerHubUseJujutsu: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer-hub:use-jujutsu",
+      tag: WS_METHODS.peerHubUseJujutsu,
+    }),
     peerNeedsYouSetAlerts: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-needs-you:set-alerts",
       tag: WS_METHODS.peerNeedsYouSetAlerts,

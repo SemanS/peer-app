@@ -38,7 +38,7 @@ import {
 } from "../../hubPolicy.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import { commandAvailable } from "../local.ts";
-import { checkoutState } from "../vcs.ts";
+import { checkoutState, jjAvailability } from "../vcs.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
 import { runCounts, workRunsOf } from "../work/runs.ts";
@@ -50,6 +50,12 @@ import {
   type RuntimeState,
 } from "../state/PeerState.ts";
 import { LEGACY_PLACES } from "./legacy.ts";
+
+const JJ_STATE = {
+  available: "available",
+  missing: "missing",
+  "unsupported-version": "tooOld",
+} as const;
 
 export class PeerStatus extends Context.Service<
   PeerStatus,
@@ -296,6 +302,7 @@ const make = Effect.gen(function* () {
           });
         }
       }
+      const jj = yield* Effect.promise(() => jjAvailability());
       const policy =
         s.persisted.workspaces.length === 0 && sharedInstances.size === 0
           ? null
@@ -308,6 +315,7 @@ const make = Effect.gen(function* () {
           ...(hub === undefined ? {} : { hub }),
           signedIn,
           email: signedIn ? s.persisted.email : null,
+          jj: JJ_STATE[jj._tag],
           pendingSignIn:
             s.persisted.pendingSignIn === null
               ? null

@@ -25,6 +25,7 @@ import {
   type PeerHubInviteInput,
   type PeerHubInviteResult,
   type PeerHubProjectInput,
+  type PeerHubUseJujutsuInput,
   type PeerHubShareProjectInput,
   type PeerHubStartSignInInput,
   type PeerHubStatus,
@@ -80,6 +81,7 @@ import {
   pullKnowledge,
   type SharedRepository,
 } from "./checkouts.ts";
+import { switchToJujutsu } from "./jujutsu.ts";
 
 const hubError = (detail: string) => new PeerHubError({ detail });
 
@@ -168,6 +170,10 @@ export class PeerWorkspaces extends Context.Service<
     /** Clones the project's repositories (in the background) and registers them as projects. */
     readonly openProject: (
       input: PeerHubProjectInput,
+    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
+    /** Puts Jujutsu beside Git in the project's checkouts here and turns its plugin on. */
+    readonly useJujutsu: (
+      input: PeerHubUseJujutsuInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     /** Shares a local project's repository with a workspace, as a project everyone works on. */
     readonly shareProject: (
@@ -598,6 +604,33 @@ const make = Effect.gen(function* () {
     return yield* publish;
   });
 
+  const useJujutsu: PeerWorkspaces["Service"]["useJujutsu"] = Effect.fn(
+    "PeerWorkspaces.useJujutsu",
+  )(function* (input) {
+    const { workspace, project } = yield* state.project(input.workspace, input.projectId);
+    const repositories = project.repositories.filter(
+      (repo) => safeId(repo.id) && (input.repository === undefined || repo.id === input.repository),
+    );
+    if (repositories.length === 0) {
+      return yield* hubError(`${project.name} has no such repository.`);
+    }
+    // Forced off by this computer, it refuses here, before any checkout changes.
+    yield* plugins.setPlugin({ id: "jujutsu", enabled: true });
+    const { persisted } = yield* state.read;
+    for (const repo of repositories) {
+      const path = checkoutPath(persisted, workspace.slug, project.id, repo.id);
+      yield* agents.changeCheckout(
+        path,
+        Effect.tryPromise({
+          try: () => switchToJujutsu(path),
+          catch: (failure) =>
+            hubError(failure instanceof Error ? failure.message : "Jujutsu could not start here."),
+        }),
+      );
+    }
+    return yield* publish;
+  }, lock.withPermits(1));
+
   const shareProject: PeerWorkspaces["Service"]["shareProject"] = Effect.fn(
     "PeerWorkspaces.shareProject",
   )(function* (input) {
@@ -757,6 +790,7 @@ const make = Effect.gen(function* () {
     declineFounding: answerFounding("decline"),
     findWorkspace,
     openProject,
+    useJujutsu,
     shareProject,
     unshareProject,
     bindCheckout,

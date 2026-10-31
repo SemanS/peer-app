@@ -805,8 +805,9 @@ a jj workspace; and the app says bookmark and workspace for those threads, also 
 Each computer that runs agents in a jj repository needs jj 0.46.0 or newer (`brew install jj` on
 macOS), your name and email in jj's own settings (`jj config set --user user.name "…"` and
 `user.email`; jj does not read Git's, and refuses to push changes without them), and Git. A jj repository that is not colocated, or a computer whose jj is missing or older, shows
-the project's checkout as unsupported with the reason; Peer then clones nothing into it and never
-converts a repository. Windows is untested.
+the project's checkout as unsupported with the reason, and Peer clones nothing into it. Windows is untested.
+
+To start with Jujutsu, turn on **Use Jujutsu** when you create a project with a repository. For a repository already on this computer, use **Switch to Jujutsu** in the project's **Repositories** settings. Either way `.git`, its remotes and any unfinished work stay, and the **Jujutsu workspaces** plugin turns on. Peer refuses while an agent runs in the repository, during a merge or rebase, and in a repository with submodules. To go back to Git, delete the checkout's `.jj` folder.
 
 ## Working on Jujutsu
 

@@ -271,6 +271,7 @@ const PEER_METHOD_NAMES = [
   "peerHub.bindCheckout",
   "peerHub.invite",
   "peerHub.openProject",
+  "peerHub.useJujutsu",
   "peerHub.connectGitHub",
   "peerHub.cancelGitHubSignIn",
   "peerHub.setCoordination",

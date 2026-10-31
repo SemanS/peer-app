@@ -9,6 +9,7 @@ import {
   addRepository,
   branchProblem,
   cloneView,
+  jjView,
   githubChecksOn,
   hasCredentials,
   hostOf,
@@ -23,6 +24,29 @@ import {
   shortUrl,
   uniqueRepositoryId,
 } from "./projectRepositories.logic";
+
+describe("what a row offers for Jujutsu", () => {
+  it("offers the switch on a Git checkout that is here", () => {
+    expect(jjView({ state: "ready" }, "available")).toEqual({ kind: "offer", blocked: null });
+  });
+
+  it("says what stops it while this computer's jj cannot work", () => {
+    expect(jjView({ state: "ready" }, "missing")).toEqual({
+      kind: "offer",
+      blocked: "Install Jujutsu on this computer first.",
+    });
+  });
+
+  it("offers nothing for a checkout that is not here or already switched", () => {
+    expect(jjView({ state: "missing" }, "available")).toEqual({ kind: "none" });
+    expect(jjView({ state: "ready", vcs: "jj" }, "available")).toEqual({ kind: "on" });
+  });
+
+  it("repairs a jj repository only where jj itself works", () => {
+    expect(jjView({ state: "error", unsupported: true }, "available").kind).toBe("offer");
+    expect(jjView({ state: "error", unsupported: true }, "missing").kind).toBe("none");
+  });
+});
 
 describe("reading the list", () => {
   it("reads the repositories that have an id, an address and a branch", () => {

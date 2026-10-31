@@ -92,7 +92,7 @@ function markerRoot(cwd: string): { root: string; marker: "jj" | "git" } | null 
 }
 
 /** The kind `.t3code/vcs.json` pins at or above `dir`, as upstream's `VcsProjectConfig` reads it. */
-function pinnedKind(dir: string): "git" | "jj" | undefined {
+export function pinnedKind(dir: string): "git" | "jj" | undefined {
   let current = dir;
   for (;;) {
     const candidate = NodePath.join(current, ".t3code", "vcs.json");

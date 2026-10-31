@@ -1,6 +1,6 @@
 import type { ProjectId } from "@t3tools/contracts";
 import { PlusIcon } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { useScratchProject } from "../../../../hooks/useScratchProject";
 import { useProjects } from "../../../../state/entities";
@@ -9,8 +9,10 @@ import { useAtomCommand } from "../../../../state/use-atom-command";
 import { Button } from "../../../ui/button";
 import { Input } from "../../../ui/input";
 import { Spinner } from "../../../ui/spinner";
+import { Switch } from "../../../ui/switch";
 import { PeerStackedField } from "../../PeerDialog";
 import { selectLocalProjects } from "../../localProjects.logic";
+import { useSwitchToJujutsu } from "../../useOpenWorkspaceProject";
 import { failureMessage } from "../../WorkspaceAccess";
 import { reportFailure } from "../../workFeedback";
 import {
@@ -31,6 +33,7 @@ import type { WorkspacePageProps } from "../pageProps";
 import { useOpenPeerSettings, PeerSettingsRedirect } from "../peerSettingsLinks";
 import { PeerSettingsPage } from "../PeerSettingsPage";
 import { DESCRIPTION_MAX } from "../projectBasics.logic";
+import { jjBlocked } from "../projectRepositories.logic";
 import { AddPeoplePanel, WhoSwitch } from "../ProjectPeopleParts";
 import { addPeople, type WhoMode } from "../projectPeople.logic";
 import { isWorkspaceAdmin } from "../peerSettings.logic";
@@ -52,6 +55,10 @@ export function NewProject({ environmentId, status, workspace }: WorkspacePagePr
   const view = useSettingsView(workspace.slug);
   const open = useOpenPeerSettings();
   const sync = useAtomCommand(serverEnvironment.peerHubSync, { reportFailure: false });
+  const openProject = useAtomCommand(serverEnvironment.peerHubOpenProject, {
+    reportFailure: false,
+  });
+  const jujutsu = useSwitchToJujutsu(environmentId);
   const bindCheckout = useAtomCommand(serverEnvironment.peerHubBindCheckout, {
     reportFailure: false,
   });
@@ -68,6 +75,12 @@ export function NewProject({ environmentId, status, workspace }: WorkspacePagePr
   const [branch, setBranch] = useState("");
   // The checkout open here that the person picked, which the address they typed may have left.
   const [picked, setPicked] = useState<RepositoryChoice<ProjectId> | null>(null);
+  const [useJj, setUseJj] = useState(false);
+  const jjStopped = jjBlocked(status.jj);
+  const offerJj = jujutsu.allowed && url.trim() !== "";
+  // The clone waits for the project to reach this computer, and the page waits for both.
+  const [jjSettled, setJjSettled] = useState(false);
+  const jjStarted = useRef(false);
   const [created, setCreated] = useState<{ readonly id: string; readonly name: string } | null>(
     null,
   );
@@ -154,6 +167,23 @@ export function NewProject({ environmentId, status, workspace }: WorkspacePagePr
     );
   };
 
+  const arrived =
+    created !== null && workspace.projects.some((state) => state.project.id === created.id);
+  const switching = arrived && useJj && offerJj && jjStopped === null;
+  const switchTo = jujutsu.switchTo;
+  useEffect(() => {
+    if (!switching || created === null || jjStarted.current) return;
+    jjStarted.current = true;
+    const input = { workspace: workspace.slug, projectId: created.id };
+    void openProject({ environmentId, input })
+      .then(async (result) => {
+        const failure = failureMessage(result);
+        if (failure === null) await switchTo(input);
+        else reportFailure("Could not clone the project", result);
+      })
+      .finally(() => setJjSettled(true));
+  }, [created, environmentId, openProject, switchTo, switching, workspace.slug]);
+
   const header = {
     title: "New project",
     description:
@@ -182,7 +212,17 @@ export function NewProject({ environmentId, status, workspace }: WorkspacePagePr
 
   // The project is saved: wait for this computer to have it, then open it.
   if (created !== null && review.dialog === null) {
-    if (workspace.projects.some((state) => state.project.id === created.id)) {
+    if (switching && !jjSettled) {
+      return (
+        <PeerSettingsPage {...header}>
+          <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner size="sm" />
+            Cloning {created.name} and adding Jujutsu…
+          </p>
+        </PeerSettingsPage>
+      );
+    }
+    if (arrived) {
       return (
         <PeerSettingsRedirect
           to={{ kind: "project", workspace: workspace.slug, projectId: created.id, tab: "basics" }}
@@ -381,6 +421,25 @@ export function NewProject({ environmentId, status, workspace }: WorkspacePagePr
               setPicked(choice);
             }}
           />
+          {offerJj ? (
+            <div className="flex items-start gap-2.5 pt-1">
+              <Switch
+                aria-labelledby={`${formId}-jj`}
+                checked={useJj && jjStopped === null}
+                disabled={jjStopped !== null}
+                onCheckedChange={setUseJj}
+              />
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span id={`${formId}-jj`} className="text-sm text-foreground">
+                  Use Jujutsu
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {jjStopped ??
+                    "Brings the repository to this computer now and adds Jujutsu beside Git. .git and its remotes stay."}
+                </span>
+              </span>
+            </div>
+          ) : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 pt-1">

@@ -177,6 +177,42 @@ export type CloneView =
   /** Not in the manifest yet, so there is nothing to clone. */
   | { readonly kind: "unsaved" };
 
+/** Why this computer cannot switch a checkout to Jujutsu; null when it can. */
+export function jjBlocked(jj: "available" | "missing" | "tooOld" | undefined) {
+  if (jj === "missing") return "Install Jujutsu on this computer first.";
+  if (jj === "tooOld") return "Update Jujutsu on this computer first.";
+  return jj === undefined ? "This environment cannot switch to Jujutsu yet." : null;
+}
+
+export type JjView =
+  | { readonly kind: "none" }
+  | { readonly kind: "on" }
+  | { readonly kind: "offer"; readonly blocked: string | null };
+
+/**
+ * What a row offers for Jujutsu: nothing for a checkout that is not here, and a way out of a jj
+ * repository Peer cannot use only when this computer's jj works, since then colocating is the cause.
+ */
+export function jjView(
+  repository:
+    | {
+        readonly state: PeerCheckoutState;
+        readonly vcs?: "git" | "jj" | undefined;
+        readonly unsupported?: boolean | undefined;
+      }
+    | undefined,
+  jj: "available" | "missing" | "tooOld" | undefined,
+): JjView {
+  if (repository === undefined) return { kind: "none" };
+  if (repository.vcs === "jj") return { kind: "on" };
+  if (repository.unsupported === true) {
+    return jj === "available" ? { kind: "offer", blocked: null } : { kind: "none" };
+  }
+  return repository.state === "ready"
+    ? { kind: "offer", blocked: jjBlocked(jj) }
+    : { kind: "none" };
+}
+
 export function cloneView(
   repository:
     | {

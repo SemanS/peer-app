@@ -702,6 +702,8 @@ export const PeerHubStatus = Schema.Struct({
   signedIn: Schema.Boolean,
   /** The verified address of the signed-in person. */
   email: Schema.NullOr(Schema.String),
+  /** This computer's Jujutsu, which a checkout needs before it can switch to it. */
+  jj: Schema.optional(Schema.Literals(["available", "missing", "tooOld"])),
   /** A code was mailed to this address and waits to be entered. */
   pendingSignIn: Schema.NullOr(
     Schema.Struct({
@@ -824,6 +826,14 @@ export const PeerHubProjectInput = Schema.Struct({
   projectId: TrimmedNonEmptyString,
 });
 export type PeerHubProjectInput = typeof PeerHubProjectInput.Type;
+
+/** Puts Jujutsu beside Git in a project's checkouts here; `repository` narrows it to one. */
+export const PeerHubUseJujutsuInput = Schema.Struct({
+  workspace: TrimmedNonEmptyString,
+  projectId: TrimmedNonEmptyString,
+  repository: Schema.optional(TrimmedNonEmptyString),
+});
+export type PeerHubUseJujutsuInput = typeof PeerHubUseJujutsuInput.Type;
 
 /**
  * A checkout that is open on this computer becomes a workspace project's repository here, so this

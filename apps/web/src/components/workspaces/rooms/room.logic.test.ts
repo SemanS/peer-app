@@ -24,6 +24,7 @@ import {
   moveKey,
   reachRows,
   recipientsOf,
+  roomAgentEntries,
   sendNotice,
   toggleChoice,
   lastOfRuns,
@@ -370,5 +371,45 @@ describe("lastAgentReply", () => {
 
   it("has nothing to take in a room no agent answered", () => {
     expect(lastAgentReply([person])).toBeUndefined();
+  });
+});
+
+describe("the agent chosen for Your agent", () => {
+  const own = {
+    key: "own-agent",
+    label: "Your agent",
+    kind: "own-agent",
+    to: [{ kind: "agent", email: "ana@acme.test" }],
+    note: "Your agent on this task reads this at its next step.",
+  } as const;
+  const opus = { harness: "claude", model: "claude-opus-5-5", label: "Opus 5.5" };
+
+  it("names the harness and model, and says it starts a session", () => {
+    const { to, notes } = recipientsOf([own], ["own-agent"], opus);
+    expect(to).toEqual([
+      { kind: "agent", email: "ana@acme.test", harness: "claude", model: "claude-opus-5-5" },
+    ]);
+    expect(notes).toEqual(["This starts Opus 5.5 on this computer, read-only, on your capacity."]);
+  });
+
+  it("survives a reload of the draft", () => {
+    expect(parseDraft(JSON.stringify({ text: "a", selected: [], agent: opus })).agent).toEqual(
+      opus,
+    );
+  });
+
+  it("offers what herdr runs, on the default account, within the project's harnesses", () => {
+    const entry = (driverKind: string, isDefault = true) => ({
+      driverKind,
+      isDefault,
+      enabled: true,
+      isAvailable: true,
+    });
+    const entries = [entry("claudeAgent"), entry("codex"), entry("cursor"), entry("codex", false)];
+    expect(roomAgentEntries(entries, []).map((e) => e.driverKind)).toEqual([
+      "claudeAgent",
+      "codex",
+    ]);
+    expect(roomAgentEntries(entries, ["codex"]).map((e) => e.driverKind)).toEqual(["codex"]);
   });
 });

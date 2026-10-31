@@ -48,6 +48,16 @@ export const harnessOf = (
   return named ?? project.capacity.personalHarnesses.find(isReview) ?? "claude";
 };
 
+/** A model its author chose, and only theirs: it ends up on the agent's command line. */
+export const modelOf = (item: PeerRoomInboxItem, me: string) =>
+  item.message.author.email.toLowerCase() === me.toLowerCase()
+    ? item.message.to.find(
+        (target) => target.kind === "agent" && target.email.toLowerCase() === me.toLowerCase(),
+      )?.model
+    : undefined;
+
+const isModelName = (model: string) => /^[A-Za-z0-9][A-Za-z0-9._:/[\]-]*$/.test(model);
+
 /** The repository of the project this computer has a checkout of, first in the project's order. */
 export const checkoutOf = (
   state: PeerState.PeerState["Service"],
@@ -148,6 +158,9 @@ export const roomStarts = (
         const harness = harnessOf(item, me, project);
         if (!isReview(harness))
           return yield* refusal("Peer starts a review session with Claude Code or Codex only.");
+        const model = modelOf(item, me);
+        if (model !== undefined && !isModelName(model))
+          return yield* refusal("Peer cannot start that model.");
         const starter = yield* plugins.require("reviewStarter");
         const started = yield* starter.start({
           workspace,
@@ -155,6 +168,7 @@ export const roomStarts = (
           taskId: task.id,
           repositoryId: checkout.repository.id,
           harness,
+          ...(model === undefined ? {} : { model }),
           ...(change === undefined ? {} : { baseBranch: change.base }),
           prompt: reviewRoomPrompt(heard, change?.ref),
         });

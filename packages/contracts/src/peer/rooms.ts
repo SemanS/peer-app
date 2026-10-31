@@ -73,6 +73,8 @@ export const PeerRoomTargetInput = Schema.Union([
     kind: Schema.Literal("agent"),
     email: TrimmedNonEmptyString,
     harness: Schema.optional(TrimmedNonEmptyString),
+    /** The model its author chose, which starts a session of its own on it. */
+    model: Schema.optional(TrimmedNonEmptyString),
   }),
 ]);
 export type PeerRoomTargetInput = typeof PeerRoomTargetInput.Type;
@@ -88,6 +90,7 @@ export const PeerRoomTarget = Schema.Struct({
   environment: Schema.optional(Schema.String),
   run: Schema.optional(Schema.String),
   harness: Schema.optional(Schema.String),
+  model: Schema.optional(Schema.String),
   reason: Schema.optional(Schema.String),
   /** The person who passed it on; an own message and a team-reach delivery have none. */
   by: Schema.optional(Schema.String),

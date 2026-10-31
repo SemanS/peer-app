@@ -94,6 +94,8 @@ export function decide(
       ? { do: "lost", run: named }
       : { do: "wait", ms: PEER_ROOM_START_GRACE_MS - Math.max(0, stood) };
   }
+  // A model its author chose is a new session on it: an open run has its model already.
+  if (same(message.author.email, me) && delivery.model !== undefined) return { do: "take-review" };
   const live = reached?.live === true ? reached : team ? undefined : runs.find((run) => run.live);
   if (live !== undefined) return { do: "take-offer", run: live.id };
   const own = same(message.author.email, me);

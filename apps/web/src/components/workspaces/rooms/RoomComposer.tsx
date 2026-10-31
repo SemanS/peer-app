@@ -7,7 +7,7 @@ import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime"
 import type { EnvironmentId } from "@t3tools/contracts";
 import { BotIcon, XIcon } from "lucide-react";
 import type { PeerRoomAnchor } from "@t3tools/contracts";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
 import { randomUUID } from "../../../lib/utils";
 import { serverEnvironment } from "../../../state/server";
@@ -36,6 +36,7 @@ import {
   type SendOutcome,
   withPaths,
 } from "./room.logic";
+import { RoomAgentPicker } from "./RoomAgentPicker";
 import { useRoomDraft } from "./useRoom";
 
 /** A line the diff asks to comment on; a new `ask` asks again. */
@@ -61,6 +62,7 @@ export function RoomComposer({
   place,
   targets,
   people,
+  personalHarnesses,
   line: asked,
   paths,
   onDrafting,
@@ -70,6 +72,8 @@ export function RoomComposer({
   readonly place: RoomPlace;
   readonly targets: ReadonlyArray<RoomTargetChoice>;
   readonly people: ReadonlyArray<RoomPerson>;
+  /** The project's allowed harnesses for a personal agent; none limits nothing. */
+  readonly personalHarnesses: ReadonlyArray<string>;
   readonly line: DraftLine | null;
   readonly paths: DraftPaths | null;
   /** Whether the draft sits on a line, so the diff keeps it lit. */
@@ -110,7 +114,7 @@ export function RoomComposer({
     });
   });
 
-  const recipients = recipientsOf(choices, draft.selected);
+  const recipients = recipientsOf(choices, draft.selected, draft.agent);
   const chosen = chosenKeys(draft);
   const problem = draftProblem(draft.text, recipients.blocked);
   const disabledChoices = choices.filter((choice) => choice.disabled !== undefined);
@@ -181,22 +185,41 @@ export function RoomComposer({
       <div role="group" aria-label="To" className="flex flex-wrap items-center gap-1">
         <span className="me-1 text-xs text-muted-foreground">To</span>
         {choices.map((choice) => (
-          <Button
-            key={choice.key}
-            type="button"
-            size="compact"
-            variant={chosen.includes(choice.key) ? "outline" : "ghost-muted"}
-            aria-pressed={chosen.includes(choice.key)}
-            disabled={busy || choice.disabled !== undefined}
-            onClick={() =>
-              onDraftChange({ ...draft, selected: toggleChoice(draft.selected, choice) })
-            }
-          >
-            {choice.kind === "own-agent" || choice.kind === "agent" ? (
-              <BotIcon aria-hidden />
+          <Fragment key={choice.key}>
+            <Button
+              type="button"
+              size="compact"
+              variant={chosen.includes(choice.key) ? "outline" : "ghost-muted"}
+              aria-pressed={chosen.includes(choice.key)}
+              disabled={busy || choice.disabled !== undefined}
+              onClick={() =>
+                onDraftChange({ ...draft, selected: toggleChoice(draft.selected, choice) })
+              }
+            >
+              {choice.kind === "own-agent" || choice.kind === "agent" ? (
+                <BotIcon aria-hidden />
+              ) : null}
+              {choice.label}
+            </Button>
+            {choice.kind === "own-agent" ? (
+              <RoomAgentPicker
+                environmentId={environmentId}
+                personalHarnesses={personalHarnesses}
+                choice={draft.agent}
+                disabled={busy || choice.disabled !== undefined}
+                onChoose={(agent) =>
+                  onDraftChange((current) => ({
+                    ...current,
+                    agent,
+                    selected: current.selected.includes(choice.key)
+                      ? current.selected
+                      : [...current.selected, choice.key],
+                  }))
+                }
+                onClear={() => onDraftChange(({ agent: _agent, ...rest }) => rest)}
+              />
             ) : null}
-            {choice.label}
-          </Button>
+          </Fragment>
         ))}
       </div>
       {disabledChoices.map((choice) => (

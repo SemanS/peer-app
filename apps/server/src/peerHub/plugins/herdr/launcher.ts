@@ -53,7 +53,14 @@ export const makeLauncher = (agents: HerdrAgents) =>
           catch: () => hubError("The newly created task checkout disappeared before startup."),
         });
         const started = yield* Effect.tryPromise({
-          try: () => client.start({ cwd: tree.cwd, harness, env: input.env, resume: input.resume }),
+          try: () =>
+            client.start({
+              cwd: tree.cwd,
+              harness,
+              env: input.env,
+              resume: input.resume,
+              model: input.model,
+            }),
           catch: (failure) => {
             const message = messageOf(failure);
             return hubError(

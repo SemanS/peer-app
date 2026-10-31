@@ -715,6 +715,8 @@ export interface PeerTaskLauncher {
      * prompt then only says the run continues.
      */
     readonly resume?: { readonly agent: string; readonly session: string } | undefined;
+    /** The model the harness starts on, where its author chose one. */
+    readonly model?: string | undefined;
     /** Provenance is returned only when this launch created a new worktree, never for reuse. */
   }) => Effect.Effect<
     PeerHubStartAgentResult & {

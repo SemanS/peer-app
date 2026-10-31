@@ -31,9 +31,19 @@ export const resumeArgs = (harness: HerdrHarness, session: string) =>
 /** The herdr workspace Peer starts agents in, so they stay out of the person's own. */
 const PEER_WORKSPACE = "Peer agents";
 
+/** The arguments `agent.start` passes on: both harnesses take `--model` before a resume's. */
+export const startArgs = (input: Pick<StartHerdrAgentInput, "harness" | "resume" | "model">) => [
+  ...(input.model === undefined ? [] : ["--model", input.model]),
+  ...(input.resume === undefined || input.resume.agent !== input.harness
+    ? []
+    : resumeArgs(input.harness, input.resume.session)),
+];
+
 export interface StartHerdrAgentInput {
   readonly cwd: string;
   readonly harness: HerdrHarness;
+  /** The model it starts on; left out, the harness uses its own default. */
+  readonly model?: string | undefined;
   /** The first thing the agent is asked, once it is ready for it. */
   readonly prompt?: string | undefined;
   /** Set in the pane's shell, so the agent has it too. */
@@ -302,6 +312,7 @@ export async function startHerdrAgent(
   const shellDeadline = Date.now() + shellMs;
   // herdr takes between 3 and 300 seconds for an agent to start.
   const startupMs = Math.min(Math.max(readyMs, 3_001), 300_000);
+  const args = startArgs(input);
   for (;;) {
     try {
       await call(
@@ -312,9 +323,7 @@ export async function startHerdrAgent(
           kind: input.harness,
           pane_id: pane.paneId,
           timeout_ms: startupMs,
-          ...(input.resume === undefined || input.resume.agent !== input.harness
-            ? {}
-            : { args: resumeArgs(input.harness, input.resume.session) }),
+          ...(args.length === 0 ? {} : { args }),
         },
         5000,
       );

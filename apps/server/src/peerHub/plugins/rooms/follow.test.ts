@@ -30,6 +30,11 @@ const live: HereRun = { id: "run_1", live: true };
 const detached: HereRun = { id: "run_2", live: false };
 
 describe("decide", () => {
+  it("starts a new session on the model its author chose, even beside a live run", () => {
+    const target = delivery("passed", { model: "claude-opus-5-5" });
+    assert.deepStrictEqual(decide(own(target), target, [live], BOB), { do: "take-review" });
+  });
+
   it("gives a passed delivery to a live session of the owner's run", () => {
     assert.deepStrictEqual(
       decide(own(delivery("passed")), delivery("passed"), [detached, live], BOB),

@@ -320,6 +320,7 @@ function RoomBody({
               place={place}
               targets={targets}
               people={people}
+              personalHarnesses={projectState.project.capacity.personalHarnesses}
               line={line}
               paths={paths}
               onDrafting={setDrafting}

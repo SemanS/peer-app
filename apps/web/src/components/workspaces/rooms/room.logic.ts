@@ -38,10 +38,24 @@ export interface RoomDraft {
   readonly text: string;
   /** The To row's chosen keys; none is Team, the default. */
   readonly selected: ReadonlyArray<string>;
+  /** The agent and model chosen for Your agent; none keeps the person's default. */
+  readonly agent?: RoomAgentChoice | undefined;
   readonly anchor?: PeerRoomAnchor | undefined;
   /** The operation of the last attempt: a retry of the same draft posts once. */
   readonly operation?: RoomOperation | undefined;
 }
+
+export interface RoomAgentChoice {
+  readonly harness: string;
+  readonly model: string;
+  readonly label: string;
+}
+
+const isAgentChoice = (value: unknown): value is RoomAgentChoice => {
+  if (typeof value !== "object" || value === null) return false;
+  const { harness, model, label } = value as Record<string, unknown>;
+  return typeof harness === "string" && typeof model === "string" && typeof label === "string";
+};
 
 export interface RoomOperation {
   readonly draft: string;
@@ -62,7 +76,7 @@ export function parseDraft(raw: string | null): RoomDraft {
     return EMPTY_DRAFT;
   }
   if (typeof value !== "object" || value === null) return EMPTY_DRAFT;
-  const { text, selected, anchor, operation } = value as Record<string, unknown>;
+  const { text, selected, agent, anchor, operation } = value as Record<string, unknown>;
   if (typeof text !== "string" || !Array.isArray(selected)) return EMPTY_DRAFT;
   const known =
     typeof operation === "object" &&
@@ -72,6 +86,7 @@ export function parseDraft(raw: string | null): RoomDraft {
   return {
     text,
     selected: selected.filter((key): key is string => typeof key === "string"),
+    ...(isAgentChoice(agent) ? { agent } : {}),
     ...(isAnchor(anchor) ? { anchor } : {}),
     ...(known ? { operation: operation as RoomOperation } : {}),
   };
@@ -146,6 +161,7 @@ export function choicesWithMentions(
 export function recipientsOf(
   choices: ReadonlyArray<RoomTargetChoice>,
   selected: ReadonlyArray<string>,
+  agent?: RoomAgentChoice,
 ): {
   readonly to: ReadonlyArray<PeerRoomTargetInput>;
   readonly notes: ReadonlyArray<string>;
@@ -153,9 +169,19 @@ export function recipientsOf(
 } {
   const chosen = choices.filter((choice) => selected.includes(choice.key));
   const gone = selected.some((key) => !choices.some((choice) => choice.key === key));
+  const carries = (choice: RoomTargetChoice) =>
+    agent !== undefined && choice.kind === "own-agent" && choice.disabled === undefined;
   return {
-    to: chosen.flatMap((choice) => choice.to),
-    notes: chosen.flatMap((choice) => (choice.note === undefined ? [] : [choice.note])),
+    to: chosen.flatMap((choice) =>
+      carries(choice) && agent !== undefined
+        ? choice.to.map((target) => ({ ...target, harness: agent.harness, model: agent.model }))
+        : choice.to,
+    ),
+    notes: chosen.flatMap((choice) => {
+      if (carries(choice) && agent !== undefined)
+        return [`This starts ${agent.label} on this computer, read-only, on your capacity.`];
+      return choice.note === undefined ? [] : [choice.note];
+    }),
     // Sending without them would reach the team instead of the people this was written for.
     blocked: gone
       ? RECIPIENT_GONE
@@ -164,6 +190,31 @@ export function recipientsOf(
 }
 
 const RECIPIENT_GONE = "Someone you chose is no longer on this task. Choose who this is for again.";
+
+/** Who can start a room agent: what herdr runs, signed in here, and what the project allows. */
+export function roomAgentEntries<
+  Entry extends {
+    readonly driverKind: string;
+    readonly enabled: boolean;
+    readonly isAvailable: boolean;
+    readonly isDefault: boolean;
+  },
+>(entries: ReadonlyArray<Entry>, personalHarnesses: ReadonlyArray<string>): ReadonlyArray<Entry> {
+  return entries.filter((entry) => {
+    const harness = harnessOfDriver(entry.driverKind);
+    return (
+      harness !== null &&
+      // Another instance's account would not reach the herdr session, which runs the plain CLI.
+      entry.isDefault &&
+      entry.enabled &&
+      entry.isAvailable &&
+      (personalHarnesses.length === 0 || personalHarnesses.includes(harness))
+    );
+  });
+}
+
+export const harnessOfDriver = (driverKind: string) =>
+  driverKind === "claudeAgent" ? "claude" : driverKind === "codex" ? "codex" : null;
 
 /** What keeps one message's move apart: a list of a person's rooms holds several `#1`s. */
 export const moveKey = (place: RoomPlace, seq: number) =>

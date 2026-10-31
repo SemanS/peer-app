@@ -54,6 +54,8 @@ import {
   type OwnerCallCard,
 } from "./WorkBoardCards";
 import { COLUMN_STATE, listRows, type ListTab } from "./workList.logic";
+import { NewTaskDialog } from "./NewTaskDialog";
+import { projectCheckout } from "./useOpenWorkspaceProject";
 import { WorkNoProjects } from "./WorkNoProjects";
 import { WorkScopePicker } from "./WorkScopePicker";
 import { WorkTaskList } from "./WorkTaskList";
@@ -120,6 +122,16 @@ export function WorkBoard() {
     readonly card: OwnerCallCard;
     readonly decision: "accept" | "decline";
   } | null>(null);
+  const [addingTask, setAddingTask] = useState(false);
+  const soleProject =
+    tree.length === 1
+      ? tree[0]
+      : scope === ALL_PROJECTS
+        ? undefined
+        : tree.find((project) => projectScopeKey(project) === scope);
+  const soleProjectState = status?.workspaces
+    .find((workspace) => workspace.slug === soleProject?.workspace)
+    ?.projects.find((candidate) => candidate.project.id === soleProject?.projectId);
   const withdrawOwnerCall = useWithdrawOwnerCall(environmentId);
   const mine = whose === "mine";
   const listing = layout !== "board";
@@ -378,6 +390,11 @@ export function WorkBoard() {
                   onTab={setTab}
                   onOpen={cardActions.openTarget}
                   onShowNeeds={() => void navigate({ to: "/work", search: { view: "needs-you" } })}
+                  onNewTask={
+                    environmentId === null || soleProject === undefined
+                      ? undefined
+                      : () => setAddingTask(true)
+                  }
                   launch={
                     environmentId === null || status === null
                       ? undefined
@@ -429,6 +446,16 @@ export function WorkBoard() {
           onClose={() => setDeciding(null)}
         />
       )}
+      {addingTask && environmentId !== null && soleProject !== undefined ? (
+        <NewTaskDialog
+          environmentId={environmentId}
+          project={soleProject}
+          t3ProjectId={
+            soleProjectState === undefined ? undefined : projectCheckout(soleProjectState).projectId
+          }
+          onClose={() => setAddingTask(false)}
+        />
+      ) : null}
       {request === null || environmentId === null || status === null ? null : (
         <RequestReview
           key={`${request.card.key}/${request.view}`}

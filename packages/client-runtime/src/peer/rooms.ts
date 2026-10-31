@@ -7,6 +7,7 @@
  * @module peer/rooms
  */
 import {
+  PEER_ROOM_SESSION_ENDED,
   PEER_ROOM_START_GRACE_MS,
   WS_METHODS,
   type PeerHubStatus,
@@ -164,7 +165,11 @@ export function deliveryWords(
     case "expired":
       return "Expired";
     case "failed":
-      return reason === "" ? "Did not start" : `Did not start: ${reason}`;
+      if (reason === "") return "Did not start";
+      // The agent ran and may have done the work: only its answer is missing.
+      return reason === PEER_ROOM_SESSION_ENDED
+        ? "Stopped without answering"
+        : `Did not start: ${reason}`;
     default:
       return delivery.state ?? null;
   }

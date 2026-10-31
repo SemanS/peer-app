@@ -120,7 +120,7 @@ export const localRepository = (project: {
     ).pipe(
       Effect.mapError(() =>
         hubError(
-          `${title} has no git remote named origin. Push it where your team can clone it, or share its repository by address.`,
+          `${title} is only on this computer, so your team cannot clone it. Publish it first, then share it.`,
         ),
       ),
     );

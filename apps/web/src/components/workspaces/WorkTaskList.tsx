@@ -1,5 +1,11 @@
 import type { EnvironmentId, PeerHubStatus, PeerProjectState } from "@t3tools/contracts";
-import { ChevronDownIcon, ChevronRightIcon, MessageCircleIcon, PlayIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  MessageCircleIcon,
+  PlayIcon,
+  PlusIcon,
+} from "lucide-react";
 import { useState, type ComponentType } from "react";
 
 import { cn } from "../../lib/utils";
@@ -80,6 +86,7 @@ export function WorkTaskList({
   onTab,
   onOpen,
   onShowNeeds,
+  onNewTask,
   launch,
 }: {
   readonly cards: ReadonlyArray<TaskCard>;
@@ -88,6 +95,8 @@ export function WorkTaskList({
   readonly onTab: (tab: ListTab) => void;
   readonly onOpen: (target: TaskTarget) => void;
   readonly onShowNeeds: () => void;
+  /** Where one project is open, an empty list starts its first task. */
+  readonly onNewTask?: (() => void) | undefined;
   readonly launch?: TaskListLaunch | undefined;
 }) {
   const groups = listGroups(cards, tab);
@@ -184,9 +193,17 @@ export function WorkTaskList({
       )}
 
       {groups.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {tab === "done" ? "No done tasks." : "No open tasks."}
-        </p>
+        <div className="flex flex-col items-start gap-3">
+          <p className="text-sm text-muted-foreground">
+            {tab === "done" ? "No done tasks." : "No open tasks."}
+          </p>
+          {tab !== "done" && onNewTask !== undefined ? (
+            <Button size="sm" onClick={onNewTask}>
+              <PlusIcon aria-hidden />
+              New task
+            </Button>
+          ) : null}
+        </div>
       ) : (
         <div className="flex flex-col gap-3">
           {groups.map((group) => (

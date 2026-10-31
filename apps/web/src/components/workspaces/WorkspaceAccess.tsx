@@ -163,9 +163,9 @@ export function WorkspaceSignIn({
   if (pending !== null) {
     // The address the Hub mailed, else the one typed here; a state from an older run may have neither.
     const sentTo = (pending.email || email).trim();
-    const submitCode = () => {
-      if (busy || code.length !== 6) return;
-      void run(() => finishSignIn({ environmentId, input: { code } }));
+    const submitCode = (typed = code) => {
+      if (busy || typed.length !== 6) return;
+      void run(() => finishSignIn({ environmentId, input: { code: typed } }));
     };
     return (
       <form
@@ -198,7 +198,11 @@ export function WorkspaceSignIn({
             aria-describedby={error ? ids.error : undefined}
             readOnly={busy}
             value={code}
-            onChange={(event) => setCode(event.currentTarget.value.replace(/\D/g, "").slice(0, 6))}
+            onChange={(event) => {
+              const typed = event.currentTarget.value.replace(/\D/g, "").slice(0, 6);
+              setCode(typed);
+              submitCode(typed);
+            }}
           />
           <Button type="submit" disabled={busy || code.length !== 6}>
             {busy ? "Signing in…" : "Sign in"}

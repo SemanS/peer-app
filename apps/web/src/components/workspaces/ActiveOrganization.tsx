@@ -54,7 +54,7 @@ export function ActiveOrganization() {
       >
         <LogInIcon aria-hidden className="size-4 shrink-0" />
         <span className="truncate">
-          {entry === "sign-in" ? "Sign in to Peer Hub" : "Choose your organization"}
+          {entry === "sign-in" ? "Sign in to Peer Hub" : "Choose your workspace"}
         </span>
       </button>
     );

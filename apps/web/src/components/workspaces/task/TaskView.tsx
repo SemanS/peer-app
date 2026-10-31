@@ -2,7 +2,7 @@ import { needsByOpen } from "@t3tools/client-runtime/peer/work";
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { EllipsisIcon } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { useClientSettings } from "../../../hooks/useSettings";
 import { cn } from "../../../lib/utils";
@@ -478,45 +478,47 @@ function TaskBody({
                   }
             }
           />
-          <HandoffChatContext
-            value={
-              handoff === null
-                ? null
-                : { title: handoff.title, open: () => actions.open(handoff.open) }
-            }
-          >
-            {plugins.map(({ id, taskContext: Section }) =>
-              Section === undefined || !TASK_PAGE_SECTIONS.has(id) ? null : (
-                <Section
-                  key={id}
-                  environmentId={environmentId}
-                  status={status}
-                  workspace={workspace}
-                  project={project}
-                  scope={`task:${taskId}`}
-                  contextText={null}
-                />
-              ),
+          <Sections folded={preparing && onTask === 0}>
+            <HandoffChatContext
+              value={
+                handoff === null
+                  ? null
+                  : { title: handoff.title, open: () => actions.open(handoff.open) }
+              }
+            >
+              {plugins.map(({ id, taskContext: Section }) =>
+                Section === undefined || !TASK_PAGE_SECTIONS.has(id) ? null : (
+                  <Section
+                    key={id}
+                    environmentId={environmentId}
+                    status={status}
+                    workspace={workspace}
+                    project={project}
+                    scope={`task:${taskId}`}
+                    contextText={null}
+                  />
+                ),
+              )}
+            </HandoffChatContext>
+            {plugins.map(({ id, taskSections: Section }) =>
+              Section === undefined ? null : <Section key={id} {...slot} />,
             )}
-          </HandoffChatContext>
-          {plugins.map(({ id, taskSections: Section }) =>
-            Section === undefined ? null : <Section key={id} {...slot} />,
-          )}
-          <TaskKnowledgeSection
-            card={model.context}
-            findings={taskNode.context?.reports ?? []}
-            onOpen={openContext}
-          />
-          <TaskActivity
-            environmentId={environmentId}
-            status={status}
-            workspace={workspace}
-            project={project}
-            task={taskId}
-            area={model.area}
-            created={model.created}
-            now={now}
-          />
+            <TaskKnowledgeSection
+              card={model.context}
+              findings={taskNode.context?.reports ?? []}
+              onOpen={openContext}
+            />
+            <TaskActivity
+              environmentId={environmentId}
+              status={status}
+              workspace={workspace}
+              project={project}
+              task={taskId}
+              area={model.area}
+              created={model.created}
+              now={now}
+            />
+          </Sections>
         </div>
         <aside aria-label="Details" className="flex min-w-0 flex-[1_1_16rem] flex-col">
           <TaskDetails rows={model.details} />
@@ -554,6 +556,25 @@ function TaskBody({
         />
       )}
     </div>
+  );
+}
+
+/** What a task gathers as it runs: before it starts, empty sections stay out of the way of starting it. */
+function Sections({
+  folded,
+  children,
+}: {
+  readonly folded: boolean;
+  readonly children: ReactNode;
+}) {
+  if (!folded) return children;
+  return (
+    <details className="group flex flex-col gap-8">
+      <summary className="cursor-pointer text-sm text-muted-foreground">
+        Dependencies, tests and activity
+      </summary>
+      <div className="flex flex-col gap-8 pt-6">{children}</div>
+    </details>
   );
 }
 

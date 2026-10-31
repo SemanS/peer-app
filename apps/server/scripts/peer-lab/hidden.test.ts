@@ -742,7 +742,7 @@ describe("the scripted agents of the deferred run", () => {
       file: (path) => NodePath.join(root, path),
       start: () => ({
         told: options.offered
-          ? 'Use `peer` as a standalone command. For an unclear dependency on another task, `peer ask <task> "<question>"` reaches its agents.'
+          ? 'run `peer` as is, with no names or IDs. For an unclear dependency on another task, `peer ask <task> "<question>"` reaches its agents.'
           : "You are Bob's agent here.",
       }),
       hook: (event) => {

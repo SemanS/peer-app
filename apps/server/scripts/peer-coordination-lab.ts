@@ -3717,7 +3717,7 @@ const program = Effect.gen(function* () {
   const namerStart = namer.start().told;
   told(`${namer.name} (on KRK-7)`, namerStart);
   check(
-    namerStart?.includes("Use `peer` as a standalone command") === true &&
+    namerStart?.includes("run `peer` as is, with no names or IDs") === true &&
       namerStart.includes(`peer ask <task> "<question>"`),
     "an agent starts knowing what Peer's command offers",
   );
@@ -4275,7 +4275,7 @@ const program = Effect.gen(function* () {
   );
   told(`${slowAgent.name} (its next step)`, slowNext);
   check(
-    slowNext?.includes("Use `peer` as a standalone command") === true &&
+    slowNext?.includes("run `peer` as is, with no names or IDs") === true &&
       slowNext.includes("Peer keeps your private working context"),
     "the complete startup guidance and context arrive at its next step",
   );

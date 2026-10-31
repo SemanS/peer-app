@@ -17,7 +17,8 @@ export function withLocalCoordination(
   return {
     ...host,
     placeOf: async (cwd) => (await host.placeOf(cwd)) ?? placeOf(cwd),
-    nameOf: (workspace, email) => (isLocal(workspace) ? "You" : host.nameOf(workspace, email)),
+    nameOf: (workspace, email) =>
+      isLocal(workspace) ? "Your person" : host.nameOf(workspace, email),
     workspaces: () => [...new Set([...host.workspaces(), PEER_LOCAL_WORKSPACE])],
     report: (w, sessions) => (isLocal(w) ? local.report(sessions) : host.report(w, sessions)),
     view: (w) => (isLocal(w) ? local.view() : host.view(w)),

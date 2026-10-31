@@ -255,7 +255,7 @@ export const roomDiff = (input: DiffInput): Effect.Effect<PeerRoomDiff> =>
         ? `This computer has no checkout of the project, and ${who} work is not here.`
         : trouble !== null
           ? `${trouble}, so Peer cannot tell whether ${who.replace(/^The/, "the")} work is pushed. Refresh to try again.`
-          : `${who} work has not been pushed. Watch it, or ask their agent to push.`;
+          : `${who} work has not been pushed. Watch it, or ask the agent to push.`;
     return {
       state: "notHere" as const,
       reason,

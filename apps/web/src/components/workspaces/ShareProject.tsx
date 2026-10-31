@@ -5,8 +5,11 @@ import { useState } from "react";
 
 import { useScratchProject } from "../../hooks/useScratchProject";
 import { useProjects } from "../../state/entities";
+import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
+import { vcsEnvironment } from "../../state/vcs";
+import { PublishRepositoryDialog } from "../GitActionsControl";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { toastManager } from "../ui/toast";
@@ -155,16 +158,15 @@ export function ShareProject({
                     )}
                   </span>
                   {row.sharedWith.length > 0 ? null : (
-                    <Button
-                      size="xs"
-                      variant="outline"
+                    <ShareRowAction
+                      environmentId={environmentId}
+                      cwd={row.project.workspaceRoot}
+                      sharing={busy === row.project.id}
                       disabled={busy !== null}
-                      onClick={() =>
+                      onShare={() =>
                         share(row.project.id, row.project.title, { projectId: row.project.id })
                       }
-                    >
-                      {busy === row.project.id ? "Sharing…" : "Share"}
-                    </Button>
+                    />
                   )}
                 </li>
               );
@@ -207,5 +209,47 @@ export function ShareProject({
         </Button>
       </div>
     </section>
+  );
+}
+
+/**
+ * Share, or Publish where the project has no remote yet: colleagues clone from one, and a project
+ * Peer just made has none, so Share alone would only refuse.
+ */
+function ShareRowAction({
+  environmentId,
+  cwd,
+  sharing,
+  disabled,
+  onShare,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly cwd: string;
+  readonly sharing: boolean;
+  readonly disabled: boolean;
+  readonly onShare: () => void;
+}) {
+  const vcs = useEnvironmentQuery(vcsEnvironment.status({ environmentId, input: { cwd } }));
+  const [publishing, setPublishing] = useState(false);
+  if (vcs.data?.hasPrimaryRemote === false) {
+    return (
+      <>
+        <Button size="xs" variant="outline" onClick={() => setPublishing(true)}>
+          Publish…
+        </Button>
+        <PublishRepositoryDialog
+          open={publishing}
+          onOpenChange={setPublishing}
+          environmentId={environmentId}
+          threadRef={null}
+          gitCwd={cwd}
+        />
+      </>
+    );
+  }
+  return (
+    <Button size="xs" variant="outline" disabled={disabled} onClick={onShare}>
+      {sharing ? "Sharing…" : "Share"}
+    </Button>
   );
 }

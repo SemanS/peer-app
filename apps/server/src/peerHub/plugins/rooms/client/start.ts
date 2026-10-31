@@ -48,15 +48,17 @@ export const harnessOf = (
   return named ?? project.capacity.personalHarnesses.find(isReview) ?? "claude";
 };
 
-/** A model its author chose, and only theirs: it ends up on the agent's command line. */
-export const modelOf = (item: PeerRoomInboxItem, me: string) =>
-  item.message.author.email.toLowerCase() === me.toLowerCase()
-    ? item.message.to.find(
-        (target) => target.kind === "agent" && target.email.toLowerCase() === me.toLowerCase(),
-      )?.model
-    : undefined;
+/** What its author chose, and only theirs: it ends up on the agent's command line. */
+export const choiceOf = (item: PeerRoomInboxItem, me: string) => {
+  if (item.message.author.email.toLowerCase() !== me.toLowerCase()) return {};
+  const target = item.message.to.find(
+    (candidate) => candidate.kind === "agent" && candidate.email.toLowerCase() === me.toLowerCase(),
+  );
+  return { model: target?.model, effort: target?.effort };
+};
 
 const isModelName = (model: string) => /^[A-Za-z0-9][A-Za-z0-9._:/[\]-]*$/.test(model);
+const isEffort = (effort: string) => /^[a-z]+$/.test(effort);
 
 /** The repository of the project this computer has a checkout of, first in the project's order. */
 export const checkoutOf = (
@@ -158,8 +160,11 @@ export const roomStarts = (
         const harness = harnessOf(item, me, project);
         if (!isReview(harness))
           return yield* refusal("Peer starts a review session with Claude Code or Codex only.");
-        const model = modelOf(item, me);
-        if (model !== undefined && !isModelName(model))
+        const { model, effort } = choiceOf(item, me);
+        if (
+          (model !== undefined && !isModelName(model)) ||
+          (effort !== undefined && !isEffort(effort))
+        )
           return yield* refusal("Peer cannot start that model.");
         const starter = yield* plugins.require("reviewStarter");
         const started = yield* starter.start({
@@ -169,6 +174,7 @@ export const roomStarts = (
           repositoryId: checkout.repository.id,
           harness,
           ...(model === undefined ? {} : { model }),
+          ...(effort === undefined ? {} : { effort }),
           ...(change === undefined ? {} : { baseBranch: change.base }),
           prompt: reviewRoomPrompt(heard, change?.ref),
         });

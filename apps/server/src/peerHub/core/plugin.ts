@@ -717,6 +717,8 @@ export interface PeerTaskLauncher {
     readonly resume?: { readonly agent: string; readonly session: string } | undefined;
     /** The model the harness starts on, where its author chose one. */
     readonly model?: string | undefined;
+    /** Its reasoning effort, in the harness's own words. */
+    readonly effort?: string | undefined;
     /** Provenance is returned only when this launch created a new worktree, never for reuse. */
   }) => Effect.Effect<
     PeerHubStartAgentResult & {

@@ -414,7 +414,11 @@ const make = Effect.gen(function* () {
           ),
       ),
     startReview: Effect.fn("Roles.startReview")(function* (
-      input: PeerRolesStartReviewInput & { readonly prompt?: string; readonly model?: string },
+      input: PeerRolesStartReviewInput & {
+        readonly prompt?: string;
+        readonly model?: string;
+        readonly effort?: string;
+      },
     ) {
       const { workspace, project } = yield* state.project(input.workspace, input.projectId);
       const task = (yield* work.tasks(workspace.slug, project.id)).find(
@@ -464,6 +468,7 @@ const make = Effect.gen(function* () {
             harness: input.harness,
             prompt: input.prompt ?? reviewPrompt(task),
             model: input.model,
+            effort: input.effort,
             env,
           }),
       );

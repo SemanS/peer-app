@@ -25,6 +25,7 @@ import {
   reachRows,
   recipientsOf,
   roomAgentEntries,
+  withEffortOnly,
   sendNotice,
   toggleChoice,
   lastOfRuns,
@@ -390,6 +391,27 @@ describe("the agent chosen for Your agent", () => {
       { kind: "agent", email: "ana@acme.test", harness: "claude", model: "claude-opus-5-5" },
     ]);
     expect(notes).toEqual(["This starts Opus 5.5 on this computer, read-only, on your capacity."]);
+  });
+
+  it("carries the effort, and says it", () => {
+    const { to, notes } = recipientsOf([own], ["own-agent"], { ...opus, effort: "high" });
+    expect(to).toEqual([
+      {
+        kind: "agent",
+        email: "ana@acme.test",
+        harness: "claude",
+        model: "claude-opus-5-5",
+        effort: "high",
+      },
+    ]);
+    expect(notes[0]).toContain("Opus 5.5 at high effort");
+  });
+
+  it("offers reasoning and no other option", () => {
+    const model = {
+      capabilities: { optionDescriptors: [{ id: "effort" }, { id: "fastMode" }] },
+    };
+    expect(withEffortOnly([model])[0]?.capabilities.optionDescriptors).toEqual([{ id: "effort" }]);
   });
 
   it("survives a reload of the draft", () => {

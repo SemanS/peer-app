@@ -12,9 +12,16 @@ import {
 import { useEnvironmentProviders } from "../../../state/environments";
 import { EMPTY_SERVER_PROVIDERS } from "../../../state/server";
 import { ProviderModelPicker } from "../../chat/ProviderModelPicker";
+import { TraitsPicker } from "../../chat/TraitsPicker";
 import { getTriggerDisplayModelLabel } from "../../chat/providerIconUtils";
 import { Button } from "../../ui/button";
-import { harnessOfDriver, roomAgentEntries, type RoomAgentChoice } from "./room.logic";
+import {
+  effortOptionOf,
+  harnessOfDriver,
+  roomAgentEntries,
+  withEffortOnly,
+  type RoomAgentChoice,
+} from "./room.logic";
 
 /** The To row's +: which of the person's agents and models Your agent starts on. */
 export const RoomAgentPicker = memo(function RoomAgentPicker({
@@ -70,6 +77,31 @@ export const RoomAgentPicker = memo(function RoomAgentPicker({
           });
         }}
       />
+      {choice === undefined ? null : (
+        <TraitsPicker
+          provider={active.driverKind}
+          models={withEffortOnly(active.models)}
+          model={choice.model}
+          prompt=""
+          onPromptChange={() => {}}
+          modelOptions={
+            choice.effort === undefined
+              ? []
+              : [{ id: effortOptionOf(choice.harness), value: choice.effort }]
+          }
+          allowPromptInjectedEffort={false}
+          planModeEnabled={false}
+          size="xs"
+          disabled={disabled}
+          onModelOptionsChange={(options) => {
+            const effort = options?.find(
+              (option) => option.id === effortOptionOf(choice.harness),
+            )?.value;
+            const { effort: _effort, ...rest } = choice;
+            onChoose(typeof effort === "string" ? { ...rest, effort } : rest);
+          }}
+        />
+      )}
       {choice === undefined ? null : (
         <Button
           type="button"

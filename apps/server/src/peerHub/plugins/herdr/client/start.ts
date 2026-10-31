@@ -31,9 +31,15 @@ export const resumeArgs = (harness: HerdrHarness, session: string) =>
 /** The herdr workspace Peer starts agents in, so they stay out of the person's own. */
 const PEER_WORKSPACE = "Peer agents";
 
-/** The arguments `agent.start` passes on: both harnesses take `--model` before a resume's. */
-export const startArgs = (input: Pick<StartHerdrAgentInput, "harness" | "resume" | "model">) => [
+const effortArgs = (harness: HerdrHarness, effort: string) =>
+  harness === "claude" ? ["--effort", effort] : ["-c", `model_reasoning_effort="${effort}"`];
+
+/** The arguments `agent.start` passes on: both harnesses take these before a resume's. */
+export const startArgs = (
+  input: Pick<StartHerdrAgentInput, "harness" | "resume" | "model" | "effort">,
+) => [
   ...(input.model === undefined ? [] : ["--model", input.model]),
+  ...(input.effort === undefined ? [] : effortArgs(input.harness, input.effort)),
   ...(input.resume === undefined || input.resume.agent !== input.harness
     ? []
     : resumeArgs(input.harness, input.resume.session)),
@@ -44,6 +50,7 @@ export interface StartHerdrAgentInput {
   readonly harness: HerdrHarness;
   /** The model it starts on; left out, the harness uses its own default. */
   readonly model?: string | undefined;
+  readonly effort?: string | undefined;
   /** The first thing the agent is asked, once it is ready for it. */
   readonly prompt?: string | undefined;
   /** Set in the pane's shell, so the agent has it too. */

@@ -49,12 +49,18 @@ export interface RoomAgentChoice {
   readonly harness: string;
   readonly model: string;
   readonly label: string;
+  readonly effort?: string | undefined;
 }
 
 const isAgentChoice = (value: unknown): value is RoomAgentChoice => {
   if (typeof value !== "object" || value === null) return false;
-  const { harness, model, label } = value as Record<string, unknown>;
-  return typeof harness === "string" && typeof model === "string" && typeof label === "string";
+  const { harness, model, label, effort } = value as Record<string, unknown>;
+  return (
+    typeof harness === "string" &&
+    typeof model === "string" &&
+    typeof label === "string" &&
+    (effort === undefined || typeof effort === "string")
+  );
 };
 
 export interface RoomOperation {
@@ -174,12 +180,19 @@ export function recipientsOf(
   return {
     to: chosen.flatMap((choice) =>
       carries(choice) && agent !== undefined
-        ? choice.to.map((target) => ({ ...target, harness: agent.harness, model: agent.model }))
+        ? choice.to.map((target) => ({
+            ...target,
+            harness: agent.harness,
+            model: agent.model,
+            ...(agent.effort === undefined ? {} : { effort: agent.effort }),
+          }))
         : choice.to,
     ),
     notes: chosen.flatMap((choice) => {
       if (carries(choice) && agent !== undefined)
-        return [`This starts ${agent.label} on this computer, read-only, on your capacity.`];
+        return [
+          `This starts ${agent.label}${agent.effort === undefined ? "" : ` at ${agent.effort} effort`} on this computer, read-only, on your capacity.`,
+        ];
       return choice.note === undefined ? [] : [choice.note];
     }),
     // Sending without them would reach the team instead of the people this was written for.
@@ -212,6 +225,36 @@ export function roomAgentEntries<
     );
   });
 }
+
+const EFFORT_OPTIONS = new Set(["effort", "reasoningEffort"]);
+
+/**
+ * The models with reasoning as their only option: a room start passes nothing else on, so the
+ * picker offers nothing else.
+ */
+export function withEffortOnly<
+  Model extends {
+    readonly capabilities?:
+      | {
+          readonly optionDescriptors?: ReadonlyArray<{ readonly id: string }> | undefined;
+        }
+      | null
+      | undefined;
+  },
+>(models: ReadonlyArray<Model>): ReadonlyArray<Model> {
+  return models.map((model) => ({
+    ...model,
+    capabilities: {
+      ...model.capabilities,
+      optionDescriptors: model.capabilities?.optionDescriptors?.filter((option) =>
+        EFFORT_OPTIONS.has(option.id),
+      ),
+    },
+  }));
+}
+
+export const effortOptionOf = (harness: string) =>
+  harness === "claude" ? "effort" : "reasoningEffort";
 
 export const harnessOfDriver = (driverKind: string) =>
   driverKind === "claudeAgent" ? "claude" : driverKind === "codex" ? "codex" : null;

@@ -60,6 +60,7 @@ export const makeLauncher = (agents: HerdrAgents) =>
               env: input.env,
               resume: input.resume,
               model: input.model,
+              effort: input.effort,
             }),
           catch: (failure) => {
             const message = messageOf(failure);

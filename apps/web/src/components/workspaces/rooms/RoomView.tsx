@@ -24,7 +24,7 @@ import { runThreadKeys, runsRevision } from "../task/runs.logic";
 import { useTaskRuns } from "../task/TaskRuns";
 import { useWorkData } from "../useWorkData";
 import type { WorkOpen, WorkTaskNode } from "../workTree.logic";
-import { peopleOf, reachRows } from "./room.logic";
+import { lastAgentReply, peopleOf, reachRows } from "./room.logic";
 import { RoomAgentDiff } from "./RoomAgentDiff";
 import { RoomComposer, type DraftLine, type DraftPaths } from "./RoomComposer";
 import { roomMessageId, RoomConversation } from "./RoomConversation";
@@ -144,7 +144,6 @@ function RoomBody({
     readonly seq: number;
     /** The moment its thread opens at; absent while the agent works, to follow it. */
     readonly until: string | undefined;
-    readonly working: boolean;
   } | null>(null);
   const [focus, setFocus] = useState<DiffFocus | null>(null);
   const [line, setLine] = useState<DraftLine | null>(null);
@@ -193,6 +192,26 @@ function RoomBody({
       document.getElementById(roomMessageId(seq))?.scrollIntoView({ block: "center" }),
     );
   };
+
+  const lastReply = lastAgentReply(read.messages);
+  const shown =
+    run ??
+    (lastReply?.author.run === undefined
+      ? null
+      : { id: lastReply.author.run, agent: lastReply.author.agent, seq: lastReply.seq });
+  const shownRun = runs.runs.find((candidate) => candidate.id === shown?.id);
+  const jujutsuAgent =
+    shown === null
+      ? null
+      : {
+          id: shown.id,
+          seq: shown.seq,
+          label: harnessName(shownRun?.agent ?? shown.agent) ?? "Agent",
+          working:
+            shownRun !== undefined &&
+            (threadWorking(shownRun) ??
+              shownRun.sessions.some((session) => session.to === undefined)),
+        };
 
   const agentChanges = {
     taskName: hubTask.key ?? hubTask.id,
@@ -281,13 +300,11 @@ function RoomBody({
             onOpenRun={(message, id, live) => {
               const agent =
                 runs.runs.find((candidate) => candidate.id === id)?.agent ?? message.author.agent;
-              const candidate = runs.runs.find((one) => one.id === id);
               setRun({
                 id,
                 agent,
                 seq: message.seq,
                 until: live ? undefined : message.at,
-                working: live || (candidate !== undefined && threadWorking(candidate) === true),
               });
               // On Jujutsu a message opens the state of the work at that moment.
               showSide(onJujutsu ? "jujutsu" : "agent");
@@ -398,14 +415,12 @@ function RoomBody({
               <RoomJujutsu
                 key={run === null ? "" : `${run.id}:${run.seq}`}
                 agent={
-                  run === null || agentLabel === null
+                  jujutsuAgent === null
                     ? null
                     : {
                         ...agentChanges,
-                        label: agentLabel,
-                        run: run.id,
-                        seq: run.seq,
-                        working: run.working,
+                        ...jujutsuAgent,
+                        run: jujutsuAgent.id,
                       }
                 }
                 environmentId={environmentId}

@@ -142,8 +142,8 @@ const git = (gitDir: string, args: ReadonlyArray<string>, timeoutMs = READ_MS) =
 export async function sealWork(
   root: string,
   at: string,
-  /** When the run started, in ISO: older changes are what it built on. */
-  since?: string,
+  /** The run it is for, and when it started: older changes are what it built on. */
+  run?: { readonly id: string; readonly startedAt: string | undefined },
 ): Promise<SealedWork | null> {
   const kind = await checkoutKind(root).catch(() => null);
   if (kind?.kind !== "jj") return null;
@@ -152,7 +152,10 @@ export async function sealWork(
   const working = stack.find((entry) => entry.working);
   if (working === undefined) return null;
   // A timestamp to the second: a change started in the run's first second is the run's.
-  const own = ownChanges(stack, since === undefined ? 0 : Date.parse(since) - 1_000);
+  const own = ownChanges(
+    stack,
+    run?.startedAt === undefined ? 0 : Date.parse(run.startedAt) - 1_000,
+  );
   const oldest = own.at(-1) ?? working;
   // On top of nothing the first parent is jj's root commit, which Git has never heard of.
   const base = oldest.parents[0];
@@ -161,6 +164,8 @@ export async function sealWork(
     at,
     changes: own.map((entry) => entry.changeId),
     subject: (own.find((entry) => entry.described) ?? working).subject,
+    // Where the run worked: nothing else says so once its session has ended.
+    ...(run === undefined ? {} : { run: run.id, root: kind.root }),
   });
   const seal = (
     await git(kind.gitDir, [

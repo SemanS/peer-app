@@ -19,66 +19,77 @@ import { RoomDiff } from "./RoomDiff";
 import { useRoomSnapshot } from "./useRoom";
 
 /**
- * The task as Jujutsu sees it, and the moment of the agent picked in the conversation. A kept state
- * opens first and never moves; Live changes follows the agent and is said to, and where no state
- * was kept this says so rather than showing today's lines for it.
+ * The task as Jujutsu sees it, and an agent's work: the one picked in the conversation, else the
+ * last to answer. A kept state opens first and never moves; Current changes is said apart from it,
+ * and where no state was kept this says so rather than showing today's lines for it.
  */
 export function RoomJujutsu({
   agent,
   ...stack
 }: {
-  /** The agent's message picked in the conversation, with what its change needs to draw. */
-  readonly agent:
-    | ({
-        readonly label: string;
-        readonly seq: number;
-        /** Its session still works, so it has live changes to follow. */
-        readonly working: boolean;
-      } & Omit<ComponentProps<typeof RoomAgentChanges>, "environmentId" | "place" | "jujutsu">)
-    | null;
+  /** The agent's message to show, with what its change needs to draw. */
+  readonly agent: JujutsuAgent | null;
 } & ComponentProps<typeof RoomTaskJujutsu>) {
-  const [show, setShow] = useState<"snapshot" | "handoff" | "live" | "task">("snapshot");
   const on = stack.projectState.repositories.some((repository) => repository.vcs === "jj");
-  const place = stack.place;
-  const environmentId = stack.environmentId;
+  return agent === null || !on ? (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <RoomTaskJujutsu {...stack} />
+    </div>
+  ) : (
+    <AgentJujutsu agent={agent} stack={stack} />
+  );
+}
+
+type JujutsuAgent = {
+  readonly label: string;
+  readonly seq: number;
+  /** Its session still works, so its current changes move. */
+  readonly working: boolean;
+} & Omit<ComponentProps<typeof RoomAgentChanges>, "environmentId" | "place" | "jujutsu">;
+
+function AgentJujutsu({
+  agent,
+  stack,
+}: {
+  readonly agent: JujutsuAgent;
+  readonly stack: ComponentProps<typeof RoomTaskJujutsu>;
+}) {
+  const [show, setShow] = useState<"snapshot" | "handoff" | "current" | "task">("snapshot");
+  const { environmentId, place } = stack;
+  const { label, seq, working, ...changes } = agent;
   const atMessage = useRoomSnapshot({
     environmentId,
     place,
-    snapshotKey: `message-${agent?.seq ?? 0}`,
-    run: agent?.run ?? "none",
+    snapshotKey: `message-${seq}`,
+    run: changes.run,
   });
-  if (agent === null || !on) {
-    return (
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <RoomTaskJujutsu {...stack} />
-      </div>
-    );
-  }
-  const { label, seq: _seq, working, ...changes } = agent;
   const handoff = atMessage.snapshot?.handoff;
-  // A session that stopped takes its Live changes with it.
-  const shown = show === "live" && !working ? "snapshot" : show;
   return (
     <>
       <div className="shrink-0 border-b border-border/60 px-4 py-2">
         <ToggleGroup
           aria-label="Show"
-          value={[shown]}
+          value={[show]}
           onValueChange={(value) => {
             const next = value[0];
-            if (next === "snapshot" || next === "handoff" || next === "live" || next === "task")
+            if (next === "snapshot" || next === "handoff" || next === "current" || next === "task")
               setShow(next);
           }}
         >
           <Toggle value="snapshot">At this message</Toggle>
           {handoff === undefined ? null : <Toggle value="handoff">At handoff</Toggle>}
-          {working ? <Toggle value="live">Live changes</Toggle> : null}
+          <Toggle value="current">{working ? "Live changes" : "Current changes"}</Toggle>
           <Toggle value="task">Task's stack</Toggle>
         </ToggleGroup>
       </div>
-      {shown === "snapshot" ? (
-        <RoomSnapshot label={label} read={atMessage} view={changes} />
-      ) : shown === "handoff" && handoff !== undefined ? (
+      {show === "snapshot" ? (
+        <RoomSnapshot
+          label={label}
+          read={atMessage}
+          view={changes}
+          onCurrent={() => setShow("current")}
+        />
+      ) : show === "handoff" && handoff !== undefined ? (
         <HandoffSnapshot
           environmentId={environmentId}
           place={place}
@@ -86,11 +97,14 @@ export function RoomJujutsu({
           run={changes.run}
           label={label}
           view={changes}
+          onCurrent={() => setShow("current")}
         />
-      ) : shown === "live" ? (
+      ) : show === "current" ? (
         <>
           <p className="shrink-0 border-b border-border/60 bg-muted/50 px-4 py-2 text-xs text-foreground sm:px-6">
-            Live: follows {label} as it works, and is not the state at any message.
+            {working
+              ? `Live: follows ${label} as it works, and is not the state at any message.`
+              : `Current: where ${label}'s change stands now, not the state at any message.`}
           </p>
           <RoomAgentChanges {...changes} environmentId={environmentId} place={place} jujutsu />
         </>
@@ -112,54 +126,91 @@ function HandoffSnapshot({
   run,
   label,
   view,
+  onCurrent,
 }: Parameters<typeof useRoomSnapshot>[0] & {
   readonly label: string;
   readonly view: SnapshotView;
+  readonly onCurrent: () => void;
 }) {
   const read = useRoomSnapshot({ environmentId, place, snapshotKey, run });
-  return <RoomSnapshot label={label} read={read} view={view} />;
+  return <RoomSnapshot label={label} read={read} view={view} onCurrent={onCurrent} />;
 }
 
 function RoomSnapshot({
   label,
   read,
   view,
+  onCurrent,
 }: {
   readonly label: string;
   readonly read: ReturnType<typeof useRoomSnapshot>;
   readonly view: SnapshotView;
+  readonly onCurrent: () => void;
 }) {
   const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
   const { snapshot, error, refresh } = read;
+  const [scope, setScope] = useState<"message" | "all">("message");
   if (snapshot === null || snapshot.state === "none") {
     return (
-      <p
-        role={snapshot === null && error === null ? "status" : undefined}
-        className="px-4 py-5 text-sm text-muted-foreground sm:px-6"
-      >
-        {snapshot?.reason ?? error ?? "Reading the kept state…"}
-      </p>
+      <div className="flex flex-col items-start gap-2 px-4 py-5 sm:px-6">
+        <p
+          role={snapshot === null && error === null ? "status" : undefined}
+          className="text-sm text-muted-foreground"
+        >
+          {snapshot?.reason ?? error ?? "Reading the kept state…"}
+        </p>
+        {snapshot === null ? null : (
+          <Button size="xs" variant="outline" onClick={onCurrent}>
+            Show current changes
+          </Button>
+        )}
+      </div>
     );
   }
-  const line = snapshotLine(snapshot);
+  const { sinceLast } = snapshot;
+  const onlyThis = scope === "message" ? sinceLast : undefined;
+  const shown = onlyThis ?? snapshot;
+  const line = snapshotLine({ ...shown, changes: snapshot.changes });
   return (
     <>
-      <div className="flex min-w-0 shrink-0 flex-col gap-0.5 border-b border-border/60 px-4 py-2 sm:px-6">
+      <div className="flex min-w-0 shrink-0 flex-col gap-1 border-b border-border/60 px-4 py-2 sm:px-6">
         <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
           <span>Snapshot · {formatShortTimestamp(snapshot.at, timestampFormat)}</span>
           {line.change === undefined ? null : <span className="font-mono">{line.change}</span>}
           <span className="tabular-nums">{line.counts}</span>
+          <span>
+            {onlyThis !== undefined
+              ? `since #${onlyThis.seq}`
+              : sinceLast === undefined
+                ? "all its work so far"
+                : "all its work"}
+          </span>
         </p>
         {snapshot.subject === "" ? null : (
           <p className="min-w-0 truncate text-sm text-foreground">{snapshot.subject}</p>
         )}
+        {sinceLast === undefined ? null : (
+          <ToggleGroup
+            aria-label="Lines"
+            value={[scope]}
+            onValueChange={(value) => {
+              const next = value[0];
+              if (next === "message" || next === "all") setScope(next);
+            }}
+          >
+            <Toggle value="message">Only this message</Toggle>
+            <Toggle value="all">All its work</Toggle>
+          </ToggleGroup>
+        )}
       </div>
-      {snapshot.files === 0 ? (
+      {shown.files === 0 ? (
         <p className="px-4 py-5 text-sm text-muted-foreground sm:px-6">
-          {label} had changed nothing in the repository at this moment.
+          {onlyThis !== undefined
+            ? `${label} changed nothing between #${onlyThis.seq} and this message.`
+            : `${label} had changed nothing in the repository at this moment.`}
         </p>
       ) : (
-        <RoomDiff {...view} diff={snapshot.diff} error={error} onRefresh={refresh} focus={null} />
+        <RoomDiff {...view} diff={shown.diff} error={error} onRefresh={refresh} focus={null} />
       )}
     </>
   );

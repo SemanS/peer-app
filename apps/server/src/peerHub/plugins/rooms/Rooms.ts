@@ -55,7 +55,7 @@ import { checkoutKind } from "../../core/vcs.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { changeToReview, pushedRefs, roomDiff, workRun, worktreeOf } from "./client/diff.ts";
 import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/steps.ts";
-import { fetchPins, newestHandoff, readPin, storeOf } from "./client/snapshots.ts";
+import { fetchPins, newestHandoff, pinnedRoot, readPin, storeOf } from "./client/snapshots.ts";
 import { runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
 import { capacityOf, checkoutOf, openRuns, roomStarts } from "./client/start.ts";
@@ -235,11 +235,18 @@ const make = Effect.gen(function* () {
         sessions,
         threads: (yield* work.localThreads).get(place.workspace) ?? [],
       });
-      if (found === undefined || found.root !== undefined) return found;
+      if (found?.root !== undefined) return found;
       const root =
         checkout === undefined
           ? undefined
-          : yield* Effect.promise(() => worktreeOf(checkout, found.branch));
+          : yield* Effect.promise(async () => {
+              const tree =
+                found === undefined ? undefined : await worktreeOf(checkout, found.branch);
+              if (tree !== undefined || only === undefined) return tree;
+              // A session that ended leaves no trace of its workspace but what its messages kept.
+              const store = await storeOf(checkout);
+              return store === undefined ? undefined : pinnedRoot(store, place, only);
+            });
       return root === undefined ? undefined : { root, repository: undefined };
     });
 
@@ -426,9 +433,9 @@ const make = Effect.gen(function* () {
         };
         // Sealed before the post, so the message is never ahead of the state it shows.
         const at = DateTime.formatIso(DateTime.makeUnsafe(yield* Clock.currentTimeMillis));
-        const since = (yield* state.read).persisted.runs?.[run]?.startedAt;
+        const startedAt = (yield* state.read).persisted.runs?.[run]?.startedAt;
         const sealed = yield* Effect.promise(() =>
-          sealWork(session.root || session.cwd, at, since).catch(() => null),
+          sealWork(session.root || session.cwd, at, { id: run, startedAt }).catch(() => null),
         );
         const message = yield* post(place, { ...body, run, environment: state.environmentId });
         if (sealed !== null) {

@@ -338,6 +338,17 @@ export function stepLine(step: Pick<PeerRoomStep, "files" | "added" | "removed">
   };
 }
 
+/** The last agent to answer in the room: whose work its Jujutsu tab shows until one is picked. */
+export function lastAgentReply(messages: ReadonlyArray<Pick<PeerRoomMessage, "seq" | "author">>) {
+  return messages.reduce<(typeof messages)[number] | undefined>(
+    (last, message) =>
+      message.author.run !== undefined && (last === undefined || message.seq > last.seq)
+        ? message
+        : last,
+    undefined,
+  );
+}
+
 /** What a kept state holds, in words: its change, or its first change and how many more. */
 export function snapshotLine(
   snapshot: Pick<

@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - whether a run's folder is still on this computer.
 /**
  * Reading a pinned moment of an agent's work (`core/workSnapshots.ts`) back: from the ref alone, so
  * it needs neither the agent's workspace nor a jj that remembers the commits. A pin that is not
@@ -6,7 +7,10 @@
  *
  * @module peerHub/plugins/rooms/snapshots
  */
+import * as NodeFS from "node:fs";
+
 import type { PeerRoomSnapshot } from "@t3tools/contracts";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import { run } from "../../../core/local.ts";
@@ -26,6 +30,7 @@ const Facts = Schema.fromJsonString(
     at: Schema.String,
     changes: Schema.Array(Schema.String),
     subject: Schema.String,
+    run: Schema.optional(Schema.String),
   }),
 );
 const decodeFacts = Schema.decodeUnknownSync(Facts);
@@ -59,19 +64,97 @@ export async function readPin(gitDir: string, place: RoomPlace, key: string): Pr
   } catch {
     return null;
   }
-  const { patch, truncated } = await readPatch(gitDir, [...DIFF, base, head, "--"]);
-  const counted = (await git(gitDir, ["diff", "--numstat", base, head, "--"]))
+  const { run, ...kept } = facts;
+  const sinceLast =
+    run === undefined ? undefined : await sincePrevious(gitDir, place, key, run, base, head);
+  return {
+    state: "here",
+    ...kept,
+    ...(await readLines(gitDir, base, head)),
+    ...(sinceLast === undefined ? {} : { sinceLast }),
+  };
+}
+
+const readLines = async (gitDir: string, from: string, head: string) => {
+  const { patch, truncated } = await readPatch(gitDir, [...DIFF, from, head, "--"]);
+  const counted = (await git(gitDir, ["diff", "--numstat", from, head, "--"]))
     .split("\n")
     .filter((line) => line !== "")
     .map((line) => line.split("\t"));
   return {
-    state: "here",
-    ...facts,
     files: counted.length,
     added: counted.reduce((sum, [added]) => sum + (Number(added) || 0), 0),
     removed: counted.reduce((sum, [, removed]) => sum + (Number(removed) || 0), 0),
-    diff: { state: "here", source: "snapshot", base, head, patch, truncated },
+    diff: {
+      state: "here" as const,
+      source: "snapshot" as const,
+      base: from,
+      head,
+      patch,
+      truncated,
+    },
   };
+};
+
+const parentsOf = async (gitDir: string, ref: string) => {
+  const [head = "", base = EMPTY_TREE] = (
+    await git(gitDir, ["log", "-1", "--format=%P", ref, "--"])
+  )
+    .trim()
+    .split(" ");
+  return { head, base };
+};
+
+/**
+ * What the message at `key` added to the run's message before it. Moved onto a new base in between,
+ * the earlier state is carried onto this one's first, so what the rebase brought in stays out.
+ * A carry that conflicts has no honest answer, and the whole work stands alone.
+ */
+async function sincePrevious(
+  gitDir: string,
+  place: RoomPlace,
+  key: string,
+  run: string,
+  base: string,
+  head: string,
+) {
+  const seq = Number(key.slice("message-".length));
+  if (!key.startsWith("message-")) return undefined;
+  const prefix = snapshotPrefix(place);
+  const pins = await git(gitDir, [
+    "for-each-ref",
+    "--format=%(refname:lstrip=-1)%00%(contents:subject)",
+    `${prefix}/`,
+  ]);
+  const previous = pins
+    .split("\n")
+    .flatMap((line) => {
+      const [name = "", subject = ""] = line.split("\0");
+      const number = /^message-(\d+)$/.exec(name)?.[1];
+      const facts = Option.getOrUndefined(decodeRunFacts(subject));
+      return number !== undefined && Number(number) < seq && facts?.run === run
+        ? [Number(number)]
+        : [];
+    })
+    .toSorted((a, b) => b - a)[0];
+  if (previous === undefined) return undefined;
+  const earlier = await parentsOf(gitDir, `${prefix}/message-${previous}`);
+  const from =
+    earlier.base === base
+      ? earlier.head
+      : await git(gitDir, [
+          "merge-tree",
+          "--write-tree",
+          `--merge-base=${earlier.base}`,
+          base,
+          earlier.head,
+        ]).then(
+          (tree) => tree.trim(),
+          () => undefined,
+        );
+  return from === undefined
+    ? undefined
+    : { seq: previous, ...(await readLines(gitDir, from, head)) };
 }
 
 /** The run's newest handoff pin here, as a key. */
@@ -85,6 +168,27 @@ export async function newestHandoff(gitDir: string, place: RoomPlace, prefix: st
   ]).catch(() => "");
   const key = answer.trim();
   return key === "" ? undefined : key;
+}
+
+const RunFacts = Schema.fromJsonString(
+  Schema.Struct({ run: Schema.optional(Schema.String), root: Schema.optional(Schema.String) }),
+);
+const decodeRunFacts = Schema.decodeUnknownOption(RunFacts);
+
+/** Where this computer's `run` last worked, while that folder is still here. */
+export async function pinnedRoot(gitDir: string, place: RoomPlace, run: string) {
+  const pins = await git(gitDir, [
+    "for-each-ref",
+    "--sort=-creatordate",
+    "--format=%(contents:subject)",
+    `${snapshotPrefix(place)}/`,
+  ]).catch(() => "");
+  for (const line of pins.split("\n")) {
+    const facts = Option.getOrUndefined(decodeRunFacts(line));
+    if (facts?.run !== run || facts.root === undefined) continue;
+    return NodeFS.existsSync(facts.root) ? facts.root : undefined;
+  }
+  return undefined;
 }
 
 const fetched = new Map<string, number>();

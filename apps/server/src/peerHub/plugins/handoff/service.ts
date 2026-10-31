@@ -314,13 +314,16 @@ export const make = Effect.gen(function* () {
       });
       if (delivery === null) return {};
       const run = session.run;
-      const since =
+      const startedAt =
         run === undefined ? undefined : (yield* state.read).persisted.runs?.[run]?.startedAt;
       const sealed =
         run === undefined
           ? null
           : yield* Effect.promise(() =>
-              sealWork(session.root || session.cwd, delivery.observedAt, since).catch(() => null),
+              sealWork(session.root || session.cwd, delivery.observedAt, {
+                id: run,
+                startedAt,
+              }).catch(() => null),
             );
       const room = { workspace: p.workspace, project: p.projectId, task: p.taskId };
       if (sealed !== null && run !== undefined) {

@@ -3,6 +3,7 @@ import type { PeerRoomMessage } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  lastAgentReply,
   snapshotLine,
   authorOf,
   canSend,
@@ -356,5 +357,18 @@ describe("snapshotLine", () => {
       change: undefined,
       counts: "0 files",
     });
+  });
+});
+
+describe("lastAgentReply", () => {
+  const person = { seq: 3, author: { email: "ana@acme.test" } };
+  const agent = (seq: number) => ({ seq, author: { email: "ana@acme.test", run: `run_${seq}` } });
+
+  it("takes the newest agent's message, past a person's", () => {
+    expect(lastAgentReply([agent(2), agent(1), person])?.seq).toBe(2);
+  });
+
+  it("has nothing to take in a room no agent answered", () => {
+    expect(lastAgentReply([person])).toBeUndefined();
   });
 });

@@ -367,6 +367,16 @@ export const PeerRoomSnapshot = Schema.Union([
     added: Schema.Number,
     removed: Schema.Number,
     diff: PeerRoomDiff,
+    /** What only this message added: against the run's message before it, when one was kept. */
+    sinceLast: Schema.optional(
+      Schema.Struct({
+        seq: Schema.Number,
+        files: Schema.Number,
+        added: Schema.Number,
+        removed: Schema.Number,
+        diff: PeerRoomDiff,
+      }),
+    ),
     /** The run's newest handoff snapshot, as a `key`. */
     handoff: Schema.optional(Schema.String),
   }),

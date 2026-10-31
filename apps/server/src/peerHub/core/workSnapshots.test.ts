@@ -6,7 +6,7 @@ import * as NodePath from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
-import { fetchPins, readPin } from "../plugins/rooms/client/snapshots.ts";
+import { fetchPins, pinnedRoot, readPin } from "../plugins/rooms/client/snapshots.ts";
 import { messageKey, pinWork, sealWork, snapshotPrefix } from "./workSnapshots.ts";
 
 const hasJj = NodeChildProcess.spawnSync("jj", ["--version"]).status === 0;
@@ -113,20 +113,69 @@ describe.skipIf(!hasJj)("kept states of an agent's work", () => {
     write("first.txt", "first agent\n");
     jj("commit", "-m", "the first agent's change");
     await new Promise((resolve) => setTimeout(resolve, 2_100));
-    const since = new Date().toISOString();
+    const run = { id: "run_2", startedAt: new Date().toISOString() };
 
-    const before = await sealWork(root, AT, since);
+    const before = await sealWork(root, AT, run);
     await pinWork(before!, place, messageKey(1));
     expect((await readPin(gitDir(), place, messageKey(1)))?.files).toBe(0);
 
     write("second.txt", "second agent\n");
     jj("commit", "-m", "the second agent's change");
     write("third.txt", "still working\n");
-    const after = await sealWork(root, AT, since);
+    const after = await sealWork(root, AT, run);
     await pinWork(after!, place, messageKey(2));
     const pin = await readPin(gitDir(), place, messageKey(2));
     expect(pin?.files).toBe(2);
     expect(await patch(2)).not.toContain("first.txt");
+  });
+
+  it("says what only this message added, even across a rebase", async () => {
+    const run = { id: "run_1", startedAt: undefined };
+    write("a.txt", "one\n");
+    await pinWork((await sealWork(root, AT, run))!, place, messageKey(1));
+    write("b.txt", "two\n");
+    await pinWork((await sealWork(root, AT, run))!, place, messageKey(2));
+
+    expect((await readPin(gitDir(), place, messageKey(1)))?.sinceLast).toBeUndefined();
+    const second = await readPin(gitDir(), place, messageKey(2));
+    expect(second?.files).toBe(2);
+    expect(second?.sinceLast?.seq).toBe(1);
+    expect(second?.sinceLast?.files).toBe(1);
+    const lines = second?.sinceLast?.diff;
+    expect(lines?.state === "here" && lines.patch).toContain("+two");
+    expect(lines?.state === "here" && lines.patch).not.toContain("+one");
+
+    const work = jj("log", "--no-graph", "-r", "@", "-T", "change_id");
+    jj("new", "main", "-m", "main moved");
+    write("main.txt", "from main\n");
+    jj("metaedit", "--author", "Mate <mate@example.com>");
+    const moved = jj("log", "--no-graph", "-r", "@", "-T", "change_id");
+    jj("rebase", "-s", work, "-o", moved);
+    jj("edit", work);
+    write("c.txt", "three\n");
+    await pinWork((await sealWork(root, AT, run))!, place, messageKey(3));
+
+    const third = await readPin(gitDir(), place, messageKey(3));
+    const rebased = third?.sinceLast?.diff;
+    expect(third?.sinceLast?.files).toBe(1);
+    expect(rebased?.state === "here" && rebased.patch).toContain("+three");
+    expect(rebased?.state === "here" && rebased.patch).not.toContain("from main");
+  });
+
+  it("finds where a run worked after its session ended, and only that run", async () => {
+    write("a.txt", "one\n");
+    await pinWork(
+      (await sealWork(root, AT, { id: "run_1", startedAt: undefined }))!,
+      place,
+      messageKey(1),
+    );
+
+    expect(await pinnedRoot(gitDir(), place, "run_1")).toBe(root);
+    expect(await pinnedRoot(gitDir(), place, "run_2")).toBeUndefined();
+
+    NodeFS.renameSync(root, `${root}-gone`);
+    root = `${root}-gone`;
+    expect(await pinnedRoot(gitDir(), place, "run_1")).toBeUndefined();
   });
 
   it("holds nothing when the agent changed nothing", async () => {

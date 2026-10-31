@@ -84,7 +84,8 @@ function refusal(path: string) {
     return "This checkout is a Git worktree. Switch the repository's main checkout instead.";
   }
   if (NodeFS.existsSync(NodePath.join(path, ".gitmodules"))) {
-    return "This repository has submodules, and Jujutsu does not manage them.";
+    // A project's checkout can be a clone other than the one the person works in, and lag behind it.
+    return `${path} has submodules, and Jujutsu does not manage them. If the repository dropped them, update this checkout, then switch.`;
   }
   for (const [marker, operation] of Object.entries(UNFINISHED)) {
     if (NodeFS.existsSync(NodePath.join(gitDir, marker))) {

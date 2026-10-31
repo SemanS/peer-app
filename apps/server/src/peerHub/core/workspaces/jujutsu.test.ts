@@ -69,7 +69,7 @@ describe.skipIf(!hasJj)("switching a checkout to Jujutsu", () => {
 
   it("refuses a repository with submodules and writes nothing", async () => {
     write(".gitmodules", "");
-    await expect(switchToJujutsu(root)).rejects.toThrow("submodules");
+    await expect(switchToJujutsu(root)).rejects.toThrow(`${root} has submodules`);
     expect(NodeFS.existsSync(NodePath.join(root, ".jj"))).toBe(false);
   });
 

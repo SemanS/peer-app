@@ -1,6 +1,11 @@
 import * as Schema from "effect/Schema";
 
 import { PeerAcceptanceVia, PeerReviewPolicyMode, PeerReviewSignal } from "./acceptance.ts";
+import {
+  PeerTestReportItemKind,
+  PeerTestReportResult,
+  PeerTestReportSeen,
+} from "./test-reports.ts";
 
 export const PeerHandoffTarget = Schema.Literals(["description", "comment", "none"]);
 export type PeerHandoffTarget = typeof PeerHandoffTarget.Type;
@@ -80,6 +85,97 @@ export const PeerHandoffPolicy = Schema.Struct({
   accepted: Schema.Boolean,
 });
 export type PeerHandoffPolicy = typeof PeerHandoffPolicy.Type;
+
+/**
+ * A handoff's current signals, computed by the Hub from today's facts with the delivery last
+ * observed (`GET /acceptance/{project}/{task}/signals`, `acceptance` revision 3). The facts come
+ * with the signals, so a client tells whose move each one is without guessing. Reading it writes
+ * nothing and never accepts; the package keeps the signals of the handoff. `evaluated` is false
+ * with no agent handoff, and every field below `signals` is then absent.
+ */
+export const PeerHandoffSignals = Schema.Struct({
+  evaluated: Schema.Boolean,
+  at: Schema.String,
+  signals: Schema.Array(PeerReviewSignal),
+  handoff: Schema.optional(
+    Schema.Struct({
+      email: Schema.String,
+      session: Schema.String,
+      environment: Schema.String,
+      at: Schema.String,
+      mode: PeerReviewPolicyMode,
+      version: Schema.Number,
+      signals: Schema.Array(PeerReviewSignal),
+      accepted: Schema.Boolean,
+      delivery: Schema.optional(PeerHandoffDelivery),
+    }),
+  ),
+  reports: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        author: Schema.String,
+        role: Schema.String,
+        number: Schema.Number,
+        result: PeerTestReportResult,
+        at: Schema.String,
+      }),
+    ),
+  ),
+  /** The governing reports' failed and unverified items; `failed` also covers what Peer saw fail. */
+  items: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        kind: PeerTestReportItemKind,
+        text: Schema.String,
+        owner: Schema.optional(Schema.String),
+        task: Schema.optional(Schema.String),
+        seen: Schema.optional(PeerTestReportSeen),
+        failed: Schema.Boolean,
+        author: Schema.String,
+        role: Schema.String,
+        number: Schema.Number,
+        index: Schema.Number,
+      }),
+    ),
+  ),
+  overlaps: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        sessions: Schema.Array(Schema.String),
+        files: Schema.Array(Schema.String),
+      }),
+    ),
+  ),
+  ownerCalls: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        owner: Schema.String,
+        state: Schema.String,
+        paths: Schema.Array(Schema.String),
+        task: Schema.optional(Schema.NullOr(Schema.String)),
+      }),
+    ),
+  ),
+  changedInputs: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        scope: Schema.String,
+        readVersion: Schema.Number,
+        currentVersion: Schema.NullOr(Schema.Number),
+      }),
+    ),
+  ),
+});
+export type PeerHandoffSignals = typeof PeerHandoffSignals.Type;
+
+/** `available` is false on a Hub that cannot say: the page then keeps the package's signals. */
+export const PeerHandoffSignalsRead = Schema.Struct({
+  available: Schema.Boolean,
+  signals: Schema.optional(PeerHandoffSignals),
+});
+export type PeerHandoffSignalsRead = typeof PeerHandoffSignalsRead.Type;
 
 export const PeerHandoffPackage = Schema.Struct({
   number: Schema.Number,

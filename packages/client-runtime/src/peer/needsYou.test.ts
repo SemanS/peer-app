@@ -693,6 +693,65 @@ it("names leased resources and patterns without treating them as files", () => {
   ).toBe("Resource deploy · Pattern migrations/** · src/a.ts");
 });
 
+describe("Needs you: what a person answers for", () => {
+  const report = (over: object) => ({
+    workspace: "acme",
+    project: "kirkwood",
+    task: "str",
+    author: "yev@acme.test",
+    number: 1,
+    result: "mixed" as const,
+    role: "author",
+    at: "2026-10-03T11:30:00Z",
+    passed: 0,
+    failed: 0,
+    unverified: 1,
+    unowned: 0,
+    ...over,
+  });
+  const answers = (hub: PeerHubStatus) =>
+    derive([environment(hub)]).filter((item) => item.kind === "answer");
+  const withReports = (summaries: ReadonlyArray<ReturnType<typeof report>>, task = "open") => {
+    const project = kirkwood();
+    const tasks = project.work.tasks.map((candidate) =>
+      candidate.id === "str" ? { ...candidate, status: task as "open" } : candidate,
+    );
+    return {
+      ...status({ ...project, work: { ...project.work, tasks } }),
+      email: "ana@acme.test",
+      testReports: { summaries },
+    };
+  };
+
+  it("tells the named person the item, with the task to go to", () => {
+    const [item] = answers(
+      withReports([report({ asks: ["Ana@acme.test"], yours: ["spec or design?"] })], "review"),
+    );
+    expect(item).toMatchObject({
+      key: needsYouKey.answer("acme", "kirkwood", "str"),
+      title: "You answer for: spec or design?",
+      workspace: "acme",
+      project: "kirkwood",
+      task: "str",
+    });
+  });
+
+  it("names the task while this computer has not read the report", () => {
+    const [item] = answers(withReports([report({ asks: ["ana@acme.test"] })]));
+    expect(item?.title).toMatch(/^You answer for: an item of /);
+  });
+
+  it("leaves when a newer report or another owner no longer names them, or the task is done", () => {
+    expect(answers(withReports([report({ asks: [] })]))).toEqual([]);
+    expect(answers(withReports([report({ asks: ["eva@acme.test"] })]))).toEqual([]);
+    expect(answers(withReports([report({ asks: ["ana@acme.test"] })], "done"))).toEqual([]);
+  });
+
+  it("says nothing with test reports off", () => {
+    expect(answers(status(kirkwood()))).toEqual([]);
+  });
+});
+
 describe("Needs you: accepted handoffs", () => {
   function inReview(accepted?: { via?: "person" | "policy"; beforeReopening?: boolean }) {
     const project = kirkwood();
@@ -737,6 +796,58 @@ describe("Needs you: accepted handoffs", () => {
     expect(byPolicy.action).toBeUndefined();
     // An older Hub says no `via`: a person gave it.
     expect(cardOf(inReview({})).task.accepted).toBe("person");
+  });
+
+  it("keeps a live agent's handoff off Needs you, and brings it back when the run ends", () => {
+    const hub = (running: number) => {
+      const base = inReview();
+      const project = base.workspaces[0]!.projects[0]!;
+      const tasks = project.work.tasks.map((candidate) =>
+        candidate.id === "str"
+          ? { ...candidate, runs: { running, detached: 1 - running, ended: 0 } }
+          : candidate,
+      );
+      return {
+        ...base,
+        workspaces: [
+          {
+            ...base.workspaces[0]!,
+            projects: [{ ...project, work: { ...project.work, tasks } }],
+          },
+        ],
+        handoff: {
+          target: "none" as const,
+          projectTargets: {},
+          deliveries: [],
+          summaries: [
+            {
+              workspace: "acme",
+              project: "kirkwood",
+              task: "str",
+              author: "yev@acme.test",
+              number: 1,
+              composedAt: "2026-10-03T11:00:00Z",
+              contextVersion: null,
+              pullRequests: 0,
+              source: "agent" as const,
+              policy: {
+                mode: "ask" as const,
+                version: 1,
+                signals: ["not-delivered" as const],
+                accepted: false,
+              },
+            },
+          ],
+        },
+      };
+    };
+    const live = cardOf(hub(1));
+    expect(live.state.label).toBe("With the agent");
+    expect(live.column).toBe("working");
+    const ended = cardOf(hub(0));
+    expect(ended.state.label).toMatch(/^The agent stopped · 1 step open$/);
+    expect(ended.column).toBe("needs");
+    expect(ended.action?.label).toBe("Review");
   });
 
   it("lists it again when the acceptance was given before the task was reopened", () => {

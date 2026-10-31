@@ -133,7 +133,8 @@ export function needsYouCardCopy(
         reason?: "handover" | "gone" | undefined;
       }
     | { kind: "stale" }
-    | { kind: "owner-call"; onBehalf: boolean },
+    | { kind: "owner-call"; onBehalf: boolean }
+    | { kind: "answer"; taskName: string },
 ) {
   switch (item.kind) {
     case "thread":
@@ -182,6 +183,8 @@ export function needsYouCardCopy(
           ? "As a lead you can decide for the owner. The record says you did."
           : "Accept or decline, with a note for the agent.",
       };
+    case "answer":
+      return { label: "You answer for", guidance: item.taskName };
   }
 }
 export function needsYouNotice(input: {

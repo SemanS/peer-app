@@ -104,12 +104,25 @@ export const newestSummary = (status: Summaries, place: PeerTestsPlace) =>
   taskSummaries(status, place)[0];
 
 /**
+ * The summaries of a task's governing reports: the newest of each role, as the Hub reads signals. An
+ * author's later pass leaves a review session's failure standing.
+ */
+export function governingSummaries(status: Summaries, place: PeerTestsPlace) {
+  const seen = new Set<string>();
+  return taskSummaries(status, place).filter((summary) => {
+    if (seen.has(summary.role)) return false;
+    seen.add(summary.role);
+    return true;
+  });
+}
+
+/**
  * The cache key of a task's reports: every author's number and how many items wait for an owner,
  * so a new report and an owner given to an item each read the reports again.
  */
 export const testReportsRevision = (status: Summaries, place: PeerTestsPlace) =>
   taskSummaries(status, place)
-    .map((s) => `${s.author}:${s.number}:${s.unowned}`)
+    .map((s) => `${s.author}:${s.number}:${s.unowned}:${(s.asks ?? []).length}`)
     .sort()
     .join("|");
 
@@ -180,6 +193,10 @@ export function itemMark(
   const at = clock(item.seen.at);
   return `seen run by Peer, ${item.seen.failed ? "failed" : "passed"}${at === "" ? "" : `, ${at}`}`;
 }
+
+/** The check failed: its author says so, or Peer saw its command fail, whatever the item's kind. */
+export const itemFailed = (item: Pick<PeerTestReportItem, "kind" | "seen">) =>
+  item.kind === "fail" || item.seen?.failed === true;
 
 /** The mark contradicts the item: a pass Peer saw fail, or a failure Peer saw pass. */
 export const markDisagrees = (item: Pick<PeerTestReportItem, "kind" | "seen">) =>

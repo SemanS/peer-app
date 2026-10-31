@@ -45,6 +45,7 @@ import type {
 } from "@t3tools/contracts";
 import { isExecutable, runTaskOf, taskKind } from "@t3tools/contracts";
 import type { EnvironmentThreadShell } from "../state/models.ts";
+import { HANDOFF_CLASS_LABEL, handoffNextSteps, statusHandoffFacts } from "./handoff.ts";
 import { projectVcs, type PeerVcsKind } from "./vcsWords.ts";
 import {
   projectOwnership,
@@ -93,6 +94,15 @@ export interface WorkThreadNode {
   readonly keepsContext: boolean;
 }
 
+/** A handoff's open steps by class, as the status tells them. */
+export interface HandoffNextCounts {
+  readonly agentActions: number;
+  readonly coordination: number;
+  readonly humanDecisions: number;
+  /** When the handoff was composed: how long it has been with the agent. */
+  readonly at: string;
+}
+
 export interface WorkTaskNode {
   readonly id: string;
   readonly key: string | undefined;
@@ -105,6 +115,8 @@ export interface WorkTaskNode {
    * person or the project's review policy. It waits on nobody but its own landing.
    */
   readonly accepted?: PeerAcceptanceVia | undefined;
+  /** In review after an agent's handoff: how many open steps of each class wait, and since when. */
+  readonly handoffNext?: HandoffNextCounts | undefined;
   /** What the task's threads add up to: blocked beats working beats the rest. */
   readonly status: PeerWorkStatus;
   readonly threads: ReadonlyArray<WorkThreadNode>;
@@ -259,6 +271,8 @@ export type TaskStateKind =
   | "accepted"
   | "approval"
   | "input"
+  | "agent_action"
+  | "coordination"
   | "working"
   | "waiting"
   | "paused"
@@ -271,6 +285,8 @@ export interface TaskState {
   readonly label: string;
   /** Whom a colleague's waiting chat waits on, for `waiting`. */
   readonly waitingOn: string | undefined;
+  /** How long it has been with the agent, for `agent_action`. */
+  readonly since?: string | undefined;
 }
 
 const TASK_STATE_LABEL: Readonly<Record<Exclude<TaskStateKind, "waiting">, string>> = {
@@ -279,6 +295,8 @@ const TASK_STATE_LABEL: Readonly<Record<Exclude<TaskStateKind, "waiting">, strin
   accepted: "Accepted",
   approval: "Needs your approval",
   input: "Needs your answer",
+  agent_action: "With the agent",
+  coordination: HANDOFF_CLASS_LABEL.coordination,
   working: "In progress",
   paused: "Paused",
   new: "Not started",
@@ -291,12 +309,55 @@ export const TASK_STATES_NEEDING_YOU: ReadonlySet<TaskStateKind> = new Set([
   "input",
 ]);
 
+/** A run or a chat of the task is still at work, so its agent can act on what it owes. */
+export function taskRunLive(task: Pick<WorkTaskNode, "runs" | "threads">): boolean {
+  return (
+    (task.runs?.running ?? 0) > 0 ||
+    task.threads.some((thread) => !thread.stale && thread.status === "working")
+  );
+}
+
+/**
+ * Who moves next on a task in review, as the class of the handoff's open steps; undefined when none
+ * is open or the task has an acceptance. `live` says its run can still act.
+ */
+export function handoffMove(
+  task: Pick<WorkTaskNode, "inReview" | "accepted" | "handoffNext" | "runs" | "threads">,
+):
+  | {
+      readonly move: "human_decision" | "coordination" | "agent_action";
+      readonly live: boolean;
+      readonly label: string;
+    }
+  | undefined {
+  const next = task.handoffNext;
+  if (task.inReview !== true || task.accepted !== undefined || next === undefined) return undefined;
+  const live = taskRunLive(task);
+  if (next.humanDecisions > 0)
+    return { move: "human_decision", live, label: HANDOFF_CLASS_LABEL.human_decision };
+  if (next.coordination > 0)
+    return { move: "coordination", live, label: HANDOFF_CLASS_LABEL.coordination };
+  if (next.agentActions === 0) return undefined;
+  return {
+    move: "agent_action",
+    live,
+    label: live
+      ? TASK_STATE_LABEL.agent_action
+      : `The agent stopped · ${next.agentActions} ${next.agentActions === 1 ? "step" : "steps"} open`,
+  };
+}
+
 /**
  * A task's state, the first rule that matches: the Hub's done (or every pull request merged or
  * closed) and review come first, then what your own chats wait for, then any chat at work, a
  * colleague's chat waiting on them, chats that stopped without a handoff, and no chat at all. A
  * colleague's chat nobody reports any more neither works nor waits. `needs` (Needs you's items)
  * tells an approval from an answer; without it a waiting chat of yours reads as an answer.
+ *
+ * A review's open steps decide whom it waits for. A person named on it is asked at once, under
+ * `input`. While the run can act, agent actions read `agent_action` ("With the agent") and
+ * coordination `coordination`, and nobody is asked to accept yet. Once it ended the same task comes
+ * back to its person as a `review`, whose words name what is open and whose page offers Continue.
  *
  * A review asks the person only when `route` says so (it asks everyone without one, as before
  * ownership): "Ready for your review". One that asks someone else is no state of the person's:
@@ -319,7 +380,12 @@ export function taskState(
   if (task.done || task.status === "done") return state("done");
   const accepted = task.inReview === true && task.accepted !== undefined;
   const askedElsewhere = task.inReview === true && !accepted && route !== undefined && !route.forMe;
-  if (task.inReview === true && !accepted && !askedElsewhere) {
+  const open = handoffMove(task);
+  const withAgent = open !== undefined && open.move !== "human_decision" && open.live;
+  if (task.inReview === true && !accepted && !askedElsewhere && !withAgent) {
+    if (open?.move === "human_decision")
+      return { kind: "input", label: open.label, waitingOn: undefined };
+    if (open !== undefined) return { kind: "review", label: open.label, waitingOn: undefined };
     return route === undefined || route.audience === "everyone"
       ? state("review")
       : { kind: "review", label: "Ready for your review", waitingOn: undefined };
@@ -334,6 +400,11 @@ export function taskState(
     return state("approval");
   if (waitingMine.length > 0) return state("input");
   if (accepted) return state("accepted");
+  if (withAgent) {
+    return open.move === "coordination"
+      ? state("coordination")
+      : { ...state("agent_action"), since: task.handoffNext?.at };
+  }
   if (askedElsewhere) return waitingForReview(route);
   if (live.some((thread) => thread.status === "working")) return state("working");
   const waiting = live.find((thread) => !thread.mine && thread.status === "blocked");
@@ -350,6 +421,26 @@ function waitingForReview(route: ReviewRoute): TaskState {
     kind: "waiting",
     label: `Ready for ${reviewer ?? "someone"}'s review`,
     waitingOn: reviewer,
+  };
+}
+
+/** The handoff's open steps by class, for a task in review; nothing without an agent's handoff. */
+function handoffNextOf(
+  status: PeerHubStatus,
+  workspace: string,
+  state: PeerProjectState,
+  task: string,
+): { readonly handoffNext?: HandoffNextCounts } {
+  const read = statusHandoffFacts(status, { workspace, project: state.project.id, task });
+  if (read === undefined) return {};
+  const next = handoffNextSteps(read.facts);
+  return {
+    handoffNext: {
+      agentActions: next.agent_action.length,
+      coordination: next.coordination.length,
+      humanDecisions: next.human_decision.length,
+      at: read.at,
+    },
   };
 }
 
@@ -684,6 +775,7 @@ function projectTree(input: {
       progress: task.progress,
       childCount: tree.children.get(task.id)?.length ?? 0,
       runs: task.runs,
+      ...(task.status === "review" ? handoffNextOf(status, workspace.slug, state, task.id) : {}),
     });
   }
   const projectContext = contextNode(status, workspace.slug, state, "project");
@@ -1066,7 +1158,8 @@ export type NeedCard =
   | (CardPlace<"needs"> & { readonly kind: "request"; readonly item: NeedOf<"request"> })
   | (CardPlace<"needs"> & { readonly kind: "overlap"; readonly item: NeedOf<"overlap"> })
   | (CardPlace<"needs"> & { readonly kind: "stale"; readonly item: NeedOf<"stale"> })
-  | (CardPlace<"needs"> & { readonly kind: "owner-call"; readonly item: NeedOf<"owner-call"> });
+  | (CardPlace<"needs"> & { readonly kind: "owner-call"; readonly item: NeedOf<"owner-call"> })
+  | (CardPlace<"needs"> & { readonly kind: "answer"; readonly item: NeedOf<"answer"> });
 
 /**
  * A chat (or herdr agent) of yours on no task that waits for your approval or your answer. On the
@@ -1136,10 +1229,11 @@ function projectCards(
 
 /** The project a request, an overlap, stale inputs or an owner's call concern, as a scope key. */
 function itemProject(
-  item: NeedOf<"request" | "overlap" | "stale" | "owner-call">,
+  item: NeedOf<"request" | "overlap" | "stale" | "owner-call" | "answer">,
 ): string | undefined {
   switch (item.kind) {
     case "owner-call":
+    case "answer":
       return `${item.workspace}/${item.project}`;
     case "request":
       return `${item.workspace}/${item.request.project}`;
@@ -1220,6 +1314,17 @@ function needCards(
             item,
           },
         ];
+      case "answer":
+        return [
+          {
+            kind: "answer",
+            key,
+            column: "needs",
+            project,
+            task: taskById(project, item.task),
+            item,
+          },
+        ];
     }
   });
 }
@@ -1233,6 +1338,8 @@ function needTexts(card: NeedCard): ReadonlyArray<string | undefined> {
       return [card.item.title, ...card.item.participants];
     case "stale":
       return [card.item.title];
+    case "answer":
+      return [card.item.title, card.item.taskName];
     case "owner-call":
       return [
         card.item.title,
@@ -1365,6 +1472,8 @@ export function taskColumn(state: TaskState): TaskColumn | null {
     case "working":
     case "waiting":
     case "accepted":
+    case "agent_action":
+    case "coordination":
       return "working";
     case "paused":
       return "paused";
@@ -1465,7 +1574,9 @@ function taskAction(
   state: TaskState,
   needOf: ReadonlyMap<string, AgentNeed>,
 ): TaskAction | undefined {
-  if (state.kind === "review") return { label: "Review", target: reviewTarget(project, task) };
+  // A person named on a handoff answers on its page, not in a chat.
+  if (state.kind === "review" || state.label === HANDOFF_CLASS_LABEL.human_decision)
+    return { label: "Review", target: reviewTarget(project, task) };
   if (state.kind !== "approval" && state.kind !== "input") return undefined;
   const waiting = task.threads.filter(
     (thread) => thread.mine && !thread.stale && thread.status === "blocked",
@@ -1849,8 +1960,14 @@ export function taskWhy(
             : "Accepted · waiting to land",
         at: card.updatedAt,
       };
+    case "agent_action":
+      return { text: "With the agent", at: state.since };
+    case "coordination":
+      return handoffLine("Coordination needed");
     case "approval":
     case "input": {
+      if (task.inReview === true && state.label === HANDOFF_CLASS_LABEL.human_decision)
+        return handoffLine("A person's decision is needed");
       const chat = live.find((thread) => thread.mine && thread.status === "blocked");
       const agent = chat === undefined ? undefined : input.agentName(chat);
       const who = agent ?? "A chat of yours";

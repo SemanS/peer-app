@@ -152,6 +152,11 @@ export const PeerReviewPolicy = Schema.Struct({
   version: Schema.Number,
   updatedAt: Schema.optional(Schema.String),
   updatedBy: Schema.optional(Schema.String),
+  /**
+   * It is `auto` in the name of someone who no longer leads the project, so it accepts nothing until
+   * a lead saves it again. Absent from an older Hub.
+   */
+  leadLeft: Schema.optional(Schema.Boolean),
 });
 export type PeerReviewPolicy = typeof PeerReviewPolicy.Type;
 

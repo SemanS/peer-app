@@ -17,6 +17,7 @@ import {
   teamFact,
   testReportsRevision,
 } from "./testReports.ts";
+import { governingSummaries } from "./testReports.ts";
 
 const ANA = "ana@acme.test";
 const SLAVO = "slavo@acme.test";
@@ -243,5 +244,37 @@ describe("the report in a handoff package", () => {
       "Tests: mixed, 1 passed, 0 failed, 1 unverified",
     );
     expect(handoffReportLine(undefined)).toBeNull();
+  });
+});
+
+describe("governingSummaries", () => {
+  const summary = (author: string, role: string, at: string) => ({
+    workspace: "w",
+    project: "p",
+    task: "t",
+    author,
+    number: 1,
+    result: "pass" as const,
+    role,
+    at,
+    passed: 1,
+    failed: 0,
+    unverified: 0,
+    unowned: 0,
+  });
+  it("keeps the newest of each role", () => {
+    const rows = governingSummaries(
+      {
+        testReports: {
+          summaries: [
+            summary("a", "author", "2026-10-01T00:00:00Z"),
+            summary("b", "author", "2026-10-02T00:00:00Z"),
+            summary("r", "review", "2026-09-01T00:00:00Z"),
+          ],
+        },
+      },
+      { workspace: "w", project: "p", task: "t" },
+    );
+    expect(rows.map((row) => row.author)).toEqual(["b", "r"]);
   });
 });

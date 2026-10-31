@@ -82,6 +82,7 @@ describe("test reports wire", () => {
     expect(peerPluginStatusFields).toHaveProperty("testReports");
     expect(TestReportsRpcScopes).toEqual({
       [PEER_TEST_REPORTS_METHODS.peerTestsList]: AuthOrchestrationReadScope,
+      [PEER_TEST_REPORTS_METHODS.peerTestsInherited]: AuthOrchestrationReadScope,
       [PEER_TEST_REPORTS_METHODS.peerTestsFile]: AuthOrchestrationOperateScope,
       [PEER_TEST_REPORTS_METHODS.peerTestsRemove]: AuthOrchestrationOperateScope,
       [PEER_TEST_REPORTS_METHODS.peerTestsSetOwner]: AuthOrchestrationOperateScope,

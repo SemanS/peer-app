@@ -48,7 +48,10 @@ export const PeerTestReportItem = Schema.Struct({
   text: Schema.String,
   /** Who answers for an unverified item: a project member's verified address. */
   owner: Schema.optional(Schema.String),
-  /** The task (its id) an unverified item is left to: a dependent task covers it, so nobody has to. */
+  /**
+   * The task (its id) an item is left to: for an unverified one, a dependent task covers it, so
+   * nobody has to; for a failed one, a task that depends on this one is its home, and it stays failed.
+   */
   task: Schema.optional(Schema.String),
   seen: Schema.optional(PeerTestReportSeen),
 });
@@ -91,6 +94,12 @@ export const PeerTestReportSummary = Schema.Struct({
   failed: Schema.Number,
   unverified: Schema.Number,
   unowned: Schema.Number,
+  /** Who answers for its unverified items, each once; absent from an older Hub. */
+  asks: Schema.optional(Schema.Array(Schema.String)),
+  /** How many of `failed` have a home. This computer adds it once it read the whole report. */
+  failedLeft: Schema.optional(Schema.Number),
+  /** The unverified items the signed-in person answers for, added the same way. */
+  yours: Schema.optional(Schema.Array(Schema.String)),
 });
 export type PeerTestReportSummary = typeof PeerTestReportSummary.Type;
 
@@ -99,6 +108,29 @@ export const PeerTestReportsStatus = Schema.Struct({
   summaries: Schema.Array(PeerTestReportSummary),
 });
 export type PeerTestReportsStatus = typeof PeerTestReportsStatus.Type;
+
+/** An item another task left to this one; `task`, `key` and `title` name that source task. */
+export const PeerTestsInheritedItem = Schema.Struct({
+  task: Schema.String,
+  key: Schema.optional(Schema.String),
+  title: Schema.String,
+  author: Schema.String,
+  role: Schema.String,
+  number: Schema.Number,
+  index: Schema.Number,
+  kind: PeerTestReportItemKind,
+  text: Schema.String,
+  failed: Schema.Boolean,
+  at: Schema.String,
+});
+export type PeerTestsInheritedItem = typeof PeerTestsInheritedItem.Type;
+
+/** What a task's dependencies left to it; `capped` when the Hub stopped at its limit of edges. */
+export const PeerTestsInherited = Schema.Struct({
+  items: Schema.Array(PeerTestsInheritedItem),
+  capped: Schema.Boolean,
+});
+export type PeerTestsInherited = typeof PeerTestsInherited.Type;
 
 export const PeerTestsPlace = Schema.Struct({
   workspace: TrimmedNonEmptyString,

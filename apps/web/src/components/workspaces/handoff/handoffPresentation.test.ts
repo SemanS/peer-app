@@ -198,7 +198,7 @@ describe("the review page as a decision page", () => {
 
     expect(view.decision).toMatchObject({
       kind: "ask",
-      text: "Accept 1.1? 2 signals: not-delivered, unowned",
+      text: "Accept 1.1? Not pushed, an item has no owner.",
       actions: ["done", "reopen"],
     });
     expect(view.verified.text).toBe("6 author-reported · 1 left to a task · 1 needs an owner");
@@ -339,13 +339,13 @@ describe("who moves next on the review page", () => {
     expect(running.decision?.actions).toContain("done");
     expect(running.agentStopped).toBe(false);
     const ended = reviewPresentation(pkg, { ...facts, runLive: false });
-    expect(ended.decision?.text).toBe("Accept 1.1? 1 signal: unowned");
+    expect(ended.decision?.text).toBe("Accept 1.1? An item has no owner.");
     expect(ended.agentStopped).toBe(true);
   });
 
   it("no longer counts a signal cleared since, and says it was raised at handoff", () => {
     const view = reviewPresentation(pkg, { ...FACT, live: live([]) });
-    expect(view.decision?.text).toBe("Accept 1.1? No signals");
+    expect(view.decision?.text).toBe("Accept 1.1?");
     expect(view.raisedAtHandoff.map((entry) => entry.signal)).toEqual(["unowned"]);
     expect(view.atHandoff).toBe(false);
     expect(view.groups).toEqual([]);
@@ -354,7 +354,7 @@ describe("who moves next on the review page", () => {
   it("keeps the package's signals labelled at handoff when the Hub cannot say", () => {
     const view = reviewPresentation(pkg, { ...FACT, live: { available: false } });
     expect(view.atHandoff).toBe(true);
-    expect(view.decision?.text).toBe("Accept 1.1? 1 signal: unowned");
+    expect(view.decision?.text).toBe("Accept 1.1? An item has no owner.");
   });
 
   it("drops a package's overlap and input the Hub no longer holds open", () => {

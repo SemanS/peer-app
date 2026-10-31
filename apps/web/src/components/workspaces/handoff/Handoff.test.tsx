@@ -250,7 +250,7 @@ describe("the decision on a handoff", () => {
       },
     ];
     await show(true);
-    expect(words(section("Decision"))).toBe("Accept VL7? 1 signal: not-delivered");
+    expect(words(section("Decision"))).toBe("Accept VL7? Not pushed.");
     expect(words(section("Agent action needed"))).toContain("The delivery was not observed");
     expect(words(section("Agent action needed"))).not.toContain("VL8 is a separate task");
     expect(

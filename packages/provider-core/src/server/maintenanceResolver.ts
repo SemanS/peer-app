@@ -90,6 +90,10 @@ export interface PackageManagedProviderMaintenanceDefinition {
     readonly env?: NodeJS.ProcessEnv;
     // The updater refuses installs it cannot detect itself, so an unproven path stays manual.
     readonly provenOnly?: boolean;
+    // A native channel can trail npm, so a proven native install compares against it.
+    readonly latestVersionUrl?: (
+      context: ProviderMaintenanceResolutionContext,
+    ) => Effect.Effect<string, never, ProviderMaintenanceResolverServices>;
   } | null;
 }
 
@@ -359,7 +363,9 @@ export const resolvePackageManagedProviderMaintenance = Effect.fn(
       })
     : manual;
   if (nativeUpdate?.isCommandPath && commandPaths.some(nativeUpdate.isCommandPath)) {
-    return native;
+    return nativeUpdate.latestVersionUrl
+      ? { ...native, latestVersionUrl: yield* nativeUpdate.latestVersionUrl(context) }
+      : native;
   }
   // A `node_modules` path not proven below belongs to another package or a
   // project, so the provider's own updater could act on the wrong install.
@@ -683,11 +689,10 @@ export function createProviderVersionAdvisory(input: {
   };
 }
 
-const fetchNpmLatestVersion = Effect.fn("fetchNpmLatestVersion")(function* (packageName: string) {
+const executeLatestVersionRequest = Effect.fn("executeLatestVersionRequest")(function* (
+  request: HttpClientRequest.HttpClientRequest,
+) {
   const client = yield* HttpClient.HttpClient;
-  const request = HttpClientRequest.get(
-    `https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`,
-  ).pipe(HttpClientRequest.setHeader("accept", "application/json"));
   const response = yield* client.execute(request).pipe(
     Effect.timeoutOption(LATEST_VERSION_TIMEOUT_MS),
     Effect.orElseSucceed(() => Option.none()),
@@ -696,7 +701,26 @@ const fetchNpmLatestVersion = Effect.fn("fetchNpmLatestVersion")(function* (pack
     return null;
   }
   const httpResponse = response.value;
-  if (httpResponse.status < 200 || httpResponse.status >= 300) {
+  return httpResponse.status >= 200 && httpResponse.status < 300 ? httpResponse : null;
+});
+
+const fetchChannelLatestVersion = Effect.fn("fetchChannelLatestVersion")(function* (url: string) {
+  const response = yield* executeLatestVersionRequest(HttpClientRequest.get(url));
+  if (!response) {
+    return null;
+  }
+  const body = yield* response.text.pipe(Effect.orElseSucceed(() => ""));
+  const version = body.trim();
+  return /^\d+\.\d+\.\d+$/.test(version) ? version : null;
+});
+
+const fetchNpmLatestVersion = Effect.fn("fetchNpmLatestVersion")(function* (packageName: string) {
+  const httpResponse = yield* executeLatestVersionRequest(
+    HttpClientRequest.get(
+      `https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`,
+    ).pipe(HttpClientRequest.setHeader("accept", "application/json")),
+  );
+  if (!httpResponse) {
     return null;
   }
   const payload = yield* httpResponse.json.pipe(
@@ -712,12 +736,16 @@ export const resolveLatestProviderVersion = Effect.fn("resolveLatestProviderVers
   if (maintenanceCapabilities.latestVersion !== undefined) {
     return maintenanceCapabilities.latestVersion;
   }
+  const latestVersions = yield* ProviderLatestVersions.ProviderLatestVersions;
+  const channelUrl = maintenanceCapabilities.latestVersionUrl;
+  if (channelUrl) {
+    return yield* latestVersions.cached(channelUrl, fetchChannelLatestVersion(channelUrl));
+  }
   const packageName = maintenanceCapabilities.packageName;
   if (!packageName) {
     return null;
   }
 
-  const latestVersions = yield* ProviderLatestVersions.ProviderLatestVersions;
   return yield* latestVersions.cached(packageName, fetchNpmLatestVersion(packageName));
 });
 

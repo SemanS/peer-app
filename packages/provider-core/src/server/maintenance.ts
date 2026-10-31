@@ -10,6 +10,8 @@ export interface ProviderMaintenanceCapabilities {
    * installer was asked and did not know.
    */
   readonly latestVersion?: string | null;
+  /** The installer's release channel: a URL whose body is that channel's version. */
+  readonly latestVersionUrl?: string;
   readonly compareVersions?: (current: string, latest: string) => number;
 }
 

@@ -3,6 +3,7 @@ import * as NodeOS from "node:os";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 
 import {
@@ -11,9 +12,33 @@ import {
   makeClaudeContinuationGroupKey,
   makeClaudeEnvironment,
   resolveClaudeHomePath,
+  resolveClaudeReleaseChannelUrl,
 } from "./ClaudeHome.ts";
 
 it.layer(NodeServices.layer)("ClaudeHome", (it) => {
+  describe("Claude release channel", () => {
+    it.effect("follows the channel `claude update` reads from the user's settings", () =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const configDir = yield* fileSystem.makeTempDirectoryScoped();
+        const env = { CLAUDE_CONFIG_DIR: configDir };
+        const settingsPath = path.join(configDir, "settings.json");
+        const latest = "https://downloads.claude.ai/claude-code-releases/latest";
+
+        expect(yield* resolveClaudeReleaseChannelUrl(env)).toBe(latest);
+
+        yield* fileSystem.writeFileString(settingsPath, "not json");
+        expect(yield* resolveClaudeReleaseChannelUrl(env)).toBe(latest);
+
+        yield* fileSystem.writeFileString(settingsPath, '{"autoUpdatesChannel":"stable"}');
+        expect(yield* resolveClaudeReleaseChannelUrl(env)).toBe(
+          "https://downloads.claude.ai/claude-code-releases/stable",
+        );
+      }).pipe(Effect.scoped),
+    );
+  });
+
   describe("Claude home resolution", () => {
     it.effect("treats empty, ~/.claude, and the expanded default as the same Claude home", () =>
       Effect.gen(function* () {

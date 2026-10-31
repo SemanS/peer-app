@@ -14,6 +14,7 @@ import * as Fiber from "effect/Fiber";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as ProviderLatestVersions from "./ProviderLatestVersions.ts";
 import {
@@ -152,6 +153,48 @@ it.layer(NodeServices.layer)("providerMaintenance", (it) => {
       ),
       Effect.map((version) => {
         expect(version).toBe("1.2.0");
+      }),
+    ),
+  );
+
+  it.effect("reads the installer's channel instead of the npm registry", () => {
+    const channelUrl = "https://downloads.example.test/releases/latest";
+    return resolveLatestProviderVersion({
+      ...manualPackageTool,
+      latestVersionUrl: channelUrl,
+    }).pipe(
+      Effect.provide(ProviderLatestVersions.layer),
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make((request) => {
+          expect(request.url).toBe(channelUrl);
+          return Effect.succeed(
+            HttpClientResponse.fromWeb(request, new Response("2.1.314\n", { status: 200 })),
+          );
+        }),
+      ),
+      Effect.map((version) => {
+        expect(version).toBe("2.1.314");
+      }),
+    );
+  });
+
+  it.effect("treats a channel body that is not a version as unknown", () =>
+    resolveLatestProviderVersion({
+      ...manualPackageTool,
+      latestVersionUrl: "https://downloads.example.test/releases/latest",
+    }).pipe(
+      Effect.provide(ProviderLatestVersions.layer),
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make((request) =>
+          Effect.succeed(
+            HttpClientResponse.fromWeb(request, new Response("<html>", { status: 200 })),
+          ),
+        ),
+      ),
+      Effect.map((version) => {
+        expect(version).toBeNull();
       }),
     ),
   );
@@ -596,6 +639,30 @@ it.layer(NodeServices.layer)("providerMaintenance", (it) => {
     });
     expect(windows.update?.command).toBe("& 'C:\\Program Files\\Tool\\tool.exe' update");
   });
+
+  it.effect.skipIf(windowsHost)("gives a proven native install its release channel", () =>
+    Effect.gen(function* () {
+      const tempDir = yield* makeTempDir("t3-native-channel");
+      const nativePath = NodePath.join(tempDir, ".local", "bin", "native-package-tool");
+      writeExecutable(nativePath);
+      const resolver = makePackageManagedProviderMaintenanceResolver({
+        provider: driver("nativePackageTool"),
+        npmPackageName: "@example/native-package-tool",
+        nativeUpdate: {
+          args: ["update"],
+          isCommandPath: isNativeTestCommandPath("/.local/bin/native-package-tool"),
+          latestVersionUrl: () => Effect.succeed("https://downloads.example.test/stable"),
+        },
+      });
+
+      const capabilities = yield* resolveProviderMaintenanceCapabilitiesEffect(resolver, {
+        binaryPath: nativePath,
+        env: { PATH: "" },
+      }).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, noSpawn));
+
+      expect(capabilities.latestVersionUrl).toBe("https://downloads.example.test/stable");
+    }),
+  );
 
   it.effect.skipIf(windowsHost)("carries the native updater's environment into the action", () =>
     Effect.gen(function* () {

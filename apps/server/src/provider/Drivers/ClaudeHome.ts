@@ -1,6 +1,7 @@
 import type { ClaudeSettings } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
@@ -8,6 +9,12 @@ import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
 const quotePath = Schema.encodeSync(Schema.fromJsonString(Schema.String));
+
+const CLAUDE_RELEASES_URL = "https://downloads.claude.ai/claude-code-releases";
+
+const decodeClaudeUserSettings = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ autoUpdatesChannel: Schema.optional(Schema.Unknown) })),
+);
 
 export const resolveClaudeHomePath = Effect.fn("resolveClaudeHomePath")(function* (
   config: Pick<ClaudeSettings, "homePath">,
@@ -26,6 +33,28 @@ export const resolveClaudeHomePath = Effect.fn("resolveClaudeHomePath")(function
   }
   return path.resolve(path.join(home, ".claude"));
 });
+
+/**
+ * `claude update` installs from this channel, which trails npm by hours and, on
+ * `stable`, by weeks. The update command gets no instance home, so neither does this.
+ */
+export const resolveClaudeReleaseChannelUrl = Effect.fn("resolveClaudeReleaseChannelUrl")(
+  function* (
+    environment?: NodeJS.ProcessEnv,
+  ): Effect.fn.Return<string, never, FileSystem.FileSystem | Path.Path> {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const configDir = yield* resolveClaudeHomePath({ homePath: "" }, environment);
+    const settings = yield* fileSystem
+      .readFileString(path.join(configDir, "settings.json"))
+      .pipe(Effect.orElseSucceed(() => ""));
+    const channel = decodeClaudeUserSettings(settings).pipe(
+      Option.map((value) => value.autoUpdatesChannel),
+      Option.getOrUndefined,
+    );
+    return `${CLAUDE_RELEASES_URL}/${channel === "stable" ? "stable" : "latest"}`;
+  },
+);
 
 export const makeClaudeEnvironment = Effect.fn("makeClaudeEnvironment")(function* (
   config: Pick<ClaudeSettings, "homePath">,

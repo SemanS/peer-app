@@ -56,6 +56,7 @@ import {
   makeClaudeCapabilitiesCacheKey,
   makeClaudeContinuationGroupKey,
   resolveClaudeHomePath,
+  resolveClaudeReleaseChannelUrl,
 } from "./ClaudeHome.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 const decodeClaudeSettings = Schema.decodeSync(ClaudeSettings);
@@ -78,6 +79,7 @@ const UPDATE = makePackageManagedProviderMaintenanceResolver({
   nativeUpdate: {
     args: ["update"],
     isCommandPath: isClaudeNativeCommandPath,
+    latestVersionUrl: (context) => resolveClaudeReleaseChannelUrl(context.env),
   },
 });
 

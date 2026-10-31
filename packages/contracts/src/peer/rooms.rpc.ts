@@ -22,6 +22,8 @@ import {
   PeerRoomsDiffInput,
   PeerRoomSteps,
   PeerRoomsStepsInput,
+  PeerRoomsThreadInput,
+  PeerRoomThread,
   PeerRoomsPostInput,
   PeerRoomsReadInput,
   PeerRoomsSeenInput,
@@ -41,6 +43,7 @@ export const PEER_ROOMS_METHODS = {
   peerRoomsSetReach: "peer.rooms.setReach",
   peerRoomsDiff: "peer.rooms.diff",
   peerRoomsSteps: "peer.rooms.steps",
+  peerRoomsThread: "peer.rooms.thread",
 } as const;
 
 const methods = PEER_ROOMS_METHODS;
@@ -72,6 +75,11 @@ export const RoomsRpcGroup = RpcGroup.make(
   }),
   Rpc.make(methods.peerRoomsDiff, { payload: PeerRoomsDiffInput, success: PeerRoomDiff, error }),
   Rpc.make(methods.peerRoomsSteps, { payload: PeerRoomsStepsInput, success: PeerRoomSteps, error }),
+  Rpc.make(methods.peerRoomsThread, {
+    payload: PeerRoomsThreadInput,
+    success: PeerRoomThread,
+    error,
+  }),
 );
 
 /** Reading is orchestration-read; what may start an agent or tell the team is operating. */
@@ -85,4 +93,5 @@ export const RoomsRpcScopes = {
   [methods.peerRoomsSetReach]: AuthOrchestrationOperateScope,
   [methods.peerRoomsDiff]: AuthOrchestrationReadScope,
   [methods.peerRoomsSteps]: AuthOrchestrationReadScope,
+  [methods.peerRoomsThread]: AuthOrchestrationReadScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof RoomsRpcGroup>["_tag"], AuthEnvironmentScope>;

@@ -809,9 +809,11 @@ the project's checkout as unsupported with the reason, and Peer clones nothing i
 
 To start with Jujutsu, turn on **Use Jujutsu** when you create a project with a repository. For a repository already on this computer, use **Switch to Jujutsu** in the project's **Repositories** settings. Either way `.git`, its remotes and any unfinished work stay, and the **Jujutsu workspaces** plugin turns on. Peer refuses while an agent runs in the repository, during a merge or rebase, and in a repository with submodules. To go back to Git, delete the checkout's `.jj` folder.
 
+A change stays on its task after its agent stops or Peer restarts, for as long as it sits unlanded in the task's workspace on this computer. Teammates see it only while an agent reports it.
+
 In a task's room, **Jujutsu** beside the diff shows how the task stands: its stack, what moved under it and how it lands. A Git checkout offers the switch there.
 
-Each agent reply carries a card with where its run stands. Open it to see that agent's own diff beside the conversation. On Jujutsu it follows each step the agent takes, and the list above it shows one step's lines at a time; in a Git checkout use **Refresh**.
+Each agent reply carries a card with where its run stands. Open it to see that agent beside the conversation: **Thread** shows its work as it stood at that reply, or follows it while it works, on the computer that ran it. **Changes** shows its own diff. On Jujutsu that follows each step the agent takes, and the list above it shows one step's lines at a time; in a Git checkout use **Refresh**.
 
 ## Working on Jujutsu
 

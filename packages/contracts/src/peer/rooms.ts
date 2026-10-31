@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 
 import { TrimmedNonEmptyString } from "../baseSchemas.ts";
+import { PeerAgentEntry } from "./base.ts";
 
 /**
  * Peer's rooms plugin: a task's shared conversation between people and their agents (the Hub's
@@ -224,6 +225,21 @@ export const PeerRoomsDiffInput = Schema.Struct({
   step: Schema.optional(TrimmedNonEmptyString),
 });
 export type PeerRoomsDiffInput = typeof PeerRoomsDiffInput.Type;
+
+/** A run's thread; `until` (an ISO time) shows it as it stood then, else as it stands. */
+export const PeerRoomsThreadInput = Schema.Struct({
+  ...RoomPlace,
+  run: TrimmedNonEmptyString,
+  until: Schema.optional(Schema.String),
+});
+export type PeerRoomsThreadInput = typeof PeerRoomsThreadInput.Type;
+
+/** A run's thread from the transcript on this computer; `note` says why there is none to show. */
+export const PeerRoomThread = Schema.Struct({
+  entries: Schema.Array(PeerAgentEntry),
+  note: Schema.optional(Schema.String),
+});
+export type PeerRoomThread = typeof PeerRoomThread.Type;
 
 export const PeerRoomsStepsInput = Schema.Struct({ ...RoomPlace, run: TrimmedNonEmptyString });
 export type PeerRoomsStepsInput = typeof PeerRoomsStepsInput.Type;

@@ -60,6 +60,24 @@ export async function readTranscriptTail(path: string, maxBytes = 512 * 1024): P
   }
 }
 
+/** A transcript as it stood at `until` (an ISO time): lines are in order, so it ends at the first later one. */
+export function transcriptUntil(
+  lines: ReadonlyArray<string>,
+  until: string,
+): ReadonlyArray<string> {
+  const end = Date.parse(until);
+  if (Number.isNaN(end)) return lines;
+  const later = lines.findIndex((line) => {
+    try {
+      const at = (JSON.parse(line) as { timestamp?: unknown }).timestamp;
+      return typeof at === "string" && Date.parse(at) > end;
+    } catch {
+      return false;
+    }
+  });
+  return later === -1 ? lines : lines.slice(0, later);
+}
+
 function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }

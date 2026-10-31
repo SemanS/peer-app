@@ -141,6 +141,9 @@ function RoomBody({
   const [run, setRun] = useState<{
     readonly id: string;
     readonly agent: string | undefined;
+    readonly seq: number;
+    /** The moment its thread opens at; absent while the agent works, to follow it. */
+    readonly until: string | undefined;
   } | null>(null);
   const [focus, setFocus] = useState<DiffFocus | null>(null);
   const [line, setLine] = useState<DraftLine | null>(null);
@@ -259,12 +262,11 @@ function RoomBody({
             reviewRuns={read.room?.reviewRuns ?? NO_RUNS}
             jujutsu={onJujutsu}
             threadWorking={threadWorking}
-            selectedRun={run?.id ?? null}
-            onOpenRun={(id) => {
+            selected={run?.seq ?? null}
+            onOpenRun={(message, id, live) => {
               const agent =
-                runs.runs.find((candidate) => candidate.id === id)?.agent ??
-                read.messages.find((message) => message.author.run === id)?.author.agent;
-              setRun({ id, agent });
+                runs.runs.find((candidate) => candidate.id === id)?.agent ?? message.author.agent;
+              setRun({ id, agent, seq: message.seq, until: live ? undefined : message.at });
               showSide("agent");
             }}
             onOpenAnchor={(anchor) => {
@@ -338,10 +340,11 @@ function RoomBody({
               )}
             >
               <RoomAgentDiff
-                key={run.id}
+                key={`${run.id}:${run.seq}`}
                 environmentId={environmentId}
                 place={place}
                 run={run.id}
+                until={run.until}
                 taskName={hubTask.key ?? hubTask.id}
                 jujutsu={onJujutsu}
                 revision={revision}

@@ -17,6 +17,8 @@ import {
   type PeerRoomsPassInput,
   type PeerRoomsDiffInput,
   type PeerRoomsStepsInput,
+  type PeerRoomsThreadInput,
+  type PeerRoomThread,
   type PeerRoomsPlace,
   type PeerRoomsPostInput,
   type PeerRoomsReadInput,
@@ -31,6 +33,7 @@ import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 
+import * as AgentTranscript from "../../agentTranscript.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import type { PeerSessionView } from "../../core/plugin.ts";
@@ -67,6 +70,11 @@ export const jobsAfterLeaving = (jobs: ReadonlyArray<Job>, workspace: string) =>
 /** A Hub's refusal is final; anything else may not have reached it, so the move is owed still. */
 const owed = (error: PeerHubError) =>
   error.status === undefined || error.status >= 500 || error.status === 429;
+
+const THREAD_ONLY_CLAUDE = "Peer can read only Claude Code's thread here.";
+const THREAD_SESSIONS = 3;
+const THREAD_BYTES = 2 * 1024 * 1024;
+const THREAD_ENTRIES = 200;
 
 const make = Effect.gen(function* () {
   const state = yield* PeerState.PeerState;
@@ -151,6 +159,29 @@ const make = Effect.gen(function* () {
         handoffs: yield* hub.handoffs(place).pipe(Effect.orElseSucceed(() => [])),
         threads,
       };
+    });
+
+  /**
+   * The run's thread from its Claude Code transcripts, oldest session first. They live on the
+   * computer that ran it and nowhere else, and other harnesses keep theirs in their own shape.
+   */
+  const runThread = (sessions: ReadonlyArray<string>, until: string | undefined) =>
+    Effect.promise(async (): Promise<PeerRoomThread> => {
+      const claude = sessions.flatMap((id) => (id.startsWith("claude:") ? [id.slice(7)] : []));
+      if (claude.length === 0) return { entries: [], note: THREAD_ONLY_CLAUDE };
+      const lines: Array<string> = [];
+      for (const id of claude.slice(-THREAD_SESSIONS)) {
+        const path = await AgentTranscript.findClaudeTranscript({ id, path: undefined });
+        if (path === null) continue;
+        lines.push(
+          ...(await AgentTranscript.readTranscriptTail(path, THREAD_BYTES).catch(() => [])),
+        );
+      }
+      const entries = AgentTranscript.transcriptEntries(
+        until === undefined ? lines : AgentTranscript.transcriptUntil(lines, until),
+        { limit: THREAD_ENTRIES },
+      );
+      return entries.length > 0 ? { entries } : { entries, note: "Its transcript is empty here." };
     });
 
   /** A workspace's steps; Git has none to show, and a failed read shows none rather than fails. */
@@ -388,6 +419,26 @@ const make = Effect.gen(function* () {
           reach: input.reach,
           capacity,
         });
+      }),
+    thread: ({ run, until, ...place }: PeerRoomsThreadInput) =>
+      Effect.gen(function* () {
+        const { persisted } = yield* state.read;
+        const found = persisted.runs?.[run];
+        if (
+          found === undefined ||
+          found.workspace !== place.workspace ||
+          found.project !== place.project ||
+          found.task !== place.task
+        ) {
+          return {
+            entries: [],
+            note: "This agent ran on another computer, so its thread is there.",
+          };
+        }
+        return yield* runThread(
+          found.sessions.map((session) => session.id),
+          until,
+        );
       }),
     /** The run's steps, where its workspace is on this computer and on jj; else none. */
     steps: ({ run, ...place }: PeerRoomsStepsInput) =>

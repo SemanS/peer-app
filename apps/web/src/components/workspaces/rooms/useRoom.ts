@@ -120,6 +120,25 @@ export function useRoomDiff(input: {
   return { diff: query.data, error: query.error, refresh: query.refresh };
 }
 
+/** A run's thread, as it stood at `until`, or as it stands and read again as it moves. */
+export function useRoomThread(input: {
+  readonly environmentId: EnvironmentId;
+  readonly place: RoomPlace;
+  readonly run: string;
+  readonly until: string | undefined;
+  readonly revision: string;
+}) {
+  const { environmentId, place, run, until, revision } = input;
+  const query = useEnvironmentQuery(
+    serverEnvironment.peerRooms.thread({
+      environmentId,
+      input: { ...place, run, ...(until === undefined ? {} : { until }) },
+    }),
+  );
+  useRefetchOn(revision, query.refresh);
+  return { thread: query.data, error: query.error };
+}
+
 /** A run's steps on this computer, read again when its change moves. */
 export function useRoomSteps(input: {
   readonly environmentId: EnvironmentId;

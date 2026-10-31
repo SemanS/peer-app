@@ -13,6 +13,7 @@ import {
   timelineEntries,
   toolSummary,
   transcriptEntries,
+  transcriptUntil,
 } from "./agentTranscript.ts";
 
 const line = (record: object) => JSON.stringify(record);
@@ -57,6 +58,20 @@ const SESSION = [
   assistant({ type: "tool_use", id: "t3", name: "mcp__kontext__ctx_brief", input: {} }),
   "not json",
 ];
+
+describe("transcriptUntil", () => {
+  const at = (timestamp: string) => JSON.stringify({ timestamp });
+
+  it("ends a transcript at the first line after the moment", () => {
+    const lines = [at("2026-10-31T10:00:00Z"), "not json", at("2026-10-31T10:05:00Z")];
+    assert.deepStrictEqual(transcriptUntil(lines, "2026-10-31T10:01:00Z"), lines.slice(0, 2));
+  });
+
+  it("keeps the whole transcript for a moment it cannot read", () => {
+    const lines = [at("2026-10-31T10:00:00Z")];
+    assert.deepStrictEqual(transcriptUntil(lines, "soon"), lines);
+  });
+});
 
 describe("transcriptEntries", () => {
   it("reads prompts, words and tools with their outcome, and leaves the rest out", () => {

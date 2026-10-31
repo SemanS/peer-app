@@ -68,7 +68,7 @@ export function RoomConversation({
   reviewRuns,
   jujutsu,
   threadWorking,
-  selectedRun,
+  selected,
   onOpenRun,
   onOpenAnchor,
 }: {
@@ -92,8 +92,9 @@ export function RoomConversation({
   readonly jujutsu: boolean;
   /** Whether a run's agent works now, where a thread of it is known here. */
   readonly threadWorking: (run: PeerRun) => boolean | undefined;
-  readonly selectedRun: string | null;
-  readonly onOpenRun: (run: string) => void;
+  /** The message whose card is open. */
+  readonly selected: number | null;
+  readonly onOpenRun: (message: PeerRoomMessage, run: string, live: boolean) => void;
   readonly onOpenAnchor: (anchor: PeerRoomAnchor) => void;
 }) {
   const lastOf = lastOfRuns(messages);
@@ -154,7 +155,7 @@ export function RoomConversation({
             moves={moves}
             now={now}
             activity={activityOf(message)}
-            selectedRun={selectedRun}
+            selected={selected === message.seq}
             onOpenRun={onOpenRun}
             onOpenAnchor={onOpenAnchor}
           />
@@ -174,7 +175,7 @@ function RoomMessage({
   moves,
   now,
   activity,
-  selectedRun,
+  selected,
   onOpenRun,
   onOpenAnchor,
 }: {
@@ -187,8 +188,8 @@ function RoomMessage({
   readonly moves: ReturnType<typeof useRoomMoves>;
   readonly now: number;
   readonly activity: (RunActivity & { readonly id: string }) | undefined;
-  readonly selectedRun: string | null;
-  readonly onOpenRun: (run: string) => void;
+  readonly selected: boolean;
+  readonly onOpenRun: (message: PeerRoomMessage, run: string, live: boolean) => void;
   readonly onOpenAnchor: (anchor: PeerRoomAnchor) => void;
 }) {
   const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
@@ -265,8 +266,8 @@ function RoomMessage({
         {activity === undefined ? null : (
           <RoomActivity
             activity={activity}
-            selected={selectedRun === activity.id}
-            onOpen={() => onOpenRun(activity.id)}
+            selected={selected}
+            onOpen={() => onOpenRun(message, activity.id, activity.kind === "working")}
           />
         )}
       </div>

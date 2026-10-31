@@ -156,6 +156,6 @@ export const chatRunPrompt = (heard: Heard) =>
   ].join("\n");
 
 export const START_LINE =
-  "A task has a room its people and their agents read: peer room reads it, peer room <n> reads one message whole, peer room say \"<text>\" [--reply <n>] [--to <person>] [--at <path>:<line>] posts as your person's agent. An agent's message wakes nobody.";
+  "A task has a room its people and their agents read: peer room reads it, peer room <task> reads another task's, peer room <n> reads one message whole, peer room say \"<text>\" [--reply <n>] [--to <person>] [--at <path>:<line>] posts as your person's agent. An agent's message wakes nobody.";
 
 export const NO_TASK = "This session is on no task, so it has no room.";

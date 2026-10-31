@@ -21,13 +21,19 @@ import { RoomComposer, type DraftLine, type DraftPaths } from "./RoomComposer";
 import { roomMessageId, RoomConversation } from "./RoomConversation";
 import { RoomDiff, type DiffFocus } from "./RoomDiff";
 import { RoomFiles } from "./RoomFiles";
+import { RoomJujutsu } from "./RoomJujutsu";
 import { RoomReach } from "./RoomReach";
 import { watchable } from "./roomDiff.logic";
 import { useRoom, useRoomDiff, useRoomMoves } from "./useRoom";
 
+const SIDE_LABEL = { diff: "Diff", files: "Files", jujutsu: "Jujutsu" } as const;
+type RoomSide = keyof typeof SIDE_LABEL;
+const isRoomSide = (value: unknown): value is RoomSide =>
+  typeof value === "string" && Object.hasOwn(SIDE_LABEL, value);
+
 /**
- * A task's room: its conversation between people and their agents, with the task's diff or the
- * project's files beside it from `lg` and behind a switch below. Peer's own page rather than a chat widget: the conversation
+ * A task's room: its conversation between people and their agents, with the task's diff, the
+ * project's files or its Jujutsu changes beside it from `lg` and behind a switch below. Peer's own page rather than a chat widget: the conversation
  * runs in one column, and the composer stays at the bottom as the review's bar does.
  */
 export function RoomView({
@@ -117,9 +123,10 @@ function RoomBody({
   const moves = useRoomMoves(environmentId, read.refresh);
   // Below `lg` one pane shows at a time; both stay mounted so neither loses its place.
   const [pane, setPane] = useState<"conversation" | "side">("conversation");
-  const [side, setSide] = useState<"diff" | "files">("diff");
-  // The tree lists folders from the disk, so a room nobody opens it in lists nothing.
-  const [filesOpened, setFilesOpened] = useState(false);
+  const [side, setSide] = useState<RoomSide>("diff");
+  // The tree lists folders from the disk and Jujutsu subscribes to the project's changes, so a room
+  // that never opens them costs neither.
+  const [opened, setOpened] = useState<ReadonlySet<RoomSide>>(new Set(["diff"]));
   const [focus, setFocus] = useState<DiffFocus | null>(null);
   const [line, setLine] = useState<DraftLine | null>(null);
   const [paths, setPaths] = useState<DraftPaths | null>(null);
@@ -135,10 +142,10 @@ function RoomBody({
     nameOf,
   });
 
-  const showSide = (next: "diff" | "files") => {
+  const showSide = (next: RoomSide) => {
     setSide(next);
     setPane("side");
-    if (next === "files") setFilesOpened(true);
+    setOpened((current) => new Set([...current, next]));
   };
 
   const addPaths = (added: ReadonlyArray<string>) => {
@@ -171,12 +178,13 @@ function RoomBody({
           onValueChange={(value) => {
             const next = value[0];
             if (next === "conversation") setPane(next);
-            if (next === "diff" || next === "files") showSide(next);
+            if (isRoomSide(next)) showSide(next);
           }}
         >
           <Toggle value="conversation">Conversation</Toggle>
           <Toggle value="diff">Diff</Toggle>
           <Toggle value="files">Files</Toggle>
+          <Toggle value="jujutsu">Jujutsu</Toggle>
         </ToggleGroup>
       </div>
       <div className="flex min-h-0 min-w-0 flex-1">
@@ -242,7 +250,7 @@ function RoomBody({
           )}
         </section>
         <section
-          aria-label={side === "diff" ? "Diff" : "Files"}
+          aria-label={SIDE_LABEL[side]}
           className={cn(
             "min-h-0 min-w-0 flex-1 flex-col lg:flex",
             pane === "side" ? "flex" : "hidden",
@@ -254,11 +262,12 @@ function RoomBody({
               value={[side]}
               onValueChange={(value) => {
                 const next = value[0];
-                if (next === "diff" || next === "files") showSide(next);
+                if (isRoomSide(next)) showSide(next);
               }}
             >
               <Toggle value="diff">Diff</Toggle>
               <Toggle value="files">Files</Toggle>
+              <Toggle value="jujutsu">Jujutsu</Toggle>
             </ToggleGroup>
           </div>
           <div
@@ -286,7 +295,7 @@ function RoomBody({
           <div
             className={cn("min-h-0 min-w-0 flex-1 flex-col", side === "files" ? "flex" : "hidden")}
           >
-            {filesOpened ? (
+            {opened.has("files") ? (
               <RoomFiles
                 environmentId={environmentId}
                 diff={diff.diff}
@@ -295,6 +304,22 @@ function RoomBody({
                 canPost={canPost}
                 onRefresh={diff.refresh}
                 onAdd={(path) => addPaths([path])}
+              />
+            ) : null}
+          </div>
+          <div
+            className={cn(
+              "min-h-0 min-w-0 flex-1 flex-col overflow-y-auto",
+              side === "jujutsu" ? "flex" : "hidden",
+            )}
+          >
+            {opened.has("jujutsu") ? (
+              <RoomJujutsu
+                environmentId={environmentId}
+                status={status}
+                place={place}
+                projectState={projectState}
+                task={taskNode}
               />
             ) : null}
           </div>

@@ -809,6 +809,8 @@ the project's checkout as unsupported with the reason, and Peer clones nothing i
 
 To start with Jujutsu, turn on **Use Jujutsu** when you create a project with a repository. For a repository already on this computer, use **Switch to Jujutsu** in the project's **Repositories** settings. Either way `.git`, its remotes and any unfinished work stay, and the **Jujutsu workspaces** plugin turns on. Peer refuses while an agent runs in the repository, during a merge or rebase, and in a repository with submodules. To go back to Git, delete the checkout's `.jj` folder.
 
+In a task's room, **Jujutsu** beside the diff shows how the task stands: its stack, what moved under it and how it lands. A Git checkout offers the switch there.
+
 ## Working on Jujutsu
 
 In a colocated jj repository, agents can build on each other's work before it lands:

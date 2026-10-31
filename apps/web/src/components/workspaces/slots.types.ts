@@ -68,6 +68,8 @@ export interface TaskSlotProps extends PeerSlotProps {
   /** Undefined while the workspace does not list the project. */
   readonly project: PeerProjectState | undefined;
   readonly task: WorkTaskNode;
+  /** The checkout is on jj, so a section speaks before any of the task's threads does. */
+  readonly onJujutsu?: boolean;
 }
 
 /** The change selected in the Changes inspector, as much of it as a plugin's section needs. */

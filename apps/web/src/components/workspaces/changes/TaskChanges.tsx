@@ -70,10 +70,17 @@ function StackRow({
  * moved under the task, and how it lands. It speaks for Jujutsu projects only; a Git project's task
  * has no change to show. Setup problems are said with their fix, as on the Changes page.
  */
-export function TaskChanges({ environmentId, status, workspace, project, task }: TaskSlotProps) {
+export function TaskChanges({
+  environmentId,
+  status,
+  workspace,
+  project,
+  task,
+  onJujutsu = false,
+}: TaskSlotProps) {
   const projectId = project?.project.id;
   const now = useRelativeTimeTick(30_000);
-  const jj = task.threads.some((thread) => thread.vcs === "jj");
+  const jj = onJujutsu || task.threads.some((thread) => thread.vcs === "jj");
   // A Git project's task has no change to read, so it asks the environment for none.
   const live = useProjectChanges({
     environmentId: projectId === undefined || !jj ? null : environmentId,

@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { taskShortTitle } from "@t3tools/client-runtime/peer/taskTitle";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronsUpDownIcon, PlusIcon, Share2Icon, ShieldIcon } from "lucide-react";
+import {
+  ChevronsUpDownIcon,
+  Layers2Icon,
+  PencilIcon,
+  PlusIcon,
+  Share2Icon,
+  ShieldIcon,
+} from "lucide-react";
 
 import { openCommandPalette } from "../../commandPaletteBus";
 import { useFileContextMenu } from "../../fileContextMenu";
@@ -19,6 +26,9 @@ import {
   MenuRadioItem,
   MenuRadioItemIndicator,
   MenuSeparator,
+  MenuSub,
+  MenuSubPopup,
+  MenuSubTrigger,
   MenuTrigger,
 } from "../ui/menu";
 import { useSidebar } from "../ui/sidebar";
@@ -31,6 +41,18 @@ import { useOrganizationStatus } from "./ActiveOrganization";
 import { usePeerHub, useProjectScope } from "./projectScope";
 import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
 import { projectSignals } from "./ProjectSignals";
+import { RenameProjectSetDialog } from "./ProjectSetNav";
+import {
+  addToSet,
+  dissolveSet,
+  joinProjects,
+  newSetId,
+  removeFromSet,
+  setOfScope,
+  setScope as scopeOfSet,
+  type ProjectSet,
+} from "./projectSets.logic";
+import { useProjectSets } from "./projectSets";
 import { sidebarTasks } from "./sidebarTasks.logic";
 import { ProjectMark, projectColor } from "./signals";
 import {
@@ -38,6 +60,7 @@ import {
   openFolderLabel,
   projectButtonLines,
   projectMenuSections,
+  projectsToAdd,
 } from "./WorkScopePicker.logic";
 import { ALL_PROJECTS, projectScopeKey } from "./workBoard.logic";
 import { useWorkData } from "./useWorkData";
@@ -93,6 +116,7 @@ export function WorkScopePicker({
 }) {
   const { status } = usePeerHub();
   const [open, setOpen] = useState(false);
+  const [renaming, setRenaming] = useState<ProjectSet | null>(null);
   const current = useProjectScope(groups);
   // Every workspace's projects tell a shared checkout from a local one; the menu lists the
   // active organization's.
@@ -103,43 +127,54 @@ export function WorkScopePicker({
     workspace.projects.map((state) => ({ workspace: workspace.slug, projectId: state.project.id })),
   );
   return (
-    <Menu open={open} onOpenChange={setOpen}>
-      <MenuTrigger
-        render={
-          <button
-            type="button"
-            aria-label={`Project: ${lines.name}, in ${lines.where}`}
-            className={cn(
-              "flex min-w-0 items-center text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-sidebar-row-active",
-              compact
-                ? "max-w-56 gap-2 rounded-md px-2 py-1.5"
-                : "w-full gap-3 rounded-xl px-2.5 py-3",
-            )}
-          />
-        }
-      >
-        <ScopeMark current={current} marks={marks} className={compact ? "size-4" : "size-7"} />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-sm font-semibold text-sidebar-foreground">
-            {lines.name}
+    <>
+      <Menu open={open} onOpenChange={setOpen}>
+        <MenuTrigger
+          render={
+            <button
+              type="button"
+              aria-label={`Project: ${lines.name}, in ${lines.where}`}
+              className={cn(
+                "flex min-w-0 items-center text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-sidebar-row-active",
+                compact
+                  ? "max-w-56 gap-2 rounded-md px-2 py-1.5"
+                  : "w-full gap-3 rounded-xl px-2.5 py-3",
+              )}
+            />
+          }
+        >
+          <ScopeMark current={current} marks={marks} className={compact ? "size-4" : "size-7"} />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="truncate text-sm font-semibold text-sidebar-foreground">
+              {lines.name}
+            </span>
+            {compact ? null : <ScopeSubtitle scope={current.scope} fallback={lines.where} />}
           </span>
-          {compact ? null : <ScopeSubtitle scope={current.scope} fallback={lines.where} />}
-        </span>
-        <ChevronsUpDownIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-      </MenuTrigger>
-      <MenuPopup align="start" className="w-(--anchor-width) min-w-72">
-        <ProjectMenuBody
-          groups={groups}
-          peer={peer}
-          marks={marks}
-          current={current}
-          onChange={(scope) => {
-            setOpen(false);
-            current.setScope(scope);
-          }}
-        />
-      </MenuPopup>
-    </Menu>
+          <ChevronsUpDownIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        </MenuTrigger>
+        <MenuPopup align="start" className="w-(--anchor-width) min-w-72">
+          <ProjectMenuBody
+            groups={groups}
+            peer={peer}
+            marks={marks}
+            current={current}
+            onChange={(scope) => {
+              setOpen(false);
+              current.setScope(scope);
+            }}
+            onChangeSets={(sets, scope) => {
+              setOpen(false);
+              if (scope !== undefined) current.setScope(scope, sets);
+            }}
+            onRename={(set) => {
+              setOpen(false);
+              setRenaming(set);
+            }}
+          />
+        </MenuPopup>
+      </Menu>
+      <RenameProjectSetDialog set={renaming} onClose={() => setRenaming(null)} />
+    </>
   );
 }
 
@@ -182,24 +217,46 @@ function ProjectMenuBody({
   marks,
   current,
   onChange,
+  onChangeSets,
+  onRename,
 }: {
   readonly groups: ReadonlyArray<SidebarProjectSnapshot>;
   readonly peer: ReturnType<typeof peerProjectIndex>;
   readonly marks: ReadonlyArray<Pick<WorkProjectNode, "workspace" | "projectId">>;
   readonly current: ResolvedProjectScope;
   readonly onChange: (scope: string) => void;
+  /** After a change of the project sets, with the scope to follow, if any. */
+  readonly onChangeSets: (sets: ReadonlyArray<ProjectSet>, scope: string | undefined) => void;
+  readonly onRename: (set: ProjectSet) => void;
 }) {
   const { environmentId, status, tree, needs, actions, plugins } = useWorkData();
   const navigate = useNavigate();
   const openSettings = useOpenPeerSettings();
   const files = useFileContextMenu(environmentId);
   const { isMobile, setOpenMobile } = useSidebar();
+  const [sets, setSets] = useProjectSets();
   const sections = projectMenuSections({
     workspaces: status?.workspaces ?? [],
     tree,
     needs,
     locals: localProjectGroups(groups, peer),
+    sets,
   });
+  const set = setOfScope(current.scope, sets);
+  const toAdd = projectsToAdd(sections, set?.projects ?? [current.scope]);
+  const saveSets = (next: ReadonlyArray<ProjectSet>, scope: string | undefined) => {
+    setSets(next);
+    onChangeSets(next, scope);
+  };
+  const addProject = (row: { readonly scope: string; readonly name: string }) => {
+    if (set !== undefined) {
+      saveSets(addToSet(sets, set.id, row.scope), current.scope);
+      return;
+    }
+    const id = newSetId();
+    const first = { scope: current.scope, name: current.name ?? row.name };
+    saveSets(joinProjects(sets, id, first, row), scopeOfSet(id));
+  };
   // What the menu does on the project in scope: its coordination, settings, folder and removal.
   const menu = actionsForScope(current.scope, { status, groups });
   const leave = () => {
@@ -257,6 +314,53 @@ function ProjectMenuBody({
         <PlusIcon aria-hidden />
         Add a project…
       </MenuItem>
+      {current.scope === ALL_PROJECTS || toAdd.length === 0 ? null : (
+        <MenuSub>
+          <MenuSubTrigger>
+            <Layers2Icon aria-hidden />
+            {set === undefined ? "Add to a workspace with…" : "Add a project to the workspace"}
+          </MenuSubTrigger>
+          <MenuSubPopup>
+            {toAdd.map((row) => (
+              <MenuItem key={row.scope} onClick={() => addProject(row)}>
+                <ProjectMark name={row.name} colorKey={row.scope} className="size-4" />
+                <span className="min-w-0 truncate">{row.name}</span>
+              </MenuItem>
+            ))}
+          </MenuSubPopup>
+        </MenuSub>
+      )}
+      {set === undefined ? null : (
+        <>
+          <MenuSeparator />
+          <MenuGroup>
+            <MenuGroupLabel>{set.name}</MenuGroupLabel>
+            <MenuItem onClick={() => onRename(set)}>
+              <PencilIcon aria-hidden />
+              Rename workspace…
+            </MenuItem>
+            <MenuSub>
+              <MenuSubTrigger inset>Take a project out</MenuSubTrigger>
+              <MenuSubPopup>
+                {(current.members ?? []).map((member) => (
+                  <MenuItem
+                    key={member.scope}
+                    onClick={() => {
+                      const left = removeFromSet(sets, set.id, member.scope);
+                      saveSets(left.sets, left.scope);
+                    }}
+                  >
+                    {member.name}
+                  </MenuItem>
+                ))}
+              </MenuSubPopup>
+            </MenuSub>
+            <MenuItem inset onClick={() => saveSets(dissolveSet(sets, set.id), set.projects[0])}>
+              Ungroup workspace
+            </MenuItem>
+          </MenuGroup>
+        </>
+      )}
       {menu === null ? null : (
         <>
           <MenuSeparator />
@@ -346,7 +450,7 @@ function ProjectMenuBody({
                   )
                 }
               >
-                Remove from workspace…
+                Remove from {menu.workspaceName}…
               </MenuItem>
             ) : null}
           </MenuGroup>

@@ -6,6 +6,7 @@ import {
   type ScopedProjectRef,
 } from "@t3tools/contracts";
 
+import { isSetScope, setOfScope, type ProjectSet } from "./projectSets.logic";
 import { ALL_PROJECTS, projectScopeKey } from "./workBoard.logic";
 
 /**
@@ -60,6 +61,8 @@ export interface ScopeGroup {
 export interface ProjectCatalog {
   readonly peer: ReadonlyArray<PeerProjectEntry>;
   readonly groups: ReadonlyArray<ScopeGroup>;
+  /** This computer's project sets; a catalog without them resolves no set. */
+  readonly sets?: ReadonlyArray<ProjectSet>;
 }
 
 /** The scope in force, once checked against the projects there are. */
@@ -70,6 +73,8 @@ export interface ResolvedProjectScope {
   readonly name: string | undefined;
   /** The projects whose chats it shows; null for every project. */
   readonly refs: ReadonlyArray<ScopedProjectRef> | null;
+  /** A project set's projects, in order; a project gone from the catalog drops out. */
+  readonly members?: ReadonlyArray<ResolvedProjectScope>;
 }
 
 const EVERY_PROJECT: ResolvedProjectScope = { scope: ALL_PROJECTS, name: undefined, refs: null };
@@ -84,6 +89,19 @@ const projectRefKey = (ref: ScopedProjectRef): string => `${ref.environmentId}:$
  */
 export function resolveProjectScope(stored: string, known: ProjectCatalog): ResolvedProjectScope {
   if (stored === ALL_PROJECTS) return EVERY_PROJECT;
+  if (isSetScope(stored)) {
+    const set = setOfScope(stored, known.sets ?? []);
+    if (set === undefined) return EVERY_PROJECT;
+    const members = set.projects
+      .map((project) => resolveProjectScope(project, known))
+      .filter((member) => member.scope !== ALL_PROJECTS);
+    return {
+      scope: stored,
+      name: set.name,
+      refs: members.flatMap((member) => member.refs ?? []),
+      members,
+    };
+  }
   if (isLocalScope(stored)) {
     const key = stored.slice(LOCAL_SCOPE_PREFIX.length);
     const group = known.groups.find((candidate) => candidate.projectKey === key);

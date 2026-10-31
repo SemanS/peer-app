@@ -33,8 +33,8 @@ import { RoomAgentDiff } from "./RoomAgentDiff";
 import { RoomComposer, type DraftLine, type DraftPaths } from "./RoomComposer";
 import { roomMessageId, RoomConversation } from "./RoomConversation";
 import { RoomDiff, type DiffFocus } from "./RoomDiff";
+import { RoomAgents } from "./RoomAgents";
 import { RoomFiles } from "./RoomFiles";
-import { RoomHerdr } from "./RoomHerdr";
 import { RoomJujutsu } from "./RoomJujutsu";
 import { RoomReach } from "./RoomReach";
 import { watchable } from "./roomDiff.logic";
@@ -46,7 +46,7 @@ const SIDE_LABEL = {
   diff: "Diff",
   files: "Files",
   jujutsu: "Jujutsu",
-  herdr: "Herdr",
+  agents: "Agents",
   agent: "Agent",
 } as const;
 type RoomSide = keyof typeof SIDE_LABEL;
@@ -279,7 +279,7 @@ function RoomBody({
           <Toggle value="diff">Diff</Toggle>
           <Toggle value="files">Files</Toggle>
           <Toggle value="jujutsu">Jujutsu</Toggle>
-          <Toggle value="herdr">Herdr</Toggle>
+          <Toggle value="agents">Agents</Toggle>
           {agentLabel === null ? null : <Toggle value="agent">{agentLabel}</Toggle>}
         </ToggleGroup>
       </div>
@@ -396,7 +396,7 @@ function RoomBody({
               <Toggle value="diff">Diff</Toggle>
               <Toggle value="files">Files</Toggle>
               <Toggle value="jujutsu">Jujutsu</Toggle>
-              <Toggle value="herdr">Herdr</Toggle>
+              <Toggle value="agents">Agents</Toggle>
               {agentLabel === null ? null : <Toggle value="agent">{agentLabel}</Toggle>}
             </ToggleGroup>
           </div>
@@ -480,9 +480,9 @@ function RoomBody({
             ) : null}
           </div>
           <div
-            className={cn("min-h-0 min-w-0 flex-1 flex-col", side === "herdr" ? "flex" : "hidden")}
+            className={cn("min-h-0 min-w-0 flex-1 flex-col", side === "agents" ? "flex" : "hidden")}
           >
-            <RoomHerdr
+            <RoomAgents
               environmentId={environmentId}
               status={status}
               projectState={projectState}
@@ -492,6 +492,7 @@ function RoomBody({
               now={read.now}
               nameOf={nameOf}
               onOpen={onOpen}
+              place={place}
             />
           </div>
         </section>

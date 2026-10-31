@@ -280,6 +280,7 @@ import { newChatProject, scopeOfProject } from "./workspaces/projectScope.logic"
 import { routeForView } from "./workspaces/sidebarRoutes.logic";
 import { ALL_PROJECTS } from "./workspaces/workBoard.logic";
 import { ActiveOrganization } from "./workspaces/ActiveOrganization";
+import { ProjectSetMembers } from "./workspaces/ProjectSetNav";
 import { WorkScopePicker } from "./workspaces/WorkScopePicker";
 import { WorkPanel } from "./workspaces/WorkPanel";
 import { SidebarAttention } from "./workspaces/SidebarAttention";
@@ -4441,6 +4442,9 @@ export default function Sidebar() {
                 )}
                 <SidebarTools scope={projectScope.scope} />
               </div>
+              {projectScope.members === undefined ? null : (
+                <ProjectSetMembers scope={projectScope} />
+              )}
               <SidebarViewSwitch
                 view={sidebarView}
                 tab={sidebarTab}

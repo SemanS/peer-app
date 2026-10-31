@@ -23,6 +23,8 @@ import {
   sidebarNeedsCount,
 } from "./sidebarNav.logic";
 import { DEFAULT_PROJECT_TAB, type PeerSettingsLocation } from "./settings/peerSettings.logic";
+import type { ProjectSet } from "./projectSets.logic";
+import { isSetScope, setScope } from "./projectSets.logic";
 import { ALL_PROJECTS, projectScopeKey } from "./workBoard.logic";
 import { canRemoveProject } from "./workMenus.logic";
 import type { WorkProjectNode } from "./workTree.logic";
@@ -80,6 +82,7 @@ export function projectMenuSections(input: {
     readonly displayName: string;
     readonly workspaceRoot: string;
   }>;
+  readonly sets?: ReadonlyArray<ProjectSet>;
 }): ReadonlyArray<ProjectMenuSection> {
   const nodes = new Map(input.tree.map((node) => [projectScopeKey(node), node] as const));
   const sections: ProjectMenuSection[] = input.workspaces
@@ -116,12 +119,41 @@ export function projectMenuSections(input: {
       })),
     });
   }
-  return sections;
+  const sets = input.sets ?? [];
+  if (sets.length === 0) return sections;
+  const names = new Map(
+    sections.flatMap((section) => section.rows.map((row) => [row.scope, row.name] as const)),
+  );
+  return [
+    {
+      id: "sets",
+      heading: "Your workspaces",
+      rows: sets.map((set) => ({
+        scope: setScope(set.id),
+        name: set.name,
+        folder: set.projects.map((project) => names.get(project) ?? project).join(" · "),
+        active: undefined,
+        needs: undefined,
+      })),
+    },
+    ...sections,
+  ];
+}
+
+/** The projects a scope can still take in, for Add a project: every project it does not hold. */
+export function projectsToAdd(
+  sections: ReadonlyArray<ProjectMenuSection>,
+  held: ReadonlyArray<string>,
+): ReadonlyArray<ProjectMenuRow> {
+  return sections
+    .filter((section) => section.id !== "sets")
+    .flatMap((section) => section.rows)
+    .filter((row) => !held.includes(row.scope));
 }
 
 /** The project button's two lines: where the project is, and its name. */
 export function projectButtonLines(
-  scope: Pick<ResolvedProjectScope, "scope" | "name">,
+  scope: Pick<ResolvedProjectScope, "scope" | "name" | "members">,
   workspaces: ReadonlyArray<{ readonly slug: string; readonly name: string }>,
 ): { readonly where: string; readonly name: string } {
   if (scope.name === undefined || scope.scope === ALL_PROJECTS) {
@@ -134,6 +166,9 @@ export function projectButtonLines(
             : `${workspaces.length} workspaces`,
       name: "All projects",
     };
+  }
+  if (isSetScope(scope.scope)) {
+    return { where: `${scope.members?.length ?? 0} projects`, name: scope.name };
   }
   if (isLocalScope(scope.scope)) return { where: "This computer", name: scope.name };
   const slug = scope.scope.split("/")[0];

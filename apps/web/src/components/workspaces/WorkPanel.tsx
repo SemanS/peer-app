@@ -48,6 +48,13 @@ export function WorkPanel({
   const scope = resolved.scope;
   const local = isLocalScope(scope);
   const current = tree.find((project) => projectScopeKey(project) === scope);
+  const members = resolved.members;
+  const listed =
+    members === undefined
+      ? tree
+      : tree.filter((project) =>
+          members.some((member) => member.scope === projectScopeKey(project)),
+        );
   const counts = sidebarNav(
     tree.filter((project) => inScope(scope, project)),
     needs,
@@ -68,7 +75,7 @@ export function WorkPanel({
             <LocalProjectTab scope={resolved} tab={tab} />
           ) : current === undefined ? (
             <p className="px-2 text-xs leading-relaxed text-muted-foreground">
-              Choose a project to see its {tab === "knowledge" ? "knowledge" : "activity"}.
+              Choose one project to see its {tab === "knowledge" ? "knowledge" : "activity"}.
             </p>
           ) : tab === "knowledge" ? (
             <ProjectKnowledgeNav
@@ -112,9 +119,9 @@ export function WorkPanel({
               <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
             ) : !status.signedIn ? (
               <LocalProjectNote />
-            ) : local ? (
+            ) : local || (members !== undefined && listed.length === 0) ? (
               <LocalProjectNote />
-            ) : current === undefined && scope !== ALL_PROJECTS ? (
+            ) : current === undefined && scope !== ALL_PROJECTS && members === undefined ? (
               <p className="px-2 text-xs leading-relaxed text-muted-foreground">
                 No team tasks yet for this project.
               </p>
@@ -141,10 +148,10 @@ export function WorkPanel({
                 <WorkSectionLabel>
                   Projects
                   <span className="font-normal tracking-normal normal-case tabular-nums">
-                    {tree.length}
+                    {listed.length}
                   </span>
                 </WorkSectionLabel>
-                {tree.map((project) => (
+                {listed.map((project) => (
                   <ProjectDisclosure
                     key={projectScopeKey(project)}
                     project={project}

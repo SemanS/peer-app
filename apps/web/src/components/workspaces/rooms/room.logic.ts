@@ -26,7 +26,7 @@ import * as Schema from "effect/Schema";
 
 import type { SignalTone } from "../signals";
 import { runThreadKeys, type TaskRunRow } from "../task/runs.logic";
-import type { WorkOpen } from "../workTree.logic";
+import type { WorkOpen, WorkProjectNode } from "../workTree.logic";
 
 /** The Hub's bound on a message: more is refused with `bad_text`. */
 export const ROOM_TEXT_MAX = 4_000;
@@ -597,6 +597,19 @@ const liveStatus = (run: PeerRun, threads: ReadonlyArray<WorkThreadNode>): PeerW
   if (first !== undefined) return first.status;
   return run.sessions.some((session) => session.to === undefined) ? "working" : "idle";
 };
+
+/** Every agent on a project's work, tasks and threads on no task alike, under its people. */
+export function projectAgentGroups(
+  project: Pick<WorkProjectNode, "areas" | "unsorted">,
+  me: string,
+  nameOf: NameOf,
+): ReadonlyArray<RoomAgentGroup> {
+  const threads = [
+    ...project.unsorted,
+    ...project.areas.flatMap((area) => area.tasks.flatMap((task) => task.threads)),
+  ];
+  return roomAgentGroups({ runs: [], rows: [], threads, me, nameOf });
+}
 
 /**
  * The room's agents under the people who run them: only people with an agent here, you first. A run

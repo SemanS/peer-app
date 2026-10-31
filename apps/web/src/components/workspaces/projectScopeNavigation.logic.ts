@@ -1,3 +1,4 @@
+import { setScope } from "./projectSets.logic";
 import { ALL_PROJECTS } from "./workBoard.logic";
 import {
   scopeOfProject,
@@ -11,6 +12,7 @@ export function scopeForLocation(
   search: Readonly<Record<string, unknown>>,
   catalog: ProjectCatalog,
 ): string | undefined {
+  if (params.setId) return setScope(params.setId);
   if (params.workspace && params.project) return `${params.workspace}/${params.project}`;
   if (pathname === "/work" && typeof search.scope === "string") return search.scope;
   if (pathname !== "/pull-requests") return undefined;

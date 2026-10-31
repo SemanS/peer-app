@@ -75,7 +75,16 @@ type RequestCard = Extract<NeedCard, { readonly kind: "request" }>;
  * same tasks out as rows.
  */
 export function WorkBoard() {
-  const { environmentId, status, plugins, tree, here, actions, needs, now } = useWorkData();
+  const {
+    environmentId,
+    status,
+    plugins,
+    tree: everyProject,
+    here,
+    actions,
+    needs,
+    now,
+  } = useWorkData();
   const navigate = useNavigate();
   const { view } = useSearch({ from: "/_chat/work" });
   const attention = view === "needs-you";
@@ -84,7 +93,15 @@ export function WorkBoard() {
   const projectGroups = useSidebarProjectGroups();
   const selected = useProjectScope(projectGroups);
   useWorkScopeUrl(selected.requestedScope);
-  const scope = selected.scope;
+  // A project set is its projects together: the board reads them as all projects of a smaller tree.
+  const members = selected.members;
+  const scope = members === undefined ? selected.scope : ALL_PROJECTS;
+  const tree =
+    members === undefined
+      ? everyProject
+      : everyProject.filter((project) =>
+          members.some((member) => member.scope === projectScopeKey(project)),
+        );
   const local = isLocalScope(scope);
   const [layout, setLayout] = useLocalStorage("peer:work-board-layout", null, StoredLayout);
   const [whose, setWhose] = useLocalStorage("peer:work-board-whose", null, StoredWhose);

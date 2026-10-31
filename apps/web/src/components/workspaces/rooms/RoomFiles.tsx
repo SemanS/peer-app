@@ -75,7 +75,7 @@ export function RoomFiles({
   );
 }
 
-function RoomFileSurface({
+export function RoomFileSurface({
   environmentId,
   folder,
   projectName,

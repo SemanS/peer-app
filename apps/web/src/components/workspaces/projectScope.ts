@@ -20,6 +20,8 @@ import {
   type PeerProjectEntry,
   type ScopeGroup,
 } from "./projectScope.logic";
+import { isSetScope, SET_SCOPE_PREFIX, setHolds, type ProjectSet } from "./projectSets.logic";
+import { useProjectSets } from "./projectSets";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 import { useThreadRouteRef } from "../../hooks/useThreadRouteTarget";
 import { useThreadShell } from "../../state/entities";
@@ -75,19 +77,22 @@ export function useProjectScope(groups: ReadonlyArray<ScopeGroup>) {
   const [stored, setStored] = useWorkScope();
   const navigate = useNavigate();
   const peer = usePeerProjectIndex();
+  const [sets] = useProjectSets();
   const [chosenWorkspace, setChosenWorkspace] = useChosenWorkspace();
   const location = useLocation();
   const params = useParams({ strict: false });
   const thread = useThreadShell(useThreadRouteRef());
   const threadScope = thread === null ? undefined : scopeOfProject(thread, { peer, groups })?.scope;
   const routeScope = scopeForLocation(location.pathname, params, location.search, { peer, groups });
+  // A set's task or chat stays in the set: opening one of its projects does not leave it.
+  const inSet = setHolds(stored, routeScope, sets);
   const workspaceOf = (scope: string | undefined) =>
     peer.find((entry) => entry.scope === scope)?.scope.split("/")[0];
   const routeWorkspace = workspaceOf(routeScope);
   const threadWorkspace = workspaceOf(threadScope);
   const rememberScope = useEffectEvent(
     (next: string | undefined, workspace: string | undefined) => {
-      if (next !== undefined && next !== stored) setStored(next);
+      if (next !== undefined && next !== stored && !setHolds(stored, next, sets)) setStored(next);
       // A direct link or Back can return to a different organization's project.
       if (workspace !== undefined && workspace !== chosenWorkspace) setChosenWorkspace(workspace);
     },
@@ -98,14 +103,31 @@ export function useProjectScope(groups: ReadonlyArray<ScopeGroup>) {
   useEffect(() => {
     rememberScope(threadScope, threadWorkspace);
   }, [threadScope, threadWorkspace]);
-  const setScope = (value: string) => {
-    const next = resolveProjectScope(value, { peer, groups });
+  // A set made a moment ago is not in `sets` until the next render, so its maker passes the new list.
+  const setScope = (value: string, knownSets: ReadonlyArray<ProjectSet> = sets) => {
+    const next = resolveProjectScope(value, { peer, groups, sets: knownSets });
     setStored(next.scope);
-    void navigate(locationForProjectScope(location.pathname, location.search, next));
+    if (isSetScope(next.scope)) {
+      const setId = next.scope.slice(SET_SCOPE_PREFIX.length);
+      void navigate({ to: "/workspace/$setId", params: { setId } });
+    } else {
+      void navigate(locationForProjectScope(location.pathname, location.search, next));
+    }
   };
-  const resolved = resolveProjectScope(routeScope ?? stored, { peer, groups });
+  const resolved = resolveProjectScope(inSet ? stored : (routeScope ?? stored), {
+    peer,
+    groups,
+    sets,
+  });
   const keys = chatScopeKeys(resolved.refs);
-  return { ...resolved, requestedScope: routeScope ?? stored, keys, peer, setScope };
+  return {
+    ...resolved,
+    requestedScope: inSet ? stored : (routeScope ?? stored),
+    keys,
+    peer,
+    stored,
+    setScope,
+  };
 }
 
 /** Preserve the saved choice in history even before the project catalogs have arrived. */

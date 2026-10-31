@@ -260,3 +260,24 @@ describe("landingProject", () => {
     expect(landingProject(every, "server", [], [])).toBeNull();
   });
 });
+
+describe("a project set's scope", () => {
+  const environmentId = EnvironmentId.make("env");
+  const ref = (id: string) => ({ environmentId, projectId: ProjectId.make(id) });
+  const known = {
+    peer: [{ scope: "acme/app", name: "App", refs: [ref("app")] }],
+    groups: [{ projectKey: "site", displayName: "Site", memberProjectRefs: [ref("site")] }],
+    sets: [{ id: "s1", name: "Shop", projects: ["acme/app", "local:site", "acme/gone"] }],
+  };
+
+  it("holds its projects' chats and drops a project that is gone", () => {
+    const resolved = resolveProjectScope("set:s1", known);
+    expect(resolved.name).toBe("Shop");
+    expect(resolved.members?.map((member) => member.scope)).toEqual(["acme/app", "local:site"]);
+    expect(resolved.refs).toEqual([ref("app"), ref("site")]);
+  });
+
+  it("falls back to every project for a set no longer here", () => {
+    expect(resolveProjectScope("set:s2", known).scope).toBe("all");
+  });
+});

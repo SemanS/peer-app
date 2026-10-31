@@ -6,6 +6,7 @@ import {
   joinProjects,
   removeFromSet,
   renameSet,
+  setFolders,
   setHolds,
   setOfProject,
   setScope,
@@ -78,5 +79,13 @@ describe("checkoutOf", () => {
 
   it("has none for a project not open anywhere", () => {
     expect(checkoutOf([{ environmentId: "x", projectId: "y" }], catalog, "here")).toBeNull();
+  });
+});
+
+describe("setFolders", () => {
+  it("gives a shared room the folders of the set's unshared projects", () => {
+    const groups = [{ projectKey: "site", displayName: "Site", workspaceRoot: "/w/site" }];
+    expect(setFolders(pair, groups)).toEqual([{ name: "Site", folder: "/w/site" }]);
+    expect(setFolders(undefined, groups)).toEqual([]);
   });
 });

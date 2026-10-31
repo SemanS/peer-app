@@ -16,12 +16,19 @@ import type * as PeerState from "../state/PeerState.ts";
 const RunRoot = Schema.Struct({
   project: Schema.String,
   repository: Schema.String,
+  /** Empty for a folder of no Hub project: its edits belong to no project's coordination. */
   task: Schema.String,
   root: Schema.String,
 });
 export type RunRoot = typeof RunRoot.Type;
 
-const RunRoots = Schema.Struct({ runs: Schema.Record(Schema.String, Schema.Array(RunRoot)) });
+const RoomFolder = Schema.Struct({ name: Schema.String, folder: Schema.String });
+
+const RunRoots = Schema.Struct({
+  runs: Schema.Record(Schema.String, Schema.Array(RunRoot)),
+  /** Group → folders of projects no Hub workspace shares, which its room's agent works in too. */
+  folders: Schema.optional(Schema.Record(Schema.String, Schema.Array(RoomFolder))),
+});
 
 export const runRootsData = (state: PeerState.PeerState["Service"]) =>
   state.pluginData("rooms", RunRoots);
@@ -40,6 +47,7 @@ const real = (path: string): string => {
 export const rootHolding = (roots: ReadonlyArray<RunRoot>, path: string): RunRoot | undefined => {
   const target = real(path);
   return roots.find((entry) => {
+    if (entry.task === "") return false;
     const root = real(entry.root);
     return target === root || target.startsWith(`${root}${NodePath.sep}`);
   });

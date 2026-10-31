@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - a folder named over the wire must be a full path.
 /**
  * Rooms: a task's room on this environment. What the person does goes to the Hub; what waits on them
  * and what this computer must act on is read from `/rooms/inbox` on a ping, at sync and on
@@ -6,6 +7,8 @@
  *
  * @module peerHub/plugins/rooms/Rooms
  */
+import * as NodePath from "node:path";
+
 import {
   PeerHubError,
   type PeerRoomCapacity,
@@ -24,6 +27,7 @@ import {
   type PeerRoomsPlace,
   type PeerRoomsPostInput,
   type PeerRoomsReadInput,
+  type PeerRoomsFoldersInput,
   type PeerRoomsSeenInput,
   type PeerRoomsSetReachInput,
   type PeerRoomsWithdrawInput,
@@ -474,7 +478,7 @@ const make = Effect.gen(function* () {
           yield* shareWork(plugins, sealed.gitDir, place);
         }
         const others = Option.getOrUndefined(yield* runRootsData(state).read)?.runs[run] ?? [];
-        for (const other of others) {
+        for (const other of others.filter((entry) => entry.task !== "")) {
           const elsewhere = {
             workspace: place.workspace,
             project: other.project,
@@ -490,6 +494,20 @@ const make = Effect.gen(function* () {
         return message;
       }),
     // What was read leaves Needs you: the Hub's list changes, and no ping says so.
+    folders: ({ group, folders }: PeerRoomsFoldersInput) =>
+      Effect.gen(function* () {
+        const absolute = folders.filter(({ folder }) => NodePath.isAbsolute(folder));
+        yield* runRootsData(state)
+          .update((current) => {
+            const stored = Option.getOrUndefined(current);
+            return {
+              runs: stored?.runs ?? {},
+              folders: { ...stored?.folders, [group]: absolute },
+            };
+          })
+          .pipe(state.lock.withPermits(1));
+        return { saved: absolute.length };
+      }),
     seen: ({ seq, ...place }: PeerRoomsSeenInput) =>
       hub.seen(place, seq).pipe(after(place.workspace)),
     pass: (input: PeerRoomsPassInput) =>

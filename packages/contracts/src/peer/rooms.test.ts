@@ -113,6 +113,7 @@ describe("the rooms plugin's place", () => {
     for (const method of [
       methods.peerRoomsPost,
       methods.peerRoomsSeen,
+      methods.peerRoomsFolders,
       methods.peerRoomsPass,
       methods.peerRoomsDecline,
       methods.peerRoomsWithdraw,

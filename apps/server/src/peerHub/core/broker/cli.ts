@@ -196,10 +196,13 @@ export function longerWaits(plugins: PeerBrokerPlugins): ReadonlyArray<readonly 
 export async function callerOf(
   this: CoordinationBroker,
   headers: NodeHttp.IncomingHttpHeaders,
+  command?: string,
 ): Promise<LocalSession> {
   const session = await namedCaller.call(this, headers);
   const cwd = headerOf(headers, "x-peer-cwd");
-  if (cwd === undefined || inRepository(session, cwd) !== null) return session;
+  // A shared room is the run's own, whichever folder its shell stands in.
+  if (cwd === undefined || command === "room" || inRepository(session, cwd) !== null)
+    return session;
   return (await this.companionAt(session, cwd)) ?? session;
 }
 
@@ -321,7 +324,7 @@ export async function runCli(
     (verifiedSession !== undefined && publicCommand === true);
   if ((PUBLIC_COMMANDS.has(command) || publicCommand === true) && !named)
     return publicCli(this, command, args, headers);
-  const session = verifiedSession ?? (await this.callerOf(headers));
+  const session = verifiedSession ?? (await this.callerOf(headers, command));
   plugins = pluginsForWorkspace(plugins, session.workspace);
   owned = pluginCommand(plugins, command);
   // A CLI read never makes another agent active or cancels its wait for a note.

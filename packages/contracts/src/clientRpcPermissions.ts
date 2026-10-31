@@ -64,6 +64,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // A room's message may start an agent, on this environment or a colleague's.
   [WS_METHODS.peerRoomsPost]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRoomsSeen]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerRoomsFolders]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRoomsPass]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRoomsDecline]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRoomsWithdraw]: AuthOrchestrationOperateScope,

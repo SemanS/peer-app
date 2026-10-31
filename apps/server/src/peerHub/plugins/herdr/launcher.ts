@@ -33,6 +33,13 @@ const PROMPT_POLL_MS = 500;
 /** After its prompt, for its first hook to arrive before it stops counting as waiting. */
 const SESSION_SETTLES_MS = 30_000;
 
+/** Claude Code reads an added folder's CLAUDE.md only when told to; Codex ignores this. */
+export const withDirs = (
+  env: Readonly<Record<string, string>>,
+  dirs: ReadonlyArray<string>,
+): Readonly<Record<string, string>> =>
+  dirs.length === 0 ? env : { ...env, CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: "1" };
+
 /** A run across projects is told where the others are: nothing else in its session says so. */
 export const withProjects = (
   prompt: string,
@@ -44,7 +51,7 @@ export const withProjects = (
         prompt,
         "This work spans several projects. Besides this folder, you work in these, each your own checkout on its own branch:",
         ...also.map((other) => `- ${other.project}: ${other.root}`),
-        "Run version control per folder (git -C <folder>, or jj -R <folder>); each project commits and lands on its own. Run peer from a folder to act on that project: peer review there hands its work off. Answer in the room from this folder.",
+        "Run version control per folder (git -C <folder>, or jj -R <folder>); each project commits and lands on its own. Before you change anything in a folder, read its AGENTS.md or CLAUDE.md, and its .ai knowledge if it has any: each project has its own rules. Run peer from a folder to act on that project: peer review there hands its work off. Answer in the room from this folder.",
       ].join("\n");
 
 /** Launches task agents in herdr, showing each among herdr's agents at once. */
@@ -131,6 +138,7 @@ export const makeLauncher = (agents: HerdrAgents) =>
           }),
         );
         const prompt = withProjects(input.prompt, also);
+        const dirs = [...(input.dirs ?? []), ...also.map((other) => other.root)];
         const identity = yield* Effect.tryPromise({
           try: () => NodeFSP.stat(tree.cwd),
           catch: () => hubError("The newly created task checkout disappeared before startup."),
@@ -140,11 +148,11 @@ export const makeLauncher = (agents: HerdrAgents) =>
             client.start({
               cwd: tree.cwd,
               harness,
-              env: input.env,
+              env: withDirs(input.env, dirs),
               resume: input.resume,
               model: input.model,
               effort: input.effort,
-              dirs: [...(input.dirs ?? []), ...also.map((other) => other.root)],
+              dirs,
             }),
           catch: (failure) => {
             const message = messageOf(failure);

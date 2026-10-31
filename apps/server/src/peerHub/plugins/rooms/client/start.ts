@@ -25,6 +25,7 @@ import type * as PeerState from "../../../core/state/PeerState.ts";
 import { projectKey } from "../../../core/state/PeerState.ts";
 import type * as PeerWork from "../../../core/work/PeerWork.ts";
 import { runRootsData, type RunRoot } from "../../../core/work/runRoots.ts";
+import { run } from "../../../core/local.ts";
 import { NO_CHECKOUT } from "../follow.ts";
 import { chatRunPrompt, passedRunPrompt, reviewRoomPrompt, type Heard } from "../text.ts";
 
@@ -158,6 +159,40 @@ const sharedRooms = (
     return found;
   });
 
+/** The branch a folder of no Hub project stands on, else its remote's default. */
+const baseOf = async (folder: string) => {
+  const name = (args: ReadonlyArray<string>) =>
+    run("git", ["-C", folder, "symbolic-ref", "--short", ...args], { timeoutMs: 5_000 }).then(
+      (out) => out.trim(),
+      () => "",
+    );
+  return (
+    (await name(["HEAD"])) ||
+    (await name(["refs/remotes/origin/HEAD"])).replace(/^origin\//, "") ||
+    "main"
+  );
+};
+
+/** The folders a shared room's agent works in besides its Hub projects, as `launch` takes them. */
+const roomFolders = (state: PeerState.PeerState["Service"], group: string | undefined) =>
+  Effect.gen(function* () {
+    if (group === undefined) return [];
+    const stored = Option.getOrUndefined(yield* runRootsData(state).read);
+    return yield* Effect.forEach(stored?.folders?.[group] ?? [], ({ name, folder }) =>
+      Effect.promise(async () => ({
+        project: name,
+        checkout: folder,
+        baseBranch: await baseOf(folder),
+        worktrees: NodePath.join(
+          state.workspaceRoot,
+          ".worktrees",
+          "_folders",
+          NodePath.basename(folder),
+        ),
+      })),
+    );
+  });
+
 export const roomStarts = (
   state: PeerState.PeerState["Service"],
   work: PeerWork.PeerWork["Service"],
@@ -229,6 +264,7 @@ export const roomStarts = (
           (effort !== undefined && !isEffort(effort))
         )
           return yield* refusal("Peer cannot start that model.");
+        const folders = yield* roomFolders(state, task.group);
         const launcher = yield* plugins.require("taskLauncher");
         const unavailable = yield* launcher.unavailable;
         if (unavailable !== null) return yield* refusal(unavailable);
@@ -249,18 +285,21 @@ export const roomStarts = (
               harness,
               prompt: task.chat === true ? chatRunPrompt(heard) : passedRunPrompt(heard),
               env,
-              also: others.map((other) => ({
-                project: other.project.name,
-                checkout: other.checkout.path,
-                baseBranch: other.checkout.repository.branch,
-                worktrees: NodePath.join(
-                  state.workspaceRoot,
-                  ".worktrees",
-                  workspace,
-                  other.project.id,
-                  other.checkout.repository.id,
-                ),
-              })),
+              also: [
+                ...others.map((other) => ({
+                  project: other.project.name,
+                  checkout: other.checkout.path,
+                  baseBranch: other.checkout.repository.branch,
+                  worktrees: NodePath.join(
+                    state.workspaceRoot,
+                    ".worktrees",
+                    workspace,
+                    other.project.id,
+                    other.checkout.repository.id,
+                  ),
+                })),
+                ...folders,
+              ],
               ...(model === undefined ? {} : { model }),
               ...(effort === undefined ? {} : { effort }),
             }),
@@ -278,11 +317,18 @@ export const roomStarts = (
                 },
               ];
         });
-        if (roots.length > 0) {
+        const folderRoots: ReadonlyArray<RunRoot> = folders.flatMap((folder, index) => {
+          const tree = started.alsoTrees?.[others.length + index];
+          return tree === undefined
+            ? []
+            : [{ project: folder.project, repository: "", task: "", root: tree.root }];
+        });
+        if (roots.length + folderRoots.length > 0) {
           yield* runRootsData(state)
-            .update((current) => ({
-              runs: { ...Option.getOrUndefined(current)?.runs, [run]: roots },
-            }))
+            .update((current) => {
+              const stored = Option.getOrUndefined(current);
+              return { ...stored, runs: { ...stored?.runs, [run]: [...roots, ...folderRoots] } };
+            })
             .pipe(state.lock.withPermits(1));
           // The same record as the run's own checkout, so it is cleaned up when its task is done.
           const contributions = yield* plugins.contributions;

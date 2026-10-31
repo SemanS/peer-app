@@ -139,3 +139,21 @@ export function checkoutOf(
     held.find((project) => project.environmentId === primaryEnvironmentId) ?? held[0] ?? null;
   return found === null ? null : { environmentId: found.environmentId, cwd: found.workspaceRoot };
 }
+
+/**
+ * A set's projects no Hub workspace shares, with where they are: a shared room's agent has no room
+ * in them, so it gets their folders. `groups` is the sidebar's catalog.
+ */
+export function setFolders(
+  set: ProjectSet | undefined,
+  groups: ReadonlyArray<{
+    readonly projectKey: string;
+    readonly displayName: string;
+    readonly workspaceRoot: string;
+  }>,
+): ReadonlyArray<{ readonly name: string; readonly folder: string }> {
+  return (set?.projects ?? []).flatMap((scope) => {
+    const group = groups.find((candidate) => `local:${candidate.projectKey}` === scope);
+    return group === undefined ? [] : [{ name: group.displayName, folder: group.workspaceRoot }];
+  });
+}

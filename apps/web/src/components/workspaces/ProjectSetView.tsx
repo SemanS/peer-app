@@ -22,7 +22,14 @@ import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { PeerPageHeader } from "./PeerPageHeader";
 import { useProjectScope } from "./projectScope";
 import { isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
-import { checkoutOf, setScope, type ProjectCheckoutRef } from "./projectSets.logic";
+import {
+  checkoutOf,
+  setFolders,
+  setOfScope,
+  setScope,
+  type ProjectCheckoutRef,
+} from "./projectSets.logic";
+import { useProjectSets } from "./projectSets";
 import { ProjectAgents } from "./rooms/RoomAgents";
 import { RoomFileSurface } from "./rooms/RoomFiles";
 import { NewSharedRoom } from "./rooms/SharedRoomView";
@@ -41,6 +48,7 @@ const isView = (value: unknown): value is View => VIEWS.includes(value as View);
  */
 export function ProjectSetView({ setId }: { readonly setId: string }) {
   const groups = useSidebarProjectGroups();
+  const [sets] = useProjectSets();
   const scope = useProjectScope(groups);
   const { environmentId, status, tree, actions } = useWorkData();
   const primary = usePrimaryEnvironmentId();
@@ -84,9 +92,7 @@ export function ProjectSetView({ setId }: { readonly setId: string }) {
                       ? []
                       : [{ workspace, project }];
                   })}
-                  left={members.flatMap((member) =>
-                    isLocalScope(member.scope) && member.name !== undefined ? [member.name] : [],
-                  )}
+                  folders={setFolders(setOfScope(scope.scope, sets), groups)}
                 />
               )
             ) : (

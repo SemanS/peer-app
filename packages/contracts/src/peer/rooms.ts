@@ -292,6 +292,21 @@ export type PeerRoomsSeenInput = typeof PeerRoomsSeenInput.Type;
 export const PeerRoomsSeenResult = Schema.Struct({ seen: Schema.Number });
 export type PeerRoomsSeenResult = typeof PeerRoomsSeenResult.Type;
 
+/**
+ * The folders on this computer that a shared room's agent works in besides its projects: projects
+ * no Hub workspace shares. They stay on this computer; the Hub never hears of them.
+ */
+export const PeerRoomsFoldersInput = Schema.Struct({
+  group: TrimmedNonEmptyString,
+  folders: Schema.Array(
+    Schema.Struct({ name: TrimmedNonEmptyString, folder: TrimmedNonEmptyString }),
+  ),
+});
+export type PeerRoomsFoldersInput = typeof PeerRoomsFoldersInput.Type;
+
+export const PeerRoomsFoldersResult = Schema.Struct({ saved: Schema.Number });
+export type PeerRoomsFoldersResult = typeof PeerRoomsFoldersResult.Type;
+
 /** Its owner passes a delivery on, or tries a failed one again. */
 export const PeerRoomsPassInput = Schema.Struct({
   ...RoomPlace,

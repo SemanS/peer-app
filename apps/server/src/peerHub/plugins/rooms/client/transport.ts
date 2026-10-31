@@ -16,6 +16,8 @@ export const roomsRpc = (rooms: Rooms["Service"]) =>
       RoomsRpcGroup.of({
         [methods.peerRoomsRead]: (input) => wrap.effect(methods.peerRoomsRead, rooms.read(input)),
         [methods.peerRoomsPost]: (input) => wrap.effect(methods.peerRoomsPost, rooms.post(input)),
+        [methods.peerRoomsFolders]: (input) =>
+          wrap.effect(methods.peerRoomsFolders, rooms.folders(input)),
         [methods.peerRoomsSeen]: (input) => wrap.effect(methods.peerRoomsSeen, rooms.seen(input)),
         [methods.peerRoomsPass]: (input) => wrap.effect(methods.peerRoomsPass, rooms.pass(input)),
         [methods.peerRoomsDecline]: (input) =>

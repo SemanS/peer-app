@@ -7276,7 +7276,7 @@ const followProgram = Effect.gen(function* () {
 
 /** A line in each project: the agent can reach the second one only through the folder it was given. */
 const SHARED_ASK = (project: string) =>
-  `Add the comment \`// marker-shared\` as the first line of src/pricing.ts in this project and also in the ${project} project, whose folder Peer gives you. Do not commit, do not run tests. Then say so in this room with peer room say, and run peer status from the ${project} folder.`;
+  `Add the comment \`// marker-shared\` as the first line of src/pricing.ts in this project and also in the ${project} project, whose folder Peer gives you. Do not commit, do not run tests. Then say so in this room with peer room say, and run peer status from the ${project} folder. Also add a file notes.md saying done in the Notes project, whose folder Peer gives you too.`;
 
 /**
  * LAB_SHARED=1: one room across Lab and Site. Ana's own message in Lab's chat starts one real agent; judged from what
@@ -7300,7 +7300,36 @@ const sharedRoomProgram = Effect.gen(function* () {
     ?.repositories[0];
   if (siteCheckout?.state !== "ready") throw new Error("Site could not be checked out");
   if (JJ) colocate(siteCheckout.path);
+  // A third project no workspace shares, with rules of its own, which the agent must follow.
+  const localFolder = NodePath.join(lab, "notes");
+  NodeChildProcess.execFileSync("git", [
+    "clone",
+    "--quiet",
+    NodePath.join(lab, "site.git"),
+    localFolder,
+  ]);
+  NodeFS.writeFileSync(
+    NodePath.join(localFolder, "CLAUDE.md"),
+    "Every file you add here starts with the line `marker-notes-rule`.\n",
+  );
+  NodeChildProcess.execFileSync("git", ["-C", localFolder, "add", "CLAUDE.md"]);
+  NodeChildProcess.execFileSync("git", [
+    "-C",
+    localFolder,
+    "-c",
+    "user.name=lab",
+    "-c",
+    "user.email=lab@acme.test",
+    "commit",
+    "--quiet",
+    "-m",
+    "rules",
+  ]);
   const group = "lab-shared-room";
+  yield* ana.client[PEER_ROOMS_METHODS.peerRoomsFolders]({
+    group,
+    folders: [{ name: "Notes", folder: localFolder }],
+  });
   const chat = (projectId: string) =>
     ana.client[WS_METHODS.peerHubCreateTask]({
       workspace: "acme",
@@ -7309,15 +7338,15 @@ const sharedRoomProgram = Effect.gen(function* () {
       chat: true,
       group,
     });
-  const lab = yield* chat("lab");
-  const site = yield* chat("site");
-  const place = (project: string, created: typeof lab) => ({
+  const labChat = yield* chat("lab");
+  const siteChat = yield* chat("site");
+  const place = (project: string, created: typeof labChat) => ({
     workspace: "acme",
     project,
     task: created.createdTask?.id ?? "",
   });
-  const labRoom = place("lab", lab);
-  const siteRoom = place("site", site);
+  const labRoom = place("lab", labChat);
+  const siteRoom = place("site", siteChat);
   const roomPath = `/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(labRoom.task)}/room`;
   const live: Array<{ computer: Computer; h: HerdrServer; pane: string; label?: string }> = [];
   const panes = () =>
@@ -7459,6 +7488,19 @@ const sharedRoomProgram = Effect.gen(function* () {
     );
     check(siteEdits.length > 0, "Site's edit went through a session of Site");
     check(siteRuns.length > 0, "Site's task has a run of its own");
+    const notesTree = (
+      NodeFS.readdirSync(NodePath.join(lab, "ana"), { recursive: true }) as string[]
+    ).find((entry) => entry.includes("_folders") && entry.endsWith("notes.md"));
+    const notes =
+      notesTree === undefined
+        ? ""
+        : NodeFS.readFileSync(NodePath.join(lab, "ana", notesTree), "utf8");
+    say("notes.md", `${notesTree} ${notes}`);
+    check(notes.includes("marker-notes-rule"), "the local project's rules reached the agent");
+    check(
+      !NodeFS.existsSync(NodePath.join(localFolder, "notes.md")),
+      "the local project's work is in a checkout of its own",
+    );
     check(answered, "the agent answered in the room");
     check(panes().length === 1, "one agent ran");
     check(patchOf(labDiff).includes("marker-shared"), "Lab's diff shows its edit");

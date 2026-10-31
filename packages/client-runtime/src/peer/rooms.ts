@@ -68,6 +68,10 @@ export function createPeerRoomsAtoms<R, ER>(
       label: "environment-data:peer.rooms.post",
       tag: WS_METHODS.peerRoomsPost,
     }),
+    folders: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer.rooms.folders",
+      tag: WS_METHODS.peerRoomsFolders,
+    }),
     seen: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer.rooms.seen",
       tag: WS_METHODS.peerRoomsSeen,

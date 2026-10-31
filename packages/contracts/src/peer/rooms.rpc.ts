@@ -28,6 +28,8 @@ import {
   PeerRoomThread,
   PeerRoomsPostInput,
   PeerRoomsReadInput,
+  PeerRoomsFoldersInput,
+  PeerRoomsFoldersResult,
   PeerRoomsSeenInput,
   PeerRoomsSeenResult,
   PeerRoomsSetReachInput,
@@ -39,6 +41,7 @@ export const PEER_ROOMS_METHODS = {
   peerRoomsRead: "peer.rooms.read",
   peerRoomsPost: "peer.rooms.post",
   peerRoomsSeen: "peer.rooms.seen",
+  peerRoomsFolders: "peer.rooms.folders",
   peerRoomsPass: "peer.rooms.pass",
   peerRoomsDecline: "peer.rooms.decline",
   peerRoomsWithdraw: "peer.rooms.withdraw",
@@ -55,6 +58,11 @@ const error = Schema.Union([PeerHubError, EnvironmentAuthorizationError]);
 export const RoomsRpcGroup = RpcGroup.make(
   Rpc.make(methods.peerRoomsRead, { payload: PeerRoomsReadInput, success: PeerRoomRead, error }),
   Rpc.make(methods.peerRoomsPost, { payload: PeerRoomsPostInput, success: PeerRoomMessage, error }),
+  Rpc.make(methods.peerRoomsFolders, {
+    payload: PeerRoomsFoldersInput,
+    success: PeerRoomsFoldersResult,
+    error,
+  }),
   Rpc.make(methods.peerRoomsSeen, {
     payload: PeerRoomsSeenInput,
     success: PeerRoomsSeenResult,
@@ -95,6 +103,7 @@ export const RoomsRpcScopes = {
   [methods.peerRoomsRead]: AuthOrchestrationReadScope,
   [methods.peerRoomsPost]: AuthOrchestrationOperateScope,
   [methods.peerRoomsSeen]: AuthOrchestrationOperateScope,
+  [methods.peerRoomsFolders]: AuthOrchestrationOperateScope,
   [methods.peerRoomsPass]: AuthOrchestrationOperateScope,
   [methods.peerRoomsDecline]: AuthOrchestrationOperateScope,
   [methods.peerRoomsWithdraw]: AuthOrchestrationOperateScope,

@@ -14,6 +14,9 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { randomUUID } from "../../../lib/utils";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
+import { useSidebarProjectGroups } from "../../../hooks/useSidebarProjectGroups";
+import { useProjectSets } from "../projectSets";
+import { setFolders } from "../projectSets.logic";
 import { Button } from "../../ui/button";
 import { SidebarInset } from "../../ui/sidebar";
 import { Toggle, ToggleGroup } from "../../ui/toggle-group";
@@ -82,6 +85,7 @@ export function SharedRoomView({ group }: { readonly group: string }) {
             environmentId={environmentId}
             status={status}
             me={status.email}
+            group={group}
             members={members}
             taskOf={(place) => findTask(tree, { ...place })?.task}
             onOpen={actions.open}
@@ -96,6 +100,7 @@ function SharedRoomBody({
   environmentId,
   status,
   me,
+  group,
   members,
   taskOf,
   onOpen,
@@ -103,6 +108,7 @@ function SharedRoomBody({
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
   readonly me: string;
+  readonly group: string;
   readonly members: ReadonlyArray<SharedRoomMember>;
   readonly taskOf: (place: RoomPlace) => WorkTaskNode | undefined;
   readonly onOpen: (open: WorkOpen) => void;
@@ -113,6 +119,14 @@ function SharedRoomBody({
   const updateTask = useAtomCommand(serverEnvironment.peerHubUpdateTask, { reportFailure: false });
   const canPost = useAtomValue(serverEnvironment.peerRooms.post.permissionAtom(environmentId));
   const canMove = useAtomValue(serverEnvironment.peerRooms.pass.permissionAtom(environmentId));
+  const saveFolders = useAtomCommand(serverEnvironment.peerRooms.folders, { reportFailure: false });
+  const [sets] = useProjectSets();
+  const groups = useSidebarProjectGroups();
+  const scopes = members.map(({ place }) => `${place.workspace}/${place.project}`);
+  const folders = setFolders(
+    sets.find((set) => scopes.every((scope) => set.projects.includes(scope))),
+    groups,
+  );
   const moves = useRoomMoves(environmentId, () => {
     for (const read of reads.values()) read.refresh();
   });
@@ -149,6 +163,11 @@ function SharedRoomBody({
         className="flex min-h-0 min-w-0 flex-1 flex-col lg:max-w-[42rem] lg:border-e lg:border-border"
       >
         <div className="flex shrink-0 justify-end border-b border-border/60 px-4 py-1">
+          {folders.length === 0 ? null : (
+            <p className="me-auto self-center truncate text-xs text-muted-foreground">
+              Also works in {folders.map((one) => one.name).join(", ")}
+            </p>
+          )}
           <Button size="sm" variant="ghost" onClick={() => void closeAll()}>
             Close room
           </Button>
@@ -200,6 +219,10 @@ function SharedRoomBody({
             line={null}
             paths={null}
             chat
+            prepare={async () => {
+              await saveFolders({ environmentId, input: { group, folders } });
+              return first.place;
+            }}
             onDrafting={NOTHING}
             onSent={() => {
               for (const read of reads.values()) read.refresh();
@@ -358,17 +381,18 @@ export function NewSharedRoom({
   environmentId,
   status,
   places,
-  left,
+  folders,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
   /** The shared projects, as far as a room needs them. */
   readonly places: ReadonlyArray<Pick<RoomPlace, "workspace" | "project">>;
-  /** The names of the projects that stay out. */
-  readonly left: ReadonlyArray<string>;
+  /** The projects no Hub workspace shares, where its agent works too. */
+  readonly folders: ReadonlyArray<{ readonly name: string; readonly folder: string }>;
 }) {
   const navigate = useNavigate();
   const createTask = useAtomCommand(serverEnvironment.peerHubCreateTask, { reportFailure: false });
+  const saveFolders = useAtomCommand(serverEnvironment.peerRooms.folders, { reportFailure: false });
   const group = useRef(randomUUID());
   // A post that fails keeps its chats, so sending again adds no second set.
   const created = useRef<RoomPlace | null>(null);
@@ -404,6 +428,7 @@ export function NewSharedRoom({
         return { workspace, project, task };
       }),
     );
+    await saveFolders({ environmentId, input: { group: group.current, folders } });
     created.current = made[0]!;
     return made[0]!;
   };
@@ -430,9 +455,10 @@ export function NewSharedRoom({
         onDrafting={NOTHING}
         onSent={() => void navigate({ to: "/together/$group", params: { group: group.current } })}
       />
-      {left.length === 0 ? null : (
+      {folders.length === 0 ? null : (
         <p className="text-center text-xs text-muted-foreground">
-          {left.join(", ")} only on this computer, so it stays out of the room.
+          The agent also works in {folders.map((one) => one.name).join(", ")}, on this computer
+          only.
         </p>
       )}
     </div>

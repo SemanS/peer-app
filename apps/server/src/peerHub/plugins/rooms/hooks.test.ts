@@ -25,11 +25,13 @@ const heard = (seq: number, text = "Why?"): Heard => ({
 const hooksOf = (
   waiting: Heard[],
   tellable: (candidates: ReadonlyArray<Heard>) => ReadonlyArray<Heard> = (all) => all,
+  projects?: string,
 ) => {
   const queued: string[] = [];
   let wakes = 0;
   const rooms = {
     waiting: () => waiting,
+    projectsOf: () => Effect.succeed(projects),
     tellable: (_run: string | undefined, candidates: ReadonlyArray<Heard>) =>
       Effect.succeed(tellable(candidates)),
     settled: (_run: string | undefined, ref: string) => {
@@ -55,6 +57,23 @@ const read = (hooks: ReturnType<typeof hooksOf>["hooks"], session: PeerSessionVi
   hooks.notices[0]!.read(ctxOf(session));
 const refsOf = (said: unknown) =>
   typeof said === "object" && said !== null ? (said as { refs: string[] }).refs : [];
+
+describe("a run across projects whose first prompt was lost", () => {
+  it.effect("hears where its projects are with the message, once", () =>
+    Effect.gen(function* () {
+      const waiting = [{ ...heard(12), promptedAt: 0 }, heard(13)];
+      const { hooks } = hooksOf(waiting, undefined, "Besides this folder: Site");
+      const session = sessionOf();
+      yield* TestClock.setTime(3_600_000);
+      const first = yield* hooks.notices[0]!.read({ ...ctxOf(session), waking: true });
+      assert.include(JSON.stringify(first), "Besides this folder: Site");
+      localOf(session).offering.clear();
+      waiting.push(heard(14));
+      const later = yield* hooks.notices[0]!.read({ ...ctxOf(session), waking: true });
+      assert.notInclude(JSON.stringify(later), "Besides this folder");
+    }),
+  );
+});
 
 describe("a message a started run's first prompt carried", () => {
   const prompted = (over: Partial<Heard> = {}): Heard => ({ ...heard(12), promptedAt: 0, ...over });

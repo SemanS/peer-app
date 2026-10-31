@@ -34,6 +34,8 @@ export interface Local {
   readonly remind: Set<string>;
   /** What it was told, where core keeps no told set for it. */
   readonly told: Set<string>;
+  /** It heard where a shared room's other projects are. */
+  projectsTold?: boolean;
 }
 
 export const localOf = (session: PeerSessionView) =>
@@ -77,7 +79,11 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
       );
       if (step === null) return null;
       for (const ref of step.refs) own.offering.add(ref);
-      return step satisfies PeerHookText;
+      // A first prompt can be lost, and its folders with it: what reaches the agent carries them.
+      const projects = own.projectsTold ? undefined : yield* rooms.projectsOf(session.run);
+      if (projects === undefined) return step satisfies PeerHookText;
+      own.projectsTold = true;
+      return { ...step, text: `${projects}\n${step.text}` } satisfies PeerHookText;
     });
   const notice = (ctx: PeerHookContext) =>
     Effect.gen(function* () {

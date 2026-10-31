@@ -16,6 +16,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
 import type { PeerTaskLauncher } from "../../core/plugin.ts";
+import { projectsText } from "../../core/work/runRoots.ts";
 import { HerdrClient } from "./client/HerdrClient.ts";
 import { trustQuestionOf } from "./client/trust.ts";
 import { prepareHerdrTaskWorktree } from "./client/worktree.ts";
@@ -40,19 +41,11 @@ export const withDirs = (
 ): Readonly<Record<string, string>> =>
   dirs.length === 0 ? env : { ...env, CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: "1" };
 
-/** A run across projects is told where the others are: nothing else in its session says so. */
+/** A run across projects is told where the others are in its first prompt. */
 export const withProjects = (
   prompt: string,
   also: ReadonlyArray<{ readonly project: string; readonly root: string }>,
-) =>
-  also.length === 0
-    ? prompt
-    : [
-        prompt,
-        "This work spans several projects. Besides this folder, you work in these, each your own checkout on its own branch:",
-        ...also.map((other) => `- ${other.project}: ${other.root}`),
-        "Run version control per folder (git -C <folder>, or jj -R <folder>); each project commits and lands on its own. Before you change anything in a folder, read its AGENTS.md or CLAUDE.md, and its .ai knowledge if it has any: each project has its own rules. Run peer from a folder to act on that project: peer review there hands its work off. Answer in the room from this folder.",
-      ].join("\n");
+) => (also.length === 0 ? prompt : `${prompt}\n${projectsText(also)}`);
 
 /** Launches task agents in herdr, showing each among herdr's agents at once. */
 export const makeLauncher = (agents: HerdrAgents) =>

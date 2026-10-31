@@ -52,3 +52,13 @@ export const rootHolding = (roots: ReadonlyArray<RunRoot>, path: string): RunRoo
     return target === root || target.startsWith(`${root}${NodePath.sep}`);
   });
 };
+
+/** What tells a run where its other projects are, which nothing else in its session says. */
+export const projectsText = (
+  also: ReadonlyArray<{ readonly project: string; readonly root: string }>,
+) =>
+  [
+    "This work spans several projects. Besides this folder, you work in these, each your own checkout on its own branch:",
+    ...also.map((other) => `- ${other.project}: ${other.root}`),
+    "Run version control per folder (git -C <folder>, or jj -R <folder>); each project commits and lands on its own. Before you change anything in a folder, read its AGENTS.md or CLAUDE.md, and its .ai knowledge if it has any: each project has its own rules. Run peer from a folder to act on that project: peer review there hands its work off. Answer in the room from this folder.",
+  ].join("\n");

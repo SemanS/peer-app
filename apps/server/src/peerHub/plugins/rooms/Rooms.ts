@@ -63,7 +63,7 @@ import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/
 import { fetchPins, newestHandoff, pinnedRoot, readPin, storeOf } from "./client/snapshots.ts";
 import { runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
-import { runRootsData } from "../../core/work/runRoots.ts";
+import { projectsText, runRootsData } from "../../core/work/runRoots.ts";
 import { capacityOf, checkoutOf, openRuns, roomStarts } from "./client/start.ts";
 import { actOn, type FollowDeps, type HereRun } from "./follow.ts";
 import { roomsHub, type Place, type PostBody } from "./client/hub.ts";
@@ -494,6 +494,12 @@ const make = Effect.gen(function* () {
         return message;
       }),
     // What was read leaves Needs you: the Hub's list changes, and no ping says so.
+    /** Where a run across projects works besides its own, in words; undefined for any other. */
+    projectsOf: (run: string | undefined) =>
+      Effect.map(runRootsData(state).read, (stored) => {
+        const roots = run === undefined ? [] : (Option.getOrUndefined(stored)?.runs[run] ?? []);
+        return roots.length === 0 ? undefined : projectsText(roots);
+      }),
     folders: ({ group, folders }: PeerRoomsFoldersInput) =>
       Effect.gen(function* () {
         const absolute = folders.filter(({ folder }) => NodePath.isAbsolute(folder));

@@ -214,6 +214,33 @@ const RoomPlace = {
 export const PeerRoomsPlace = Schema.Struct(RoomPlace);
 export type PeerRoomsPlace = typeof PeerRoomsPlace.Type;
 
+/**
+ * A room's diff; `run` asks for that run's checkout instead of the task's newest work, and `step`
+ * for one of its steps.
+ */
+export const PeerRoomsDiffInput = Schema.Struct({
+  ...RoomPlace,
+  run: Schema.optional(TrimmedNonEmptyString),
+  step: Schema.optional(TrimmedNonEmptyString),
+});
+export type PeerRoomsDiffInput = typeof PeerRoomsDiffInput.Type;
+
+export const PeerRoomsStepsInput = Schema.Struct({ ...RoomPlace, run: TrimmedNonEmptyString });
+export type PeerRoomsStepsInput = typeof PeerRoomsStepsInput.Type;
+
+/** One snapshot of an agent's change, from jj on this computer; the Hub never has these. */
+export const PeerRoomStep = Schema.Struct({
+  commit: Schema.String,
+  at: Schema.String,
+  files: Schema.Array(Schema.String),
+  added: Schema.Number,
+  removed: Schema.Number,
+});
+export type PeerRoomStep = typeof PeerRoomStep.Type;
+
+export const PeerRoomSteps = Schema.Struct({ steps: Schema.Array(PeerRoomStep) });
+export type PeerRoomSteps = typeof PeerRoomSteps.Type;
+
 export const PeerRoomsReadInput = Schema.Struct({
   ...RoomPlace,
   after: Schema.optional(Schema.Number),

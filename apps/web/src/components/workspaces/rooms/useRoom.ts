@@ -3,7 +3,12 @@ import {
   isAtomCommandInterrupted,
   type AtomCommandResult,
 } from "@t3tools/client-runtime/state/runtime";
-import type { EnvironmentId, PeerHubStatus, PeerRoomMessage } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  PeerHubStatus,
+  PeerRoomMessage,
+  PeerRoomStep,
+} from "@t3tools/contracts";
 import { useEffect, useRef, useState } from "react";
 
 import { useEnvironmentQuery } from "../../../state/query";
@@ -21,6 +26,7 @@ import {
 } from "./room.logic";
 
 const NO_MESSAGES: ReadonlyArray<PeerRoomMessage> = [];
+const NO_STEPS: ReadonlyArray<PeerRoomStep> = [];
 
 /** Calls `refresh` whenever `revision` moves; the query itself reads on mount. */
 function useRefetchOn(revision: string, refresh: () => void) {
@@ -94,13 +100,39 @@ export function useRoomDiff(input: {
   readonly environmentId: EnvironmentId;
   readonly place: RoomPlace;
   readonly revision: string;
+  /** Reads that run's checkout instead of the task's newest work. */
+  readonly run?: string;
+  /** One of that run's steps. */
+  readonly step?: string;
 }) {
-  const { environmentId, place, revision } = input;
+  const { environmentId, place, revision, run, step } = input;
   const query = useEnvironmentQuery(
-    serverEnvironment.peerRooms.diff({ environmentId, input: place }),
+    serverEnvironment.peerRooms.diff({
+      environmentId,
+      input: {
+        ...place,
+        ...(run === undefined ? {} : { run }),
+        ...(step === undefined ? {} : { step }),
+      },
+    }),
   );
   useRefetchOn(revision, query.refresh);
   return { diff: query.data, error: query.error, refresh: query.refresh };
+}
+
+/** A run's steps on this computer, read again when its change moves. */
+export function useRoomSteps(input: {
+  readonly environmentId: EnvironmentId;
+  readonly place: RoomPlace;
+  readonly run: string;
+  readonly revision: string;
+}) {
+  const { environmentId, place, run, revision } = input;
+  const query = useEnvironmentQuery(
+    serverEnvironment.peerRooms.steps({ environmentId, input: { ...place, run } }),
+  );
+  useRefetchOn(revision, query.refresh);
+  return query.data?.steps ?? NO_STEPS;
 }
 
 function readStored(key: string): RoomDraft {

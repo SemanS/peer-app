@@ -28,6 +28,7 @@ import {
   mentionsOf,
   ROOM_PAGE,
   runActivity,
+  turnDone,
   type RunActivity,
 } from "./room.logic";
 import { RoomActivity } from "./RoomActivity";
@@ -66,6 +67,7 @@ export function RoomConversation({
   runs,
   reviewRuns,
   jujutsu,
+  threadWorking,
   selectedRun,
   onOpenRun,
   onOpenAnchor,
@@ -88,6 +90,8 @@ export function RoomConversation({
   readonly reviewRuns: ReadonlyArray<string>;
   /** The checkout is on Jujutsu. */
   readonly jujutsu: boolean;
+  /** Whether a run's agent works now, where a thread of it is known here. */
+  readonly threadWorking: (run: PeerRun) => boolean | undefined;
   readonly selectedRun: string | null;
   readonly onOpenRun: (run: string) => void;
   readonly onOpenAnchor: (anchor: PeerRoomAnchor) => void;
@@ -95,10 +99,13 @@ export function RoomConversation({
   const lastOf = lastOfRuns(messages);
   const activityOf = (message: PeerRoomMessage) => {
     const id = message.author.run;
-    if (id === undefined || lastOf.get(id) !== message.seq) return undefined;
+    if (id === undefined) return undefined;
+    const review = reviewRuns.includes(id);
     const run = runs.find((candidate) => candidate.id === id);
-    if (run === undefined) return undefined;
-    return { id, ...runActivity(run, { review: reviewRuns.includes(id), jujutsu }) };
+    if (run === undefined || lastOf.get(id) !== message.seq) {
+      return { id, ...turnDone(message.author.agent, review) };
+    }
+    return { id, ...runActivity(run, { review, jujutsu, threadWorking: threadWorking(run) }) };
   };
   const scroller = useRef<HTMLDivElement>(null);
   const last = messages.at(-1)?.seq;

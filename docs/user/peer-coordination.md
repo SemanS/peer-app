@@ -811,6 +811,8 @@ To start with Jujutsu, turn on **Use Jujutsu** when you create a project with a 
 
 In a task's room, **Jujutsu** beside the diff shows how the task stands: its stack, what moved under it and how it lands. A Git checkout offers the switch there.
 
+Each agent reply carries a card with where its run stands. Open it to see that agent's own diff beside the conversation. On Jujutsu it follows each step the agent takes, and the list above it shows one step's lines at a time; in a Git checkout use **Refresh**.
+
 ## Working on Jujutsu
 
 In a colocated jj repository, agents can build on each other's work before it lands:

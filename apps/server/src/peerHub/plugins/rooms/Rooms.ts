@@ -15,6 +15,8 @@ import {
   type PeerRoomRead,
   type PeerRoomsDeclineInput,
   type PeerRoomsPassInput,
+  type PeerRoomsDiffInput,
+  type PeerRoomsStepsInput,
   type PeerRoomsPlace,
   type PeerRoomsPostInput,
   type PeerRoomsReadInput,
@@ -36,8 +38,10 @@ import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import { runKeys } from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
+import { checkoutKind } from "../../core/vcs.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { changeToReview, pushedRefs, roomDiff, workRun, worktreeOf } from "./client/diff.ts";
+import { stepDiff, workspaceSteps } from "./client/steps.ts";
 import { runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
 import { capacityOf, checkoutOf, openRuns, roomStarts } from "./client/start.ts";
@@ -149,6 +153,12 @@ const make = Effect.gen(function* () {
       };
     });
 
+  /** A workspace's steps; Git has none to show, and a failed read shows none rather than fails. */
+  const runSteps = async (root: string) =>
+    (await checkoutKind(root).catch(() => null))?.kind === "jj"
+      ? workspaceSteps(root).catch(() => [])
+      : [];
+
   /** The project's runs that only read the work, as the review starter knows them. */
   const reviewsOf = (place: PeerRoomsPlace) =>
     plugins.require("reviewStarter").pipe(
@@ -157,9 +167,10 @@ const make = Effect.gen(function* () {
     );
 
   /** The checkout of this computer's newest run that does the task's work, detached ones too. */
-  const workHere = (place: PeerRoomsPlace, checkout: string | undefined) =>
+  const workHere = (place: PeerRoomsPlace, checkout: string | undefined, only?: string) =>
     Effect.gen(function* () {
-      const reviews = yield* reviewsOf(place);
+      // A run asked for by name is shown whatever it does, a review's checkout too.
+      const reviews = only === undefined ? yield* reviewsOf(place) : new Set<string>();
       const sessions = (yield* agents.sessions).filter(
         (session) =>
           session.workspace === place.workspace &&
@@ -167,7 +178,9 @@ const make = Effect.gen(function* () {
           session.task === place.task,
       );
       const found = workRun({
-        runs: (yield* openRuns(state, place)).map((run) => ({ id: run.id, keys: runKeys(run) })),
+        runs: (yield* openRuns(state, place))
+          .filter((run) => only === undefined || run.id === only)
+          .map((run) => ({ id: run.id, keys: runKeys(run) })),
         reviews,
         sessions,
         threads: (yield* work.localThreads).get(place.workspace) ?? [],
@@ -376,11 +389,31 @@ const make = Effect.gen(function* () {
           capacity,
         });
       }),
-    diff: (place: PeerRoomsPlace): Effect.Effect<PeerRoomDiff, PeerHubError> =>
+    /** The run's steps, where its workspace is on this computer and on jj; else none. */
+    steps: ({ run, ...place }: PeerRoomsStepsInput) =>
+      Effect.gen(function* () {
+        const { checkout } = yield* workOf(place);
+        const root = (yield* workHere(place, checkout?.path, run))?.root;
+        if (root === undefined) return { steps: [] };
+        const steps = yield* Effect.promise(() => runSteps(root));
+        return { steps };
+      }),
+    diff: ({
+      run,
+      step,
+      ...place
+    }: PeerRoomsDiffInput): Effect.Effect<PeerRoomDiff, PeerHubError> =>
       Effect.gen(function* () {
         const { project, base, checkout, handoffs, threads } = yield* workOf(place);
         const views = yield* agents.view(place.workspace);
-        const here = yield* workHere(place, checkout?.path);
+        const here = yield* workHere(place, checkout?.path, run);
+        if (step !== undefined && here?.root !== undefined) {
+          const root = here.root;
+          const shown = yield* Effect.promise(() => stepDiff(root, step).catch(() => null));
+          if (shown !== null) {
+            return { ...shown, folder: root };
+          }
+        }
         const diff = yield* roomDiff({
           root: here?.root,
           rootBase: project.repositories.find((row) => row.id === here?.repository)?.branch,

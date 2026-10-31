@@ -198,7 +198,7 @@ export function taskRunRows(
  * The thread keys the work tree gives a run's chats: a Peer thread by its id, a herdr agent by
  * `herdr:<session>`, each prefixed with its computer when it is a colleague's or another of yours.
  */
-function runThreadKeys(run: PeerRun): ReadonlyArray<string> {
+export function runThreadKeys(run: PeerRun): ReadonlyArray<string> {
   const ids = [
     ...(run.thread?.startsWith("peer:") === true ? [run.thread.slice("peer:".length)] : []),
     ...run.sessions.flatMap((session) => [session.id, `herdr:${session.id}`]),

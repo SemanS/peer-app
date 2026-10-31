@@ -40,6 +40,12 @@ export function createPeerRoomsAtoms<R, ER>(
       staleTimeMs: 0,
       idleTtlMs: 0,
     }),
+    steps: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:peer.rooms.steps",
+      tag: WS_METHODS.peerRoomsSteps,
+      staleTimeMs: 0,
+      idleTtlMs: 0,
+    }),
     diff: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:peer.rooms.diff",
       tag: WS_METHODS.peerRoomsDiff,

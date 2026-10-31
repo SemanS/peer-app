@@ -26,6 +26,8 @@ import {
   toggleChoice,
   lastOfRuns,
   runActivity,
+  stepLine,
+  turnDone,
   withPaths,
 } from "./room.logic";
 
@@ -225,7 +227,18 @@ describe("a run in the conversation", () => {
     );
   });
 
-  it("shows once, on the run's last message", () => {
+  it("does not call an agent working that waits for the next message", () => {
+    const run = { agent: "claude", state: "running" } as const;
+    expect(runActivity(run, { ...options, threadWorking: false }).word).toBe("Done");
+    expect(runActivity(run, { ...options, threadWorking: true }).word).toBe("Working");
+  });
+
+  it("keeps an earlier reply done, with a name even when its run is gone", () => {
+    expect(turnDone("codex", true)).toMatchObject({ word: "Done", title: "Codex · Review" });
+    expect(turnDone(undefined, false).title).toBe("Agent · Implementation");
+  });
+
+  it("finds the message that speaks for each run", () => {
     const by = (seq: number, run?: string) => ({
       seq,
       author: { email: "a@b.c", ...(run === undefined ? {} : { run }) },
@@ -236,6 +249,19 @@ describe("a run in the conversation", () => {
         ["r2", 3],
       ]),
     );
+  });
+});
+
+describe("a step in a line", () => {
+  it("names the file and how much moved", () => {
+    expect(stepLine({ files: ["src/a/concurrency.ts"], added: 12, removed: 3 })).toEqual({
+      name: "concurrency.ts",
+      counts: "+12 −3",
+    });
+    expect(stepLine({ files: ["a.ts", "b.ts", "c.ts"], added: 1, removed: 0 })).toEqual({
+      name: "a.ts +2",
+      counts: "+1",
+    });
   });
 });
 

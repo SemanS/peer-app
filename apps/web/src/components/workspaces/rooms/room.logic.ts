@@ -16,6 +16,7 @@ import {
   type PeerRoomReach,
   type PeerRoomTarget,
   type PeerRoomTargetInput,
+  type PeerRoomStep,
   type PeerRun,
 } from "@t3tools/contracts";
 import { harnessName } from "@t3tools/client-runtime/peer/work";
@@ -261,12 +262,41 @@ export interface RunActivity {
   readonly link: string;
 }
 
-/** A run as the conversation shows it, from what its record says and nothing guessed. */
+const activityTitle = (agent: string | undefined, review: boolean) =>
+  `${harnessName(agent) ?? agent ?? "Agent"} · ${review ? "Review" : "Implementation"}`;
+
+/** A reply the agent went on from: that turn is over, whatever its run does now. */
+export const turnDone = (agent: string | undefined, review: boolean): RunActivity => ({
+  kind: "delivered",
+  title: activityTitle(agent, review),
+  word: "Done",
+  detail: "Replied",
+  link: "View changes",
+});
+
+/**
+ * A run as the conversation shows it, from what its record says and nothing guessed. A run stays
+ * open while its session waits for the next message, so `threadWorking`, where a thread of the run
+ * is known here, says whether the agent is at work now.
+ */
 export function runActivity(
   run: Pick<PeerRun, "agent" | "state" | "outcome">,
-  input: { readonly review: boolean; readonly jujutsu: boolean },
+  input: {
+    readonly review: boolean;
+    readonly jujutsu: boolean;
+    readonly threadWorking?: boolean | undefined;
+  },
 ): RunActivity {
-  const title = `${harnessName(run.agent) ?? run.agent} · ${input.review ? "Review" : "Implementation"}`;
+  const title = activityTitle(run.agent, input.review);
+  if (run.state === "running" && input.threadWorking === false) {
+    return {
+      kind: "delivered",
+      title,
+      word: "Done",
+      detail: "Waiting for the next message",
+      link: "View changes",
+    };
+  }
   if (run.state === "running") {
     return {
       kind: "working",
@@ -294,7 +324,20 @@ export function runActivity(
   };
 }
 
-/** Each run's last message, where its activity shows, so a long turn draws it once. */
+/** A step in a line: what it touched and how much. */
+export function stepLine(step: Pick<PeerRoomStep, "files" | "added" | "removed">) {
+  const [first = "", ...rest] = step.files;
+  const name = first.split("/").at(-1) ?? first;
+  return {
+    name: rest.length === 0 ? name : `${name} +${rest.length}`,
+    counts: [
+      ...(step.added > 0 ? [`+${step.added}`] : []),
+      ...(step.removed > 0 ? [`−${step.removed}`] : []),
+    ].join(" "),
+  };
+}
+
+/** Each run's last message: the one that says where the run stands now. */
 export function lastOfRuns(messages: ReadonlyArray<Pick<PeerRoomMessage, "seq" | "author">>) {
   const last = new Map<string, number>();
   for (const message of messages) {

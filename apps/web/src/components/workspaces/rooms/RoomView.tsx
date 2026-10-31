@@ -1,8 +1,16 @@
 import { useAtomValue } from "@effect/atom-react";
 import { personName } from "@t3tools/client-runtime/peer/needs-you";
 import { targetsFor, type RoomPlace } from "@t3tools/client-runtime/peer/rooms";
-import type { EnvironmentId, PeerHubStatus, PeerProjectState, PeerTask } from "@t3tools/contracts";
+import type {
+  EnvironmentId,
+  PeerHubStatus,
+  PeerProjectState,
+  PeerRoomAnchor,
+  PeerRun,
+  PeerTask,
+} from "@t3tools/contracts";
 
+import { harnessName } from "@t3tools/client-runtime/peer/work";
 import { type DragEvent, useState } from "react";
 
 import { cn } from "../../../lib/utils";
@@ -12,11 +20,12 @@ import { Toggle, ToggleGroup } from "../../ui/toggle-group";
 import { FILE_TREE_PATHS_DRAG_TYPE, fileTreePathsOf } from "../../files/fileTreeDragMention";
 import { PeerPageHeader } from "../PeerPageHeader";
 import { findTask } from "../task/task.logic";
-import { runsRevision } from "../task/runs.logic";
+import { runThreadKeys, runsRevision } from "../task/runs.logic";
 import { useTaskRuns } from "../task/TaskRuns";
 import { useWorkData } from "../useWorkData";
 import type { WorkOpen, WorkTaskNode } from "../workTree.logic";
 import { peopleOf, reachRows } from "./room.logic";
+import { RoomAgentDiff } from "./RoomAgentDiff";
 import { RoomComposer, type DraftLine, type DraftPaths } from "./RoomComposer";
 import { roomMessageId, RoomConversation } from "./RoomConversation";
 import { RoomDiff, type DiffFocus } from "./RoomDiff";
@@ -28,7 +37,7 @@ import { useRoom, useRoomDiff, useRoomMoves } from "./useRoom";
 
 const NO_RUNS: ReadonlyArray<string> = [];
 
-const SIDE_LABEL = { diff: "Diff", files: "Files", jujutsu: "Jujutsu" } as const;
+const SIDE_LABEL = { diff: "Diff", files: "Files", jujutsu: "Jujutsu", agent: "Agent" } as const;
 type RoomSide = keyof typeof SIDE_LABEL;
 const isRoomSide = (value: unknown): value is RoomSide =>
   typeof value === "string" && Object.hasOwn(SIDE_LABEL, value);
@@ -129,12 +138,15 @@ function RoomBody({
   // The tree lists folders from the disk and Jujutsu subscribes to the project's changes, so a room
   // that never opens them costs neither.
   const [opened, setOpened] = useState<ReadonlySet<RoomSide>>(new Set(["diff"]));
+  const [run, setRun] = useState<{
+    readonly id: string;
+    readonly agent: string | undefined;
+  } | null>(null);
   const [focus, setFocus] = useState<DiffFocus | null>(null);
   const [line, setLine] = useState<DraftLine | null>(null);
   const [paths, setPaths] = useState<DraftPaths | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [dropping, setDropping] = useState(false);
-  const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const canPost = useAtomValue(serverEnvironment.peerRooms.post.permissionAtom(environmentId));
   const canMove = useAtomValue(serverEnvironment.peerRooms.pass.permissionAtom(environmentId));
 
@@ -158,6 +170,18 @@ function RoomBody({
 
   const takesPaths = (event: DragEvent) =>
     canPost && event.dataTransfer.types.includes(FILE_TREE_PATHS_DRAG_TYPE);
+
+  const threadWorking = (candidate: PeerRun) => {
+    const keys = runThreadKeys(candidate);
+    const threads = taskNode.threads.filter((thread) => keys.includes(thread.key));
+    return threads.length === 0 ? undefined : threads.some((thread) => thread.status === "working");
+  };
+  const onJujutsu = projectState.repositories.some((repository) => repository.vcs === "jj");
+  const agentLabel = run === null ? null : (harnessName(run.agent) ?? "Agent");
+  const commentOn = (anchor: PeerRoomAnchor) => {
+    if (canPost) setLine({ anchor, ask: (line?.ask ?? 0) + 1 });
+    setPane("conversation");
+  };
 
   const openMessage = (seq: number) => {
     setPane("conversation");
@@ -188,6 +212,7 @@ function RoomBody({
           <Toggle value="diff">Diff</Toggle>
           <Toggle value="files">Files</Toggle>
           <Toggle value="jujutsu">Jujutsu</Toggle>
+          {agentLabel === null ? null : <Toggle value="agent">{agentLabel}</Toggle>}
         </ToggleGroup>
       </div>
       <div className="flex min-h-0 min-w-0 flex-1">
@@ -232,12 +257,15 @@ function RoomBody({
             now={read.now}
             runs={runs.runs}
             reviewRuns={read.room?.reviewRuns ?? NO_RUNS}
-            jujutsu={projectState.repositories.some((repository) => repository.vcs === "jj")}
-            selectedRun={selectedRun}
-            onOpenRun={(run) => {
-              setSelectedRun(run);
-              showSide("diff");
-              diff.refresh();
+            jujutsu={onJujutsu}
+            threadWorking={threadWorking}
+            selectedRun={run?.id ?? null}
+            onOpenRun={(id) => {
+              const agent =
+                runs.runs.find((candidate) => candidate.id === id)?.agent ??
+                read.messages.find((message) => message.author.run === id)?.author.agent;
+              setRun({ id, agent });
+              showSide("agent");
             }}
             onOpenAnchor={(anchor) => {
               showSide("diff");
@@ -262,7 +290,7 @@ function RoomBody({
           )}
         </section>
         <section
-          aria-label={SIDE_LABEL[side]}
+          aria-label={side === "agent" ? (agentLabel ?? SIDE_LABEL.agent) : SIDE_LABEL[side]}
           className={cn(
             "min-h-0 min-w-0 flex-1 flex-col lg:flex",
             pane === "side" ? "flex" : "hidden",
@@ -280,6 +308,7 @@ function RoomBody({
               <Toggle value="diff">Diff</Toggle>
               <Toggle value="files">Files</Toggle>
               <Toggle value="jujutsu">Jujutsu</Toggle>
+              {agentLabel === null ? null : <Toggle value="agent">{agentLabel}</Toggle>}
             </ToggleGroup>
           </div>
           <div
@@ -296,14 +325,38 @@ function RoomBody({
               nameOf={nameOf}
               watch={watchable(taskNode.threads)}
               onWatch={onOpen}
-              onComment={(anchor) => {
-                if (canPost) setLine({ anchor, ask: (line?.ask ?? 0) + 1 });
-                setPane("conversation");
-              }}
+              onComment={commentOn}
               onAddPaths={canPost ? addPaths : undefined}
               onOpenMessage={openMessage}
             />
           </div>
+          {run === null ? null : (
+            <div
+              className={cn(
+                "min-h-0 min-w-0 flex-1 flex-col",
+                side === "agent" ? "flex" : "hidden",
+              )}
+            >
+              <RoomAgentDiff
+                key={run.id}
+                environmentId={environmentId}
+                place={place}
+                run={run.id}
+                taskName={hubTask.key ?? hubTask.id}
+                jujutsu={onJujutsu}
+                revision={revision}
+                messages={read.messages}
+                drafting={drafting}
+                me={me}
+                nameOf={nameOf}
+                watch={watchable(taskNode.threads)}
+                onWatch={onOpen}
+                onComment={commentOn}
+                onAddPaths={canPost ? addPaths : undefined}
+                onOpenMessage={openMessage}
+              />
+            </div>
+          )}
           <div
             className={cn("min-h-0 min-w-0 flex-1 flex-col", side === "files" ? "flex" : "hidden")}
           >

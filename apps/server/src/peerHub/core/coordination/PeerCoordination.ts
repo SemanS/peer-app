@@ -71,6 +71,7 @@ import { readCommittedSince, readGitStatus } from "./edits.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
 import { projectKey } from "../state/PeerState.ts";
+import { rootHolding, runRootsData } from "../work/runRoots.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
 import * as ContinueRun from "../work/continueRun.ts";
 import * as PeerWork from "../work/PeerWork.ts";
@@ -309,6 +310,12 @@ const make = Effect.gen(function* () {
         : runPromise(contextViews.discover(input)),
     runs,
     placeOf: (cwd) => runPromise(state.placeOf(cwd)),
+    runRootAt: (run, path) =>
+      runPromise(
+        Effect.map(runRootsData(state).read, (stored) =>
+          rootHolding(Option.getOrUndefined(stored)?.runs[run] ?? [], path),
+        ),
+      ),
     bindingNotice: (cwd) => runPromise(state.pendingBindingNotice(cwd)),
     branchOf: currentRef,
     gitStatus: readGitStatus,

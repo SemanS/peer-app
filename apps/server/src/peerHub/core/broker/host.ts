@@ -119,6 +119,13 @@ export interface PeerBrokerHost {
   /** This computer's runs (`core/work/runs.ts`). Absent: sessions run without runs, as before them. */
   readonly runs?: RunBook;
 
+  /** The run's checkout in another project that holds `path`, if any (`core/work/runRoots.ts`). */
+  readonly runRootAt?: (
+    run: string,
+    path: string,
+  ) => Promise<
+    { readonly project: string; readonly task: string; readonly root: string } | undefined
+  >;
   /** The workspace project a directory belongs to, or null outside them. */
   readonly placeOf: (cwd: string) => Promise<CheckoutPlace | null>;
   /**

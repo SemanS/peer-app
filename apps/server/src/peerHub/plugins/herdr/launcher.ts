@@ -44,7 +44,7 @@ export const withProjects = (
         prompt,
         "This work spans several projects. Besides this folder, you work in these, each your own checkout on its own branch:",
         ...also.map((other) => `- ${other.project}: ${other.root}`),
-        "Run version control per folder (git -C <folder>, or jj -R <folder>); each project commits and lands on its own. Answer in this room.",
+        "Run version control per folder (git -C <folder>, or jj -R <folder>); each project commits and lands on its own. Run peer from a folder to act on that project: peer review there hands its work off. Answer in the room from this folder.",
       ].join("\n");
 
 /** Launches task agents in herdr, showing each among herdr's agents at once. */

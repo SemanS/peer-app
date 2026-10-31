@@ -7276,7 +7276,7 @@ const followProgram = Effect.gen(function* () {
 
 /** A line in each project: the agent can reach the second one only through the folder it was given. */
 const SHARED_ASK = (project: string) =>
-  `Add the comment \`// marker-shared\` as the first line of src/pricing.ts in this project and also in the ${project} project, whose folder Peer gives you. Do not commit, do not run tests. Then say so in this room with peer room say.`;
+  `Add the comment \`// marker-shared\` as the first line of src/pricing.ts in this project and also in the ${project} project, whose folder Peer gives you. Do not commit, do not run tests. Then say so in this room with peer room say, and run peer status from the ${project} folder.`;
 
 /**
  * LAB_SHARED=1: one room across Lab and Site. Ana's own message in Lab's chat starts one real agent; judged from what
@@ -7289,6 +7289,7 @@ const sharedRoomProgram = Effect.gen(function* () {
   yield* Effect.promise(setUpWorkspace);
   writeFakeModel();
   const herdr = startHerdr("Ana");
+  const bobHerdr = startHerdr("Bob");
   const ana = yield* startComputer("Ana", "ana@acme.test", herdr.socket);
   writeClaudeWrapper(herdr, ana);
   const opened = yield* ana.client[WS_METHODS.peerHubOpenProject]({
@@ -7376,6 +7377,86 @@ const sharedRoomProgram = Effect.gen(function* () {
     const patchOf = (diff: typeof labDiff) => (diff.state === "here" ? diff.patch : "");
     say("lab diff", `${labDiff.folder} ${patchOf(labDiff).slice(0, 300)}`);
     say("site diff", `${siteDiff.folder} ${patchOf(siteDiff).slice(0, 300)}`);
+    // Bob's agent, on Site alone, edits the file Ana's agent edited there from Lab's session.
+    const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socket);
+    writeClaudeWrapper(bobHerdr, bob);
+    const bobOpened = yield* bob.client[WS_METHODS.peerHubOpenProject]({
+      workspace: "acme",
+      projectId: "site",
+    });
+    const bobSite = bobOpened.workspaces[0]?.projects.find((p) => p.project.id === "site")
+      ?.repositories[0];
+    if (bobSite?.state !== "ready") throw new Error("Bob could not check Site out");
+    if (JJ) colocate(bobSite.path);
+    const bobPane = yield* Effect.promise(() =>
+      startClaude(bobHerdr, bob, "bob", { cwd: NodeFS.realpathSync(bobSite.path) }),
+    );
+    live.push({ computer: bob, h: bobHerdr, pane: bobPane });
+    herdrJson(
+      bobHerdr,
+      "agent",
+      "prompt",
+      bobPane,
+      "Add the comment `// from bob` as the first line of src/pricing.ts. Do not commit. Then say done.",
+    );
+    for (let waited = 0; waited < 3 * 60_000; waited += 3000) {
+      yield* Effect.promise(() => sleep(3000));
+      approveAll(live);
+      if (
+        waited > 15_000 &&
+        ["idle", "done"].includes(statusOf(bobHerdr, bobPane)) &&
+        NodeFS.readFileSync(NodePath.join(bobSite.path, "src/pricing.ts"), "utf8").includes(
+          "from bob",
+        )
+      )
+        break;
+    }
+    const overlaps = [...events(ana), ...events(bob)].filter((entry) =>
+      /overlap/i.test(entry.event),
+    );
+    say("overlap events", JSON.stringify(overlaps).slice(0, 700));
+    check(overlaps.length > 0, "Bob's edit on Site meets the edit Ana's agent made there from Lab");
+    // The work on Site is handed off from Site's folder.
+    herdrJson(
+      herdr,
+      "agent",
+      "prompt",
+      live.find((one) => one.computer === ana)?.pane ?? "",
+      `Commit your change in this folder: cd ${siteDiff.folder ?? ""} and commit it there. Then run peer review from that folder. If Peer refuses, do what it says and run it again until it hands off. Tell me its last output.`,
+    );
+    const siteTask = async () => {
+      const read = await Effect.runPromise(ana.client[WS_METHODS.peerHubSync]({}));
+      return read.workspaces[0]?.projects
+        .find((p) => p.project.id === "site")
+        ?.work.tasks.find((one) => one.id === siteRoom.task);
+    };
+    for (let waited = 0; waited < 2 * 60_000; waited += 3000) {
+      yield* Effect.promise(() => sleep(3000));
+      approveAll(live);
+    }
+    const reviews = events(ana).filter((entry) => entry.event === "cli");
+    say("cli", JSON.stringify(reviews.slice(-4)).slice(0, 900));
+    say(
+      "Site's task after peer review",
+      JSON.stringify(yield* Effect.promise(siteTask)).slice(0, 300),
+    );
+    const siteRuns = (
+      (yield* Effect.promise(() =>
+        hubCall(`/v1/workspaces/acme/runs/site?task=${encodeURIComponent(siteRoom.task)}`, {
+          session: hubSession,
+        }),
+      )) as unknown as { runs: ReadonlyArray<RoomsRun> }
+    ).runs;
+    say("runs on Site", JSON.stringify(siteRuns).slice(0, 400));
+    const siteEdits = events(ana).filter(
+      (entry) =>
+        entry.event === "hook" &&
+        entry.project === "site" &&
+        entry.hookEvent === "PreToolUse" &&
+        entry.tool === "Edit",
+    );
+    check(siteEdits.length > 0, "Site's edit went through a session of Site");
+    check(siteRuns.length > 0, "Site's task has a run of its own");
     check(answered, "the agent answered in the room");
     check(panes().length === 1, "one agent ran");
     check(patchOf(labDiff).includes("marker-shared"), "Lab's diff shows its edit");
@@ -7392,10 +7473,10 @@ const sharedRoomProgram = Effect.gen(function* () {
       );
     }
     for (const entry of events(ana)) {
-      if (/^(hook|edit|claim|rooms)/.test(entry.event))
-        console.log(JSON.stringify(entry).slice(0, 300));
+      if (/^(edit|claim|rooms)/.test(entry.event)) console.log(JSON.stringify(entry).slice(0, 300));
     }
     herdrText(herdr, "server", "stop");
+    herdrText(bobHerdr, "server", "stop");
   }
 }).pipe(Effect.scoped);
 

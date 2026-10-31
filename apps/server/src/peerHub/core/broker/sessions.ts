@@ -38,6 +38,8 @@ export interface LocalSession {
   runtimeGeneration: string;
   readonly bindingRevision?: number;
   readonly repositoryId: string | undefined;
+  /** Its sessions in a run's other projects (`companions.ts`). */
+  companions?: Set<string>;
   /** The agent's harness, whose hooks report it: its id is `<agent>:<session id>`. */
   readonly agent: string;
   adapter?: "hooks" | "mcp";
@@ -370,6 +372,8 @@ export async function createSession(
   explicitThread?: string,
   dormant = false,
   claim?: RunClaim,
+  /** The task it is on, where its place cannot say. */
+  task?: string,
 ): Promise<LocalSession | null> {
   const sid = typeof body.session_id === "string" ? body.session_id : null;
   if (sid === null) return null;
@@ -384,7 +388,7 @@ export async function createSession(
   const place = await this.host.placeOf(cwd);
   await Promise.all(this.checkoutChanges.values());
   if (this.checkoutRevision !== bindingRevision)
-    return this.createSession(agent, body, pane, adapter, explicitThread, dormant, claim);
+    return this.createSession(agent, body, pane, adapter, explicitThread, dormant, claim, task);
   if (place === null) {
     this.ignoredCwds.set(cwd, Date.now());
     this.record("session.ignored", { session: id, cwd, why: "not in a workspace project" });
@@ -405,6 +409,7 @@ export async function createSession(
     adapter,
     claim: claimed,
     texts: [branch, title],
+    ...(task === undefined ? {} : { task }),
   });
   const ownContextPath = await this.contextPathFor(place, sid, dormant ? undefined : plan.id);
   const session: LocalSession = {

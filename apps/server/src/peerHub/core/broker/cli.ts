@@ -192,8 +192,19 @@ export function longerWaits(plugins: PeerBrokerPlugins): ReadonlyArray<readonly 
     );
 }
 
-/** Verify only the named session; a person's shell is never attributed by heuristics. */
+/** The caller, on the project of the folder it runs in where its run works in several. */
 export async function callerOf(
+  this: CoordinationBroker,
+  headers: NodeHttp.IncomingHttpHeaders,
+): Promise<LocalSession> {
+  const session = await namedCaller.call(this, headers);
+  const cwd = headerOf(headers, "x-peer-cwd");
+  if (cwd === undefined || inRepository(session, cwd) !== null) return session;
+  return (await this.companionAt(session, cwd)) ?? session;
+}
+
+/** Verify only the named session; a person's shell is never attributed by heuristics. */
+async function namedCaller(
   this: CoordinationBroker,
   headers: NodeHttp.IncomingHttpHeaders,
 ): Promise<LocalSession> {

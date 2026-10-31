@@ -51,6 +51,7 @@ import * as Owner from "./owner.ts";
 import * as Runs from "./runs.ts";
 import * as Server from "./server.ts";
 import * as SessionMemory from "./sessionMemory.ts";
+import { companionAt } from "./companions.ts";
 import * as Sessions from "./sessions.ts";
 import * as Sync from "./sync.ts";
 import * as Wake from "./wake.ts";
@@ -523,6 +524,7 @@ export class CoordinationBroker {
   sessionView = Sessions.sessionView;
   merged = Sessions.merged;
   sessionFor = Sessions.sessionFor;
+  companionAt = companionAt;
   createSession = Sessions.createSession;
   unplacedAnswer = Sessions.unplacedAnswer;
   paneOf = Sessions.paneOf;

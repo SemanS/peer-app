@@ -52,6 +52,7 @@ import {
 } from "./pipeline.ts";
 import { headerOf } from "./server.ts";
 import { forgetPluginTold } from "./sessionMemory.ts";
+import { companionBody } from "./companions.ts";
 import { inRepository, type LocalSession, MAX_FILES } from "./sessions.ts";
 
 /**
@@ -147,6 +148,20 @@ export async function hook(
     return null;
   const session = await this.sessionFor(agent, body, pane, runClaimOf(headers));
   if (session === null) return this.unplacedAnswer(event, body);
+  if (event === "SessionEnd") {
+    for (const id of session.companions ?? []) {
+      const companion = this.sessions.get(id);
+      if (companion !== undefined)
+        await this.hook(companionBody(body, companion), headers, late, timing);
+    }
+  }
+  if (event === "PreToolUse" || event === "PostToolUse") {
+    const elsewhere = this.editedPaths(session, body).find(
+      (path) => inRepository(session, path) === null && !this.keptBy(session, path),
+    );
+    const companion = elsewhere === undefined ? null : await this.companionAt(session, elsewhere);
+    if (companion !== null) return this.hook(companionBody(body, companion), headers, late, timing);
+  }
   const mod = headerOf(headers, "x-peer-adapter") === "mod";
   const signature = NodeCrypto.createHash("sha256")
     .update(

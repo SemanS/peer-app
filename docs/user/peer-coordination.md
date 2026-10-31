@@ -984,14 +984,31 @@ On a task with one of your threads, **Hand off for review** moves it into review
 
 Publishing defaults to **Pull request comment**. **Settings → This computer → Coordination & plugins** also offers **Not at all**, which keeps the package in Peer only. Each project can opt in to **Pull request description**. Publishing needs an active GitHub plugin, github.com and a signed-in GitHub CLI on the connected environment. Public repositories and repositories whose visibility cannot be checked receive only a pointer and counts. Other people’s pull requests are never edited.
 
-The task's **Review** page opens with the decision: "Accept 1.1? 2 signals: not-delivered, unowned" with
-**Mark task done** and **Reopen with a note…**, or "Accepted by policy v3 · waiting to land" with
-**Withdraw acceptance…**. Under it, three facts say where each comes from: **Verified** (the newest test
+The task's **Review** page opens with who moves next. **With the agent** means only its agent has
+something to do and its run is still going, with how long it has been so; **Coordination needed** and
+**Human decision needed** mean one of those is open; otherwise the line asks for the decision ("Accept
+1.1? 2 signals: not-delivered, unowned"), or says none is asked ("Accepted by policy v3 · waiting to
+land"). **Mark task done** and **Reopen with a note…**, or **Withdraw acceptance…**, stay on that line
+whatever it says. When a run ends with its steps still open, the task comes back to you with
+**Continue** on the page. On the phone, continue it from a computer.
+
+Below it, each open fact sits under one of three labels, with who acts and what comes next:
+**Agent action needed** (no report, undelivered work, a failed item without a home, an unverified item
+nobody answers for, a declined owner's call), **Coordination needed** (a failure left to a dependent
+task, an open overlap, an input that changed) and **Human decision needed** (an item an agent named a
+person on, an owner's call waiting). Peer does not read the items' words: a decision reaches a person
+only when an agent names them. These are today's facts, so giving an item an owner clears it at once; a
+signal raised at the handoff and cleared since says so. If the Hub cannot be reached, the page shows
+what the package recorded, labelled as at handoff.
+
+Under it, three facts say where each comes from: **Verified** (the newest test
 report's items, seen run by Peer or author-reported, left to a task or needing an owner), **Delivered**
 (whether the change is shared, as Peer saw it on the author's computer at `peer review`) and **Provides**
 (the plan's contract lines, else the brief's outcome, and the tasks that wait for this one). What changed
-and the report's items follow; the agent's own notes, its blockers among them, sit under one fold. Needs
-attention lists only what Peer knows: open overlaps, inputs that changed, and the policy's signals.
+and the report's items follow; the agent's own notes, its blockers among them, sit under one fold.
+
+An agent that runs `peer review` hears what it owes, item by item, in that reply. It is told to wait for
+a person only when nothing is its own.
 
 **Review policy.** In **Settings → Projects →** the project **→ Coordination**, a lead or an admin picks
 **Ask a person** (the default) or **Accept by policy**. Under the second, an agent's handoff is accepted in
@@ -1142,7 +1159,7 @@ peer tests mixed "Unit tests pass; the phone was not checked" \
 ```
 
 The full form is `peer tests pass|fail|mixed "<summary>" [--for <task>] [--pass "<text>"]...
-[--fail "<text>"]... [--unverified "<text> [@<person>]"]...`. Each flag can repeat. `--for` names
+[--fail "<text> [@task:<key>]"]... [--unverified "<text> [@<person>|@task:<key>]"]...`. Each flag can repeat. `--for` names
 another task of the same project; a session without a task needs it. A result that disagrees with the
 items, such as `pass` with a failed item, is stored as `mixed`, and the reply says why. The reply names
 the report's number and the unverified items that still need an owner.
@@ -1163,6 +1180,16 @@ project lead or a workspace admin gives each item an owner on the task page, whe
 replace or remove your own report. While the task's newest report lists an unverified item without an
 owner, the Hub refuses an agent's `peer done` and names the items. `peer review` is never held back by a
 report, and a person marking a task done is never stopped; the task page keeps showing the item.
+
+**Every failed item needs a home before an agent finishes the task.** Fix it, or leave it to a task that
+depends on this one and is not done with `--fail "<text> @task:<key>"`. It still counts as failed, and
+the Hub refuses any other task. `peer done` names the failed items that have no home; a person's move
+is free. The task that carries an item lists it on its page under **Left to this task**, with where it
+came from, and an agent starting that task reads it. A newer report that no longer lists the item takes
+it away.
+
+A person named on an unverified item sees it in Needs you as **You answer for:**, with the way to the
+task, on the computer and the phone, until a newer report no longer lists it or it has another owner.
 
 The task's page, its row and the Team page show the newest result and how many items need an owner, and
 the handoff package carries the newest report's result and counts. On the phone, reports are shown

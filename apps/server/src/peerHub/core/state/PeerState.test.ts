@@ -176,6 +176,32 @@ describe("PeerState", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
+  it.effect("keeps its state when a torn save left a tail after the line", () =>
+    Effect.gen(function* () {
+      const seed = `${BEFORE_PLUGINS_WITHOUT_ASSIGNMENTS}"bound":[]}}}\n`;
+      const state = yield* startState(yield* seeded(seed));
+      assert.strictEqual(yield* state.email, "ana@acme.test");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("saves in turn, each from the one before, however many ask at once", () =>
+    Effect.gen(function* () {
+      const baseDir = yield* seeded(BEFORE_PLUGINS_WITHOUT_ASSIGNMENTS);
+      const state = yield* startState(baseDir);
+      yield* Effect.all(
+        Array.from({ length: 20 }, (_, index) =>
+          state.updatePersisted((persisted) => ({
+            ...persisted,
+            plugins: { ...persisted.plugins, [`plugin-${index}`]: true },
+          })),
+        ),
+        { concurrency: "unbounded" },
+      );
+      const restarted = yield* startState(baseDir);
+      assert.lengthOf(Object.keys((yield* restarted.read).persisted.plugins ?? {}), 20);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("starts empty without a peer-hub.json, or with one it cannot read", () =>
     Effect.gen(function* () {
       for (const seed of ["", "{not json", '{"hubUrl":1}']) {

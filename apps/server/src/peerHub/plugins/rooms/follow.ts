@@ -8,6 +8,7 @@
  * @module peerHub/plugins/rooms/follow
  */
 import {
+  PEER_ROOM_SESSION_ENDED,
   PEER_ROOM_START_GRACE_MS,
   PeerHubError,
   type PeerRoomCapacity,
@@ -114,7 +115,7 @@ export function decide(
   return own && !chat ? { do: "take-review" } : { do: "take-start" };
 }
 
-export const SESSION_ENDED = "Its session ended before answering.";
+export const SESSION_ENDED = PEER_ROOM_SESSION_ENDED;
 export const NOT_RUNNING = "The agent is no longer running.";
 export const RUN_ENDED = "The run this message was for has ended.";
 export const RUN_NOW_PERSONAL =

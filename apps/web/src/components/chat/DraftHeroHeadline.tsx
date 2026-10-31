@@ -1,5 +1,6 @@
 import type { DraftId } from "~/composerDraftStore";
 import { composerDraftHasUserContent, useComposerDraftStore } from "~/composerDraftStore";
+import { useChatTaskIndex } from "../workspaces/useChatTasks";
 import { resolveEnvironmentMachineKind, type ScopedProjectRef } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
@@ -73,6 +74,17 @@ export function DraftHeroHeadline({
   const applyStickyState = useComposerDraftStore((store) => store.applyStickyState);
   const setModelSelection = useComposerDraftStore((store) => store.setModelSelection);
   const openAddProject = () => openCommandPalette({ open: "add-project" });
+  // A draft opened on a task already says what to build: the page names it rather than asking.
+  const workTask = useComposerDraftStore((store) =>
+    draftId === null ? null : (store.getDraftSession(draftId)?.workTask ?? null),
+  );
+  const taskIndex = useChatTaskIndex();
+  const taskTitle =
+    workTask === null || taskIndex === null
+      ? null
+      : (taskIndex.byWorkspaceProject
+          .get(`${workTask.workspace}/${workTask.projectId}`)
+          ?.tasks.find((task) => task.id === workTask.taskId)?.title ?? null);
   const { scratchEnvironmentId, scratchWorkspaceRootFor, openScratchProject } = useScratchProject();
   const openProjectDraft = useNewThreadHandler();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
@@ -312,13 +324,16 @@ export function DraftHeroHeadline({
     </button>
   );
 
-  const headingLabel = isScratchDraft
-    ? "What should we work on?"
-    : hasResolvedProject
-      ? `What should we build in ${activeProjectDisplayName}?`
-      : canChooseProject
-        ? `${activeProjectDisplayName ?? "Choose a project"} to start`
-        : "Add a project to start";
+  const headingLabel =
+    taskTitle !== null
+      ? taskTitle
+      : isScratchDraft
+        ? "What should we work on?"
+        : hasResolvedProject
+          ? `What should we build in ${activeProjectDisplayName}?`
+          : canChooseProject
+            ? `${activeProjectDisplayName ?? "Choose a project"} to start`
+            : "Add a project to start";
 
   const noProjectShortcut = shortcutLabelForCommand(keybindings, "chat.newWithoutProject");
   const orStartWithoutProject =
@@ -351,7 +366,9 @@ export function DraftHeroHeadline({
         aria-label={headingLabel}
         className="w-full text-center font-normal text-2xl text-foreground tracking-tight sm:text-3xl"
       >
-        {isScratchDraft ? (
+        {taskTitle !== null ? (
+          taskTitle
+        ) : isScratchDraft ? (
           <>What should we work on?</>
         ) : hasResolvedProject ? (
           <>What should we build in {projectSelector}?</>
@@ -362,7 +379,7 @@ export function DraftHeroHeadline({
         )}
       </h1>
       {}
-      {scratchWorkspaceRoot === null ? null : (
+      {scratchWorkspaceRoot === null || taskTitle !== null ? null : (
         <p className="mt-2 flex h-6 items-center text-sm">
           {isScratchDraft ? projectSelector : orStartWithoutProject}
         </p>

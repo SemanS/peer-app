@@ -61,7 +61,7 @@ describe("the project's other work", () => {
       nameOf,
       cliPath: "/c/bin/peer",
     });
-    assert.include(codex, "(/c/bin/peer) as a standalone command");
+    assert.include(codex, "(/c/bin/peer) as is");
   });
 });
 
@@ -326,19 +326,16 @@ describe("working context", () => {
     ]);
     assert.include(contextSkill("/peer/me.md"), "Start a line with [project]");
     // What the agent took from the team survives a compaction in its own context.
-    assert.include(
-      contextSkill("/peer/me.md"),
-      'Under "## Team" note what you took from the team\'s work',
-    );
+    assert.include(contextSkill("/peer/me.md"), 'Under "## Team" note what you took from others');
     assert.include(contextTemplate("Speaker bars", "KRK-12"), "## Team");
   });
 
   it("says bookmark and jj's commands to an agent in a jj checkout, branch and Git otherwise", () => {
     const git = contextSkill("/peer/me.md");
-    assert.include(git, "Keep the repository, branch,");
+    assert.include(git, "note the branch,");
     assert.include(git, "recheck Git and PR state");
     const jj = contextSkill("/peer/me.md", undefined, "jj");
-    assert.include(jj, "Keep the repository, bookmark,");
+    assert.include(jj, "note the bookmark,");
     assert.include(jj, "recheck `jj status`, `jj log` and PR state");
     assert.notInclude(jj, "recheck Git");
   });

@@ -162,7 +162,12 @@ export const PersistedState = Schema.Struct({
   localCheckouts: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   /** Agents on the same project staying out of each other's way, on this computer (experimental). */
   coordination: Schema.optional(
-    Schema.Struct({ enabled: Schema.Boolean, policy: PeerCoordinationPolicy }),
+    Schema.Struct({
+      enabled: Schema.Boolean,
+      policy: PeerCoordinationPolicy,
+      /** False once the person removed Peer's hooks from Claude Code: installed builds then leave them out. */
+      claudeHooks: Schema.optional(Schema.Boolean),
+    }),
   ),
   /**
    * This computer's threads (`peer:…`, `herdr:…`) whose owner lets the team watch them: observe's,
@@ -411,7 +416,11 @@ const make = Effect.gen(function* () {
   const text = yield* Effect.tryPromise(() => NodeFSP.readFile(statePath, "utf8")).pipe(
     Effect.orElseSucceed(() => ""),
   );
-  const decoded = Option.getOrElse(decodePersisted(text), () => EMPTY_PERSISTED);
+  // Every save ends in a newline: what a torn write left after it is not the state, the line is.
+  const decoded = Option.getOrElse(
+    Option.orElse(decodePersisted(text), () => decodePersisted(text.split("\n")[0] ?? "")),
+    () => EMPTY_PERSISTED,
+  );
   // A file from before runs' phase B may still name assignments: once, each becomes a detached run,
   // unless the file has runs already (phase A wrote assignments as an index of its runs).
   const legacy = Option.getOrUndefined(decodeLegacy(text));
@@ -439,6 +448,9 @@ const make = Effect.gen(function* () {
     localThreads: new Map(),
   });
   const lock = yield* Semaphore.make(1);
+  // Saves come from many fibers: one at a time, or two share a temporary file and tear it, and each
+  // works from what the one before it saved.
+  const saving = yield* Semaphore.make(1);
 
   const persist = (persisted: PersistedState) =>
     Effect.tryPromise(async () => {
@@ -456,7 +468,7 @@ const make = Effect.gen(function* () {
       const next = f((yield* Ref.get(ref)).persisted);
       yield* persist(next);
       yield* Ref.update(ref, (s) => ({ ...s, persisted: next }));
-    });
+    }).pipe(saving.withPermits(1));
 
   const checkoutPath: PeerState["Service"]["checkoutPath"] = (
     persisted,

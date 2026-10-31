@@ -82,6 +82,12 @@ function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+/** A prompt typed into a terminal reaches Claude Code as a paste: the person wrote what is inside. */
+const unwrapped = (text: string) =>
+  text
+    .replace(/^\s*<pasted_content\b[^>]*>\s*/u, "")
+    .replace(/\s*<\/pasted_content\b[^>]*>\s*$/u, "");
+
 function lines(text: string): string[] {
   return text
     .split("\n")
@@ -280,7 +286,7 @@ function timelineEntry(item: OrchestrationV2TurnItem, cwd: string | undefined): 
   switch (item.type) {
     case "user_message": {
       const text = item.text.trim();
-      return text === "" ? [] : [{ id, kind: "prompt", text: clip(text, 2_000) }];
+      return text === "" ? [] : [{ id, kind: "prompt", text: clip(unwrapped(text), 2_000) }];
     }
     case "assistant_message": {
       const text = item.text.trim();

@@ -72,7 +72,7 @@ function HubSignInDialog() {
           <>
             <PeerDialogHeader
               icon={LogInIcon}
-              title="Choose your organization"
+              title="Choose your workspace"
               description={`Signed in as ${status.email ?? "you"}.`}
             />
             <PeerDialogBody>

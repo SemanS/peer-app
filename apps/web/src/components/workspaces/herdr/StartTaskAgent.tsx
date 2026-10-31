@@ -553,12 +553,8 @@ function LaunchForm({
                 <Toggle value="codex">Codex</Toggle>
               </ToggleGroup>
             </PeerField>
-            <p className="text-sm text-muted-foreground">
-              {agentName} · Agent’s default model · {environment?.label ?? "This computer"} ·
-              Isolated checkout
-            </p>
             <div role="status" className="flex flex-wrap items-center gap-2 text-sm">
-              <span>
+              <span className={readiness === "ready" ? "sr-only" : undefined}>
                 {readiness === "ready"
                   ? `${agentName} is ready`
                   : readiness === "signIn"
@@ -612,7 +608,11 @@ function LaunchForm({
                 value={additional}
                 disabled={busy || started}
                 maxLength={2_000}
-                placeholder="Anything the agent should know beyond the task brief"
+                placeholder={
+                  prompt.trim() === ""
+                    ? "What should the agent do? The task’s title goes with it."
+                    : "Anything the agent should know beyond the task brief"
+                }
                 onChange={(event) => setAdditional(event.target.value)}
               />
             </PeerField>

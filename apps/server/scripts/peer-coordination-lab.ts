@@ -3170,7 +3170,7 @@ const program = Effect.gen(function* () {
     anaStart?.includes("You keep the shared context of lab (work outside tasks)") === true,
     "the first agent on a work keeps its shared context",
   );
-  const sharedPath = /You keep the shared context of .+? in (\S+\.md)[.,]/.exec(
+  const sharedPath = /You keep the shared context of .+? in (\S+\.md)[.,:]/.exec(
     anaStart ?? "",
   )?.[1];
   check(
@@ -3232,12 +3232,12 @@ const program = Effect.gen(function* () {
     requestedShared.includes("applyVat()") && requestedShared.includes("<shared-context>"),
     "an explicit peer context request retrieves the full shared version as team reference",
   );
-  const anaOwn = /Peer keeps your private working context in (\S+\.md),/.exec(anaStart ?? "")?.[1];
+  const anaOwn = /Your private notes: (\S+\.md),/.exec(anaStart ?? "")?.[1];
   check(
     anaOwn !== undefined && anaOwn !== sharedPath && NodeFS.existsSync(anaOwn),
     "the keeper's private notes live apart from the shared context",
   );
-  const bobOwn = /Peer keeps your private working context in (\S+\.md),/.exec(bobStart ?? "")?.[1];
+  const bobOwn = /Your private notes: (\S+\.md),/.exec(bobStart ?? "")?.[1];
   check(
     bobOwn !== undefined && NodeFS.existsSync(bobOwn),
     "the other agent keeps a working context of its own",
@@ -3717,7 +3717,7 @@ const program = Effect.gen(function* () {
   const namerStart = namer.start().told;
   told(`${namer.name} (on KRK-7)`, namerStart);
   check(
-    namerStart?.includes("Use `peer` as a standalone command") === true &&
+    namerStart?.includes("run `peer` as is, with no names or IDs") === true &&
       namerStart.includes(`peer ask <task> "<question>"`),
     "an agent starts knowing what Peer's command offers",
   );
@@ -3736,7 +3736,7 @@ const program = Effect.gen(function* () {
       exporterStart.includes("no shared context yet"),
     "an agent on another task hears who works on the related task, on which computer",
   );
-  const namesPath = /You keep the shared context of KRK-7 · Speaker names in (\S+\.md)[.,]/.exec(
+  const namesPath = /You keep the shared context of KRK-7 · Speaker names in (\S+\.md)[.,:]/.exec(
     namerStart ?? "",
   )?.[1];
   check(namesPath !== undefined, "the keeper knows its task's context file");
@@ -4019,7 +4019,9 @@ const program = Effect.gen(function* () {
   branchOff(bob.checkout, "krk-12-bars");
   const statsAgent = agent(ana, "lab-ana-stats", "w4:p1");
   const statsStart = statsAgent.start().told;
-  const statsPath = /shared context of KRK-11 · .+? in (\/\S+\.md)[.,]/.exec(statsStart ?? "")?.[1];
+  const statsPath = /shared context of KRK-11 · .+? in (\/\S+\.md)[.,:]/.exec(
+    statsStart ?? "",
+  )?.[1];
   check(statsPath !== undefined, "the agent on KRK-11 keeps its task's context");
   const statsLines = [
     "# KRK-11 · Speaker talk time",
@@ -4275,8 +4277,8 @@ const program = Effect.gen(function* () {
   );
   told(`${slowAgent.name} (its next step)`, slowNext);
   check(
-    slowNext?.includes("Use `peer` as a standalone command") === true &&
-      slowNext.includes("Peer keeps your private working context"),
+    slowNext?.includes("run `peer` as is, with no names or IDs") === true &&
+      slowNext.includes("Your private notes:"),
     "the complete startup guidance and context arrive at its next step",
   );
   check(

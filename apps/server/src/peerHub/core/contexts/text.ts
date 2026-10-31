@@ -33,16 +33,16 @@ export function commandsText(
   tools = false,
 ): string {
   const text = [
-    `Peer identifies this session, project and assigned task automatically. Use \`${cli}\`${path === undefined ? "" : ` (${path})`} as a standalone command; no agent names or IDs are needed from your person.`,
-    `Before implementing, check the supplied team index for shared data, behavior or interfaces. \`${cli} index [page]\` lists more work; \`${cli} context <task>\` reads an exact version and records it as an input. Choose relevant inputs yourself, even when your person did not mention another agent.${on("knowledge") ? ` \`${cli} knowledge <id or words>\` reads project decisions.` : ""}${on("ask") ? ` For an unclear dependency on another task, \`${cli} ask <task> "<question>"\` reaches its agents.` : ""} Within your own task or the shared project scope, use its shared context and your "For the team" notes.`,
-    `Peer announces changes during work. Read changed inputs, check their effect on your code and tests, and update your assumptions. Use \`${cli} note "<text>"\` and \`${cli} resolve "<agreement>"\` for an overlap. \`${cli} status\` shows current coordination; \`${cli}\` lists all commands.`,
-    `When the requested implementation is verified, publish its shared handoff context, then run \`${cli} review\` for your assigned task before reporting completion. A stale-input refusal means read the named contexts, recheck the result and retry; do not ask your person to supply Peer commands or acknowledge unseen changes. \`${cli} done\` is only for work whose linked PRs have merged. An analysis-only reply or a paused turn does not finish a task.`,
+    `Peer knows this session, its project and task: run \`${cli}\`${path === undefined ? "" : ` (${path})`} as is, with no names or IDs.`,
+    `Before implementing, check the team index below for shared data, behavior or interfaces, and pick what bears on your work even if your person did not mention it: \`${cli} index [page]\` lists more, \`${cli} context <task>\` reads a context and records it as an input.${on("knowledge") ? ` \`${cli} knowledge <id or words>\` reads decisions.` : ""}${on("ask") ? ` \`${cli} ask <task> "<question>"\` reaches a task's agents.` : ""}`,
+    `When Peer announces a change, read it and recheck your code and tests. On an overlap: \`${cli} note "<text>"\`, \`${cli} resolve "<agreement>"\`. \`${cli} status\` shows where things stand; \`${cli}\` lists all commands.`,
+    `When the work is verified, publish its shared context, then run \`${cli} review\`. A stale-input refusal: read the named contexts, recheck, retry. Never ask your person for Peer commands. \`${cli} done\` is only for work whose linked PRs have merged.`,
   ].join(" ");
   return tools
     ? text
         .replace(
           /^.*?Before implementing,/,
-          "Peer identifies this session, project and task. Use your peer_* tools; peer <command> below means peer_<command>. Before changing files, call peer_claim and follow each verdict; the tools advise and cannot stop an edit. Before implementing,",
+          "Peer knows this session, its project and task. Use your peer_* tools; peer <command> below means peer_<command>. Before changing files, call peer_claim and follow each verdict; the tools advise and cannot stop an edit. Before implementing,",
         )
         .replaceAll(`\`${cli} `, "`peer_")
         .replaceAll(`\`${cli}\``, "`peer_status`")
@@ -58,11 +58,10 @@ export function contextSkill(
   const ref = vcs === "jj" ? "bookmark" : "branch";
   const recheck = vcs === "jj" ? "recheck `jj status`, `jj log`" : "recheck Git";
   return [
-    `Runtime state and delivery are separate: ending a turn, going idle or closing a terminal does not finish the work. Keep the repository, ${ref}, all PR links, checks run and their results, unresolved blockers and the next action in your context before you stop or hand off. Work stays open until all linked PRs merge or a person explicitly closes its task. On resume read the team index and current shared context, then ${recheck} and PR state before editing. Ask an available agent through ${on("ask") ? "peer ask/note" : "peer note"}; when nobody is available, use the saved context and record what remains unanswered.`,
-    `Peer keeps your private working context in ${path}, separate from the shared context even if you are its keeper. Keep it short (under about 60 lines) and current. Under "## Team" note what you took from the team's work (a work's id, exact version and one line): recheck changed versions before publishing.`,
-    "Keep: the goal; what you are doing now; findings with exact file names and symbols; decisions and why; hypotheses marked unconfirmed; approaches that failed; what you need from whom. Drop what no longer matters and sum up finished work in a line. After a compaction or a resume, this file is what you get back.",
-    `At a subtask boundary, under "## For the team" keep 1-5 bullet lines (- ...): an interface or output others use, a decision and why, a hypothesis disproved by a check, or a blocker. Include exact sources and validity conditions. Peer passes them to your work's keeper. Never put secrets there.`,
-    `Start a line with [project] when the project should keep it beyond this task: a rule the code relies on, a pitfall someone will hit again, a risk, a decision and why. Not what the code or a change in progress does: the code and its commits say that. Peer offers those lines to the project's people as knowledge to keep. Your progress, plans and what you change are for the team on this task: leave them unmarked.`,
+    `Ending a turn does not finish the work: it stays open until its PRs merge or a person closes its task. Before you stop, note the ${ref}, PR links, checks and the next step in your context. On resume read the team index and shared context, then ${recheck} and PR state.`,
+    `Your private notes: ${path}, under about 60 lines, given back after a compaction or a resume. Keep the goal, what you do now, findings with exact files and symbols, decisions and why, what failed, what you need from whom. Under "## Team" note what you took from others (a work's id, version, one line).`,
+    `At a subtask boundary, under "## For the team" keep 1-5 lines (- ...) for your work's keeper: an interface others use, a decision and why, a disproved hypothesis, a blocker, with exact sources. No secrets.`,
+    `Start a line with [project] when the project should keep it beyond this task (a rule the code relies on, a pitfall, a risk, a decision and why): Peer offers it to the project's people. Progress stays unmarked.`,
   ].join("\n");
 }
 
@@ -72,11 +71,10 @@ const PEER_CONTEXT_COMMAND = "peer context";
 /** How the keeper of a shared context keeps it, said when it starts keeping it. */
 export function keeperSkill(path: string, subject: string): string {
   return [
-    `You keep the shared context of ${subject} in ${path}, separate from your private working context. Read its current version with \`${PEER_CONTEXT_COMMAND}\` before editing it. Your teammates and their people read this file; it is a handoff, not a log.`,
-    'Before implementation, publish a short intent under "## Provides": outputs/interfaces and assumptions others may depend on, marking untested ones unconfirmed. Update it at subtask boundaries and before handoff with checks, decisions and why, blockers and precise code/commit sources. Keep disproved hypotheses with their checks; private scratch stays private.',
-    `Keep it small, under about 6K tokens. At a milestone, sum up the finished part in a line. Peer keeps your recent versions, so compact without fear: where you drop detail, leave a pointer such as "(details: version 7)", and \`${PEER_CONTEXT_COMMAND} 7\` reads that version back.`,
-    "When Peer reports new findings, read them explicitly with peer context. Fold in what is verified and concerns this work, with authors and evidence. Keep conflicting observations with their conditions. After compaction or resume Peer restores your private notes and points to the current shared version; another agent may take over keeping it.",
-    "Start a bullet with [project] when the project should keep it beyond this work (a rule the code relies on, a pitfall, a risk, a decision and why), not what the code or a change in progress does: Peer offers it to the project's people as knowledge to keep.",
+    `You keep the shared context of ${subject} in ${path}: a handoff teammates and their people read, not a log. Read it with \`${PEER_CONTEXT_COMMAND}\` before editing it.`,
+    'Before implementation, publish a short intent under "## Provides": interfaces and assumptions others may rely on, untested ones marked unconfirmed. Update it at subtask boundaries and before handoff with checks, decisions, blockers and precise sources.',
+    `Keep it under about 6K tokens. Peer keeps your recent versions, so compact freely: leave "(details: version 7)" where you cut, and \`${PEER_CONTEXT_COMMAND} 7\` reads it back.`,
+    "When Peer reports findings, read them with peer context and fold in what is verified, with authors and evidence. [project] bullets work here too.",
   ].join("\n");
 }
 

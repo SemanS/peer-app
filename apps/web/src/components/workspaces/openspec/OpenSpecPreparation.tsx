@@ -40,30 +40,33 @@ export function OpenSpecPreparation({
   const settled = query.error === null && !query.isPending ? (data ?? undefined) : undefined;
   const ready = settled?.state === "ready" ? settled : null;
   const saved = settled?.state === "brief" ? settled : null;
-  const state: TaskPreparationState = manual
-    ? {
-        state: "ready",
-        prompt: "",
-        repositoryId:
-          repositoryId ?? project.repositories.find((repo) => repo.state === "ready")?.id ?? "",
-      }
-    : (ready ??
-      (saved === null
-        ? reason === null
-          ? { state: "loading" }
-          : { state: "unavailable", reason }
-        : { state: "ready", prompt: saved.prompt, repositoryId: saved.repositoryId }));
+  // Most tasks have no OpenSpec change: that is the plain case, with nothing to retry or fix.
+  const plain = settled?.state === "unavailable" && settled.code === "not-linked";
+  const state: TaskPreparationState =
+    manual || plain
+      ? {
+          state: "ready",
+          prompt: "",
+          repositoryId:
+            repositoryId ?? project.repositories.find((repo) => repo.state === "ready")?.id ?? "",
+        }
+      : (ready ??
+        (saved === null
+          ? reason === null
+            ? { state: "loading" }
+            : { state: "unavailable", reason }
+          : { state: "ready", prompt: saved.prompt, repositoryId: saved.repositoryId }));
   const source = promptSourceText(settled);
   const content = (
     <section aria-label="Task preparation" className="flex min-w-0 flex-col gap-6">
       <div className="flex min-w-0 flex-col gap-4">
-        <h2 className="text-lg font-medium">Task brief</h2>
+        {plain ? null : <h2 className="text-lg font-medium">Task brief</h2>}
         {saved !== null && saved.link.brief !== null ? (
           <div className="flex min-w-0 flex-col gap-3">
             <p className="text-sm text-muted-foreground">{saved.reason}</p>
             <SavedBrief brief={saved.link.brief} />
           </div>
-        ) : ready === null ? (
+        ) : plain ? null : ready === null ? (
           reason === null ? (
             <p role="status" className="text-sm text-muted-foreground">
               Loading the current OpenSpec change…

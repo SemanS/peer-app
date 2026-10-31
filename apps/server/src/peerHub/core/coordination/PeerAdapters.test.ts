@@ -120,6 +120,7 @@ const started = (input: {
           Layer.mock(PeerCoordination.PeerCoordination)({
             paths,
             localView: Effect.succeed({ sessions: [], overlaps: [], at: "2026-10-22T10:00:00Z" }),
+            localProjects: Effect.succeed([]),
             broker: input.broker ?? (() => null),
             start: input.start ?? Effect.void,
             stop: Effect.void,
@@ -311,6 +312,20 @@ describe("Peer's adapters in Claude Code when Peer starts", () => {
       const status = yield* adapters.setCoordination({});
       assert.isFalse(status.coordination.claudeHooks);
       assert.isFalse(status.coordination.claudeMod);
+      assert.deepStrictEqual(yield* Effect.promise(() => settings()), { model: "opus" });
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("adds its hooks at an installed build's start, and keeps them out once removed", () =>
+    Effect.gen(function* () {
+      const { adapters, settings } = yield* started({
+        mode: "desktop",
+        settings: () => ({ model: "opus" }),
+      });
+      const added = yield* adapters.setCoordination({});
+      assert.isTrue(added.coordination.claudeHooks);
+      const removed = yield* adapters.setCoordination({ claudeHooks: false });
+      assert.isFalse(removed.coordination.claudeHooks);
       assert.deepStrictEqual(yield* Effect.promise(() => settings()), { model: "opus" });
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );

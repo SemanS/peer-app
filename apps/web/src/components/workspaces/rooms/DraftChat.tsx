@@ -29,7 +29,8 @@ export const chatTitle = (text: string) => {
  * A new thread of a project on the Hub opens as a chat: the room's composer, with the people on
  * the project and your agent. Everything else keeps the thread's own composer, which is `children`:
  * a project on no Hub, a Hub without rooms, a draft that already holds a prompt, and anyone who
- * asks for it, since a thread runs on this computer without a Hub.
+ * asks for it, since a thread runs on this computer without a Hub. A draft opened on a task is that
+ * task's thread too: a chat would be a second piece of work beside the task it was opened for.
  */
 export function DraftChat({
   environmentId,
@@ -50,6 +51,9 @@ export function DraftChat({
   const hasPrompt = useComposerDraftStore(
     (store) => (store.getComposerDraft(draftId)?.prompt ?? "") !== "",
   );
+  const onTask = useComposerDraftStore(
+    (store) => (store.getDraftSession(draftId)?.workTask ?? null) !== null,
+  );
   const canPost = useAtomValue(serverEnvironment.peerRooms.post.permissionAtom(environmentId));
   const found = (status?.workspaces ?? []).flatMap((workspace) =>
     workspace.projects
@@ -58,10 +62,11 @@ export function DraftChat({
   )[0];
   const me = status?.email ?? null;
   // Showing the thread's composer until the status comes would flash it before the chat's.
-  if (!settled && !asThread && !hasPrompt) return null;
+  if (!settled && !asThread && !hasPrompt && !onTask) return null;
   if (
     asThread ||
     hasPrompt ||
+    onTask ||
     !canPost ||
     found === undefined ||
     me === null ||

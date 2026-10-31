@@ -35,7 +35,7 @@ export function HubConnectCard({
     >
       <div className="flex flex-col gap-1.5">
         <h2 id="peer-hub-card-title" className="text-base font-semibold text-foreground">
-          {stage === "sign-in" ? "Connect your team’s Peer Hub" : "Choose your organization"}
+          {stage === "sign-in" ? "Connect your team’s Peer Hub" : "Choose your workspace"}
         </h2>
         <p className="text-sm text-muted-foreground">
           {stage === "sign-in"

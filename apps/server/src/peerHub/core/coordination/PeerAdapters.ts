@@ -141,6 +141,12 @@ const make = Effect.gen(function* () {
     if (settingsDiffer(next, claude)) await writeJsonSettings(settingsPath, next);
   };
   const initialClaudeHomes = yield* configuredClaudeHomes;
+  // An agent Peer starts answers through hooks, so installed builds add them as they do Codex's
+  // plugin; dev servers leave them alone, and "Remove from Claude Code" stays removed.
+  const autoInstallClaude =
+    config.mode === "desktop" &&
+    config.devUrl === undefined &&
+    (yield* state.read).persisted.coordination?.claudeHooks !== false;
   yield* Effect.tryPromise(async () => {
     const initialSettings = await Promise.all(
       initialClaudeHomes.map((home) => readJsonSettings(NodePath.join(home, "settings.json"))),
@@ -156,7 +162,11 @@ const make = Effect.gen(function* () {
     });
     // The Mod was injected into every SDK profile, even profiles without its settings entry.
     for (const [index, home] of initialClaudeHomes.entries()) {
-      if (legacyModInstalled || hasPeerHooks(initialSettings[index] ?? {}, dir))
+      if (
+        autoInstallClaude ||
+        legacyModInstalled ||
+        hasPeerHooks(initialSettings[index] ?? {}, dir)
+      )
         await configureClaudeHooks(home, true);
     }
     await retireClaudeMod();
@@ -375,6 +385,11 @@ const make = Effect.gen(function* () {
           ? true
           : (input.enabled ?? current.enabled),
       policy: input.policy ?? current.policy,
+      ...(claudeHooks === undefined
+        ? current.claudeHooks === undefined
+          ? {}
+          : { claudeHooks: current.claudeHooks }
+        : { claudeHooks }),
     };
     yield* state.updatePersisted((p) => ({ ...p, coordination: next }));
     if (next.enabled) yield* coordination.start;

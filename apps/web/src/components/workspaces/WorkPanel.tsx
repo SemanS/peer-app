@@ -30,7 +30,6 @@ import { WorkSectionLabel, WorkHereContext } from "./marks";
 import { ProjectMark, SignalCount } from "./signals";
 import type { PeerWebPlugin } from "./slots.types";
 import { useWorkData } from "./useWorkData";
-import { WorkNoProjects } from "./WorkNoProjects";
 import { ALL_PROJECTS, inScope, projectScopeKey } from "./workBoard.logic";
 import { sharedRoomsOf } from "./rooms/sharedRoom.logic";
 
@@ -136,17 +135,10 @@ export function WorkPanel({
                   Join or create a workspace in Settings → Peer to work with your team.
                 </p>
               ) : (
-                <WorkNoProjects
-                  environmentId={environmentId}
-                  status={status}
-                  plugins={plugins}
-                  fallback={
-                    <p className="px-2 text-xs leading-relaxed text-muted-foreground">
-                      No team projects yet. Share one below, and everyone in the workspace can work
-                      on it.
-                    </p>
-                  }
-                />
+                <p className="px-2 text-xs leading-relaxed text-muted-foreground">
+                  No team projects yet. Share one below, and everyone in the workspace can work on
+                  it.
+                </p>
               )
             ) : current === undefined ? (
               <section aria-label="Projects" className="flex flex-col gap-1">

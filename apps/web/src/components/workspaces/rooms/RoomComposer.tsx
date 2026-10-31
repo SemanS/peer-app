@@ -67,6 +67,10 @@ export function RoomComposer({
   paths,
   onDrafting,
   onSent,
+  chat = false,
+  emptyDraft,
+  prepare,
+  placeholder = "Write to the room. @ names a person.",
 }: {
   readonly environmentId: EnvironmentId;
   readonly place: RoomPlace;
@@ -78,9 +82,16 @@ export function RoomComposer({
   readonly paths: DraftPaths | null;
   /** Whether the draft sits on a line, so the diff keeps it lit. */
   readonly onDrafting: (drafting: boolean) => void;
-  readonly onSent: () => void;
+  readonly onSent: (place: RoomPlace) => void;
+  /** The room is a chat: your own agent works there rather than reads. */
+  readonly chat?: boolean;
+  /** What a draft starts as when nothing is kept. */
+  readonly emptyDraft?: RoomDraft;
+  /** Makes the room the first message goes to; fails with the words to show. */
+  readonly prepare?: (text: string) => Promise<RoomPlace>;
+  readonly placeholder?: string;
 }) {
-  const [draft, onDraftChange] = useRoomDraft(place);
+  const [draft, onDraftChange] = useRoomDraft(place, emptyDraft);
   const choices = choicesWithMentions(targets, people, draft.selected);
   const post = useAtomCommand(serverEnvironment.peerRooms.post, { reportFailure: false });
   const [busy, setBusy] = useState(false);
@@ -114,7 +125,7 @@ export function RoomComposer({
     });
   });
 
-  const recipients = recipientsOf(choices, draft.selected, draft.agent);
+  const recipients = recipientsOf(choices, draft.selected, draft.agent, chat);
   const chosen = chosenKeys(draft);
   const problem = draftProblem(draft.text, recipients.blocked);
   const ownAgent = choices.find((choice) => choice.kind === "own-agent");
@@ -136,10 +147,20 @@ export function RoomComposer({
     onDraftChange(attempt);
     setBusy(true);
     setNotice(null);
+    const target = await (prepare === undefined
+      ? place
+      : prepare(draft.text.trim()).catch((failure: unknown) => {
+          setNotice(failure instanceof Error ? failure.message : "The chat could not be started.");
+          return null;
+        }));
+    if (target === null) {
+      setBusy(false);
+      return;
+    }
     const result = await post({
       environmentId,
       input: {
-        ...place,
+        ...target,
         op: operation.id,
         text: draft.text.trim(),
         to: recipients.to,
@@ -155,7 +176,7 @@ export function RoomComposer({
           : { kind: "failed", reason: failureMessage(result) ?? "the Hub did not take it." };
     onDraftChange(draftAfter(attempt, outcome));
     setNotice(sendNotice(outcome));
-    if (outcome.kind === "sent") onSent();
+    if (outcome.kind === "sent") onSent(target);
     input.current?.focus();
   };
 
@@ -272,7 +293,7 @@ export function RoomComposer({
       <Textarea
         ref={input}
         aria-label="Message"
-        placeholder="Write to the room. @ names a person."
+        placeholder={placeholder}
         value={draft.text}
         readOnly={busy}
         onChange={(event) => {

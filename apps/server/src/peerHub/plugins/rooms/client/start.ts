@@ -24,7 +24,7 @@ import type * as PeerState from "../../../core/state/PeerState.ts";
 import { projectKey } from "../../../core/state/PeerState.ts";
 import type * as PeerWork from "../../../core/work/PeerWork.ts";
 import { NO_CHECKOUT } from "../follow.ts";
-import { passedRunPrompt, reviewRoomPrompt, type Heard } from "../text.ts";
+import { chatRunPrompt, passedRunPrompt, reviewRoomPrompt, type Heard } from "../text.ts";
 
 const isHarness = Schema.is(PeerHarness);
 const refusal = (detail: string) => new PeerHubError({ detail, refused: true });
@@ -191,6 +191,12 @@ export const roomStarts = (
         if (!isHarness(harness)) return yield* refusal(`Peer cannot start ${harness} here.`);
         if (project.capacity.personal !== "any")
           return yield* refusal("This project needs an approved commercial or shared provider.");
+        const { model, effort } = choiceOf(item, me);
+        if (
+          (model !== undefined && !isModelName(model)) ||
+          (effort !== undefined && !isEffort(effort))
+        )
+          return yield* refusal("Peer cannot start that model.");
         const launcher = yield* plugins.require("taskLauncher");
         const unavailable = yield* launcher.unavailable;
         if (unavailable !== null) return yield* refusal(unavailable);
@@ -209,8 +215,10 @@ export const roomStarts = (
               ),
               task,
               harness,
-              prompt: passedRunPrompt(heard),
+              prompt: task.chat === true ? chatRunPrompt(heard) : passedRunPrompt(heard),
               env,
+              ...(model === undefined ? {} : { model }),
+              ...(effort === undefined ? {} : { effort }),
             }),
         );
         yield* work.refresh().pipe(state.lock.withPermits(1));

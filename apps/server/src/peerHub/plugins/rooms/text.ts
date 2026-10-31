@@ -148,6 +148,13 @@ export const passedRunPrompt = (heard: Heard) =>
     heardText(heard),
   ].join("\n");
 
+/** The first prompt of a working run started from a chat, which has no task to work on. */
+export const chatRunPrompt = (heard: Heard) =>
+  [
+    `You work from a chat of the project (${taskLine(heard.taskName)}), in your own checkout. The chat is no task: do what it asks, and answer in its room.`,
+    heardText(heard),
+  ].join("\n");
+
 export const START_LINE =
   "A task has a room its people and their agents read: peer room reads it, peer room <n> reads one message whole, peer room say \"<text>\" [--reply <n>] [--to <person>] [--at <path>:<line>] posts as your person's agent. An agent's message wakes nobody.";
 

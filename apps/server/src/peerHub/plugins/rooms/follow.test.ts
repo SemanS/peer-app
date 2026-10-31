@@ -191,6 +191,7 @@ const depsOf = (over: Partial<FollowDeps> & { readonly runs?: ReadonlyArray<Here
   const deps: FollowDeps = {
     me: BOB,
     runsHere: () => Effect.succeed(over.runs ?? []),
+    isChat: () => Effect.succeed(false),
     take: (_item, run) => note(`take ${run ?? "-"}`),
     fail: (_item, reason) => note(`fail ${reason}`),
     record: (_item, run) => note(`record ${run}`),
@@ -450,4 +451,26 @@ describe("act", () => {
       assert.deepStrictEqual(log, []);
     }),
   );
+});
+
+describe("decide in a chat", () => {
+  const own = {
+    seq: 1,
+    task: "chat-1",
+    at: "2026-10-31T00:00:00Z",
+    author: { email: "ana@acme.test" },
+    text: "hi",
+    to: [],
+  };
+  const delivery = { kind: "agent", email: "ana@acme.test", state: "passed" };
+
+  it("starts a working run where a task's room starts a review", () => {
+    assert.strictEqual(decide(own, delivery, [], "ana@acme.test").do, "take-review");
+    assert.strictEqual(decide(own, delivery, [], "ana@acme.test", 0, true).do, "take-start");
+  });
+
+  it("starts one on the model its author chose", () => {
+    const chosen = { ...delivery, model: "claude-opus-5-5" };
+    assert.strictEqual(decide(own, chosen, [], "ana@acme.test", 0, true).do, "take-start");
+  });
 });

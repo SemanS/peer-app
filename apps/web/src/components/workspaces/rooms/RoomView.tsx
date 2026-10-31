@@ -11,10 +11,13 @@ import type {
 } from "@t3tools/contracts";
 
 import { harnessName } from "@t3tools/client-runtime/peer/work";
+import { useNavigate } from "@tanstack/react-router";
 import { type DragEvent, useState } from "react";
 
 import { cn } from "../../../lib/utils";
 import { serverEnvironment } from "../../../state/server";
+import { useAtomCommand } from "../../../state/use-atom-command";
+import { Button } from "../../ui/button";
 import { SidebarInset } from "../../ui/sidebar";
 import { Toggle, ToggleGroup } from "../../ui/toggle-group";
 import { FILE_TREE_PATHS_DRAG_TYPE, fileTreePathsOf } from "../../files/fileTreeDragMention";
@@ -63,13 +66,31 @@ export function RoomView({
     ?.projects.find((candidate) => candidate.project.id === project);
   const hubTask = state?.work.tasks.find((candidate) => candidate.id === task);
   const projectName = found?.project.name ?? state?.project.name ?? project;
+  const isChat = hubTask?.chat === true;
+  const navigate = useNavigate();
+  const updateTask = useAtomCommand(serverEnvironment.peerHubUpdateTask, { reportFailure: false });
+  const closeChat = async () => {
+    if (environmentId === null) return;
+    const input = { workspace, projectId: project, taskId: task, status: "done" as const };
+    const result = await updateTask({ environmentId, input });
+    if (result._tag === "Success") await navigate({ to: "/" });
+  };
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background">
         <PeerPageHeader
           project={{ name: projectName, colorKey: `${workspace}/${project}` }}
           task={hubTask === undefined ? undefined : { key: hubTask.key, title: hubTask.title }}
-          page="Room"
+          page={isChat ? "Chat" : "Room"}
+          {...(isChat
+            ? {
+                actions: (
+                  <Button size="sm" variant="ghost" onClick={() => void closeChat()}>
+                    Close chat
+                  </Button>
+                ),
+              }
+            : {})}
         />
         {status === null || environmentId === null ? (
           <p role="status" className="px-6 py-6 text-sm text-muted-foreground">
@@ -158,6 +179,7 @@ function RoomBody({
     ...(read.room?.hasCheckout === undefined ? {} : { hasCheckout: read.room.hasCheckout }),
     reaches: read.room?.reaches ?? [],
     nameOf,
+    chat: hubTask.chat === true,
   });
 
   const showSide = (next: RoomSide) => {
@@ -324,7 +346,8 @@ function RoomBody({
               line={line}
               paths={paths}
               onDrafting={setDrafting}
-              onSent={read.refresh}
+              onSent={() => read.refresh()}
+              chat={hubTask.chat === true}
             />
           ) : (
             <p className="shrink-0 border-t border-border px-4 py-3 text-sm text-muted-foreground sm:px-6">

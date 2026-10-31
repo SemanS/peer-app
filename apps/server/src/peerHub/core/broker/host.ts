@@ -214,6 +214,7 @@ export interface PeerBrokerHost {
     readonly executable?: boolean | undefined;
     readonly unsettled?: boolean | undefined;
     readonly position?: number | undefined;
+    readonly chat?: boolean | undefined;
     /** Over its executable descendants, as the Hub counts them. */
     readonly progress?: { readonly done: number; readonly total: number } | undefined;
   }>;

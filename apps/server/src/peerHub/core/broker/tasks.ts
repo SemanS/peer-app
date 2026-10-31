@@ -215,7 +215,7 @@ export async function taskCommand(
     case "list": {
       allowed("--flat");
       if (rest.length > 0) throw wrong();
-      const all = tasks();
+      const all = tasks().filter((task) => task.chat !== true);
       if (all.length === 0)
         return `This project has no tasks. Add one with peer task add "<title>".`;
       const said = await facts(all);

@@ -168,6 +168,7 @@ export function recipientsOf(
   choices: ReadonlyArray<RoomTargetChoice>,
   selected: ReadonlyArray<string>,
   agent?: RoomAgentChoice,
+  chat = false,
 ): {
   readonly to: ReadonlyArray<PeerRoomTargetInput>;
   readonly notes: ReadonlyArray<string>;
@@ -191,7 +192,7 @@ export function recipientsOf(
     notes: chosen.flatMap((choice) => {
       if (carries(choice) && agent !== undefined)
         return [
-          `This starts ${agent.label}${agent.effort === undefined ? "" : ` at ${agent.effort} effort`} on this computer, read-only, on your capacity.`,
+          `This starts ${agent.label}${agent.effort === undefined ? "" : ` at ${agent.effort} effort`} on this computer, ${chat ? "in its own checkout" : "read-only"}, on your capacity.`,
         ];
       return choice.note === undefined ? [] : [choice.note];
     }),

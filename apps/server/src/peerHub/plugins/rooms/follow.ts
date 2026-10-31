@@ -76,6 +76,8 @@ export function decide(
   me: string,
   /** How long it has stood taken under this Peer: since the take, or since Peer started. */
   stood = 0,
+  /** The room is a chat: its own agent works there, as nothing else would carry the work. */
+  chat = false,
 ): Decision {
   const named = delivery.run;
   const reached = runs.find((run) => run.id === named);
@@ -95,14 +97,15 @@ export function decide(
       : { do: "wait", ms: PEER_ROOM_START_GRACE_MS - Math.max(0, stood) };
   }
   // A model its author chose is a new session on it: an open run has its model already.
-  if (same(message.author.email, me) && delivery.model !== undefined) return { do: "take-review" };
+  if (same(message.author.email, me) && delivery.model !== undefined)
+    return { do: chat ? "take-start" : "take-review" };
   const live = reached?.live === true ? reached : team ? undefined : runs.find((run) => run.live);
   if (live !== undefined) return { do: "take-offer", run: live.id };
   const own = same(message.author.email, me);
   const kept = reached ?? (own ? runs.find((run) => run.running || !run.staysPut) : runs[0]);
   if (kept !== undefined)
     return { do: kept.running === true ? "take-queue" : "take-continue", run: kept.id };
-  return own ? { do: "take-review" } : { do: "take-start" };
+  return own && !chat ? { do: "take-review" } : { do: "take-start" };
 }
 
 export const SESSION_ENDED = "Its session ended before answering.";
@@ -123,6 +126,7 @@ export interface Started {
 export interface FollowDeps {
   readonly me: string;
   readonly runsHere: (item: PeerRoomInboxItem) => Effect.Effect<ReadonlyArray<HereRun>>;
+  readonly isChat: (item: PeerRoomInboxItem) => Effect.Effect<boolean>;
   /** `take`: the one-winner step. Fails when another took it or the state moved. */
   readonly take: (
     item: PeerRoomInboxItem,
@@ -166,7 +170,14 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
       return yield* deps.record(item, unrecorded);
     const since = Math.max(Date.parse(delivery.at ?? "") || 0, deps.startedAt);
     const stood = (yield* Clock.currentTimeMillis) - since;
-    const decision = decide(item.message, delivery, yield* deps.runsHere(item), deps.me, stood);
+    const decision = decide(
+      item.message,
+      delivery,
+      yield* deps.runsHere(item),
+      deps.me,
+      stood,
+      yield* deps.isChat(item),
+    );
     const kind = kindOf(item.message, delivery, deps.me);
     // The agent exists from here on: a failed prompt must not read as a failed start, or Try
     // again would start a second one. It hears the message as any session of the run does.

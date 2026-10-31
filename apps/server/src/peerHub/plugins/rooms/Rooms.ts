@@ -79,6 +79,9 @@ export const jobsAfterLeaving = (jobs: ReadonlyArray<Job>, workspace: string) =>
   jobs.filter((job) => workspaceOf(job) !== workspace);
 
 /** A Hub's refusal is final; anything else may not have reached it, so the move is owed still. */
+const kindOf = (item: PeerRoomInboxItem, me: string): HeardKind =>
+  item.message.author.email.toLowerCase() === me.toLowerCase() ? "own" : "passed";
+
 const owed = (error: PeerHubError) =>
   error.status === undefined || error.status >= 500 || error.status === 429;
 
@@ -273,6 +276,11 @@ const make = Effect.gen(function* () {
   const followDeps = (workspace: string, me: string): FollowDeps => ({
     me,
     runsHere: (item) => runsHere(workspace, item),
+    isChat: (item) =>
+      work.tasks(workspace, item.project).pipe(
+        Effect.map((tasks) => tasks.some((task) => task.id === item.task && task.chat === true)),
+        Effect.orElseSucceed(() => false),
+      ),
     take: (item, run) =>
       hub
         .move(placeOf(workspace, item), item.message.seq, me, {
@@ -342,7 +350,7 @@ const make = Effect.gen(function* () {
         return yield* starts.review(workspace, item, me, heard, change);
       }),
     start: (item) =>
-      Effect.flatMap(heardOf(workspace, item, "passed", me), (heard) =>
+      Effect.flatMap(heardOf(workspace, item, kindOf(item, me), me), (heard) =>
         starts.work(workspace, item, me, heard),
       ),
   });

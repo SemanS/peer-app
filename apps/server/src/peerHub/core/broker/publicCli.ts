@@ -158,6 +158,7 @@ export async function publicCli(
     .sessions.filter((agent) => agent.project === project);
   const rows = broker.host
     .tasks(workspace, project)
+    .filter((task) => task.chat !== true)
     .map((task) => `${task.key ?? task.id} · ${task.title} · ${task.status}`);
   if (command === "status")
     return [

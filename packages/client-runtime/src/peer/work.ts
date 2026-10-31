@@ -207,6 +207,8 @@ export interface WorkProjectNode {
   /** Knowledge candidates waiting for people to keep or dismiss. */
   readonly candidates: number;
   readonly tasks: ReadonlyArray<PeerTask>;
+  /** Open rooms bound to no work item, newest first; none of them is among `areas` or `tasks`. */
+  readonly chats?: ReadonlyArray<WorkTaskNode>;
   /** The version control of the project's checkouts on this computer. */
   readonly vcs?: PeerVcsKind | undefined;
   /**
@@ -736,7 +738,8 @@ function projectTree(input: {
     /(?:^|:)herdr:(.+)$/.exec(node.key)?.[1] === context.keeper.session
       ? { ...node, keepsContext: true }
       : node;
-  const tree = taskTree(work.tasks);
+  const items = work.tasks.filter((task) => task.chat !== true);
+  const tree = taskTree(items);
   // A task in review with a current acceptance waits on nobody (`WorkTaskNode.accepted`).
   const acceptedVia = new Map(
     (status.acceptance?.accepted ?? [])
@@ -810,7 +813,11 @@ function projectTree(input: {
       status.coordination.candidates.find(
         (waiting) => waiting.workspace === workspace.slug && waiting.project === state.project.id,
       )?.proposed ?? 0,
-    tasks: work.tasks,
+    tasks: items,
+    chats: work.tasks
+      .filter((task) => task.chat === true && task.status !== "done")
+      .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .flatMap((task) => taskNodes.get(task.id) ?? []),
     vcs: projectVcs(state.repositories),
     ownership: projectOwnership(status, workspace, state.project),
   };

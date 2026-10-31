@@ -60,6 +60,10 @@ export function findTask(
     const task = area.tasks.find((candidate) => candidate.id === ids.task);
     if (project !== undefined && task !== undefined) return { project, area, task };
   }
+  const chats = project?.chats ?? [];
+  const chat = chats.find((candidate) => candidate.id === ids.task);
+  if (project !== undefined && chat !== undefined)
+    return { project, area: { name: null, tasks: chats }, task: chat };
   return undefined;
 }
 

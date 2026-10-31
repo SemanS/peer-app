@@ -7,6 +7,7 @@ import ChatView from "./ChatView";
 import { resolveDraftPromotionNavigationTarget, threadHasStarted } from "./ChatView.logic";
 import { waitForDraftHeroTransition } from "./chat/draftHeroTransition";
 import { SidebarInset } from "./ui/sidebar";
+import { DraftChat } from "./workspaces/rooms/DraftChat";
 import {
   finalizePromotedDraftThreadByRef,
   markPromotedDraftThreadByRef,
@@ -153,14 +154,21 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
   if (target.kind === "draft") {
     if (draftSession) {
       view = (
-        <ChatView
+        <DraftChat
           key={target.draftId}
-          draftId={target.draftId}
           environmentId={draftSession.environmentId}
-          threadId={draftSession.threadId}
-          routeKind="draft"
-          forceExpandedMobileComposer
-        />
+          draftId={target.draftId}
+          projectId={draftSession.projectId}
+        >
+          <ChatView
+            key={target.draftId}
+            draftId={target.draftId}
+            environmentId={draftSession.environmentId}
+            threadId={draftSession.threadId}
+            routeKind="draft"
+            forceExpandedMobileComposer
+          />
+        </DraftChat>
       );
     }
   } else if (renderState === "ready" || (renderState === "loading" && serverThreadShell !== null)) {

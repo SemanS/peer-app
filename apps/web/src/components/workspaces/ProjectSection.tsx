@@ -109,7 +109,7 @@ export function ProjectSection({
       {heading ? (
         <div className="flex h-6 min-w-0 items-center gap-2 px-2">
           <h2 className="min-w-0 flex-1 truncate text-xs font-medium tracking-wide text-muted-foreground uppercase">
-            Areas
+            Tasks
           </h2>
           {total === 0 ? null : <NavCount>{tasksCountLabel(total)}</NavCount>}
           <ProjectActions

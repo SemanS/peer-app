@@ -224,6 +224,8 @@ export function targetsFor(
     readonly hasCheckout?: boolean;
     readonly reaches?: ReadonlyArray<PeerRoomReach>;
     readonly nameOf?: NameOf;
+    /** A chat: anyone on the project can be named, and your agent works in its own checkout. */
+    readonly chat?: boolean;
   } = {},
 ): ReadonlyArray<RoomTargetChoice> {
   const nameOf: NameOf =
@@ -232,9 +234,13 @@ export function targetsFor(
   const onTask = runs.filter((run) => run.task === task.id);
   const ownRun = onTask.some((run) => same(run.email, me) && runOpen(run));
   const canAsk = ownRun || options.hasCheckout !== false;
-  const people = [...new Set([...onTask.map((run) => run.email), task.createdBy])].filter(
-    (email) => !same(email, me),
-  );
+  const people = [
+    ...new Set([
+      ...onTask.map((run) => run.email),
+      task.createdBy,
+      ...(options.chat === true ? project.members.map((member) => member.email) : []),
+    ]),
+  ].filter((email) => !same(email, me));
   const reached = (email: string) =>
     onTask.some(
       (run) =>
@@ -253,7 +259,9 @@ export function targetsFor(
         ? {
             note: ownRun
               ? "Your agent on this task reads this at its next step."
-              : "This starts your agent on this computer, read-only, on your capacity.",
+              : options.chat === true
+                ? "This starts your agent on this computer, in its own checkout, on your capacity."
+                : "This starts your agent on this computer, read-only, on your capacity.",
           }
         : { disabled: "This computer has no checkout of the project." }),
     },

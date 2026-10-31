@@ -171,11 +171,12 @@ export function useRoomSteps(input: {
   return { steps: query.data?.steps ?? NO_STEPS, change: query.data?.change };
 }
 
-function readStored(key: string): RoomDraft {
+function readStored(key: string, empty: RoomDraft): RoomDraft {
   try {
-    return parseDraft(localStorage.getItem(key));
+    const stored = parseDraft(localStorage.getItem(key));
+    return isEmptyDraft(stored) ? empty : stored;
   } catch {
-    return EMPTY_DRAFT;
+    return empty;
   }
 }
 
@@ -189,9 +190,9 @@ function writeStored(key: string, draft: RoomDraft) {
 }
 
 /** The room's draft, kept on this device, so leaving the page or a reload loses no words. */
-export function useRoomDraft(place: RoomPlace) {
+export function useRoomDraft(place: RoomPlace, empty: RoomDraft = EMPTY_DRAFT) {
   const key = draftStorageKey(place);
-  const [draft, setDraft] = useState(() => readStored(key));
+  const [draft, setDraft] = useState(() => readStored(key, empty));
   const latest = useRef(draft);
   const change = (next: RoomDraft | ((current: RoomDraft) => RoomDraft)) => {
     latest.current = typeof next === "function" ? next(latest.current) : next;

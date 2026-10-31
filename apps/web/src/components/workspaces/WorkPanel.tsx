@@ -55,6 +55,8 @@ export function WorkPanel({
       : tree.filter((project) =>
           members.some((member) => member.scope === projectScopeKey(project)),
         );
+  // Tasks and rooms live on the Hub, so a set's project that no workspace shares has neither.
+  const unshared = (members ?? []).filter((member) => isLocalScope(member.scope));
   const counts = sidebarNav(
     tree.filter((project) => inScope(scope, project)),
     needs,
@@ -156,6 +158,7 @@ export function WorkPanel({
                     key={projectScopeKey(project)}
                     project={project}
                     needs={sidebarNav([project], needs).needs}
+                    defaultOpen={members !== undefined}
                   >
                     <ProjectSection
                       environmentId={environmentId}
@@ -165,8 +168,14 @@ export function WorkPanel({
                       activeThread={activeThread}
                       actions={actions}
                       needOf={needOf}
+                      heading={members !== undefined}
                     />
                   </ProjectDisclosure>
+                ))}
+                {unshared.map((member) => (
+                  <p key={member.scope} className="px-2 py-1 text-xs text-muted-foreground">
+                    {member.name} is only on this computer, so it has no team tasks.
+                  </p>
                 ))}
               </section>
             ) : (
@@ -291,14 +300,21 @@ function ProjectDisclosure({
   project,
   children,
   needs,
+  defaultOpen = false,
 }: {
   readonly project: WorkProjectNode;
   readonly children: ReactNode;
   readonly needs: number | null;
+  /** A project set's projects stack open: their work is why they are grouped. */
+  readonly defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   return (
-    <details className="group/project" onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <details
+      className="group/project"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 rounded-md px-2 py-2 text-sm font-medium outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
         <ProjectMark name={project.name} colorKey={projectScopeKey(project)} />
         <span className="min-w-0 flex-1 truncate">{project.name}</span>

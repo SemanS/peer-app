@@ -176,7 +176,13 @@ export function WorkPanel({
               />
             )}
             {environmentId !== null && status?.signedIn && status.workspaces.length > 0 ? (
-              <ShareProject environmentId={environmentId} status={status} plugins={plugins} />
+              <ShareProject
+                environmentId={environmentId}
+                status={status}
+                plugins={plugins}
+                scope={resolved}
+                actions={actions}
+              />
             ) : null}
           </>
         )}

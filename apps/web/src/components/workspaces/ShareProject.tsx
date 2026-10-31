@@ -10,23 +10,31 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { toastManager } from "../ui/toast";
+import { isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
+import { shareRowNote, shareRows } from "./shareProject.logic";
 import type { PeerWebPlugin } from "./slots.types";
+import type { WorkActions } from "./useWorkActions";
 import { reportFailure } from "./workFeedback";
 
 /**
  * Any member shares a project with the workspace the way "Add project" takes
  * one: a repository by its address (GitHub's owner/repo or a clone URL), or a
  * project on this computer by its origin. Everyone then clones it with
- * "Clone & open".
+ * "Clone & open". The project the sidebar has open is the first offer; any
+ * other is a choice the person opens, so a list never reads as being about it.
  */
 export function ShareProject({
   environmentId,
   status,
   plugins,
+  scope,
+  actions,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
+  readonly scope: ResolvedProjectScope;
+  readonly actions: WorkActions;
 }) {
   const projects = useProjects();
   const { scratchWorkspaceRootFor } = useScratchProject();
@@ -37,19 +45,20 @@ export function ShareProject({
   const [workspace, setWorkspace] = useState(status.workspaces[0]?.slug ?? "");
   const [address, setAddress] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const bound = new Set(
-    status.workspaces.flatMap((w) =>
-      w.projects.flatMap((p) => p.repositories.flatMap((r) => (r.projectId ? [r.projectId] : []))),
-    ),
-  );
   // Threads without a project ("No project") have no repository to share.
   const scratchRoot = scratchWorkspaceRootFor(environmentId);
-  const candidates = projects.filter(
-    (project) =>
-      project.environmentId === environmentId &&
-      !bound.has(project.id) &&
-      !isScratchProject(project, scratchRoot),
+  const rows = shareRows(
+    projects.filter(
+      (project) =>
+        project.environmentId === environmentId && !isScratchProject(project, scratchRoot),
+    ),
+    scope.refs,
+    status.workspaces,
   );
+  const openUnshared = isLocalScope(scope.scope)
+    ? rows.find((row) => row.open && row.sharedWith.length === 0)?.project
+    : undefined;
+  const onlyWorkspace = status.workspaces.length === 1 ? status.workspaces[0] : undefined;
   const workspaceName = status.workspaces.find((w) => w.slug === workspace)?.name ?? workspace;
   const share = (
     key: string,
@@ -68,16 +77,44 @@ export function ShareProject({
       .finally(() => setBusy(null));
   };
   if (!open) {
+    if (openUnshared === undefined) {
+      return (
+        <Button
+          className="mx-2 self-start"
+          size="xs"
+          variant="ghost-muted"
+          onClick={() => setOpen(true)}
+        >
+          <Share2Icon className="size-3.5" />
+          {scope.refs === null || isLocalScope(scope.scope)
+            ? "Share a project"
+            : "Share another project"}
+        </Button>
+      );
+    }
     return (
-      <Button
-        className="mx-2 self-start"
-        size="xs"
-        variant="ghost-muted"
-        onClick={() => setOpen(true)}
-      >
-        <Share2Icon className="size-3.5" />
-        Share a project
-      </Button>
+      <div className="mx-2 flex min-w-0 flex-wrap items-center gap-1">
+        <Button
+          className="min-w-0"
+          size="xs"
+          variant="outline"
+          onClick={() => {
+            if (onlyWorkspace === undefined) setOpen(true);
+            else void actions.shareProject(openUnshared, openUnshared.title, onlyWorkspace);
+          }}
+        >
+          <Share2Icon className="size-3.5" />
+          <span className="min-w-0 truncate">
+            Share {openUnshared.title}
+            {onlyWorkspace === undefined ? "" : ` with ${onlyWorkspace.name}`}…
+          </span>
+        </Button>
+        {onlyWorkspace === undefined ? null : (
+          <Button size="xs" variant="ghost-muted" onClick={() => setOpen(true)}>
+            Another project
+          </Button>
+        )}
+      </div>
     );
   }
   return (
@@ -85,8 +122,9 @@ export function ShareProject({
       aria-label="Share a project"
       className="mx-1 rounded-md border border-sidebar-border p-2"
     >
-      <p className="text-xs text-muted-foreground">
-        Everyone in the workspace sees the project and clones it with “Clone &amp; open”.
+      <h3 className="text-xs font-medium text-sidebar-foreground">Share with {workspaceName}</h3>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Pick a project. Everyone in the workspace sees it and clones it with “Clone &amp; open”.
       </p>
       {status.workspaces.length > 1 ? (
         <div className="mt-2 flex flex-wrap gap-1">
@@ -102,8 +140,43 @@ export function ShareProject({
           ))}
         </div>
       ) : null}
+      {rows.length > 0 ? (
+        <>
+          <p className="mt-3 text-xs text-muted-foreground">On this computer</p>
+          <ul className="mt-1 flex flex-col gap-1">
+            {rows.map((row) => {
+              const note = shareRowNote(row);
+              return (
+                <li key={row.project.id} className="flex min-h-6 items-center gap-2">
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm">{row.project.title}</span>
+                    {note === null ? null : (
+                      <span className="truncate text-xs text-muted-foreground">{note}</span>
+                    )}
+                  </span>
+                  {row.sharedWith.length > 0 ? null : (
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        share(row.project.id, row.project.title, { projectId: row.project.id })
+                      }
+                    >
+                      {busy === row.project.id ? "Sharing…" : "Share"}
+                    </Button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      ) : null}
+      <p className="mt-3 text-xs text-muted-foreground">
+        {rows.length > 0 ? "Or by address" : "By address"}
+      </p>
       <form
-        className="mt-2 flex gap-1"
+        className="mt-1 flex gap-1"
         onSubmit={(event) => {
           event.preventDefault();
           const repository = address.trim();
@@ -128,26 +201,6 @@ export function ShareProject({
       {plugins.map(({ id, shareProject: Note }) =>
         Note === undefined ? null : <Note key={id} environmentId={environmentId} status={status} />,
       )}
-      {candidates.length > 0 ? (
-        <>
-          <p className="mt-3 text-xs text-muted-foreground">Or a project on this computer:</p>
-          <ul className="mt-1 flex flex-col gap-px">
-            {candidates.map((project) => (
-              <li key={project.id} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-sm">{project.title}</span>
-                <Button
-                  size="xs"
-                  variant="outline"
-                  disabled={busy !== null}
-                  onClick={() => share(project.id, project.title, { projectId: project.id })}
-                >
-                  {busy === project.id ? "Sharing…" : "Share"}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
       <div className="mt-2 flex justify-end">
         <Button size="xs" variant="ghost" onClick={() => setOpen(false)}>
           Close

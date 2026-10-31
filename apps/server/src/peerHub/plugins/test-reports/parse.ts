@@ -74,7 +74,11 @@ export function parse(args: ReadonlyArray<string>): Parsed {
   for (let at = 0; at < rest.length; at++) {
     const arg = rest[at]!;
     if (!arg.startsWith("--")) {
-      words.push(arg);
+      const flag = ITEM_FLAGS[rest[at - 2] ?? ""];
+      // `--fail "<text>" @task:<key>`, the closing quote one word early: left in the summary, the item would quietly lose its home.
+      if (flag !== undefined && arg.startsWith("@"))
+        items[items.length - 1] = itemOf(flag, `${rest[at - 1]} ${arg}`);
+      else words.push(arg);
       continue;
     }
     const value = rest[at + 1];

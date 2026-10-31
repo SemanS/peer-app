@@ -70,6 +70,33 @@ describe("peer tests, as typed", () => {
     assert.include(FORM, '--fail "<text> [@task:<key>]"');
   });
 
+  it("reads an @ just outside an item's quotes as that item's, not the summary's", () => {
+    assert.deepStrictEqual(
+      parse([
+        "mixed",
+        "one left",
+        "--fail",
+        "receipt test",
+        "@task:INV-2",
+        "--unverified",
+        "rounding",
+        "@ana",
+      ]),
+      {
+        kind: "file",
+        result: "mixed",
+        summary: "one left",
+        task: undefined,
+        items: [
+          { kind: "fail", text: "receipt test", task: "INV-2" },
+          { kind: "unverified", text: "rounding", owner: "ana" },
+        ],
+      },
+    );
+    const summary = parse(["pass", "--for", "INV-1", "@ana", "words"]);
+    assert.strictEqual(summary.kind === "file" && summary.summary, "@ana words");
+  });
+
   it("is a usage error when the line is wrong", () => {
     assert.strictEqual(usageOf([]).outcome, "usage");
     assert.include(usageOf(["maybe", "x"]).reason, "pass, fail, mixed or show");

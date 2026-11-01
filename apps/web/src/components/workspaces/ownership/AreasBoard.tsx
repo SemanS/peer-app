@@ -19,7 +19,8 @@ import { PeerSectionLabel, TaskKey } from "../PeerPageHeader";
 import { TONE_BADGE } from "../signals";
 import { teamTaskFactsOf } from "../slots.logic";
 import type { PeerWebPlugin } from "../slots.types";
-import { StateDot } from "../WorkBoardCards";
+import { taskStateLook } from "../taskRow.logic";
+import { StateDot } from "../workStatus";
 import { taskStateTone } from "../workList.logic";
 import type { WorkProjectNode } from "../workTree.logic";
 import { CallSummary } from "./CallSummary";
@@ -238,7 +239,7 @@ function TaskRow({
         </Link>
         <span className="text-sm text-foreground">{ownerLine(task.owner)}</span>
         <Badge variant={TONE_BADGE[taskStateTone(task.state.kind)]} size="control">
-          <StateDot kind={task.state.kind} />
+          <StateDot {...taskStateLook(task.state.kind)} />
           {task.state.label}
         </Badge>
         <span className="text-sm text-muted-foreground">{agentsLine(task.agents)}</span>

@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  SIDEBAR_VIEW_LABELS,
-  sidebarScopeLine,
-  sidebarSwitchChoice,
-  sidebarSwitchValue,
-  storedSidebarTab,
-} from "./SidebarViewSwitch.logic";
+import { SIDEBAR_VIEW_LABELS, sidebarScopeLine } from "./SidebarViewSwitch.logic";
 
 describe("sidebarScopeLine", () => {
   it("names the project in both views", () => {
@@ -34,25 +28,5 @@ describe("sidebarScopeLine", () => {
 describe("the view labels", () => {
   it("call the stored views Work and Chats", () => {
     expect(SIDEBAR_VIEW_LABELS).toEqual({ work: "Work", threads: "Chats" });
-  });
-});
-
-describe("the switch", () => {
-  it("shows the tab while on the work, and Chats while on the chats", () => {
-    expect(sidebarSwitchValue("work", "activity")).toBe("activity");
-    expect(sidebarSwitchValue("threads", "activity")).toBe("chats");
-  });
-
-  it("reads a choice as a view and, for the work, a tab", () => {
-    expect(sidebarSwitchChoice("activity")).toEqual({ view: "work", tab: "activity" });
-    expect(sidebarSwitchChoice("chats")).toEqual({ view: "threads" });
-    expect(sidebarSwitchChoice(undefined)).toBeUndefined();
-    expect(sidebarSwitchChoice("knowledge")).toBeUndefined();
-  });
-
-  it("reads a stored tab that is gone as Work", () => {
-    expect(storedSidebarTab("activity")).toBe("activity");
-    expect(storedSidebarTab("tasks")).toBe("tasks");
-    expect(storedSidebarTab("knowledge")).toBe("tasks");
   });
 });

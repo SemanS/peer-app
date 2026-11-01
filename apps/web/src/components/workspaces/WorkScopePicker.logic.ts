@@ -1,4 +1,3 @@
-import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
 import type {
   EnvironmentId,
   PeerHubStatus,
@@ -76,7 +75,7 @@ interface MenuWorkspace {
 export function projectMenuSections(input: {
   readonly workspaces: ReadonlyArray<MenuWorkspace>;
   readonly tree: ReadonlyArray<WorkProjectNode>;
-  readonly needs: ReadonlyArray<NeedsYouItem>;
+  readonly rooms: PeerHubStatus["rooms"];
   readonly locals: ReadonlyArray<{
     readonly projectKey: string;
     readonly displayName: string;
@@ -102,7 +101,9 @@ export function projectMenuSections(input: {
           ),
           active: node === undefined ? undefined : activeTasksText(activeTaskCount(node)),
           needs:
-            node === undefined ? undefined : needsYouText(sidebarNeedsCount([node], input.needs)),
+            node === undefined
+              ? undefined
+              : needsYouText(sidebarNeedsCount({ rooms: input.rooms }, [node])),
         };
       }),
     }));

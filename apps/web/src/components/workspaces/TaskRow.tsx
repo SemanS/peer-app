@@ -19,13 +19,7 @@ import { MoveUnderDialog } from "./MoveUnderDialog";
 import { NewTaskDialog } from "./NewTaskDialog";
 import type { PeerWebPlugin } from "./slots.types";
 import { TONE_TEXT } from "./signals";
-import {
-  rowStateLabel,
-  taskRouteKey,
-  taskRowModel,
-  taskRowTarget,
-  type TaskRowTarget,
-} from "./taskRow.logic";
+import { rowStateLabel, taskRouteKey, taskRowModel } from "./taskRow.logic";
 import { kindChange, servesTree } from "./taskTree.logic";
 import {
   below,
@@ -45,9 +39,8 @@ import {
 } from "./workTree.logic";
 
 /**
- * One task of a project: its state's dot, its key and short name, which open it, and under them its
- * state in words once there is one to say. Runs, chats and what the task asks are on its page and in
- * Needs your attention. A double click or F2 renames it. An item of a task tree is indented under
+ * One task of a project: its state's dot, its key and short name, which open its room, and under
+ * them its state in words once there is one to say. A double click or F2 renames it. An item of a task tree is indented under
  * the row of its parent.
  */
 export function TaskRow({
@@ -94,11 +87,9 @@ export function TaskRow({
   const taskArea = tasks.find((t) => t.id === task.id)?.area;
   const model = taskRowModel({
     task,
-    scope,
     needOf,
     review: taskOwnership(project, task, taskArea ?? null).review,
   });
-  const { target } = model;
   const blocked = taskBlocked(status, scope.workspace, projectState, task.id);
   const stateLabel = rowStateLabel(model.state, blocked);
   const active = activeThread === taskRouteKey(scope, task.id);
@@ -107,18 +98,11 @@ export function TaskRow({
   )?.requestTeammate;
   const canRequest = RequestDialog !== undefined && projectState !== undefined;
 
-  const go = (to: TaskRowTarget) => {
-    if (to.kind === "chat") actions.open(to.open);
-    else {
-      void navigate({
-        to:
-          to.kind === "task"
-            ? "/task/$workspace/$project/$task"
-            : "/review/$workspace/$project/$task",
-        params: { workspace: to.workspace, project: to.project, task: to.task },
-      });
-    }
-  };
+  const openRoom = () =>
+    void navigate({
+      to: "/room/$workspace/$project/$task",
+      params: { workspace: scope.workspace, project: scope.projectId, task: task.id },
+    });
   const startThread = () => {
     if (t3ProjectId !== undefined) void actions.startThread(scope, task.id, t3ProjectId);
   };
@@ -140,7 +124,6 @@ export function TaskRow({
           canStartThread: t3ProjectId !== undefined,
           canRequestTeammate: canRequest,
           inReview: task.inReview === true,
-          showTaskDetails: target?.kind === "review",
           areas,
           area: taskArea,
           tree,
@@ -158,8 +141,7 @@ export function TaskRow({
     else if (moved !== undefined) {
       if ((moved.area ?? undefined) !== taskArea)
         void actions.moveTaskToArea(scope, task, moved.area);
-    } else if (choice === "task-details") go(taskRowTarget(task, scope));
-    else if (choice === "new-thread") startThread();
+    } else if (choice === "new-thread") startThread();
     else if (choice === "request-teammate") setRequesting(true);
     else if (choice === "add-under" || choice === "move-under") setTreeDialog(choice);
     else if (choice === "make-group" || choice === "make-task")
@@ -229,8 +211,6 @@ export function TaskRow({
                 if (next !== null) void actions.renameTask(scope, task, next);
               }}
             />
-          ) : target === undefined ? (
-            <div className="flex min-w-0 items-baseline gap-1.5">{title}</div>
           ) : (
             <Tooltip>
               <TooltipTrigger
@@ -239,7 +219,7 @@ export function TaskRow({
                     type="button"
                     aria-current={active ? "page" : undefined}
                     className="flex min-w-0 items-baseline gap-1.5 rounded-sm text-left outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                    onClick={() => go(target)}
+                    onClick={openRoom}
                   />
                 }
               >

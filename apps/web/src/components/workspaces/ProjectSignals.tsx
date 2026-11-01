@@ -1,7 +1,5 @@
-import { overlapTopic } from "@t3tools/client-runtime/peer/needs-you";
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { LayersIcon } from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { WorkSectionLabel } from "./marks";
@@ -9,55 +7,13 @@ import { TONE_SURFACE, TONE_TEXT } from "./signals";
 import type { PeerWebPlugin, ProjectSignal } from "./slots.types";
 import type { WorkProjectNode } from "./workTree.logic";
 
-/**
- * A project's signals: its open overlaps (core: agents on the same file), then what the active
- * plugins add (announcements, held resources, …).
- */
+/** A project's signals: what the active plugins add (announcements, held resources, …). */
 export function projectSignals(
   status: PeerHubStatus,
   project: WorkProjectNode,
   plugins: ReadonlyArray<PeerWebPlugin>,
 ): ReadonlyArray<ProjectSignal> {
-  const overlaps = status.coordination.enabled
-    ? status.coordination.overlaps.filter(
-        (overlap) =>
-          overlap.state === "open" &&
-          overlap.workspace === project.workspace &&
-          overlap.project === project.projectId,
-      )
-    : [];
-  const first = overlaps[0];
-  return [
-    ...(status.coordination.enabled
-      ? [
-          {
-            id: "overlaps",
-            label: "Overlaps",
-            icon: LayersIcon,
-            count: overlaps.length,
-            chip: (count) => (count === 1 ? "1 overlap" : `${count} overlaps`),
-            detail:
-              first === undefined ? "No agents on the same file" : overlapTopic(status, first),
-            tone: "coordination",
-            // The overlap's page; with several, the one that waits longest.
-            ...(first === undefined
-              ? {}
-              : {
-                  open: (navigate) =>
-                    void navigate({
-                      to: "/overlap/$workspace/$project/$overlap",
-                      params: {
-                        workspace: first.workspace,
-                        project: first.project,
-                        overlap: first.id,
-                      },
-                    }),
-                }),
-          } satisfies ProjectSignal,
-        ]
-      : []),
-    ...plugins.flatMap((plugin) => plugin.projectSignals?.(status, project) ?? []),
-  ];
+  return plugins.flatMap((plugin) => plugin.projectSignals?.(status, project) ?? []);
 }
 
 /**

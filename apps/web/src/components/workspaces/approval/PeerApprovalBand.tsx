@@ -7,7 +7,7 @@ import { usePeerThread } from "./usePeerThread";
 /**
  * Above an approval in a Peer workspace project: the task the thread is on, and what the team's
  * other agents do that bears on it — an overlap with one of the person's agents, a resource
- * another agent holds — each opening its page. Nothing outside a Peer project.
+ * another agent holds. The task opens its room. Nothing outside a Peer project.
  */
 export function PeerApprovalBand({
   environmentId,
@@ -32,21 +32,19 @@ export function PeerApprovalBand({
           variant="knowledge"
           size="control"
           render={
-            task.context === undefined ? undefined : (
-              <button
-                type="button"
-                onClick={() =>
-                  void navigate({
-                    to: "/context/$workspace/$project/$scope",
-                    params: {
-                      workspace: project.workspace,
-                      project: project.projectId,
-                      scope: `task:${task.id}`,
-                    },
-                  })
-                }
-              />
-            )
+            <button
+              type="button"
+              onClick={() =>
+                void navigate({
+                  to: "/room/$workspace/$project/$task",
+                  params: {
+                    workspace: project.workspace,
+                    project: project.projectId,
+                    task: task.id,
+                  },
+                })
+              }
+            />
           }
         >
           <span className="font-semibold">Task</span>
@@ -56,30 +54,11 @@ export function PeerApprovalBand({
         </Badge>
       )}
       {overlaps.map((overlap) => (
-        <Badge
-          key={overlap.id}
-          variant="coordination"
-          size="control"
-          render={
-            <button
-              type="button"
-              onClick={() =>
-                void navigate({
-                  to: "/overlap/$workspace/$project/$overlap",
-                  params: {
-                    workspace: project.workspace,
-                    project: project.projectId,
-                    overlap: overlap.id,
-                  },
-                })
-              }
-            />
-          }
-        >
+        <Badge key={overlap.id} variant="coordination" size="control">
           <span className="font-semibold">Overlap</span>
           <span className="max-w-64 truncate font-normal text-foreground/80">
             {overlap.with === undefined ? "" : `${overlap.with}’s agent · `}
-            {overlap.topic} · See it
+            {overlap.topic}
           </span>
         </Badge>
       ))}

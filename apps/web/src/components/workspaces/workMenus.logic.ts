@@ -75,7 +75,6 @@ export function threadMenuItems(input: {
  * `move-under` open the Under picker; `make-group` and `make-task` change what the item is.
  */
 export type WorkTaskMenuId =
-  | "task-details"
   | "new-thread"
   | "request-teammate"
   | "move-area"
@@ -112,7 +111,6 @@ export function taskMenuItems(input: {
   /** The active plugins can ask a teammate to take the task on. */
   readonly canRequestTeammate?: boolean | undefined;
   readonly inReview?: boolean;
-  readonly showTaskDetails?: boolean;
   /** The project's areas in its order. */
   readonly areas?: ReadonlyArray<string>;
   /** The area the task is in now; undefined when it is in none. */
@@ -123,9 +121,6 @@ export function taskMenuItems(input: {
   const areas = input.areas ?? [];
   const group = input.task.kind === "group";
   return [
-    ...(input.showTaskDetails
-      ? [{ id: "task-details" as const, label: "Task details", icon: "file-text" }]
-      : []),
     {
       id: "new-thread",
       label: "New chat on this task",

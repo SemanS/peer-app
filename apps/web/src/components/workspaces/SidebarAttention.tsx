@@ -1,59 +1,40 @@
+import { roomFeed, type RoomFeedRow } from "@t3tools/client-runtime/peer/rooms";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronDownIcon, InboxIcon } from "lucide-react";
 import { useState } from "react";
-import { taskShortTitle } from "@t3tools/client-runtime/peer/taskTitle";
 
 import { cn } from "../../lib/utils";
 import { useSidebar } from "../ui/sidebar";
-import { isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
-import { sidebarAttention, type AttentionRow } from "./sidebarAttention.logic";
-import { useLocalProject } from "./StableWorkNavigation";
+import type { ResolvedProjectScope } from "./projectScope.logic";
+import { feedInScope } from "./rooms/roomFeed.logic";
+import { roomTaskLabel } from "./rooms/roomSlots.logic";
+import { needsYouText } from "./sidebarNav.logic";
 import { useWorkData } from "./useWorkData";
-import { taskCards, type TaskTarget } from "./workBoard.logic";
-import { attentionCards } from "./workNavigation.logic";
 
 /**
- * The bar at the foot of the sidebar: what waits on the person in the project in scope, whichever
- * tab shows. It is the Needs your attention column of the board, the same cards; with none the bar
- * is gone, since it asks for nothing.
+ * The bar at the foot of the sidebar: the rooms that wait on the person in the project in scope,
+ * whichever tab shows, the Feed's first list. With none the bar is gone, since it asks for nothing.
  */
-export function SidebarAttention({ scope: resolved }: { readonly scope: ResolvedProjectScope }) {
-  const scope = resolved.scope;
-  const { tree, needs, actions, status } = useWorkData();
-  const local = useLocalProject(resolved);
+export function SidebarAttention({ scope }: { readonly scope: ResolvedProjectScope }) {
+  const { status } = useWorkData();
   const navigate = useNavigate();
   const { isMobile, setOpenMobile } = useSidebar();
   const [open, setOpen] = useState(false);
-  const cards = attentionCards(
-    taskCards(tree, { scope, mine: false, query: "", needs, me: status?.email ?? null }),
-  );
-  if (cards.length === 0 && local.needs === 0) return null;
+  const rows = feedInScope(roomFeed(status?.rooms), scope).filter((row) => row.state === "yours");
+  if (status === null || rows.length === 0) return null;
   const leave = () => {
     if (isMobile) setOpenMobile(false);
   };
-  const go = (target: TaskTarget) => {
+  const openRoom = ({ workspace, project, task }: RoomFeedRow) => {
     leave();
-    if (target.kind === "chat") {
-      actions.open(target.open);
-      return;
-    }
     void navigate({
-      to:
-        target.kind === "task"
-          ? "/task/$workspace/$project/$task"
-          : "/review/$workspace/$project/$task",
-      params: { workspace: target.workspace, project: target.project, task: target.task },
+      to: "/room/$workspace/$project/$task",
+      params: { workspace, project, task },
     });
   };
   const showAll = () => {
     leave();
-    void navigate({ to: "/work", search: { view: "needs-you", scope } });
-  };
-  const rows = cards.map(sidebarAttention);
-  const count = isLocalScope(scope) ? local.needs : cards.length;
-  const openRow = (row: AttentionRow) => {
-    if (row.target === undefined) showAll();
-    else go(row.target);
+    void navigate({ to: "/work", search: { scope: scope.scope } });
   };
   return (
     <section
@@ -63,13 +44,13 @@ export function SidebarAttention({ scope: resolved }: { readonly scope: Resolved
       <button
         type="button"
         aria-expanded={open}
-        onClick={() => (rows.length === 0 ? showAll() : setOpen((value) => !value))}
+        onClick={() => setOpen((value) => !value)}
         className="flex h-9 min-w-0 items-center gap-2 rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         <InboxIcon aria-hidden className="size-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate">Needs your attention</span>
         <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-warning/20 text-xs font-medium text-warning-foreground tabular-nums">
-          {count}
+          {rows.length}
         </span>
         <ChevronDownIcon
           aria-hidden
@@ -83,18 +64,15 @@ export function SidebarAttention({ scope: resolved }: { readonly scope: Resolved
               <li key={row.key}>
                 <button
                   type="button"
-                  onClick={() => openRow(row)}
+                  onClick={() => openRoom(row)}
                   className="flex w-full min-w-0 flex-col rounded-md px-2 py-1.5 text-left outline-none hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
                   <span className="truncate text-sm text-sidebar-foreground">
-                    {row.taskKey === undefined ? null : (
-                      <span className="me-1.5 text-xs text-muted-foreground tabular-nums">
-                        {row.taskKey}
-                      </span>
-                    )}
-                    {taskShortTitle(row.title)}
+                    {roomTaskLabel(status, row)}
                   </span>
-                  <span className="truncate text-xs text-warning-foreground">{row.ask}</span>
+                  <span className="truncate text-xs text-warning-foreground">
+                    {needsYouText(row.needs) ?? "Blocked"}
+                  </span>
                 </button>
               </li>
             ))}

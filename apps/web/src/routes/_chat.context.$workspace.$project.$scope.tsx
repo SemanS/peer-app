@@ -1,23 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { parseContextCompare } from "../components/workspaces/contextCompare.logic";
-import { WorkContextView } from "../components/workspaces/WorkContextView";
+const TASK_SCOPE = "task:";
 
+/** A task's context page is its room now; a project's has no page of its own. */
 export const Route = createFileRoute("/_chat/context/$workspace/$project/$scope")({
-  validateSearch: parseContextCompare,
-  component: WorkContextRouteView,
+  beforeLoad: ({ params: { workspace, project, scope } }) => {
+    if (!scope.startsWith(TASK_SCOPE)) throw redirect({ to: "/work", replace: true });
+    throw redirect({
+      to: "/room/$workspace/$project/$task",
+      params: { workspace, project, task: scope.slice(TASK_SCOPE.length) },
+      replace: true,
+    });
+  },
 });
-
-function WorkContextRouteView() {
-  const { workspace, project, scope } = Route.useParams();
-  const { compare, environmentId } = Route.useSearch();
-  return (
-    <WorkContextView
-      workspace={workspace}
-      project={project}
-      scope={scope}
-      compare={compare}
-      environmentId={environmentId}
-    />
-  );
-}

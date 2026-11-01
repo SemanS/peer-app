@@ -1,12 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { ReviewView } from "../components/workspaces/review/ReviewView";
-
+/** Finished work is read in its room: an address of the old review page lands there. */
 export const Route = createFileRoute("/_chat/review/$workspace/$project/$task")({
-  component: ReviewRouteView,
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/room/$workspace/$project/$task", params, replace: true });
+  },
 });
-
-function ReviewRouteView() {
-  const { workspace, project, task } = Route.useParams();
-  return <ReviewView workspace={workspace} project={project} task={task} />;
-}

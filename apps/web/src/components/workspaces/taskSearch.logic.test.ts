@@ -28,8 +28,6 @@ function search(query: string, options: { actions?: boolean; submenu?: boolean }
   const items = taskSearchItems({
     tree,
     scope: `${project.workspace}/${project.projectId}`,
-    needs: [],
-    me: BOB,
     icon: null,
     open: async (target) => {
       opened.push(target);

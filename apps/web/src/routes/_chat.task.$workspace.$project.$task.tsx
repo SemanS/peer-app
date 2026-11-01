@@ -1,12 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { TaskView } from "../components/workspaces/task/TaskView";
-
+/** A task is its room: an address from before rooms replaced the task page lands there. */
 export const Route = createFileRoute("/_chat/task/$workspace/$project/$task")({
-  component: TaskRouteView,
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: "/room/$workspace/$project/$task", params, replace: true });
+  },
 });
-
-function TaskRouteView() {
-  const { workspace, project, task } = Route.useParams();
-  return <TaskView workspace={workspace} project={project} task={task} />;
-}

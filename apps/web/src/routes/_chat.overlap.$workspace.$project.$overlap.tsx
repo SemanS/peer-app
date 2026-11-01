@@ -1,25 +1,8 @@
-import { EnvironmentId } from "@t3tools/contracts";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { OverlapView } from "../components/workspaces/overlap/OverlapView";
-
+/** An overlap's agents talk in their rooms: its address names no task, so it lands on the Feed. */
 export const Route = createFileRoute("/_chat/overlap/$workspace/$project/$overlap")({
-  validateSearch: (search: Record<string, unknown>): { environmentId?: EnvironmentId } =>
-    typeof search.environmentId === "string" && search.environmentId.trim() !== ""
-      ? { environmentId: EnvironmentId.make(search.environmentId) }
-      : {},
-  component: OverlapRouteView,
+  beforeLoad: () => {
+    throw redirect({ to: "/work", replace: true });
+  },
 });
-
-function OverlapRouteView() {
-  const { workspace, project, overlap } = Route.useParams();
-  const { environmentId } = Route.useSearch();
-  return (
-    <OverlapView
-      workspace={workspace}
-      project={project}
-      overlap={overlap}
-      environmentId={environmentId}
-    />
-  );
-}

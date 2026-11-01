@@ -1,15 +1,8 @@
-import { TASK_STATES_NEEDING_YOU, type TaskState } from "@t3tools/client-runtime/peer/work";
+import type { TaskState } from "@t3tools/client-runtime/peer/work";
 import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  taskRouteKey,
-  taskRowModel,
-  taskRowTarget,
-  taskStateLook,
-  type TaskRowTarget,
-  rowStateLabel,
-} from "./taskRow.logic";
+import { rowStateLabel, taskRouteKey, taskRowModel, taskStateLook } from "./taskRow.logic";
 import {
   openKey,
   type AgentNeed,
@@ -74,10 +67,10 @@ function needs(entries: ReadonlyArray<[WorkThreadNode, AgentNeed]>) {
 }
 
 const model = (node: WorkTaskNode, needOf?: ReadonlyMap<string, AgentNeed>) =>
-  taskRowModel({ task: node, scope, needOf });
+  taskRowModel({ task: node, needOf });
 
 describe("taskRowModel: the words", () => {
-  it("says one of the eight states, with how many chats the task has", () => {
+  it("says one of the eight states", () => {
     const waiting = thread("a", { status: "blocked" });
     const ana = thread("ana", { mine: false, person: "Ana", status: "blocked", open: undefined });
     const cases: ReadonlyArray<readonly [string, WorkTaskNode, ReadonlyMap<string, AgentNeed>?]> = [
@@ -94,155 +87,23 @@ describe("taskRowModel: the words", () => {
       cases.map(([label]) => label),
     );
   });
-
-  it("counts everyone's chats: also a colleague's, and says none yet", () => {
-    const ana = thread("ana", { mine: false, person: "Ana", open: undefined });
-    expect(model(task([thread("a"), ana])).chats).toBe("2 chats");
-    expect(model(task([thread("a")])).chats).toBe("1 chat");
-    expect(model(task([ana])).chats).toBe("1 chat");
-    expect(model(task([])).chats).toBe("no chats yet");
-    expect(
-      model(task([thread("a"), thread("b"), thread("c", { mine: false, stale: true })])).chats,
-    ).toBe("3 chats");
-  });
-
-  it("reads an accepted handoff as no one's wait, with no Review chip", () => {
-    const accepted = model(task([thread("a")], { inReview: true, accepted: "policy" }));
-    expect(accepted.state).toMatchObject({ kind: "accepted", label: "Accepted" });
-    expect(accepted.chip).toBeUndefined();
-  });
-
-  it("reads review before anything its chats do", () => {
-    const handedOff = task([thread("a", { status: "working" })], { inReview: true });
-    expect(model(handedOff).state).toMatchObject({ kind: "review", label: "Ready for review" });
-  });
-
-  it("passes the overlap the task is in on, as its suffix", () => {
-    const overlap = { id: "o1", label: "overlaps ORD-6" };
-    expect(
-      taskRowModel({ task: task([thread("a", { status: "working" })]), scope, overlap }).overlap,
-    ).toEqual(overlap);
-    expect(model(task([])).overlap).toBeUndefined();
-  });
 });
 
 describe("taskRowModel: a review asks its owner", () => {
-  const inReview = task([thread("a", { status: "working" })], { inReview: true });
-  const review = (forMe: boolean) =>
-    taskRowModel({
-      task: inReview,
-      scope,
-      review: { audience: "owner", forMe, names: forMe ? ["You"] : ["Ana"] },
-    });
+  const route = {
+    audience: "owner",
+    names: ["Ana"],
+    forMe: false,
+  } as unknown as Parameters<typeof taskRowModel>[0]["review"];
 
-  it("is the person's to do when it asks them: Ready for your review, with the Review chip", () => {
-    expect(review(true).state).toMatchObject({ kind: "review", label: "Ready for your review" });
-    expect(review(true).chip).toMatchObject({ label: "Review", target: { kind: "review" } });
-    expect(review(true).target).toEqual(review(true).chip?.target);
-    expect(taskRowTarget(inReview, scope).kind).toBe("task");
-  });
-
-  it("is Ana's when it asks her: the task waits on her, and the person gets no chip", () => {
-    expect(review(false).state).toMatchObject({
-      kind: "waiting",
-      label: "Ready for Ana's review",
-    });
-    expect(review(false).chip).toBeUndefined();
-    expect(review(false).target).toEqual(taskRowTarget(inReview, scope));
-    expect(TASK_STATES_NEEDING_YOU.has(review(false).state.kind)).toBe(false);
+  it("is Ana's when it asks her: the task waits on her", () => {
+    const row = taskRowModel({ task: task([thread("a")], { inReview: true }), review: route });
+    expect(row.state.kind).toBe("waiting");
+    expect(row.state.label).toBe("Ready for Ana's review");
   });
 
   it("asks everyone when no route is passed, as before ownership", () => {
-    expect(model(inReview).state.label).toBe("Ready for review");
-  });
-});
-
-describe("taskRowModel: the chip", () => {
-  const review: TaskRowTarget = {
-    kind: "review",
-    workspace: "webinson",
-    project: "ordering",
-    task: "ord-7",
-  };
-
-  it("offers Review for a task waiting for review, to open its review", () => {
-    expect(model(task([thread("a")], { inReview: true })).chip).toEqual({
-      label: "Review",
-      target: review,
-    });
-  });
-
-  it("offers Answer or Approve to open the chat that waits", () => {
-    const asks = thread("ask", { status: "blocked" });
-    const approves = thread("approve", { status: "blocked" });
-    expect(model(task([thread("idle"), asks])).chip).toEqual({
-      label: "Answer",
-      target: { kind: "chat", open: asks.open },
-    });
-    expect(model(task([asks, approves]), needs([[approves, "approval"]])).chip).toEqual({
-      label: "Approve",
-      target: { kind: "chat", open: approves.open },
-    });
-  });
-
-  it("offers the chip only in the states that wait on the person", () => {
-    const states = [
-      task([thread("a")], { done: true }),
-      task([thread("a", { status: "working" })]),
-      task([thread("a", { mine: false, person: "Ana", status: "blocked" })]),
-      task([thread("a")]),
-      task([]),
-    ];
-    for (const node of states) {
-      expect(TASK_STATES_NEEDING_YOU.has(model(node).state.kind)).toBe(false);
-      expect(model(node).chip).toBeUndefined();
-    }
-    const waiting = [
-      task([thread("a")], { inReview: true }),
-      task([thread("a", { status: "blocked" })]),
-    ];
-    for (const node of waiting) {
-      expect(TASK_STATES_NEEDING_YOU.has(model(node).state.kind)).toBe(true);
-      expect(model(node).chip).toBeDefined();
-    }
-  });
-
-  it("offers none when the waiting chat is not one this computer can open", () => {
-    const elsewhere = thread("other", { status: "blocked", open: undefined, placeable: false });
-    const node = task([elsewhere]);
-    expect(model(node).state.label).toBe("Needs your answer");
-    expect(model(node).chip).toBeUndefined();
-  });
-
-  it("does not send an answer to a chat the person can only watch", () => {
-    const watched = thread("watched", {
-      status: "blocked",
-      placeable: false,
-      open: { kind: "observe", workspace: "webinson", environment: "laptop", thread: "t" },
-    });
-    expect(model(task([watched])).chip).toBeUndefined();
-    const herdr = thread("herdr", {
-      status: "blocked",
-      open: { kind: "herdr", agentId: "claude:1", paneId: "p1" },
-    });
-    expect(model(task([watched, herdr])).chip).toEqual({
-      label: "Answer",
-      target: { kind: "chat", open: herdr.open },
-    });
-  });
-
-  it("does not send an answer to a chat nobody reports any more", () => {
-    const gone = thread("gone", { status: "blocked", stale: true });
-    expect(model(task([gone])).chip).toBeUndefined();
-  });
-});
-
-describe("taskRowTarget", () => {
-  it("leads to the task's page, in review or not, with or without a chat", () => {
-    const page = { kind: "task", workspace: "webinson", project: "ordering", task: "ord-7" };
-    expect(taskRowTarget(task([thread("a")], { inReview: true }), scope)).toEqual(page);
-    expect(taskRowTarget(task([thread("a")]), scope)).toEqual(page);
-    expect(taskRowTarget(task([]), scope)).toEqual(page);
+    expect(model(task([thread("a")], { inReview: true })).state.label).toBe("Ready for review");
   });
 });
 
@@ -260,24 +121,8 @@ describe("what the row looks like", () => {
     expect(taskStateLook("accepted")).toEqual({ tone: "delivery", hollow: true });
   });
 
-  it("names the route a task's page is highlighted by", () => {
+  it("names the route a task's room is highlighted by", () => {
     expect(taskRouteKey(scope, "ord-7")).toBe("task:webinson:ordering:ord-7");
-  });
-});
-
-describe("taskRowModel: an unsettled item", () => {
-  it("offers Decide, which opens the task", () => {
-    const row = model(task([], { unsettled: true }));
-    expect(row.chip?.label).toBe("Decide");
-    expect(row.chip?.target).toEqual(taskRowTarget(task([]), scope));
-  });
-
-  it("lets a chip that waits on the person go first, and offers nothing once done", () => {
-    const waiting = thread("a", { status: "blocked" });
-    expect(
-      model(task([waiting], { unsettled: true }), needs([[waiting, "input"]])).chip?.label,
-    ).toBe("Answer");
-    expect(model(task([], { unsettled: true, done: true })).chip).toBeUndefined();
   });
 });
 

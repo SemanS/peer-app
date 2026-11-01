@@ -2,14 +2,6 @@ import type { ChangeShape } from "@t3tools/client-runtime/peer/changes";
 
 import { cn } from "../../../lib/utils";
 
-/** What each shape says in words, for assistive technology and the legend. */
-export const SHAPE_WORDS: Readonly<Record<ChangeShape, string>> = {
-  dot: "An agent works in it now",
-  ring: "Change, nobody in it",
-  diamond: "Landed, immutable",
-  cross: "Conflict stored in the change",
-};
-
 const SHAPE_COLOR: Readonly<Record<ChangeShape, string>> = {
   dot: "text-info-foreground",
   ring: "text-muted-foreground",
@@ -18,7 +10,7 @@ const SHAPE_COLOR: Readonly<Record<ChangeShape, string>> = {
 };
 
 /** A shape drawn around (x, y) inside an svg, in jj log's alphabet. */
-export function ShapeAt({
+function ShapeAt({
   shape,
   x,
   y,

@@ -91,7 +91,7 @@ export function ProjectTasks(props: ProjectPageProps) {
     },
     onOpen: (task) =>
       void navigate({
-        to: "/task/$workspace/$project/$task",
+        to: "/room/$workspace/$project/$task",
         params: { workspace: workspace.slug, project: project.id, task: task.id },
       }),
     onMenu: (task, position) => void onMenu(task, position),

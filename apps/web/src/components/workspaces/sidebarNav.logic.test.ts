@@ -1,4 +1,4 @@
-import type { PeerTask } from "@t3tools/contracts";
+import type { PeerHubStatus, PeerTask } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -6,35 +6,9 @@ import {
   activeTasksText,
   doneTaskCount,
   needsYouText,
-  pluginNavRows,
-  sidebarNav,
   sidebarNeedsCount,
 } from "./sidebarNav.logic";
-import type { ProjectSignal } from "./slots.types";
-import { taskCards } from "./workBoard.logic";
 import type { WorkProjectNode, WorkTaskNode, WorkThreadNode } from "./workTree.logic";
-
-function thread(key: string, overrides: Partial<WorkThreadNode> = {}): WorkThreadNode {
-  return {
-    key,
-    title: `Chat ${key}`,
-    person: "Slavo",
-    mine: true,
-    status: "idle",
-    harness: "claude",
-    branch: undefined,
-    source: "peer",
-    stale: false,
-    open: undefined,
-    placeable: true,
-    concerns: undefined,
-    observable: false,
-    agent: undefined,
-    activeAt: undefined,
-    keepsContext: false,
-    ...overrides,
-  };
-}
 
 function task(id: string, overrides: Partial<WorkTaskNode> = {}): WorkTaskNode {
   return {
@@ -91,103 +65,19 @@ describe("the sidebar's task counts", () => {
 });
 
 describe("sidebarNeedsCount", () => {
-  const waiting = thread("t1", { status: "blocked" });
-  const colleague = thread("t2", { status: "blocked", mine: false, person: "Ana" });
-  const other = project([task("a", { threads: [waiting, colleague] })], [], "receipts");
-  const ordering = project(
-    [task("b", { threads: [thread("t3", { status: "blocked" }), thread("t4")] })],
-    [thread("t5", { status: "blocked" })],
-  );
-  const tree = [ordering, other];
+  const need = (project: string) => ({ workspace: "webinson", project }) as never;
+  const status = {
+    rooms: { waiting: [need("ordering")], mentions: [need("ordering"), need("receipts")] },
+  } as unknown as Pick<PeerHubStatus, "rooms">;
 
-  it("is the Needs you column of the board: tasks waiting on you, not on a colleague", () => {
-    const column = taskCards(tree, { scope: "all", mine: false, query: "", needs: [] }).filter(
-      (card) => card.column === "needs",
-    );
-    expect(sidebarNeedsCount(tree, [])).toBe(column.length);
-    expect(sidebarNeedsCount(tree, [])).toBe(2);
+  it("counts what waits in the rooms of the projects it is given", () => {
+    const ordering = { workspace: "webinson", projectId: "ordering" };
+    const receipts = { workspace: "webinson", projectId: "receipts" };
+    expect(sidebarNeedsCount(status, [ordering])).toBe(2);
+    expect(sidebarNeedsCount(status, [ordering, receipts])).toBe(3);
   });
 
-  it("counts one project, or the scope it is given", () => {
-    expect(sidebarNeedsCount([other], [])).toBe(1);
-    expect(sidebarNeedsCount(tree, [], "webinson/ordering")).toBe(1);
-  });
-});
-
-describe("sidebarNav", () => {
-  const open = ["a", "b", "c", "d", "e", "f", "g"].map((id) => task(id));
-  const done = [task("x", { done: true }), task("y", { status: "done" })];
-  const ordering = {
-    ...project([...open, task("h", { threads: [thread("t1", { status: "blocked" })] })]),
-  };
-
-  it("counts active and done tasks apart and never 9 together", () => {
-    const nav = sidebarNav([project([...open, ...done])], []);
-    expect(nav.active).toBe(7);
-    expect(nav.done).toBe(2);
-  });
-
-  it("counts what waits on the person", () => {
-    const nav = sidebarNav([ordering], []);
-    expect(nav.needs).toBe(1);
-  });
-
-  it("hides every count that is zero", () => {
-    expect(sidebarNav([project([task("a")])], [])).toEqual({
-      needs: null,
-      active: 1,
-      done: null,
-      sharedContext: false,
-    });
-    expect(sidebarNav([], [])).toEqual({
-      needs: null,
-      active: null,
-      done: null,
-      sharedContext: false,
-    });
-  });
-
-  it("adds up the projects it is given", () => {
-    const nav = sidebarNav(
-      [project([task("a")], [], "p1"), project([task("b"), task("c")], [], "p2")],
-      [],
-    );
-    expect(nav.active).toBe(3);
-  });
-
-  it("knows a shared context once an agent wrote one", () => {
-    const context = { version: 3 } as unknown as WorkProjectNode["context"];
-    expect(sidebarNav([{ ...project([]), context }], []).sharedContext).toBe(true);
-    const empty = { version: 0 } as unknown as WorkProjectNode["context"];
-    expect(sidebarNav([{ ...project([]), context: empty }], []).sharedContext).toBe(false);
-  });
-});
-
-describe("pluginNavRows", () => {
-  const signal = (id: string, navRow?: ProjectSignal["navRow"]): ProjectSignal => ({
-    id,
-    label: id,
-    icon: (() => null) as unknown as ProjectSignal["icon"],
-    count: null,
-    detail: "",
-    tone: "neutral",
-    ...(navRow === undefined ? {} : { navRow }),
-  });
-
-  it("adds no row for signals that name none", () => {
-    expect(pluginNavRows([signal("overlaps"), signal("team")])).toEqual([]);
-  });
-
-  it("lists the rows of the signals that name one, in order", () => {
-    const row = (label: string): NonNullable<ProjectSignal["navRow"]> => ({
-      label,
-      icon: (() => null) as unknown as ProjectSignal["icon"],
-      open: () => {},
-    });
-    expect(
-      pluginNavRows([signal("a", row("Changes")), signal("b"), signal("c", row("Preview"))]).map(
-        ({ id, row: { label } }) => `${id}:${label}`,
-      ),
-    ).toEqual(["a:Changes", "c:Preview"]);
+  it("has nothing to count without rooms", () => {
+    expect(sidebarNeedsCount({}, [{ workspace: "webinson", projectId: "ordering" }])).toBe(0);
   });
 });

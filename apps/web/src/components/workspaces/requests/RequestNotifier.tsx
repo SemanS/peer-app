@@ -85,7 +85,7 @@ export function RequestNotifier({
       window.focus();
       setSidebarView("work");
       setScope(ALL_PROJECTS);
-      void navigate({ to: "/work", search: { view: "needs-you" } });
+      void navigate({ to: "/work" });
     };
     const focused = document.visibilityState === "visible" && document.hasFocus();
     if (hasNotificationSound(mode))

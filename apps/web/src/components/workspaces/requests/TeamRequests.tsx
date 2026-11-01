@@ -341,7 +341,7 @@ function RequestForm({
  * Opens a request addressed to the person: the task launcher to accept it (and start their agent)
  * or decline it with a reason, or, where no agent can start here, the dialog that declines it.
  */
-export function RequestReview({
+function RequestReview({
   environmentId,
   status,
   plugins,

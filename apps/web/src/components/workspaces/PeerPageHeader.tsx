@@ -81,7 +81,7 @@ export function PeerPageHeader({
       <WorkspacePageHeader electron={isElectron} className="border-b border-border">
         <Button size="sm" variant="ghost" onClick={() => void navigate({ to: "/work" })}>
           <ChevronLeftIcon aria-hidden />
-          Board
+          Feed
         </Button>
         <nav
           aria-label="Breadcrumb"
@@ -100,7 +100,7 @@ export function PeerPageHeader({
                 <TaskCrumb task={task} />
               ) : (
                 <Link
-                  to="/task/$workspace/$project/$task"
+                  to="/room/$workspace/$project/$task"
                   params={taskPage}
                   className="flex min-w-0 max-w-64 items-center gap-1.5 rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                 >
@@ -133,7 +133,7 @@ export function PeerPageHeader({
               </span>
             ) : (
               <Link
-                to="/task/$workspace/$project/$task"
+                to="/room/$workspace/$project/$task"
                 params={taskPage}
                 aria-label={[task.key, task.title].filter(Boolean).join(" · ")}
                 className="rounded-sm text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"

@@ -6,7 +6,7 @@ import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { ProjectActions } from "./ProjectActions";
 import { SignalTiles } from "./ProjectSignals";
-import { NavCount } from "./SidebarNav";
+import { NavCount, ProjectPullRequestsNav } from "./SidebarNav";
 import {
   openAreasByDefault,
   sidebarTasks,
@@ -25,13 +25,13 @@ import { useSidebarRows } from "./useSidebarRows";
 import type { WorkActions } from "./useWorkActions";
 import type { AgentNeed, WorkProjectNode, WorkTaskNode } from "./workTree.logic";
 
-/** Signals another place already holds: a tab of their own, Needs your attention, the project menu. */
-const PLACED_SIGNALS: ReadonlySet<string> = new Set(["overlaps", "team", "changes"]);
+/** Signals another place already holds: Needs your attention, the project menu. */
+const PLACED_SIGNALS: ReadonlySet<string> = new Set(["team", "changes"]);
 
 /**
  * The open project in the Work tab: what holds now (its announcement, what it has in place), then
  * its areas with what each has done and each task's name and state. Done tasks fold inside their
- * area. What the rows do not say is on the task's page.
+ * area. What the rows do not say is in the task's room.
  */
 export function ProjectSection({
   environmentId,
@@ -140,6 +140,9 @@ export function ProjectSection({
           />
         ))}
       </div>
+      {heading ? (
+        <ProjectPullRequestsNav environmentId={environmentId} status={status} project={project} />
+      ) : null}
     </section>
   );
 }

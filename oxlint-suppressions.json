@@ -1653,52 +1653,8 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/SharedInputs.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/SidebarViewSwitch.tsx": {
     "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/WorkBoard.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/WorkBoardCards.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/WorkContextView.tsx": {
-    "react/exhaustive-effect-dependencies": {
-      "count": 1
-    },
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/WorkPanel.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/WorkTaskList.browser.test.tsx": {
-    "t3code/no-frame-waits-in-browser-tests": {
-      "count": 2
-    },
-    "t3code/require-disposable-render": {
-      "count": 7
-    }
-  },
-  "apps/web/src/components/workspaces/WorkTaskList.tsx": {
-    "t3code/no-low-value-comments": {
       "count": 1
     }
   },
@@ -1940,11 +1896,6 @@
   "apps/web/src/components/workspaces/requests/TeamRequests.tsx": {
     "t3code/no-unreasoned-state-sync": {
       "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/review/ReviewView.browser.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 10
     }
   },
   "apps/web/src/components/workspaces/rooms/DraftChat.tsx": {
@@ -2263,16 +2214,6 @@
     "t3code/no-hookless-use-function": {
       "count": 1
     },
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/task/TaskRuns.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/task/TaskView.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
     }

@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { WorkBoard } from "../components/workspaces/WorkBoard";
+import { RoomFeed } from "../components/workspaces/rooms/RoomFeed";
 import { workSearch } from "../components/workspaces/workNavigation.logic";
 
 export const Route = createFileRoute("/_chat/work")({
   validateSearch: workSearch,
-  component: WorkBoard,
+  component: RoomFeed,
 });

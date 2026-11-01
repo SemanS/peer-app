@@ -17,11 +17,6 @@ import {
 /** Which tasks the list shows: the ones still to do, or the done ones. */
 export type ListTab = "active" | "done";
 
-export const LIST_TABS: ReadonlyArray<{ readonly id: ListTab; readonly label: string }> = [
-  { id: "active", label: "Open" },
-  { id: "done", label: "Done" },
-];
-
 const COLUMN_ORDER = TASK_COLUMNS.map((column) => column.id);
 
 function isTask(card: TaskCard): card is WorkTaskCard {
@@ -132,7 +127,7 @@ export const COLUMN_STATE: Readonly<Record<TaskColumn, TaskStateKind>> = {
 };
 
 /** A task's row in the list across projects: tasks of different projects never nest. */
-export const listRowKey = (card: Pick<WorkTaskCard, "project" | "task">): string =>
+const listRowKey = (card: Pick<WorkTaskCard, "project" | "task">): string =>
   `${card.project.workspace}/${card.project.projectId}/${card.task.id}`;
 
 /**

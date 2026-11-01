@@ -1,15 +1,12 @@
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { FileTextIcon, type LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
 import { usePullRequestsSupported } from "../../state/environments";
 import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "../ui/sidebar";
-import { projectSignals } from "./ProjectSignals";
-import { pluginNavRows } from "./sidebarNav.logic";
-import type { PeerWebPlugin } from "./slots.types";
 import { projectCheckout } from "./useOpenWorkspaceProject";
 import type { WorkProjectNode } from "./workTree.logic";
 
@@ -20,7 +17,7 @@ type NavIcon = LucideIcon | ComponentType<{ readonly className?: string }>;
  * One row of the sidebar's navigation: its icon, its name, and what follows (a count, a shortcut).
  * `active` marks the screen the main area shows; `expanded` makes the row a disclosure.
  */
-export function NavRow({
+function NavRow({
   icon: Icon,
   label,
   trailing,
@@ -70,24 +67,17 @@ function useGo() {
   };
 }
 
-/** The Activity tab's rows: where work moves as changes and pull requests, and the project's context. */
-export function ProjectActivityNav({
+/** The project's pull requests, T3 Code's own page, where the environment supports them. */
+export function ProjectPullRequestsNav({
   environmentId,
   status,
   project,
-  plugins,
-  activeThread,
-  sharedContext,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
-  readonly plugins: ReadonlyArray<PeerWebPlugin>;
-  readonly activeThread: string | null;
-  readonly sharedContext: boolean;
 }) {
   const { navigate, go } = useGo();
-  const contextOpen = `context:${project.workspace}:${project.projectId}:project`;
   const pullRequestsSupported = usePullRequestsSupported();
   const onPullRequests = useLocation({
     select: (location) => location.pathname === "/pull-requests",
@@ -96,65 +86,31 @@ export function ProjectActivityNav({
     .find((workspace) => workspace.slug === project.workspace)
     ?.projects.find((candidate) => candidate.project.id === project.projectId);
   const t3ProjectId = state === undefined ? undefined : projectCheckout(state).projectId;
+  if (!pullRequestsSupported) return null;
   return (
-    <SidebarMenu aria-label={`Activity of ${project.name}`}>
-      {pluginNavRows(projectSignals(status, project, plugins)).map(({ id, row }) => (
-        <NavRow
-          key={id}
-          icon={row.icon}
-          label={row.label}
-          active={row.active?.(activeThread) ?? false}
-          trailing={
-            row.count === undefined || row.count === null || row.count <= 0 ? undefined : (
-              <NavCount>{row.count}</NavCount>
-            )
-          }
-          onClick={() => go(() => row.open(navigate))}
-        />
-      ))}
-      {pullRequestsSupported ? (
-        <NavRow
-          icon={PullRequestGlyph.pullRequest}
-          label="Pull requests"
-          active={onPullRequests}
-          onClick={() =>
-            go(() => {
-              // Scoped to the project's repository where it is open on this computer.
-              const {
-                environmentId: _environment,
-                projectId: _project,
-                ...list
-              } = readPullRequestListPreferences();
-              return navigate({
-                to: "/pull-requests",
-                search: {
-                  ...list,
-                  ...(t3ProjectId === undefined ? {} : { environmentId, projectId: t3ProjectId }),
-                },
-              });
-            })
-          }
-        />
-      ) : null}
-      {!sharedContext ? null : (
-        <NavRow
-          icon={FileTextIcon}
-          label="Project context"
-          active={activeThread === contextOpen}
-          onClick={() =>
-            go(() =>
-              navigate({
-                to: "/context/$workspace/$project/$scope",
-                params: {
-                  workspace: project.workspace,
-                  project: project.projectId,
-                  scope: "project",
-                },
-              }),
-            )
-          }
-        />
-      )}
+    <SidebarMenu aria-label={`Pull requests of ${project.name}`}>
+      <NavRow
+        icon={PullRequestGlyph.pullRequest}
+        label="Pull requests"
+        active={onPullRequests}
+        onClick={() =>
+          go(() => {
+            // Scoped to the project's repository where it is open on this computer.
+            const {
+              environmentId: _environment,
+              projectId: _project,
+              ...list
+            } = readPullRequestListPreferences();
+            return navigate({
+              to: "/pull-requests",
+              search: {
+                ...list,
+                ...(t3ProjectId === undefined ? {} : { environmentId, projectId: t3ProjectId }),
+              },
+            });
+          })
+        }
+      />
     </SidebarMenu>
   );
 }

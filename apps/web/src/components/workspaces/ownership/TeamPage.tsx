@@ -56,7 +56,7 @@ export function TeamPage({
   readonly project: string;
   readonly view: TeamPageView;
 }) {
-  const { environmentId, status, plugins, tree, needs, now } = useWorkData();
+  const { environmentId, status, plugins, tree, now } = useWorkData();
   const state = teamPageState({ status, tree, workspace, project: projectId });
   // What the person is told while the page has nothing of the project to draw.
   const note =
@@ -124,7 +124,7 @@ export function TeamPage({
                 plugins={plugins}
                 project={state.project}
                 ownership={state.ownership}
-                needs={needs}
+                needs={[]}
                 now={now}
               />
             )}

@@ -117,11 +117,11 @@ describe("a project's signals", () => {
     return projectSignals(status, teamProject(EVA), usePeerPlugins(status)).map(({ id }) => id);
   };
 
-  it("holds the Team tile after the overlaps while Ownership is active", () => {
-    expect(ids(true)).toEqual(["overlaps", "team"]);
+  it("holds the Team tile while Ownership is active", () => {
+    expect(ids(true)).toEqual(["team"]);
   });
 
   it("holds no Team tile while Ownership is off or not served", () => {
-    expect(ids(false)).toEqual(["overlaps"]);
+    expect(ids(false)).toEqual([]);
   });
 });

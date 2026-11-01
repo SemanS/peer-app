@@ -100,7 +100,7 @@ export function NewTaskDialog({
 
   const openTask = (task: string) =>
     void navigate({
-      to: "/task/$workspace/$project/$task",
+      to: "/room/$workspace/$project/$task",
       params: { workspace: scope.workspace, project: scope.projectId, task },
     });
 

@@ -229,7 +229,7 @@ function ProjectMenuBody({
   readonly onChangeSets: (sets: ReadonlyArray<ProjectSet>, scope: string | undefined) => void;
   readonly onRename: (set: ProjectSet) => void;
 }) {
-  const { environmentId, status, tree, needs, actions, plugins } = useWorkData();
+  const { environmentId, status, tree, actions, plugins } = useWorkData();
   const navigate = useNavigate();
   const openSettings = useOpenPeerSettings();
   const files = useFileContextMenu(environmentId);
@@ -238,7 +238,7 @@ function ProjectMenuBody({
   const sections = projectMenuSections({
     workspaces: status?.workspaces ?? [],
     tree,
-    needs,
+    rooms: status?.rooms,
     locals: localProjectGroups(groups, peer),
     sets,
   });

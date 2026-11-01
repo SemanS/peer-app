@@ -281,7 +281,6 @@ import { useChatTaskIndex } from "./workspaces/useChatTasks";
 import {
   SidebarViewSwitch,
   useRememberSidebarRoute,
-  useSidebarTab,
   useSidebarView,
 } from "./workspaces/SidebarViewSwitch";
 import { sidebarScopeLine, type SidebarView } from "./workspaces/SidebarViewSwitch.logic";
@@ -292,7 +291,7 @@ import { ALL_PROJECTS } from "./workspaces/workBoard.logic";
 import { ActiveOrganization } from "./workspaces/ActiveOrganization";
 import { ProjectSetMembers } from "./workspaces/ProjectSetNav";
 import { WorkScopePicker } from "./workspaces/WorkScopePicker";
-import { WorkPanel } from "./workspaces/WorkPanel";
+import { SidebarTasks } from "./workspaces/SidebarTasks";
 import { SidebarAttention } from "./workspaces/SidebarAttention";
 import { SidebarTools } from "./workspaces/StableWorkNavigation";
 import { SidebarThreadHeader } from "./sidebar/SidebarThreadHeader";
@@ -4415,7 +4414,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
 
   // Peer: the team's tasks (Project → Area → Task → Chats) or this computer's chats.
   const [sidebarView, setSidebarView] = useSidebarView();
-  const [sidebarTab, setSidebarTab] = useSidebarTab();
   const scopeLine = sidebarScopeLine(sidebarView, projectScope.scope, projectScope.name);
   useRememberSidebarRoute();
   // Switching views also switches the main area to the view's last screen: Work to the Work
@@ -4531,9 +4529,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               )}
               <SidebarViewSwitch
                 view={sidebarView}
-                tab={sidebarTab}
                 onChange={switchSidebarView}
-                onTab={setSidebarTab}
                 scopeLine={scopeLine}
               />
             </div>
@@ -4630,7 +4626,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             )
           ) : null}
           {!isSearchingThreads && sidebarView === "work" ? (
-            <WorkPanel scope={projectScope} tab={sidebarTab} />
+            <SidebarTasks scope={projectScope} />
           ) : null}
           {!isSearchingThreads && sidebarView === "threads" ? (
             <TooltipProvider

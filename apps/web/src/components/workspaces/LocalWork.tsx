@@ -1,5 +1,5 @@
 import { localCoordination } from "@t3tools/client-runtime/peer/local";
-import { PEER_LOCAL_WORKSPACE, type PeerHubStatus } from "@t3tools/contracts";
+import type { PeerHubStatus } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
@@ -17,11 +17,9 @@ import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
 export function LocalWork({
   status: fallbackStatus,
   scope,
-  attention = false,
 }: {
   readonly status: PeerHubStatus;
   readonly scope?: ResolvedProjectScope;
-  readonly attention?: boolean;
 }) {
   const targetEnvironment = scope?.refs?.[0]?.environmentId;
   const targetStatus = usePeerHubStatus(targetEnvironment ?? null);
@@ -46,30 +44,23 @@ export function LocalWork({
         ? thread.environmentId === status.environmentId
         : keys.has(`${thread.environmentId}:${thread.projectId}`)),
   );
-  const visibleThreads = threads
-    .filter((thread) => !attention || thread.hasPendingApprovals || thread.hasPendingUserInput)
-    .toSorted(
-      (a, b) =>
-        Number(b.hasPendingApprovals || b.hasPendingUserInput) -
-          Number(a.hasPendingApprovals || a.hasPendingUserInput) ||
-        Number(localThreadStatus(b) === "working") - Number(localThreadStatus(a) === "working") ||
-        b.updatedAt.localeCompare(a.updatedAt),
-    );
+  const visibleThreads = threads.toSorted(
+    (a, b) =>
+      Number(b.hasPendingApprovals || b.hasPendingUserInput) -
+        Number(a.hasPendingApprovals || a.hasPendingUserInput) ||
+      Number(localThreadStatus(b) === "working") - Number(localThreadStatus(a) === "working") ||
+      b.updatedAt.localeCompare(a.updatedAt),
+  );
   const settings = useOpenPeerSettings();
   const navigate = useNavigate();
   const [shown, setShown] = useState(20);
   return (
     <section aria-label="Local coordination" className="flex flex-col gap-3 px-2 text-sm">
-      <section
-        aria-label={attention ? "Local decisions" : "Project chats"}
-        className="flex flex-col gap-2"
-      >
-        <h2 className="font-semibold">{attention ? "Needs you" : "Recent work"}</h2>
+      <section aria-label="Project chats" className="flex flex-col gap-2">
+        <h2 className="font-semibold">Recent work</h2>
         {visibleThreads.length === 0 ? (
           <p role="status" className="text-muted-foreground">
-            {attention
-              ? "You’re all caught up. No chat is waiting for your approval or answer."
-              : "No chats here yet. Start a chat to work with an agent in this project."}
+            No chats here yet. Start a chat to work with an agent in this project.
           </p>
         ) : (
           <ul className="divide-y divide-border">
@@ -154,24 +145,6 @@ export function LocalWork({
                 {overlap.notes.slice(-3).map((note) => (
                   <p key={note.id}>{note.text}</p>
                 ))}
-                <Button
-                  size="xs"
-                  variant="outline"
-                  onClick={() =>
-                    void navigate({
-                      to: "/overlap/$workspace/$project/$overlap",
-                      params: {
-                        workspace: overlap.workspace,
-                        project: overlap.project,
-                        overlap: overlap.id,
-                      },
-                      search:
-                        targetEnvironment === undefined ? {} : { environmentId: targetEnvironment },
-                    })
-                  }
-                >
-                  Open coordination
-                </Button>
               </div>
             </details>
           ))}
@@ -190,26 +163,7 @@ export function LocalWork({
           </h3>
           {local.projects.slice(0, shown).map((project) => (
             <div key={project.id} className="flex flex-col gap-1">
-              <div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    void navigate({
-                      to: "/context/$workspace/$project/$scope",
-                      params: {
-                        workspace: PEER_LOCAL_WORKSPACE,
-                        project: project.id,
-                        scope: "project-aggregate",
-                      },
-                      search:
-                        targetEnvironment === undefined ? {} : { environmentId: targetEnvironment },
-                    })
-                  }
-                >
-                  {project.name} · Shared context
-                </Button>
-              </div>
+              <p className="font-medium">{project.name}</p>
               <details className="text-xs text-muted-foreground">
                 <summary className="cursor-pointer">Project details</summary>
                 <p className="break-all">{project.id}</p>

@@ -11,7 +11,7 @@ import {
 import { cn } from "../../lib/utils";
 import type { StateTone } from "./taskChats.logic";
 
-export const STATUS_LABEL: Readonly<Record<PeerWorkStatus, string>> = {
+const STATUS_LABEL: Readonly<Record<PeerWorkStatus, string>> = {
   working: "Working",
   blocked: "Needs input",
   done: "Done",

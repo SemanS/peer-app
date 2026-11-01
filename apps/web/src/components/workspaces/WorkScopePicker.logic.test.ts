@@ -94,9 +94,20 @@ describe("projectMenuSections", () => {
       task("c", true),
     ]),
   ];
+  const ROOMS = {
+    waiting: [{ workspace: "webinson", project: "ordering" }],
+    mentions: [],
+    seqs: {},
+    revs: {},
+  } as unknown as PeerHubStatus["rooms"];
 
   it("lists a workspace's projects with their folder and how many tasks are active", () => {
-    const [section] = projectMenuSections({ workspaces: [workspace], tree, needs: [], locals: [] });
+    const [section] = projectMenuSections({
+      workspaces: [workspace],
+      tree,
+      rooms: ROOMS,
+      locals: [],
+    });
     expect(section?.heading).toBe("Webinson · projects");
     expect(section?.rows[0]).toEqual({
       scope: "webinson/ordering",
@@ -108,7 +119,12 @@ describe("projectMenuSections", () => {
   });
 
   it("names the project's id as the folder of one not on this computer, with no counts", () => {
-    const [section] = projectMenuSections({ workspaces: [workspace], tree, needs: [], locals: [] });
+    const [section] = projectMenuSections({
+      workspaces: [workspace],
+      tree,
+      rooms: ROOMS,
+      locals: [],
+    });
     expect(section?.rows[1]).toEqual({
       scope: "webinson/receipt-printer",
       name: "Receipt printer",
@@ -122,7 +138,7 @@ describe("projectMenuSections", () => {
     const sections = projectMenuSections({
       workspaces: [workspace, { slug: "empty", name: "Empty", projects: [] }],
       tree,
-      needs: [],
+      rooms: undefined,
       locals: [
         {
           projectKey: "github.com/ana/dotfiles",
@@ -158,7 +174,7 @@ describe("projectMenuSections", () => {
         },
       ],
       tree: [],
-      needs: [],
+      rooms: undefined,
       locals: [
         { projectKey: "server", displayName: "server", workspaceRoot: "/local/server" },
         { projectKey: "tools", displayName: "Server tools", workspaceRoot: "/local/server-tools" },
@@ -174,7 +190,9 @@ describe("projectMenuSections", () => {
   });
 
   it("lists nothing for a person with no workspace and no local project", () => {
-    expect(projectMenuSections({ workspaces: [], tree: [], needs: [], locals: [] })).toEqual([]);
+    expect(projectMenuSections({ workspaces: [], tree: [], rooms: undefined, locals: [] })).toEqual(
+      [],
+    );
   });
 });
 

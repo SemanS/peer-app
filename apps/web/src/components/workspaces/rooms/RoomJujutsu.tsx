@@ -2,7 +2,7 @@ import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
 import type { RoomPlace } from "@t3tools/client-runtime/peer/rooms";
 import type { EnvironmentId, PeerHubStatus, PeerProjectState } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { GitCompareIcon, HistoryIcon } from "lucide-react";
+import { HistoryIcon } from "lucide-react";
 import { type ComponentProps, useState } from "react";
 
 import { useClientSettings } from "../../../hooks/useSettings";
@@ -255,19 +255,6 @@ function RoomTaskJujutsu({
       {on ? (
         <>
           <div className="flex flex-wrap gap-2">
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() =>
-                void navigate({
-                  to: "/changes/$workspace/$project",
-                  params: { workspace, project },
-                })
-              }
-            >
-              <GitCompareIcon aria-hidden />
-              All changes
-            </Button>
             {inactivePluginReason(status, "jujutsu") === null ? (
               <Button
                 size="xs"

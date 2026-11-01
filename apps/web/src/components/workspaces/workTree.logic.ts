@@ -1,10 +1,7 @@
 /** The work tree lives in the client runtime, so web and mobile build it alike. */
 export {
   activeAgents,
-  adviceLabel,
-  adviceOnWork,
   buildWorkTree,
-  contextSize,
   openKey,
   personName,
   scopeOfTask,

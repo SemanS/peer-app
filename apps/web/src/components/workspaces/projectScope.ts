@@ -151,17 +151,13 @@ export function useResolvedProjectSets() {
 
 /** Preserve the saved choice in history even before the project catalogs have arrived. */
 export function useWorkScopeUrl(requestedScope: string) {
-  const { scope, view } = useSearch({ from: "/_chat/work" });
+  const { scope } = useSearch({ from: "/_chat/work" });
   const navigate = useNavigate();
   useEffect(() => {
     if (scope === undefined) {
-      void navigate({
-        to: "/work",
-        search: { ...(view ? { view } : {}), scope: requestedScope },
-        replace: true,
-      });
+      void navigate({ to: "/work", search: { scope: requestedScope }, replace: true });
     }
-  }, [navigate, scope, requestedScope, view]);
+  }, [navigate, scope, requestedScope]);
 }
 
 export function useOpenProjectPullRequests() {

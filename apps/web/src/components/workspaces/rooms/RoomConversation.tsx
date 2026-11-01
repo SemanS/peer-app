@@ -17,8 +17,8 @@ import { cn } from "../../../lib/utils";
 import { formatShortTimestamp } from "../../../timestampFormat";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import { initialOf } from "../settings/settingsView.logic";
 import { TONE_TEXT } from "../signals";
-import { PersonMark } from "../task/TaskSections";
 import { DeclineDialog } from "./DeclineDialog";
 import {
   authorOf,
@@ -55,6 +55,20 @@ export const roomMessageId = (seq: number, project?: string) =>
 
 /** Within this of the end, a new message keeps the reader at the end. */
 const AT_END_PX = 96;
+
+function PersonMark({ name, mine }: { readonly name: string; readonly mine: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+        mine ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+      )}
+    >
+      {initialOf(name)}
+    </span>
+  );
+}
 
 /**
  * The room's messages in one column, oldest first, each with the plain line of each delivery and

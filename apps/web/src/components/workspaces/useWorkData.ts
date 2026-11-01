@@ -1,4 +1,3 @@
-import { deriveNeedsYou } from "@t3tools/client-runtime/peer/needs-you";
 import { useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
@@ -18,11 +17,11 @@ import { canWatchThreads } from "./slots.logic";
 import { useWorkActions } from "./useWorkActions";
 import { useOrganizationStatus } from "./ActiveOrganization";
 import { usePeerHubStatus } from "./WorkspaceAccess";
-import { activeAgents, buildWorkTree, taskLabel } from "./workTree.logic";
+import { activeAgents, buildWorkTree, openKey, taskLabel, type AgentNeed } from "./workTree.logic";
 
 /**
  * What the Work views read: this computer's Hub status and active plugins, the team's work as a
- * tree, what runs here and what waits on the person. The sidebar and the Work board share it.
+ * tree, and what runs here. The sidebar and the Feed share it.
  */
 export function useWorkData() {
   const primary = usePrimaryEnvironment();
@@ -87,22 +86,19 @@ export function useWorkData() {
     unseen,
     taskOf,
   });
-  const needs = deriveNeedsYou({
-    environments:
-      environmentId === null
-        ? []
-        : [
-            {
-              environmentId,
-              label: primary?.label ?? "This computer",
-              connected: true,
-              status,
-              threads,
-            },
-          ],
-    now,
-    unseen,
-  });
+  // Which of this computer's waiting chats wait for an approval, so a row tells one from an answer.
+  const needOf = new Map<string, AgentNeed>(
+    threads.flatMap((thread) =>
+      thread.hasPendingApprovals
+        ? [
+            [
+              openKey({ kind: "thread", environmentId: thread.environmentId, threadId: thread.id }),
+              "approval",
+            ],
+          ]
+        : [],
+    ),
+  );
   return {
     environmentId,
     status,
@@ -112,7 +108,7 @@ export function useWorkData() {
     tree,
     here,
     agents,
-    needs,
+    needOf,
     actions,
     activeThread,
     now,

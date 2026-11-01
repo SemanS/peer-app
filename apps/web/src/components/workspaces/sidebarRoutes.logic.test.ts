@@ -16,14 +16,10 @@ describe("viewOfPath", () => {
   it("puts the Work screens, and what opens from them, under Work", () => {
     for (const path of [
       "/work",
-      "/task/acme/app/t-1",
-      "/review/acme/app/t-1",
       "/room/acme/app/t-1",
       "/together/group-1",
       "/workspace/set-1",
-      "/context/acme/app/task:t-1",
       "/team/acme/app",
-      "/overlap/acme/app/o-1",
       "/observe/acme/laptop/th-1",
       "/agent/claude:1",
     ]) {
@@ -57,7 +53,7 @@ describe("viewOfPath", () => {
 describe("rememberRoute", () => {
   it("keeps the last screen of each view apart", () => {
     let routes: SidebarRoutes = {};
-    routes = rememberRoute(routes, "/review/acme/app/t-1");
+    routes = rememberRoute(routes, "/room/acme/app/t-1");
     routes = rememberRoute(routes, "/env-1/thread-1");
     routes = rememberRoute(routes, "/work");
     expect(routes).toEqual({ work: "/work", threads: "/env-1/thread-1", lastView: "work" });
@@ -77,8 +73,8 @@ describe("rememberRoute", () => {
 });
 
 describe("route-aware sidebar view", () => {
-  it("follows work, task, review, chat and draft URLs despite a conflicting saved choice", () => {
-    for (const pathname of ["/work", "/task/acme/app/t-1", "/review/acme/app/t-1"]) {
+  it("follows work, room, chat and draft URLs despite a conflicting saved choice", () => {
+    for (const pathname of ["/work", "/room/acme/app/t-1"]) {
       expect(sidebarViewForLocation(pathname, {}, "threads")).toBe("work");
     }
     for (const pathname of ["/env-1/thread-1", "/draft/d-1", "/"]) {
@@ -118,12 +114,12 @@ describe("route-aware sidebar view", () => {
 });
 
 describe("routeForView", () => {
-  const routes: SidebarRoutes = { work: "/review/acme/app/t-1", threads: "/env-1/thread-1" };
+  const routes: SidebarRoutes = { work: "/room/acme/app/t-1", threads: "/env-1/thread-1" };
 
   it("brings back the last screen of the view the person switches to", () => {
     expect(routeForView({ view: "work", current: "/env-1/thread-9", routes })).toEqual({
       kind: "remembered",
-      href: "/review/acme/app/t-1",
+      href: "/room/acme/app/t-1",
     });
     expect(routeForView({ view: "threads", current: "/work", routes })).toEqual({
       kind: "remembered",
@@ -141,7 +137,7 @@ describe("routeForView", () => {
   });
 
   it("stays on a screen that already belongs to the view", () => {
-    expect(routeForView({ view: "work", current: "/review/acme/app/t-2", routes })).toEqual({
+    expect(routeForView({ view: "work", current: "/room/acme/app/t-2", routes })).toEqual({
       kind: "stay",
     });
     expect(routeForView({ view: "threads", current: "/", routes })).toEqual({ kind: "stay" });
@@ -171,7 +167,7 @@ describe("sanitizeRoutes", () => {
   });
 
   it("drops an address of a screen this app no longer has", () => {
-    for (const screen of ["integration", "team-usage", "knowledge", "memory"]) {
+    for (const screen of ["integration", "team-usage", "knowledge", "memory", "changes"]) {
       expect(sanitizeRoutes({ work: `/${screen}/acme/app`, lastView: "work" })).toEqual({
         lastView: "work",
       });
@@ -183,18 +179,8 @@ describe("activeRouteKey", () => {
   it("names what each route shows, as the tree highlights it", () => {
     expect(activeRouteKey("/agent/claude:1", { agentId: "claude:1" })).toBe("agent:claude:1");
     expect(
-      activeRouteKey("/context/acme/app/task:t-1", {
-        workspace: "acme",
-        project: "app",
-        scope: "task:t-1",
-      }),
-    ).toBe("context:acme:app:task:t-1");
-    // A task's page and its review both light up the task.
-    for (const path of ["/task/acme/app/t-1", "/review/acme/app/t-1"]) {
-      expect(activeRouteKey(path, { workspace: "acme", project: "app", task: "t-1" })).toBe(
-        "task:acme:app:t-1",
-      );
-    }
+      activeRouteKey("/room/acme/app/t-1", { workspace: "acme", project: "app", task: "t-1" }),
+    ).toBe("task:acme:app:t-1");
     expect(
       activeRouteKey("/observe/acme/laptop/th-1", {
         workspace: "acme",
@@ -213,11 +199,9 @@ describe("activeRouteKey", () => {
     expect(activeRouteKey("/team/acme/app", project)).toBe("team:acme:app");
   });
 
-  it("keeps the Changes row lit on Changes and on the pages that open from it", () => {
+  it("lights nothing for a project's Operations page", () => {
     const project = { workspace: "acme", project: "app" };
-    for (const page of ["changes", "operations"]) {
-      expect(activeRouteKey(`/${page}/acme/app`, project)).toBe("changes:acme:app");
-      expect(viewOfPath(`/${page}/acme/app`)).toBe("work");
-    }
+    expect(activeRouteKey("/operations/acme/app", project)).toBeNull();
+    expect(viewOfPath("/operations/acme/app")).toBe("work");
   });
 });

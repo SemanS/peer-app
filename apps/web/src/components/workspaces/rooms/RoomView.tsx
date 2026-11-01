@@ -34,7 +34,7 @@ import type { ProjectSet } from "../projectSets.logic";
 import { ProjectMark } from "../signals";
 import { findTask } from "../task/task.logic";
 import { runThreadWorking, runsRevision } from "../task/runs.logic";
-import { useTaskRuns } from "../task/TaskRuns";
+import { useTaskRuns } from "../task/useTaskRuns";
 import { useWorkData } from "../useWorkData";
 import type { WorkOpen, WorkTaskNode } from "../workTree.logic";
 import { chatIsYours, lastAgentReply, peopleOf, reachRows, ROOM_PAGE } from "./room.logic";

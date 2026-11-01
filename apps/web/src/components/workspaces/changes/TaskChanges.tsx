@@ -21,7 +21,6 @@ import { Button } from "../../ui/button";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import type { TaskSlotProps } from "../slots.types";
 import { failureMessage } from "../WorkspaceAccess";
-import { ChangeId } from "./ChangeGraph";
 import { ShapeIcon } from "./ChangeShape";
 import { StateCard } from "./ChangesStates";
 import {
@@ -36,6 +35,16 @@ import {
 import { keyedLines } from "./changeReview.logic";
 import { useProjectChanges } from "./useProjectChanges";
 import { changeIdParts } from "@t3tools/client-runtime/peer/changes";
+
+/** A row's identity: the shortest unique prefix of the change id is the part to type. */
+function ChangeId({ pre, rest }: { readonly pre: string; readonly rest: string }) {
+  return (
+    <span className="shrink-0 font-mono text-xs text-muted-foreground">
+      <b className="font-semibold text-foreground">{pre}</b>
+      {rest}
+    </span>
+  );
+}
 
 function StackRow({
   line,

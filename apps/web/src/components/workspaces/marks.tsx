@@ -1,15 +1,8 @@
-import {
-  type EnvironmentMachineKind,
-  isProviderDriverKind,
-  ProviderDriverKind,
-} from "@t3tools/contracts";
+import type { EnvironmentMachineKind } from "@t3tools/contracts";
 import { createContext, type ReactNode, useRef, useState } from "react";
 
 import { cn } from "../../lib/utils";
 import type { ProviderInstanceEntry } from "../../providerInstances";
-import { formatRelativeTimeLabel } from "../../timestampFormat";
-import { getTriggerDisplayModelLabel } from "../chat/providerIconUtils";
-import type { WorkAgent } from "./workTree.logic";
 
 /**
  * A heading in the sidebar's Work view (Needs you, Signals, Tasks, Projects), with
@@ -52,65 +45,6 @@ export const WorkHereContext = createContext<WorkHere>({
   label: null,
   machine: "laptop",
 });
-
-/** Harness names agents report, as the drivers whose icons the Threads list draws. */
-const HARNESS_DRIVER: Readonly<Record<string, string>> = {
-  claude: "claudeAgent",
-  "claude-code": "claudeAgent",
-  codex: "codex",
-  cursor: "cursor",
-  "cursor-agent": "cursor",
-  opencode: "opencode",
-  grok: "grok",
-  antigravity: "antigravity",
-  pi: "pi",
-};
-
-interface AgentLook {
-  readonly driverKind: ProviderDriverKind;
-  readonly displayName: string;
-  readonly accentColor?: string | undefined;
-  readonly acpRegistryAgentId?: string | undefined;
-  readonly acpRegistryIconUrl?: string | undefined;
-  /** The model, as the Threads list names it. */
-  readonly model: string | undefined;
-}
-
-/** How a thread's agent looks: this computer's provider instance, or a reported harness. */
-export function agentLook(
-  agent: WorkAgent | undefined,
-  providers: ReadonlyMap<string, ProviderInstanceEntry>,
-): AgentLook | null {
-  if (agent === undefined) return null;
-  if ("instanceId" in agent) {
-    const entry = providers.get(agent.instanceId);
-    if (entry === undefined) return null;
-    const model = entry.models.find((candidate) => candidate.slug === agent.model);
-    return {
-      driverKind: entry.driverKind,
-      displayName: entry.displayName,
-      accentColor: entry.accentColor,
-      acpRegistryAgentId: entry.acpRegistryAgentId,
-      acpRegistryIconUrl: entry.acpRegistryIconUrl,
-      model: model === undefined ? agent.model : getTriggerDisplayModelLabel(model),
-    };
-  }
-  const name = agent.harness.trim().toLowerCase();
-  const slug = HARNESS_DRIVER[name] ?? name;
-  return {
-    driverKind: isProviderDriverKind(slug) ? slug : ProviderDriverKind.make("agent"),
-    displayName: agent.harness,
-    model: undefined,
-  };
-}
-
-/** "17h", "now": when a thread was last active, as the Threads list says it. */
-export function activeLabel(at: string | undefined): string | null {
-  if (at === undefined) return null;
-  const label = formatRelativeTimeLabel(at);
-  if (label === "just now") return "now";
-  return label.endsWith(" ago") ? label.slice(0, -4) : label;
-}
 
 /** Edits a title in place: Enter or leaving the field saves, Escape keeps the old one. */
 export function TitleInput({

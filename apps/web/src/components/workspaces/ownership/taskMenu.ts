@@ -25,16 +25,8 @@ interface OwnedTarget {
   readonly task: string;
 }
 
-/** Whether the person may take the task: a member's, while nobody owns it and it is not done. */
-export function canTake(
-  status: Parameters<typeof taskOwnerFacts>[0],
-  target: OwnedTarget,
-): boolean {
-  return taskOwnerFacts(status, target)?.actions.take === true;
-}
-
 /** The person becomes the task's owner, once at a time per task; a refusal is reported. */
-export function takeTask(environmentId: EnvironmentId, target: OwnedTarget, name: string): void {
+function takeTask(environmentId: EnvironmentId, target: OwnedTarget, name: string): void {
   const key = `${environmentId}:${target.workspace}:${target.project}:${target.task}`;
   if (taking.has(key)) return;
   taking.add(key);

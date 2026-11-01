@@ -3,9 +3,11 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   addToSet,
   checkoutOf,
+  columnWeights,
   joinProjects,
   removeFromSet,
   renameSet,
+  resizedColumns,
   setHolds,
   setIdOfScope,
   setOfProject,
@@ -105,5 +107,32 @@ describe("setOfRoom", () => {
 
   it("has none for a room it knows nothing of yet, which every set would hold", () => {
     expect(setOfRoom([], setScope("s2"), [pair, other])).toBeUndefined();
+  });
+});
+
+describe("resizedColumns", () => {
+  it("moves width between the two columns beside the line", () => {
+    expect(resizedColumns([300, 300, 300], 0, 50, 100)).toEqual([350, 250, 300]);
+    expect(resizedColumns([300, 300, 300], 1, -50, 100)).toEqual([300, 250, 350]);
+  });
+
+  it("stops at the minimum on either side", () => {
+    expect(resizedColumns([300, 300], 0, 500, 100)).toEqual([500, 100]);
+    expect(resizedColumns([300, 300], 0, -500, 100)).toEqual([100, 500]);
+  });
+
+  it("leaves columns already narrower than the minimum alone", () => {
+    expect(resizedColumns([80, 90], 0, 40, 100)).toEqual([80, 90]);
+  });
+});
+
+describe("columnWeights", () => {
+  it("keeps the proportions around one", () => {
+    expect(columnWeights([300, 300])).toEqual([1, 1]);
+    expect(columnWeights([450, 150])).toEqual([1.5, 0.5]);
+  });
+
+  it("gives empty columns the same share", () => {
+    expect(columnWeights([0, 0])).toEqual([1, 1]);
   });
 });

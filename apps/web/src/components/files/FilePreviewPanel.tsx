@@ -37,8 +37,8 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { mediaFileReference } from "@t3tools/client-runtime/media-reference";
-import { FolderTree, Globe2, WrapTextIcon, XIcon } from "lucide-react";
-import { Code2, Eye, Table2 } from "lucide";
+import { Globe2, WrapTextIcon, XIcon } from "lucide-react";
+import { Code2, Eye, PanelRight, PanelRightClose, Table2 } from "lucide";
 import * as Schema from "effect/Schema";
 import { useEffect, useRef, useState } from "react";
 
@@ -47,6 +47,7 @@ import { useAssetUrlRefresh, useAssetUrlState } from "~/assets/assetUrls";
 import { OpenInPicker } from "~/components/chat/OpenInPicker";
 import { MediaVideoPlayer } from "~/components/media/MediaVideoPlayer";
 import { MediaActions, type MediaActionSource } from "~/components/media/MediaActions";
+import { ColumnResizeHandle } from "~/components/ui/column-resize-handle";
 import { MorphIcon } from "~/components/MorphIcon";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { useClientSettings, useUpdateClientSettings } from "~/hooks/useSettings";
@@ -146,6 +147,11 @@ interface FilePreviewPanelProps {
 }
 
 const FILE_EXPLORER_STORAGE_KEY = "t3code.fileExplorerOpen";
+const FILE_EXPLORER_WIDTH_KEY = "peer.fileExplorerWidth";
+const ExplorerWidthSchema = Schema.NullOr(Schema.Number);
+const FILE_EXPLORER_MIN_WIDTH = 160;
+/** What the tree leaves the file beside it, however wide it was dragged. */
+const FILE_PREVIEW_MIN_WIDTH = 192;
 const RENDER_MARKDOWN_STORAGE_KEY = "t3code.renderMarkdown";
 const RENDER_BROWSER_FILE_STORAGE_KEY = "t3code.renderBrowserFile";
 const RENDER_TABLE_STORAGE_KEY = "t3code.renderTable";
@@ -961,6 +967,10 @@ function renderedToggleLabel(mode: "markdown" | "html" | "table", rendered: bool
   return rendered ? "Show HTML source" : "Show rendered page";
 }
 
+/** A width dragged in a wide pane still leaves the file room in a narrow one. */
+const explorerWidthStyle = (width: number) =>
+  `min(${width}px, calc(100% - ${FILE_PREVIEW_MIN_WIDTH}px))`;
+
 function initialExplorerOpen(): boolean {
   try {
     return getLocalStorageItem(FILE_EXPLORER_STORAGE_KEY, Schema.Boolean) ?? true;
@@ -1053,6 +1063,13 @@ export default function FilePreviewPanel({
     explorerOpen,
     attachmentOpen: attachment !== undefined,
   });
+  const [explorerWidth, setExplorerWidth] = useLocalStorage<number | null, number | null>(
+    FILE_EXPLORER_WIDTH_KEY,
+    null,
+    ExplorerWidthSchema,
+  );
+  const explorerRef = useRef<HTMLElement | null>(null);
+  const explorerDrag = useRef<{ start: number; now: number } | null>(null);
   const [renderMarkdownPreferred, setRenderMarkdownPreferred] = useLocalStorage(
     RENDER_MARKDOWN_STORAGE_KEY,
     false,
@@ -1282,7 +1299,7 @@ export default function FilePreviewPanel({
               pressed={explorerOpen}
               onPress={toggleExplorer}
             >
-              <FolderTree className="size-3.5" />
+              <MorphIcon className="size-3.5" icon={explorerOpen ? PanelRightClose : PanelRight} />
             </FileSurfaceAction>
           ) : null}
           {onClose !== undefined && relativePath !== null ? (
@@ -1446,14 +1463,45 @@ export default function FilePreviewPanel({
             )
           ) : null}
         </div>
+        {showExplorer && previewPath ? (
+          <ColumnResizeHandle
+            label="Resize file explorer"
+            onStart={() => {
+              const start = explorerRef.current?.getBoundingClientRect().width ?? 0;
+              explorerDrag.current = { start, now: start };
+            }}
+            onDrag={(travel) => {
+              const panel = explorerRef.current;
+              if (explorerDrag.current === null || panel === null) return;
+              const room = (panel.parentElement?.clientWidth ?? 0) - FILE_PREVIEW_MIN_WIDTH;
+              const width = Math.max(
+                FILE_EXPLORER_MIN_WIDTH,
+                Math.min(room, explorerDrag.current.start - travel),
+              );
+              explorerDrag.current.now = width;
+              panel.style.width = explorerWidthStyle(width);
+            }}
+            onCommit={() => {
+              if (explorerDrag.current === null) return;
+              setExplorerWidth(explorerDrag.current.now);
+              explorerDrag.current = null;
+            }}
+            onReset={() => {
+              explorerRef.current?.style.removeProperty("width");
+              setExplorerWidth(null);
+            }}
+          />
+        ) : null}
         {showExplorer ? (
           <aside
+            ref={explorerRef}
             className={cn(
               "flex min-h-0 shrink-0 bg-background",
-              previewPath
-                ? "w-[min(22rem,46%)] min-w-64 border-l border-border/60"
-                : "min-w-0 flex-1",
+              previewPath ? "w-[min(22rem,46%)] min-w-40" : "min-w-0 flex-1",
             )}
+            {...(previewPath && explorerWidth !== null
+              ? { style: { width: explorerWidthStyle(explorerWidth) } }
+              : {})}
           >
             <FileBrowserPanel
               key={`${environmentId}:${hostFolderPath ?? cwd}`}

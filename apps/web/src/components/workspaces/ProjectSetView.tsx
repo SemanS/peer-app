@@ -3,8 +3,10 @@ import { personName } from "@t3tools/client-runtime/peer/needs-you";
 import { EnvironmentId, type PeerHubStatus } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
 import { MessagesSquareIcon } from "lucide-react";
-import { Suspense } from "react";
+import * as Schema from "effect/Schema";
+import { Suspense, useRef, type ReactNode } from "react";
 
+import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { useSidebarProjectGroups } from "~/hooks/useSidebarProjectGroups";
 import { useTheme } from "~/hooks/useTheme";
 import {
@@ -19,12 +21,19 @@ import { useEnvironmentQuery } from "../../state/query";
 import { reviewEnvironment } from "../../state/review";
 import { StyledDiffCodeView } from "../diffs/StyledDiffCodeView";
 import { Button } from "../ui/button";
+import { ColumnResizeHandle } from "../ui/column-resize-handle";
 import { SidebarInset } from "../ui/sidebar";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { PeerPageHeader, PeerSectionLabel } from "./PeerPageHeader";
 import { useProjectScope } from "./projectScope";
 import type { ResolvedProjectScope } from "./projectScope.logic";
-import { checkoutOf, setScope, type ProjectCheckoutRef } from "./projectSets.logic";
+import {
+  checkoutOf,
+  columnWeights,
+  resizedColumns,
+  setScope,
+  type ProjectCheckoutRef,
+} from "./projectSets.logic";
 import { ProjectAgents } from "./rooms/RoomAgents";
 import { RoomFileSurface } from "./rooms/RoomFiles";
 import { NewSharedRoom } from "./rooms/SharedRoomView";
@@ -39,10 +48,14 @@ export type ProjectSetPage = (typeof VIEWS)[number];
 export const isProjectSetView = (value: unknown): value is ProjectSetPage =>
   VIEWS.includes(value as ProjectSetPage);
 
+const COLUMN_MIN_WIDTH = 288;
+const ColumnWeightsSchema = Schema.Record(Schema.String, Schema.Number);
+
 /**
  * A project set's page: a room across its projects, or the projects side by side, one column each:
- * their files, what changed in their checkouts, or their agents. Columns scroll sideways rather than
- * shrink past reading width.
+ * their files, what changed in their checkouts, or their agents. The line between two columns drags
+ * to share their width, remembered per set; columns scroll sideways rather than shrink past reading
+ * width.
  */
 export function ProjectSetView({
   setId,
@@ -101,37 +114,114 @@ export function ProjectSetView({
                 />
               )
             ) : (
-              <div className="flex min-h-0 min-w-0 flex-1 divide-x divide-border overflow-x-auto">
-                {members.map((member) => (
-                  <section
-                    key={member.scope}
-                    aria-label={member.name}
-                    className="flex min-h-0 min-w-[24rem] flex-1 basis-0 flex-col"
-                  >
-                    <h2 className="flex shrink-0 items-center gap-2 border-b border-border/60 px-4 py-2 text-sm font-medium text-foreground">
-                      <ProjectMark
-                        name={member.name ?? member.scope}
-                        colorKey={member.scope}
-                        className="size-4"
+              <ProjectColumns
+                setId={setId}
+                columns={members.map((member) => ({
+                  key: member.scope,
+                  name: member.name ?? member.scope,
+                  body: (
+                    <>
+                      <h2 className="flex shrink-0 items-center gap-2 border-b border-border/60 px-4 py-2 text-sm font-medium text-foreground">
+                        <ProjectMark
+                          name={member.name ?? member.scope}
+                          colorKey={member.scope}
+                          className="size-4"
+                        />
+                        <span className="min-w-0 truncate">{member.name}</span>
+                      </h2>
+                      <Column
+                        view={view}
+                        member={member}
+                        checkout={checkoutOf(member.refs ?? [], catalog, primary)}
+                        project={tree.find((node) => projectScopeKey(node) === member.scope)}
+                        status={status}
+                        onOpen={actions.open}
                       />
-                      <span className="min-w-0 truncate">{member.name}</span>
-                    </h2>
-                    <Column
-                      view={view}
-                      member={member}
-                      checkout={checkoutOf(member.refs ?? [], catalog, primary)}
-                      project={tree.find((node) => projectScopeKey(node) === member.scope)}
-                      status={status}
-                      onOpen={actions.open}
-                    />
-                  </section>
-                ))}
-              </div>
+                    </>
+                  ),
+                }))}
+              />
             )}
           </>
         )}
       </div>
     </SidebarInset>
+  );
+}
+
+/** Writes each drag to the DOM and keeps the weights when it ends, so a column's files stay put. */
+function ProjectColumns({
+  setId,
+  columns,
+}: {
+  readonly setId: string;
+  readonly columns: ReadonlyArray<{
+    readonly key: string;
+    readonly name: string;
+    readonly body: ReactNode;
+  }>;
+}) {
+  const [stored, setStored] = useLocalStorage<Readonly<Record<string, number>>, unknown>(
+    `peer.projectSetColumns.${setId}`,
+    {},
+    ColumnWeightsSchema as Schema.Codec<Readonly<Record<string, number>>, unknown>,
+  );
+  const sections = useRef(new Map<string, HTMLElement>());
+  const dragged = useRef<{ start: number[]; now: number[] } | null>(null);
+  const measured = () =>
+    columns.map(({ key }) => sections.current.get(key)?.getBoundingClientRect().width ?? 0);
+  const paint = (widths: ReadonlyArray<number>) => {
+    columnWeights(widths).forEach((weight, at) => {
+      const column = columns[at];
+      if (column === undefined) return;
+      sections.current.get(column.key)?.style.setProperty("flex-grow", String(weight));
+    });
+  };
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 overflow-x-auto">
+      {columns.map((column, at) => (
+        <div key={column.key} className="contents">
+          {at === 0 ? null : (
+            <ColumnResizeHandle
+              label={`Resize ${columns[at - 1]?.name ?? ""} and ${column.name}`}
+              onStart={() => {
+                const start = measured();
+                dragged.current = { start, now: start };
+              }}
+              onDrag={(travel) => {
+                if (dragged.current === null) return;
+                const now = resizedColumns(dragged.current.start, at - 1, travel, COLUMN_MIN_WIDTH);
+                dragged.current.now = now;
+                paint(now);
+              }}
+              onCommit={() => {
+                if (dragged.current === null) return;
+                const weights = columnWeights(dragged.current.now);
+                dragged.current = null;
+                setStored(
+                  Object.fromEntries(columns.map(({ key }, index) => [key, weights[index] ?? 1])),
+                );
+              }}
+              onReset={() => {
+                setStored({});
+                paint(columns.map(() => 1));
+              }}
+            />
+          )}
+          <section
+            ref={(node) => {
+              if (node === null) sections.current.delete(column.key);
+              else sections.current.set(column.key, node);
+            }}
+            aria-label={column.name}
+            className="flex min-h-0 min-w-72 basis-0 flex-col overflow-hidden"
+            style={{ flexGrow: stored[column.key] ?? 1 }}
+          >
+            {column.body}
+          </section>
+        </div>
+      ))}
+    </div>
   );
 }
 

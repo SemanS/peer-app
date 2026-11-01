@@ -155,3 +155,29 @@ export function checkoutOf(
     held.find((project) => project.environmentId === primaryEnvironmentId) ?? held[0] ?? null;
   return found === null ? null : { environmentId: found.environmentId, cwd: found.workspaceRoot };
 }
+
+/**
+ * Moves the line between a column and the next by `travel` pixels, from the widths measured when the
+ * drag began. Only those two change, and neither goes below `minWidth`.
+ */
+export function resizedColumns(
+  widths: ReadonlyArray<number>,
+  index: number,
+  travel: number,
+  minWidth: number,
+): number[] {
+  const left = widths[index] ?? 0;
+  const right = widths[index + 1] ?? 0;
+  const moved = Math.min(right - minWidth, Math.max(minWidth - left, travel));
+  // Columns already at their minimum leave nothing to take, whichever way the line is pulled.
+  const applied = left + right < minWidth * 2 ? 0 : moved;
+  return widths.map((width, at) =>
+    at === index ? width + applied : at === index + 1 ? width - applied : width,
+  );
+}
+
+/** Widths as flex weights around 1, so they hold when the window changes and a new column starts equal. */
+export function columnWeights(widths: ReadonlyArray<number>): number[] {
+  const average = widths.reduce((sum, width) => sum + width, 0) / widths.length;
+  return widths.map((width) => (average > 0 ? width / average : 1));
+}

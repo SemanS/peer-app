@@ -190,8 +190,6 @@
         "src/components/settings/useSettingsSectionNavigation.ts",
         "src/components/sidebar/SidebarListMarkers.tsx",
         "src/components/sidebar/SidebarProjectFolderHeader.tsx",
-        // Peer files nothing imports, kept until a maintainer decides each one.
-        "src/bootAppearance.ts",
       ],
     },
     "apps/marketing": {

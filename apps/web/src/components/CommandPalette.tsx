@@ -153,6 +153,7 @@ import {
   isExplicitRelativeProjectPath,
   isUnsupportedWindowsProjectPath,
   resolveProjectPathForDispatch,
+  withoutHomePrefixBeforeAbsolutePath,
 } from "../lib/projectPaths";
 import { onOpenCommandPalette } from "../commandPaletteBus";
 import { usePeerPlugins } from "./workspaces/slots";
@@ -1386,7 +1387,7 @@ function OpenCommandPaletteDialog(props: {
   function handleQueryChange(nextQuery: string): void {
     browseNavigation.invalidate();
     clearTypedHighlight();
-    setQuery(nextQuery);
+    setQuery(isBrowsing ? withoutHomePrefixBeforeAbsolutePath(nextQuery) : nextQuery);
     if (nextQuery === "" && currentView?.initialQuery) {
       popView();
     }

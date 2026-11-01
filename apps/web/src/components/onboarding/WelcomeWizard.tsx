@@ -131,6 +131,7 @@ export function WelcomeWizard({
 }) {
   const completeOnboarding = useCompleteOnboarding();
   const [mode, setMode] = useState<"local" | "team" | "remote">("local");
+  const [teamProjectPicked, setTeamProjectPicked] = useState(false);
   const stages: readonly WizardStep[] = resumeEnvironmentId
     ? ["agents", "import"]
     : !localAvailable
@@ -248,6 +249,7 @@ export function WelcomeWizard({
     <Dialog open disablePointerDismissal onOpenChange={(_, event) => event.cancel()}>
       <WizardPopup
         size="wide"
+        placement="top"
         bottomStickOnMobile={false}
         showCloseButton={false}
         initialFocus={() => document.getElementById("onboarding-pairing-url") ?? true}
@@ -326,7 +328,8 @@ export function WelcomeWizard({
             </StepShell>
           ) : step === "workspace" ? (
             <WorkspaceStep
-              onContinue={() => {
+              onContinue={(projectPicked) => {
+                setTeamProjectPicked(projectPicked);
                 if (primaryEnvironment?.connection.phase === "connected")
                   startSetup([primaryEnvironment.environmentId]);
                 else {
@@ -360,8 +363,9 @@ export function WelcomeWizard({
             <AgentsStep
               environmentIds={setupIds}
               onContinue={() => {
-                // A team's project is open by now: there is no first project left to choose.
-                if (mode === "team" && hasProject) void finish(undefined, undefined, 0, "work");
+                // A team's project is open or still cloning: no first project is left to choose.
+                if (mode === "team" && (hasProject || teamProjectPicked))
+                  void finish(undefined, undefined, 0, "work");
                 else setStep("import");
               }}
             />

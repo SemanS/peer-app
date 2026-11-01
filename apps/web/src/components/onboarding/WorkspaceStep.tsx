@@ -25,7 +25,13 @@ import { withFinally } from "~/lib/withFinally";
  * team's workspace (its domain or an invite admits you) or create one.
  * Skippable — Peer works on its own, and Settings → Peer has the same.
  */
-export function WorkspaceStep({ onContinue }: { readonly onContinue: () => void }) {
+export function WorkspaceStep({
+  onContinue,
+}: {
+  /** `projectPicked`: a project of the team is open or cloning on this computer. */
+  readonly onContinue: (projectPicked: boolean) => void;
+}) {
+  const skip = () => onContinue(false);
   const primary = usePrimaryEnvironment();
   const environmentId =
     primary !== null && primary.connection.phase === "connected" && primary.serverConfig !== null
@@ -42,7 +48,7 @@ export function WorkspaceStep({ onContinue }: { readonly onContinue: () => void 
           <Spinner className="size-4" />
           Starting Peer
         </div>
-        <Footer onSkip={onContinue} />
+        <Footer onSkip={skip} />
       </>
     );
   }
@@ -57,7 +63,7 @@ export function WorkspaceStep({ onContinue }: { readonly onContinue: () => void 
         <div className="mt-5">
           <WorkspaceSignIn environmentId={environmentId} status={status} />
         </div>
-        <Footer onSkip={onContinue} />
+        <Footer onSkip={skip} />
       </>
     );
   }
@@ -80,7 +86,7 @@ export function WorkspaceStep({ onContinue }: { readonly onContinue: () => void 
           </div>
         </ScrollArea>
         <Footer
-          onSkip={onContinue}
+          onSkip={skip}
           {...(status.workspaces.length > 0 ? { onBack: () => setAddingAnother(false) } : {})}
         />
       </>
@@ -106,7 +112,7 @@ function ProjectsToOpen({
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
   readonly onJoinAnother: () => void;
-  readonly onContinue: () => void;
+  readonly onContinue: (projectPicked: boolean) => void;
 }) {
   const openProject = useAtomCommand(serverEnvironment.peerHubOpenProject, {
     reportFailure: false,
@@ -133,6 +139,8 @@ function ProjectsToOpen({
   const domain = companyDomainOf(status.email);
   const byDomain =
     domain !== null && status.workspaces.some((w) => w.allowedDomains.includes(domain));
+  // Someone who runs the workspace, by founding it or otherwise, adds its projects themselves.
+  const leads = status.workspaces.some((w) => w.role !== "member");
 
   const open = async () => {
     setBusy(true);
@@ -153,7 +161,7 @@ function ProjectsToOpen({
             return;
           }
         }
-        onContinue();
+        onContinue(candidates.some((c) => c.opened || selected.has(c.key)));
       },
       () => {
         setBusy(false);
@@ -166,10 +174,12 @@ function ProjectsToOpen({
       <Heading
         title={`You’re in ${names}`}
         description={[
-          byDomain ? `Your @${domain} address got you in.` : null,
-          candidates.length === 0
-            ? "Your workspaces list no projects with repositories for you yet. A lead adds you to projects; they appear in Settings → Peer."
-            : "Pick the projects to clone to this computer. They open in the sidebar with their tools and knowledge.",
+          byDomain && !leads ? `Your @${domain} address got you in.` : null,
+          candidates.length > 0
+            ? "Pick the projects to clone to this computer. They open in the sidebar with their tools and knowledge."
+            : leads
+              ? "Add your first project next, then share it with your team."
+              : "Your workspaces list no projects with repositories for you yet. A lead adds you to projects; they appear in Settings → Peer.",
         ]
           .filter(Boolean)
           .join(" ")}

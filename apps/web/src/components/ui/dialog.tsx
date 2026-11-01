@@ -61,11 +61,14 @@ function DialogPopup({
   children,
   showCloseButton = true,
   bottomStickOnMobile = true,
+  placement = "center",
   variant = "default",
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
   bottomStickOnMobile?: boolean;
+  /** `top` keeps the top edge still for a dialog whose height changes while it is open. */
+  placement?: "center" | "top";
   variant?: "default" | "media";
 }) {
   return (
@@ -75,6 +78,7 @@ function DialogPopup({
       <DialogViewport
         className={cn(
           bottomStickOnMobile && "max-sm:grid-rows-[1fr_auto] max-sm:p-0 max-sm:pt-12",
+          placement === "top" && "grid-rows-[min(4rem,8dvh)_auto_1fr]",
           variant === "media" &&
             "z-[60] grid-rows-1 place-items-center px-4 py-6 [-webkit-app-region:no-drag]",
         )}

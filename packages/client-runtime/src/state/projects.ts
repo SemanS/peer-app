@@ -30,6 +30,15 @@ function preferredPathSeparator(value: string): "/" | "\\" {
   return value.includes("\\") ? "\\" : "/";
 }
 
+/**
+ * The add-project field opens on `~/`, so a path pasted or typed there lands after the prefix. An
+ * absolute path means itself, not a new folder of that name inside the home directory.
+ */
+export function withoutHomePrefixBeforeAbsolutePath(value: string): string {
+  const rest = value.replace(/^~[\\/]/, "");
+  return rest !== value && getAbsolutePathKind(rest) !== null ? rest : value;
+}
+
 export function hasTrailingPathSeparator(value: string): boolean {
   return (getAbsolutePathKind(value) === "unix" ? /\/$/ : /[\\/]$/).test(value);
 }

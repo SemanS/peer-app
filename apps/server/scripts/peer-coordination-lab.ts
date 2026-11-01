@@ -109,7 +109,8 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   run that left nothing starts over from the base. The room's diff shows the commit throughout. A task starts from
 //   what a teammate pushed, and the person's own checkout stays where it was. Peer remembers each checkout it made, once;
 //   closing a chat removes those that hold nothing and keeps the one with a commit no remote has. Nobody syncs: the room
-//   says an agent stopped by itself, at its session's end and, for one killed outright, when its lease runs out.
+//   says an agent stopped by itself, at its session's end and, for one killed outright, when its lease runs out. An agent
+//   that read a message on a hook leaves it `taken`, and gets the same words and a working Try again.
 //   REAL_SCENARIO=rooms (peer-lab/rooms.ts) proves a task's room: Bob names Ana's agent and nothing reaches it until she
 //   passes it on, she declines and Bob's status moves with no new message, Bob withdraws, a hostile message stays
 //   fenced, an agent cannot name an agent, Bob's own agent answers from a review session on his computer after Ana's run
@@ -7587,6 +7588,8 @@ const sharedRoomProgram = Effect.gen(function* () {
 /** LAB_RETRY: the work at a first hearing; at a later one the agent finds its file and answers. */
 const RETRY_ASK = (file: string) =>
   `I send you this message twice. The first time, ${file} is missing: create it with the one line \`// ${file}\`, commit it on your branch (${JJ ? "jj commit" : "git add, then git commit"}), then stop, without a word in this room and without peer review or peer done. The second time, you find the file there, or you remember making it: then answer this message in the room with peer room say --reply, naming the commit that holds it.`;
+const RETRY_READ = (file: string) =>
+  `${RETRY_ASK(file)} A reminder from Peer in this session is not the second time, so stay silent then. Once your person continues your run, it is the second time.`;
 const RETRY_NOTHING =
   "Change nothing and commit nothing. Stop, without a word in this room and without peer review or peer done.";
 
@@ -7690,13 +7693,20 @@ const roomsRetryProgram = Effect.gen(function* () {
     }
   };
 
+  interface ChatHere {
+    readonly cwd: string;
+    readonly pane: string;
+    readonly place: { readonly workspace: string; readonly project: string; readonly task: string };
+    readonly deliveryAt: (seq: number) => Promise<ReturnType<typeof deliveryOf>>;
+  }
+
   /** Ana's message in a new chat, until its agent is done with it and `leave` has let it go. */
   const chatUntilStopped = async (
     title: string,
     text: string,
     chosen: string | undefined,
     done: (cwd: string) => boolean,
-    leave: (run: string) => Promise<void> = async () => undefined,
+    leave: (run: string, chat: ChatHere) => Promise<void> = async () => undefined,
     gone: (pane: string) => Promise<void> = agentGone,
   ) => {
     const created = await rpc(
@@ -7717,14 +7727,15 @@ const roomsRetryProgram = Effect.gen(function* () {
       }),
     );
     const roomPath = `/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(place.task)}/room`;
-    const delivery = async () =>
+    const deliveryAt = async (seq: number) =>
       deliveryOf(
         (
           (await hubCall(`${roomPath}?limit=50`, { session: hubSession }))
             .messages as ReadonlyArray<PeerRoomMessage>
-        ).find((one) => one.seq === asked.seq),
+        ).find((one) => one.seq === seq),
         email,
       );
+    const delivery = () => deliveryAt(asked.seq);
     if (!(await waitOn(`${title}: its agent`, () => agents().length > 0, 3 * 60_000)))
       throw new Error(`${title}: no agent started`);
     const { pane_id: pane, cwd = "" } = started()!;
@@ -7734,7 +7745,7 @@ const roomsRetryProgram = Effect.gen(function* () {
       `${title}: its agent did what it was asked`,
     );
     const run = (await delivery())?.run ?? "";
-    await leave(run);
+    await leave(run, { cwd, pane, place, deliveryAt });
     await gone(pane);
     // Nobody syncs here: no ping comes on a quiet room, so only Peer can have read it.
     must(
@@ -7761,15 +7772,20 @@ const roomsRetryProgram = Effect.gen(function* () {
       say(`${title}: the room's diff`, JSON.stringify(diff).slice(0, 300));
       return diff.state === "here" && diff.patch.includes(file);
     };
-    const tryAgain = () =>
-      rpc(
-        ana.client[PEER_ROOMS_METHODS.peerRoomsPass]({
-          ...place,
-          seq: asked.seq,
-          expect: "failed",
-        }),
-      );
-    return { cwd, delivery, openRuns, run, shows, task: place.task, tryAgain };
+    const tryAgainAt = (seq: number) =>
+      rpc(ana.client[PEER_ROOMS_METHODS.peerRoomsPass]({ ...place, seq, expect: "failed" }));
+    const tryAgain = () => tryAgainAt(asked.seq);
+    return {
+      cwd,
+      delivery,
+      deliveryAt,
+      openRuns,
+      run,
+      shows,
+      task: place.task,
+      tryAgain,
+      tryAgainAt,
+    };
   };
 
   try {
@@ -7931,8 +7947,67 @@ const roomsRetryProgram = Effect.gen(function* () {
       must(againD?.cwd !== d.cwd, `D: in a new checkout (${String(againD?.cwd)})`);
       await agentGone(againD?.pane_id ?? "");
 
-      // A and B went on in their checkouts; C's and D's retries, with nothing to keep, made new ones.
-      const made = [a.cwd, b.cwd, c.cwd, againC?.cwd ?? "", d.cwd, againD?.cwd ?? ""]
+      // A live run hears a message on a hook, which proves no reading: only the retired Peer Mod
+      // made a delivery `heard`. So what an agent read stays `taken`, and its end fails it as any.
+      let settled = 0;
+      let read = 0;
+      const e = await chatUntilStopped(
+        "E",
+        RETRY_NOTHING,
+        undefined,
+        () => {
+          settled += 1;
+          return settled > 8;
+        },
+        async (_run, { cwd, pane, place, deliveryAt }) => {
+          read = (
+            await rpc(
+              ana.client[PEER_ROOMS_METHODS.peerRoomsPost]({
+                ...place,
+                op: `retry-read-${place.task}`,
+                text: RETRY_READ("retry-e.ts"),
+                to: [{ kind: "agent", email }],
+              }),
+            )
+          ).seq;
+          must(
+            await waitOn(
+              "E: its agent to read it",
+              () => committed("retry-e.ts")(cwd) && idle(pane),
+              6 * 60_000,
+            ),
+            "E: its agent read the message on a hook and did what it asked",
+          );
+          must((await deliveryAt(read))?.state === "taken", "E: the message it read stays `taken`");
+        },
+      );
+      must(
+        await waitOn(
+          "E: the room says it stopped",
+          async () => (await e.deliveryAt(read))?.state === "failed",
+          60_000,
+        ),
+        "E: the message it read failed once its session ended",
+      );
+      must(
+        (await e.deliveryAt(read))?.reason === PEER_ROOM_SESSION_ENDED,
+        "E: the room says it stopped without answering",
+      );
+      await e.tryAgainAt(read);
+      must(
+        await waitOn(
+          "E: the retry's answer",
+          async () => (await e.deliveryAt(read))?.state === "answered",
+          6 * 60_000,
+        ),
+        "E: Try again got the message answered",
+      );
+      const againE = started();
+      must(againE?.cwd === e.cwd, `E: in the same checkout (${String(againE?.cwd)})`);
+      await agentGone(againE?.pane_id ?? "");
+
+      // A, B and E went on in their checkouts; C's and D's retries, with nothing to keep, made new ones.
+      const made = [a.cwd, b.cwd, c.cwd, againC?.cwd ?? "", d.cwd, againD?.cwd ?? "", e.cwd]
         .map(realPath)
         .toSorted();
       const allKnown = await waitOn(
@@ -7965,7 +8040,7 @@ const roomsRetryProgram = Effect.gen(function* () {
       );
       must(
         remembered().join() ===
-          [a.cwd, b.cwd, d.cwd, againD?.cwd ?? ""].map(realPath).toSorted().join(),
+          [a.cwd, b.cwd, d.cwd, againD?.cwd ?? "", e.cwd].map(realPath).toSorted().join(),
         "Peer forgot only what it removed",
       );
     });

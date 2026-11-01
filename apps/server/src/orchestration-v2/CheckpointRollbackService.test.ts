@@ -43,7 +43,7 @@ import * as EventSink from "./EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProjectStore from "./ProjectStore.ts";
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as RuntimePolicy from "./RuntimePolicy.ts";
 
@@ -170,6 +170,84 @@ it.effect.each(["initial", "waiting"])(
     }).pipe(Effect.provide(testLayer));
   },
 );
+
+it.effect("shows a provider's refusal in its own words and changes nothing", () => {
+  const threadId = ThreadId.make("thread:rollback-refused");
+  const providerThreadId = ProviderThreadId.make("provider-thread:rollback-refused");
+  const providerSessionId = ProviderSessionId.make("provider-session:rollback-refused");
+  const checkpointId = CheckpointId.make("checkpoint:rollback-refused");
+  const scopeId = CheckpointScopeId.make("checkpoint-scope:rollback-refused");
+  const providerInstanceId = ProviderInstanceId.make("provider_rollback_refused");
+  const refusal = "Claude compacted this conversation, so it can't rewind to this point.";
+  const restore = vi.fn(() => Effect.die("checkpoint restore must not run"));
+  const write = vi.fn(() => Effect.die("a refused rollback must not write events"));
+  const projection = {
+    thread: {
+      id: threadId,
+      worktreePath: process.cwd(),
+      branch: null,
+      activeProviderThreadId: providerThreadId,
+      modelSelection: { instanceId: providerInstanceId, model: "test-model" },
+    },
+    providerThread: { id: providerThreadId, providerSessionId, providerInstanceId },
+    providerSession: undefined,
+    checkpoint: { id: checkpointId, scopeId, status: "ready", appRunOrdinal: 0 },
+    scope: { id: scopeId, cwd: process.cwd() },
+    runsToRollback: [{ id: RunId.make("run:rollback-refused") }],
+    rolledBackAttemptIds: [],
+    staleCheckpoints: [],
+    rootNodes: [],
+    providerTurns: [],
+  } as unknown as ProjectionStore.ProjectionCheckpointRollbackContext;
+  const testLayer = layerCheckpointRollbackService.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        ThreadCommandExecutor.layer,
+        Layer.mock(CheckpointService.CheckpointServiceV2)({ restore }),
+        Layer.mock(EventSink.EventSinkV2)({ write }),
+        IdAllocator.layer,
+        Layer.mock(ProjectionStore.ProjectionStoreV2)({
+          getThread: () => Effect.succeed(projection.thread),
+          getCheckpointRollbackContext: () => Effect.succeed(projection),
+          getShellSnapshot: () =>
+            Effect.succeed({
+              schemaVersion: 1,
+              snapshotSequence: 0,
+              threads: [],
+              archivedThreads: [],
+            }),
+        }),
+        Layer.mock(ProviderSessionManager.ProviderSessionManagerV2)({
+          open: () =>
+            Effect.succeed({
+              rollbackThread: () =>
+                Effect.fail(
+                  new ProviderAdapter.ProviderAdapterRollbackThreadError({
+                    driver: ProviderDriverKind.make("claudeAgent"),
+                    providerThreadId,
+                    refusal,
+                    cause: "Internal detail with native ids.",
+                  }),
+                ),
+            } as never),
+        }),
+        Layer.mock(RuntimePolicy.RuntimePolicyV2)({ resolve: () => Effect.succeed({} as never) }),
+      ),
+    ),
+  );
+
+  return Effect.gen(function* () {
+    const service = yield* CheckpointRollbackService.CheckpointRollbackServiceV2;
+    const error = yield* service
+      .execute({ threadId, providerThreadId, checkpointId, scopeId })
+      .pipe(Effect.flip);
+
+    assert.equal(error.reason, "provider-refused");
+    assert.equal(CheckpointRollbackService.rollbackFailureClientMessage(error), refusal);
+    assert.equal(restore.mock.calls.length, 0);
+    assert.equal(write.mock.calls.length, 0);
+  }).pipe(Effect.provide(testLayer));
+});
 
 it.effect.each([
   { order: "cleanup-first", restoreFiles: true },

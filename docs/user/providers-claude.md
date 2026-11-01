@@ -81,6 +81,11 @@ You can also send `/compact` in an existing conversation. Web and desktop offer
 [commands and skills](./composer.md#commands-and-skills) to enable it. Claude Code
 compacts automatically whether the meter is on or off.
 
+A compaction limits how far [**Edit from here**](./composer.md#edit-an-earlier-prompt)
+can rewind, because Claude keeps only the newest messages from before it. To go back
+further, fork from an earlier response instead: the fork keeps the full history up to
+that response.
+
 When you return to a large thread after Claude's prompt cache expires, a
 **Compact** chip with the thread's token count shows
 next to the send button. While it is on, Enter summarizes the history first, then

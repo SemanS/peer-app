@@ -174,6 +174,7 @@ it.effect.each(deliveries)(
               }),
             forkSession: () => Effect.die("unused"),
             subagentLaunchToolUseId: () => Effect.succeed(null),
+            sessionMessageIds: () => Effect.die("unused"),
             assertComplete: Effect.void,
           },
         });

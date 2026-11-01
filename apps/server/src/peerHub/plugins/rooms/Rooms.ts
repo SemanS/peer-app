@@ -376,6 +376,8 @@ const make = Effect.gen(function* () {
       return;
     const { teammatesMayWake } = yield* cardOf(state);
     const heard = yield* heardOf(workspace, item, "colleague", me);
+    // Each read says it again: the card may have changed since it was queued.
+    queues.remove(delivery.run, heard.ref);
     queues.add(delivery.run, { ...heard, quiet: !teammatesMayWake });
     if (teammatesMayWake) yield* agents.wake;
   });
@@ -484,13 +486,13 @@ const make = Effect.gen(function* () {
       const inbox = yield* hub.inbox(workspace, state.environmentId);
       yield* Ref.update(inboxes, (current) => new Map(current).set(workspace, inbox));
       queues.prune(workspace, inbox);
+      yield* Effect.forEach(inbox.waiting, (item) => hearWaiting(workspace, item, email), {
+        discard: true,
+      });
       yield* status.publish;
       for (const job of unsent.values()) if (workspaceOf(job) === workspace) yield* handle(job);
       const deps = followDeps(workspace, email);
       yield* Effect.forEach(inbox.work, (item) => actOn(deps, item), { discard: true });
-      yield* Effect.forEach(inbox.waiting, (item) => hearWaiting(workspace, item, email), {
-        discard: true,
-      });
     }).pipe(Effect.ignore);
 
   const readAll = Effect.gen(function* () {

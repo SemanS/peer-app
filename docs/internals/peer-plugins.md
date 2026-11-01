@@ -29,16 +29,14 @@ changes no outcome. Extend core instead when:
 - every agent must get it, whatever the environment's owner chose.
 
 Plugins that need each other's work meet in capability slots: a runtime that runs agents, a git
-host, an index source, the task launcher, the request acceptor, the review starter. At most one active plugin fills
-each, and core works without it. `PeerPlugins.require(slot)` returns the plugin that fills a slot,
+host, the task launcher, the request acceptor, the review starter, whether a person shares unfinished
+work. At most one active plugin fills each, and core works without it. `PeerPlugins.require(slot)` returns the plugin that fills a slot,
 or fails saying that plugin is off or needs a newer Hub, so core can tell people why a capability is
 missing. Starting an agent from a team request goes through the request acceptor this way.
 
 An agent's working context (its own notes, what it marks for the team, the shared context it keeps)
-has no slot: no plugin can move it or change what core says about it. A project's Peer Memory mode
-therefore changes only what memory stores, and agents reach memory by asking (`peer memory`,
-`peer remember`, its MCP tools). A plugin that needs to take the working context over needs a new
-decision, not a branch in the broker.
+has no slot: no plugin can move it or change what core says about it. A plugin that needs to take
+the working context over needs a new decision, not a branch in the broker.
 
 ## Where a plugin lives
 
@@ -110,12 +108,11 @@ Plugins reach core only through `core/plugin.ts` and the services that `PeerCore
 `core/<area>/Peer*.ts`: `PeerState` (places, the lock, a plugin's own `pluginData`), `PeerHubClient`
 (`request` and `stream` on the session), `PeerPlugins`, `PeerStatus` (`publish`), `PeerWork` (the
 work report, a thread's `view`, its task), `PeerAgents` (the agent sessions coordination knows) and
-`PeerIndex` (the works an agent chooses its context from, and the entries the index source adds);
+`PeerIndex` (the works an agent chooses its context from);
 sessions and works are known only while coordination is on. `PeerCore` also carries the T3 services
 plugins build on: provider settings, where shared capacity adds its provider instances, and the
-server's configuration, HTTP client, projects and thread projections, which memory keeps its queue
-with and binds agents' runtimes to. Headless, Peer Core supplies stand-ins for those T3 services, so a
-plugin that needs the app's threads or provider instances finds them empty there; see
+server's configuration, HTTP client, projects and thread projections. Headless, Peer Core supplies
+stand-ins for those T3 services, so a plugin that needs the app's threads or provider instances finds them empty there; see
 [Peer Core](./peer-core.md). A plugin's Hub endpoints live in its own `hub.ts`;
 [`hubApi.ts`](../../apps/server/src/peerHub/core/hub/hubApi.ts) and
 [`coordApi.ts`](../../apps/server/src/peerHub/core/hub/coordApi.ts) keep only core's.
@@ -129,10 +126,7 @@ plugin's tests may drive all of core.
 
 `peerPlugins()` is a function, read when core starts: plugins import core's services, which import
 the registry, so the list cannot be built while modules load. For the same reason, a plugin's
-module-level code uses nothing of core's. A plugin's MCP tools declare who may call them with
-`McpToolAccess` and register through `toolkitRegistration` of `McpHttpServer`, which imports
-PeerHub: the plugin loads it with `import()` when it builds its layer, as memory's
-[`registration.ts`](../../apps/server/src/peerHub/plugins/memory/mcp/registration.ts) does.
+module-level code uses nothing of core's.
 
 The broker keeps its Promise-based internals and runs plugins' Effects with the runtime it captured
 when it started ([`core/broker/host.ts`](../../apps/server/src/peerHub/core/broker/host.ts)).
@@ -182,13 +176,11 @@ A core view's plain line can be the fallback of a slot in the same way: Work's e
 workspace in which the person is on no project is the settings plugin's `noProjects`, and core
 keeps saying its own line without it.
 
-The Jujutsu plugins show how far that goes without one plugin importing another. They meet in four
-places: `changeSections`, where forecast adds "With the other changes" to the Changes inspector;
-`pairActions`, where jujutsu adds "Build … on …", "Resolve together…" or an ask to forecast's pair
-cards; herdr's start dialog, which lists teammates' bookmarks from core's work tree and passes the
-choice as its `baseBranch`; and the ref namespaces `refs/peer/wip/*` (forecast) and
-`refs/peer/reviewed/*` (changes), which jj never imports. Anything one of them would need from
-another's data goes through one of these, or into the contracts.
+The Jujutsu plugins show how far that goes without one plugin importing another. They meet in
+herdr's start dialog, which lists teammates' bookmarks from core's work tree and passes the choice
+as its `baseBranch`, and in the ref namespace `refs/peer/reviewed/*` (changes), which jj never
+imports. Anything one of them would need from another's data goes through one of these, or into the
+contracts.
 
 ## Hub features
 
@@ -197,8 +189,8 @@ trait of `server/src/features/mod.rs`, listed in `features::all()`. A feature mo
 `/v1/workspaces/{slug}`, declares the pings it publishes, follows coordination reports and adds
 counts to the coordination view. The Hub lists the features it serves, with their revisions, in
 `/health` and `/v1/me`. An app plugin is active only while its `hubFeature` is listed at its revision
-or a later one. A Hub from before the catalog serves `requests`, `observe`, `knowledge` and `memory`
-at revision 1, and while the Hub cannot be reached the last catalog read stands. `/v1/me` also names
+or a later one. A Hub from before the catalog serves `requests` and `observe` at revision 1, and
+while the Hub cannot be reached the last catalog read stands. `/v1/me` also names
 the features the operator turned off (`featuresOff`) and the Hub's build (`hub`); core keeps what the
 Hub said, none of it assumed, in the status (`hub`), and a plugin's id is its feature's. A client tells
 "off on this Hub" from "needs a newer Hub" by `featuresOff` where the Hub sends it
@@ -219,14 +211,8 @@ manifest, which also names any write it must make together with another domain's
 - **While a plugin is inactive**, its commands answer `peer: <name> is turned off on this
   environment.` or `peer: <name> needs a newer Peer Hub.` and are left out of `peer help`; its RPC
   methods fail with the same reason before anything runs; its hooks, listeners, slots and capability
-  slots are skipped, and core's own texts for agents stop naming its commands (`CommandsOn`). A
-  feature a Hub may be built without says so instead of asking for a newer Hub
-  (`PeerPluginInfo.unserved`: "this Peer Hub was built without Memory"). In a build that excludes a
-  plugin, core answers its RPC methods with a refusal, and the `peer` commands it names
-  (`PeerPluginInfo.commandNames`) as it does an inactive plugin's, where a command nobody has prints
-  help. T3 registers MCP toolkits once, when the server starts, so a plugin's tools stay listed and
-  must refuse calls themselves (`PeerPlugins.requireActive`); memory lists its tools only when it
-  was on at start, so turning it on lists them after a restart.
+  slots are skipped, and core's own texts for agents stop naming its commands (`CommandsOn`). Core
+  answers a method of `PeerRpcGroup` that no plugin of the build serves with a refusal.
 - **A feature, on one Hub.** Its operator sets `PEERHUB_FEATURES_OFF` (NixOS:
   `services.peerhub.featuresOff`) and restarts the Hub. The feature's routes answer 404 and its data
   stays; app plugins that need it are inactive, and the app says the operator turned it off where the
@@ -247,10 +233,8 @@ code to its shape: each plugin under its own id with its tests beside it, one ow
 imports above, and the budgets. Each non-test file under `core/` stays within 800 lines, each plugin
 folder within 1,000 non-test lines, not counting `client/`, whose files stay within 800, and
 `PeerHub.ts`, the entry, within 150. On the Hub, `server/src/features/tests.rs` holds each feature
-folder to 1,000 lines. Peer Memory is over both budgets: the Hub's ceiling for it is in that file,
-and the app plugin's, its size when it was extracted, in `core/structure.test.ts` and
-[`plugins/memory/boundary.test.ts`](../../apps/server/src/peerHub/plugins/memory/boundary.test.ts).
-Both ceilings only fall.
+folder to 1,000 lines. A plugin over its budget has a ceiling in `core/structure.test.ts`, and a
+ceiling only falls.
 
 ## Adding a plugin
 

@@ -106,6 +106,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   // The highlighted result stays inside the list as the list shrinks.
   const activeIndex = Math.min(activeResultIndex, Math.max(results.length - 1, 0));
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- scrolls the highlighted result's DOM node into view as the highlight moves
   useEffect(() => {
     const result = results[activeIndex];
     if (!result) return;
@@ -114,6 +115,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
       ?.scrollIntoView({ block: "nearest" });
   }, [activeIndex, results]);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- window keydown listener for the find and slash search shortcuts
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       // "/" from anywhere that is not typing, and ⌘F / Ctrl+F.

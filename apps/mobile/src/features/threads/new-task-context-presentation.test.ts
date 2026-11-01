@@ -3,7 +3,6 @@ import { JJ_VCS_TERMINOLOGY } from "@t3tools/shared/vcs";
 
 import {
   fillNewTaskWorkspaceBranch,
-  filterNewTaskBranches,
   resolveNewTaskBranchLabel,
   resolveNewTaskWorkspaceLabel,
   resolveNewTaskBranchWorktreePath,

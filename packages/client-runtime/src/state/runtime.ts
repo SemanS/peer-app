@@ -943,11 +943,10 @@ export function createEnvironmentRpcSubscriptionAtomFamily<
 }
 
 /**
- * What `createEnvironmentRpcCommand` makes for `TTag`, named. Left to inference, a command's type
- * spells out its input and what it answers with, and the type of the atoms a client holds, which
- * has a command for most methods, spells out the Peer status once for each that answers with it:
- * the declaration emit of a client that is a composite project fails once that type is too long,
- * with a field added to the status. Named, a command costs a few words.
+ * What `createEnvironmentRpcCommand` makes for `TTag`, named. Left to inference, the type of the
+ * atoms a client holds spells out the Peer status once for each command that answers with it, and
+ * the declaration emit of a composite client fails once that type is too long. Named, a command
+ * costs a few words.
  */
 export type EnvironmentRpcCommand<
   TTag extends EnvironmentUnaryRpcTag,

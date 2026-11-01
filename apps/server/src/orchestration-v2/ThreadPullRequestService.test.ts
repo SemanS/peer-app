@@ -173,8 +173,9 @@ describe("ThreadPullRequestServiceV2 reads", () => {
     };
   };
 
-  for (const kind of ["git", "jj"] as const) {
-    it.effect(`discovers and rechecks PRs using the ${kind} hosting checkout`, () =>
+  it.effect.each(["git", "jj"] as const)(
+    "discovers and rechecks PRs using the %s hosting checkout",
+    (kind) =>
       Effect.scoped(
         Effect.gen(function* () {
           const thread = {
@@ -282,8 +283,7 @@ describe("ThreadPullRequestServiceV2 reads", () => {
           }).pipe(Effect.provide(dependencies));
         }),
       ),
-    );
-  }
+  );
 
   it.effect("an event for one thread reads that thread's shell, not every thread's", () =>
     Effect.scoped(

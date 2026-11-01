@@ -202,30 +202,6 @@ function parseBranchAb(value: string): { ahead: number; behind: number } {
   };
 }
 
-function parseNumstatEntries(
-  stdout: string,
-): Array<{ path: string; insertions: number; deletions: number }> {
-  const entries: Array<{ path: string; insertions: number; deletions: number }> = [];
-  for (const line of stdout.split(/\r?\n/g)) {
-    if (line.trim().length === 0) continue;
-    const [addedRaw, deletedRaw, ...pathParts] = line.split("\t");
-    const rawPath =
-      pathParts.length > 1 ? (pathParts.at(-1) ?? "").trim() : pathParts.join("\t").trim();
-    if (rawPath.length === 0) continue;
-    const added = Number.parseInt(addedRaw ?? "0", 10);
-    const deleted = Number.parseInt(deletedRaw ?? "0", 10);
-    const renameArrowIndex = rawPath.indexOf(" => ");
-    const normalizedPath =
-      renameArrowIndex >= 0 ? rawPath.slice(renameArrowIndex + " => ".length).trim() : rawPath;
-    entries.push({
-      path: normalizedPath.length > 0 ? normalizedPath : rawPath,
-      insertions: Number.isFinite(added) ? added : 0,
-      deletions: Number.isFinite(deleted) ? deleted : 0,
-    });
-  }
-  return entries;
-}
-
 export function parseReviewNumstat(stdout: string): ReviewDiffFileStat[] {
   const fields = stdout.split("\0");
   const files: ReviewDiffFileStat[] = [];

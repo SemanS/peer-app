@@ -3,7 +3,7 @@ import { SheetHeader } from "../../../components/ui/SheetHeader";
 import { Button } from "../../../components/ui/Button";
 import { useNavigation, type StaticScreenProps } from "@react-navigation/native";
 import { resolveVcsTerminology } from "@t3tools/shared/vcs";
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { Platform, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
 import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
 import { useSafeAreaInsets } from "react-native-safe-area-context";

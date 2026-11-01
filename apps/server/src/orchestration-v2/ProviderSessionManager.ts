@@ -457,11 +457,9 @@ export const layerWithOptions = (
                   ),
                   Effect.ignore,
                 );
-                // Reuse a still-valid credential for this thread instead of
-                // rotating: long-lived provider processes (codex app-server)
-                // build their MCP client once per conversation and keep using
-                // the credential it started with, so a thread that detaches and
-                // re-attaches across a workspace handoff must come back to the
+                // Reuse a still-valid credential instead of rotating: a long-lived provider
+                // process (codex app-server) builds its MCP client once per conversation, so
+                // a thread that re-attaches across a workspace handoff must come back to the
                 // same token or the process's tool calls fail auth.
                 const { browser: browserToolsAvailable, device: deviceToolsAvailable } =
                   yield* agentAccessSettings(threadId);

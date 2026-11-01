@@ -7,10 +7,7 @@ import {
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 
-export { parseTimeOfDay };
-
 const MINUTE_MS = 60_000;
-
 
 export function nextScheduledRunAt(
   schedule: ScheduledTaskSchedule,
@@ -70,14 +67,10 @@ export function isSameSchedule(
 const MISSED_FIXED_TIME_GRACE_MS = 10 * MINUTE_MS;
 
 /**
- * True when a due fixed-time run was missed and should be rescheduled to its
- * next occurrence instead of firing now: it is later than the grace window,
- * and the schedule does not ask to catch up. A schedule that does catches up
- * with one run when the latest of its runs up to now is recent enough, even
- * if the stored one is older (a computer that slept through several runs
- * does one, not several). Interval schedules are never considered missed: an
- * overdue interval task catching up with a single run is the desired
- * behaviour.
+ * True when a due fixed-time run is past the grace window and moves to its next occurrence instead
+ * of firing. A schedule that asks to catch up runs once when its latest run up to now is recent
+ * enough, even if the stored one is older. Interval schedules are never missed: an overdue interval
+ * task catching up with a single run is the desired behaviour.
  */
 export function isMissedFixedTimeRun(
   schedule: ScheduledTaskSchedule,

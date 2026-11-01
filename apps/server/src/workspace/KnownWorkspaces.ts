@@ -1,13 +1,7 @@
-/**
- * KnownWorkspaces - the folders a client-named cwd may act in: a T3-managed
- * worktree folder, a registered project, or a thread's worktree. Clients send
- * the thread's worktree, else the project root. A client also sets a thread's
- * worktree path, so one counts only under a managed folder or when the project's
- * Git worktree list registers it, or jj lists it and it still belongs to the
- * project's shared jj repository.
- *
- * @module KnownWorkspaces
- */
+// The folders a client-named cwd may act in: a T3-managed worktree folder, a registered project, or
+// a thread's worktree. A client also sets a thread's worktree path, so one counts only under a
+// managed folder, when the project's Git worktree list registers it, or when jj lists it and it
+// still belongs to the project's shared jj repository.
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import * as Context from "effect/Context";

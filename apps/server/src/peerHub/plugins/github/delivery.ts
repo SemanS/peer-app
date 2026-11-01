@@ -2,7 +2,7 @@ import { pullRequestRows, taskDelivery, type PeerWorkThread } from "@t3tools/con
 
 import type { PeerSessionView } from "../../core/plugin.ts";
 
-// eslint-disable-next-line no-control-regex -- Metadata from an older Hub must not add model-input lines.
+// Metadata from an older Hub must not add model-input lines.
 const ref = (text: string) => text.replace(/[\u0000-\u0020\u007f]/g, "").slice(0, 100);
 const time = (at: string | undefined) => {
   const match = at?.match(/T(\d{2}:\d{2}):\d{2}(?:\.\d+)?Z$/);

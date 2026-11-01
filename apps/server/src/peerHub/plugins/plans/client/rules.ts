@@ -7,7 +7,7 @@ export const MAX_PROVIDES = 10;
 export const NAME_CHARS = 200;
 const PATH_CHARS = 300;
 
-// oxlint-disable-next-line eslint/no-control-regex -- Controls are never part of a path or a name.
+// Controls are never part of a path or a name.
 export const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 
 /**

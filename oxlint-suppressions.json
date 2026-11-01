@@ -1,0 +1,3070 @@
+{
+  "apps/mobile/src/features/peer/CurrentContextReport.test.tsx": {
+    "t3code/no-dom-test-environment": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/CurrentContextReport.tsx": {
+    "react/exhaustive-effect-dependencies": {
+      "count": 1
+    },
+    "t3code/no-ambiguous-detail-navigation": {
+      "count": 1
+    },
+    "t3code/no-unreasoned-state-sync": {
+      "count": 3
+    }
+  },
+  "apps/mobile/src/features/peer/PeerBackground.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 2
+    }
+  },
+  "apps/mobile/src/features/peer/agreements/PeerTaskAgreements.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/agreements/agreements.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/announcements/AnnouncementReceiptsList.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 2
+    }
+  },
+  "apps/mobile/src/features/peer/digest/VisitsBackground.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 3
+    }
+  },
+  "apps/mobile/src/features/peer/impact/PeerImpactSettings.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/knowledge/SavedKnowledge.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/memory/MemorySettingsRow.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/needs-you/NeedsYouCards.tsx": {
+    "t3code/no-ambiguous-detail-navigation": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/needs-you/useNeedsYou.ts": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/openspec/OpenSpecTaskPreparation.test.tsx": {
+    "t3code/no-dom-test-environment": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/ownership/OwnerCallSheet.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/ownership/TeamSection.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/ownership/ownerCall.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/ownership/team.logic.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/ownership/useMinuteClock.ts": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/plans/PeerPlansSection.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/plans/PlanCards.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/resources/PeerHeldResources.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/rooms/useRoom.ts": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 3
+    }
+  },
+  "apps/mobile/src/features/peer/slots.ts": {
+    "t3code/no-hookless-use-function": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/test-reports/testReports.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/work/TaskDecisionSheet.tsx": {
+    "t3code/no-ambiguous-detail-navigation": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/work/TaskRuns.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/work/WorkRouteScreen.tsx": {
+    "t3code/no-ambiguous-detail-navigation": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/work/signals.ts": {
+    "t3code/no-mobile-pull-request-glyph-literals": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/work/useWork.ts": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/mobile/src/features/peer/work/work.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/scripts/peer-coordination-lab.ts": {
+    "no-unused-vars": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 11
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 10
+    }
+  },
+  "apps/server/scripts/peer-lab/agreements.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/scripts/peer-lab/contract.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 4
+    }
+  },
+  "apps/server/scripts/peer-lab/follow.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/scripts/peer-lab/gap.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/scripts/peer-lab/handoffSteps.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/scripts/peer-lab/hidden.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 4
+    }
+  },
+  "apps/server/scripts/peer-lab/hubProxy.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/scripts/peer-lab/jujutsu.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/scripts/peer-lab/knowledge.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/scripts/peer-lab/operatorEnv.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/scripts/peer-lab/owners.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 3
+    }
+  },
+  "apps/server/scripts/peer-lab/owners.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 4
+    }
+  },
+  "apps/server/scripts/peer-lab/plans.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/scripts/peer-lab/rooms.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/scripts/peer-lab/team.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/cli/openspecItems.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/cli/peerCore.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 22
+    }
+  },
+  "apps/server/src/cli/peerCoreBind.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/cli/peerCoreEditor.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/cli/peerCoreJoin.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 7
+    }
+  },
+  "apps/server/src/cli/peerCoreMenu.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/cli/peerCoreOpenSpec.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/cli/peerCoreRuns.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 12
+    }
+  },
+  "apps/server/src/cli/peerCoreShare.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/cli/peerCoreStart.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/cli/peerCoreTasks.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 5
+    }
+  },
+  "apps/server/src/cli/peerCoreTree.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 2
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/jj/JjFailure.ts": {
+    "t3code/no-inline-schema-compile": {
+      "count": 2
+    }
+  },
+  "apps/server/src/jj/JjPullRequestThread.test.ts": {
+    "t3code/no-test-in-loop": {
+      "count": 4
+    }
+  },
+  "apps/server/src/jj/JjRefs.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/jj/JjRemotes.test.ts": {
+    "t3code/no-test-in-loop": {
+      "count": 3
+    }
+  },
+  "apps/server/src/jj/JjStackedAction.test.ts": {
+    "t3code/no-test-in-loop": {
+      "count": 2
+    }
+  },
+  "apps/server/src/jj/JjStatus.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/jj/JjWorkflow.test.ts": {
+    "t3code/no-test-in-loop": {
+      "count": 3
+    }
+  },
+  "apps/server/src/jj/JjWorkflow.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/jj/JjWorkspaces.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/orchestration-v2/AcpRegistryOrchestratorV2.live.test.ts": {
+    "t3code/no-polling-loop-in-tests": {
+      "count": 1
+    },
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/orchestration-v2/Adapters/CodexAdapterV2.peer.test.ts": {
+    "no-unused-vars": {
+      "count": 43
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/orchestration-v2/CursorOrchestratorV2.live.test.ts": {
+    "t3code/no-polling-loop-in-tests": {
+      "count": 1
+    },
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/orchestration-v2/GrokOrchestratorV2.live.test.ts": {
+    "t3code/no-polling-loop-in-tests": {
+      "count": 1
+    },
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/orchestration-v2/OpenCode2OrchestratorV2.live.test.ts": {
+    "t3code/no-polling-loop-in-tests": {
+      "count": 1
+    },
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/PeerHub.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/agentTranscript.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/cloneFailure.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/codexPlugin.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/coordinationWake.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/adapters/cliTransport.test.ts": {
+    "t3code/no-polling-loop-in-tests": {
+      "count": 1
+    },
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    },
+    "t3code/no-wall-clock-in-tests": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/core/adapters/scripts.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/Broker.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/agentTools.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/cli.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 2
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/companions.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/dormant.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/help.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/hooks.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/core/broker/hooks.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/host.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/inputCheckpoints.test.ts": {
+    "t3code/no-test-timeout-or-unreasoned-skip": {
+      "count": 2
+    },
+    "t3code/no-wall-clock-in-tests": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/core/broker/landing.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/core/broker/landing.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/core/broker/owner.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/pipeline.test.ts": {
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    },
+    "t3code/no-wall-clock-in-tests": {
+      "count": 5
+    }
+  },
+  "apps/server/src/peerHub/core/broker/pipeline.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/runs.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/core/broker/sessionMemory.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/core/broker/sessionMemory.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/share.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/tasks.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/broker/toolSessions.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/contexts/contextCli.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 5
+    }
+  },
+  "apps/server/src/peerHub/core/contexts/contexts.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 5
+    }
+  },
+  "apps/server/src/peerHub/core/contexts/contexts.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/contexts/text.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/coordination/PeerAdapters.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/coordination/PeerAgents.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/coordination/PeerCoordination.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/coordination/edits.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/core/coordination/jjEdits.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/coordination/news.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/core/coordination/overlaps.test.ts": {
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    },
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/coordination/overlaps.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/coordination/threadLookup.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/core/hub/PeerHubClient.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/core/hub/PeerHubEvents.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/core/hub/hubApi.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/hub/runsApi.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/index/PeerIndex.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/index/board.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 8
+    }
+  },
+  "apps/server/src/peerHub/core/index/board.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/core/index/text.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 2
+    },
+    "t3code/no-low-value-comments": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/core/local.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/localCoordination/LocalAuthority.scale.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 8
+    }
+  },
+  "apps/server/src/peerHub/core/plugin.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/core/plugins/PeerPlugins.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 6
+    }
+  },
+  "apps/server/src/peerHub/core/state/PeerState.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/core/status/PeerStatus.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/core/status/legacy.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/structure.test.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/testkit.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/vcs.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/core/work/PeerWork.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 6
+    }
+  },
+  "apps/server/src/peerHub/core/work/continueRun.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/core/work/runs.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 5
+    }
+  },
+  "apps/server/src/peerHub/core/work/start.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/work/workItems.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/workSnapshots.test.ts": {
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    },
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/workSnapshots.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/core/workspaces/PeerWorkspaces.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/core/workspaces/checkouts.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/core/workspaces/jujutsu.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/gitSafety.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/headless/PeerCoreRuntime.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/hubPolicy.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/kontext.test.ts": {
+    "t3code/no-test-timeout-or-unreasoned-skip": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/peerText.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/peerText.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/acceptance/Acceptance.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/acceptance/client/hub.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/acceptance/fixtures.test.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/acceptance/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/agreements/Agreements.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 5
+    }
+  },
+  "apps/server/src/peerHub/plugins/agreements/cli.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/agreements/fixtures.test.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/agreements/hub.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/agreements/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/agreements/rules.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/agreements/text.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/announcements/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/announcements/service.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/ask/Ask.test.ts": {
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    },
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/ask/Ask.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/ask/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/capacity/Capacity.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/plugins/changes/Changes.ts": {
+    "oxc/no-accumulating-spread": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 15
+    },
+    "unicorn/no-useless-spread": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/changes/cli.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/changes/client/jj.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/changes/client/parked.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/changes/client/review.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/changes/fixtures.test.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-polling-loop-in-tests": {
+      "count": 2
+    },
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/changes/hub.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/changes/index.test.ts": {
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/changes/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/changes/report.test.ts": {
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/changes/text.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/dependencies/service.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/plugins/digest/catchup.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/find/Find.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 2
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/find/findModel.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/find/findModel.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/forecast/ForecastService.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 6
+    }
+  },
+  "apps/server/src/peerHub/plugins/forecast/check.test.ts": {
+    "t3code/no-test-timeout-or-unreasoned-skip": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/forecast/check.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/forecast/client/git.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 6
+    }
+  },
+  "apps/server/src/peerHub/plugins/forecast/client/jj.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/forecast/index.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/forecast/jjSources.test.ts": {
+    "t3code/no-test-timeout-or-unreasoned-skip": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/forecast/jjSources.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/forecast/share.test.ts": {
+    "t3code/no-test-timeout-or-unreasoned-skip": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/forecast/share.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/github/GitHub.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/github/client/gh.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/github/status.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/plugins/handoff/cli.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/handoff/client/delivery.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/handoff/client/ghWrite.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/handoff/render.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/handoff/service.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 8
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/Herdr.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/Herdr.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 9
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/client/checkouts.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/client/cleanup.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/client/herdr.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 3
+    },
+    "t3code/no-low-value-comments": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/client/integration.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/client/real.test.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    },
+    "t3code/no-test-timeout-or-unreasoned-skip": {
+      "count": 8
+    },
+    "t3code/no-wall-clock-in-tests": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/client/server.test.ts": {
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/client/server.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/client/start.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/client/supervisor.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/client/trust.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/client/window.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/client/worktree.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/follower.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/launcher.test.ts": {
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/launcher.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/runtime.test.ts": {
+    "t3code/no-polling-loop-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/herdr/runtime.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/impact/Impact.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 7
+    }
+  },
+  "apps/server/src/peerHub/plugins/impact/index.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/Jujutsu.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 9
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/client/follow.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/client/jj.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/client/operations.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/config.test.ts": {
+    "t3code/no-polling-loop-in-tests": {
+      "count": 1
+    },
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/fixtures.test.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/follow.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 7
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/operations.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 8
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/places.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/protection.test.ts": {
+    "t3code/no-polling-loop-in-tests": {
+      "count": 1
+    },
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/snapshot.test.ts": {
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/text.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/jujutsu/verdicts.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/Knowledge.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/Knowledge.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 11
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/challenges.integration.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/client/capture.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/client/challengeFlows.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 12
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/client/challenges.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/client/changes.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/client/drift.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/client/flows.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/client/keeping.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/client/memory.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/client/proof.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/client/resolve.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/client/reviewChecks.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/client/store.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/knowledge/knowledgeIndex.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/mcp/connect.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/mcp/index.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/memory/MemoryRuntime.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 7
+    }
+  },
+  "apps/server/src/peerHub/plugins/memory/MemoryTransport.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/memory/commands.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/memory/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/memory/mcp/PeerMemoryMcpService.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/memory/mcp/registration.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/memory/run.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/metrics/client/hubSync.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/metrics/service.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/needs-you/service.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/observe/Observe.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/openspec/brief.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/openspec/hub.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/Ownership.test.ts": {
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 2
+    },
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/Ownership.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/cli.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/cli.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/client/failures.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/client/hub.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/client/rules.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/fixtures.test.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/index.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/tell.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/tell.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/text.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/ownership/verdicts.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/plans/Plans.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 13
+    }
+  },
+  "apps/server/src/peerHub/plugins/plans/cli.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/plans/client/codegraph.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/plans/client/hub.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/requests/Requests.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 3
+    }
+  },
+  "apps/server/src/peerHub/plugins/requests/command.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/requests/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/resources/index.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/resources/service.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 5
+    }
+  },
+  "apps/server/src/peerHub/plugins/roles/Roles.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 5
+    }
+  },
+  "apps/server/src/peerHub/plugins/roles/cli.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/roles/hub.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/roles/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/roles/integration.test.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/roles/tell.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/roles/text.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/roles/verdicts.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/rooms/Rooms.test.ts": {
+    "t3code/no-polling-loop-in-tests": {
+      "count": 1
+    },
+    "t3code/no-real-time-wait-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/rooms/Rooms.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 18
+    }
+  },
+  "apps/server/src/peerHub/plugins/rooms/cli.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/plugins/rooms/client/diff.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/rooms/client/queue.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/rooms/client/snapshots.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/rooms/client/start.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 8
+    }
+  },
+  "apps/server/src/peerHub/plugins/rooms/follow.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/rooms/hooks.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/plugins/rooms/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/settings/client/hub.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/settings/config.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 4
+    }
+  },
+  "apps/server/src/peerHub/plugins/settings/files.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/settings/service.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/settle/register.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/settle/service.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/settle/service.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 7
+    }
+  },
+  "apps/server/src/peerHub/plugins/slack/PeerSlack.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/slack/deliver.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/slack/ledger.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/slack/redact.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/slack/waits.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/slack/world.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/test-reports/TestReports.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 6
+    }
+  },
+  "apps/server/src/peerHub/plugins/test-reports/cli.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/test-reports/hub.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/test-reports/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/test-reports/integration.test.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/peerHub/plugins/tool-trust/trustStore.ts": {
+    "t3code/prefer-effect-fn": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/usage/privacy.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 2
+    }
+  },
+  "apps/server/src/peerHub/plugins/usage/reporter.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/prefer-effect-fn": {
+      "count": 5
+    }
+  },
+  "apps/server/src/vcs/JjAvailability.test.ts": {
+    "t3code/no-test-in-loop": {
+      "count": 1
+    }
+  },
+  "apps/server/src/vcs/JjCheckpoints.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/vcs/JjProcess.test.ts": {
+    "t3code/no-test-in-loop": {
+      "count": 3
+    }
+  },
+  "apps/server/src/vcs/JjProcessFailure.test.ts": {
+    "t3code/no-test-in-loop": {
+      "count": 3
+    }
+  },
+  "apps/server/src/vcs/JjRepo.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/server/src/vcs/JjReviewDiff.test.ts": {
+    "t3code/no-test-in-loop": {
+      "count": 1
+    }
+  },
+  "apps/server/src/vcs/JjVcsDriver.test.ts": {
+    "t3code/no-inline-schema-compile": {
+      "count": 2
+    },
+    "t3code/no-test-in-loop": {
+      "count": 1
+    }
+  },
+  "apps/server/src/workspace/KnownWorkspaces.activation.test.ts": {
+    "t3code/no-test-in-loop": {
+      "count": 3
+    }
+  },
+  "apps/web/src/components/chat/CompactComposerControlsMenu.browser.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 9
+    }
+  },
+  "apps/web/src/components/settings/FoldedSettingsSection.browser.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 7
+    }
+  },
+  "apps/web/src/components/settings/ProviderInstanceCard.browser.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 7
+    }
+  },
+  "apps/web/src/components/settings/overview.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/settings/useOverviewFacts.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/sidebar/SidebarChatMeta.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/ui/liquid-toggle-indicator.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/ui/toggle-group.browser.test.tsx": {
+    "t3code/no-frame-waits-in-browser-tests": {
+      "count": 1
+    },
+    "t3code/require-disposable-render": {
+      "count": 8
+    }
+  },
+  "apps/web/src/components/workspaces/ActiveOrganization.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/AgentTimeline.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/Coordination.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/NewTaskDialog.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/NewTaskDialog.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/PeerDialog.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/PluginOff.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/ProjectSignals.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/ProjectSignals.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/ShareProject.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/SharedInputs.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/SidebarViewSwitch.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/WorkBoard.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/WorkBoardCards.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/WorkContextView.tsx": {
+    "react/exhaustive-effect-dependencies": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/WorkPanel.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/WorkTaskList.browser.test.tsx": {
+    "t3code/no-frame-waits-in-browser-tests": {
+      "count": 2
+    },
+    "t3code/require-disposable-render": {
+      "count": 7
+    }
+  },
+  "apps/web/src/components/workspaces/WorkTaskList.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/WorkspaceAccess.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/acceptance/AcceptanceCard.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/acceptance/AcceptanceDialogs.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/acceptance/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/agreements/AgreementsNeedsYou.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/agreements/AgreementsSection.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/agreements/agreements.logic.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 2
+    },
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/agreements/agreements.test.tsx": {
+    "t3code/no-dom-test-environment": {
+      "count": 1
+    },
+    "t3code/require-disposable-render": {
+      "count": 3
+    }
+  },
+  "apps/web/src/components/workspaces/agreements/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/agreements/useAgreementActions.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/announcements/AnnouncementList.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/announcements/AnnouncementReceipts.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/digest/DigestBackground.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/github/GitHubConnect.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/github/GitHubTaskPullRequests.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/github/GitHubVerificationSettings.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/github/GitHubVerificationSettings.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/handoff/Handoff.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/handoff/HandoffReport.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/herdr/StartTaskAgent.browser.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 7
+    }
+  },
+  "apps/web/src/components/workspaces/herdr/StartTaskAgent.tsx": {
+    "react/capitalized-calls": {
+      "count": 3
+    }
+  },
+  "apps/web/src/components/workspaces/impact/ImpactList.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/jujutsu/pairActions.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/knowledge/Flows.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 3
+    }
+  },
+  "apps/web/src/components/workspaces/knowledge/KeepOperations.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/knowledge/KeepOperations.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/knowledge/KnowledgeView.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/knowledge/SavedKnowledge.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 7
+    }
+  },
+  "apps/web/src/components/workspaces/knowledge/SavedKnowledge.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/knowledge/knowledge.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/memory/MemoryChangesNotice.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/openspec/BriefPanel.browser.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 7
+    }
+  },
+  "apps/web/src/components/workspaces/openspec/checklistMarkdown.browser.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/AreasBoard.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/AssignUnassigned.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/OwnerBadge.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/OwnerCallDecision.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/OwnerCallDecision.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/OwnerDialogs.test.tsx": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 3
+    },
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/OwnerDialogs.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/OwnerMapEditor.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/OwnerMapEditor.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/OwnersSettings.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/TeamNavigator.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/TeamNavigator.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/TeamPage.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/TeamPage.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 3
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/TeamRoute.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/ownerMapDraft.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/ownership.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/taskMenu.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/team.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/ownership/teamTimeline.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/plans/PlansSection.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/plans/plans.test.tsx": {
+    "t3code/no-dom-test-environment": {
+      "count": 1
+    },
+    "t3code/require-disposable-render": {
+      "count": 3
+    }
+  },
+  "apps/web/src/components/workspaces/projectScope.integration.test.tsx": {
+    "t3code/no-dom-test-environment": {
+      "count": 1
+    },
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/projectScope.ts": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 3
+    }
+  },
+  "apps/web/src/components/workspaces/requests/RequestNotifier.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 5
+    }
+  },
+  "apps/web/src/components/workspaces/requests/TeamRequests.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/review/ReviewView.browser.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 10
+    }
+  },
+  "apps/web/src/components/workspaces/rooms/DraftChat.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/rooms/RoomComposer.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 4
+    }
+  },
+  "apps/web/src/components/workspaces/rooms/RoomConversation.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/rooms/RoomView.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/rooms/SharedRoomView.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/rooms/useRoom.ts": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 3
+    }
+  },
+  "apps/web/src/components/workspaces/settings/AiSubscriptionsParts.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/AskAgent.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/GitHubWizard.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/IntegrationsGitHub.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/IntegrationsGitHub.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-unreasoned-state-sync": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/IntegrationsSlackConnected.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/IntegrationsWebhooks.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/IntegrationsWebhooks.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/InviteDialog.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/PeerSettingsContext.test.tsx": {
+    "t3code/no-dom-test-environment": {
+      "count": 1
+    },
+    "t3code/require-disposable-render": {
+      "count": 3
+    }
+  },
+  "apps/web/src/components/workspaces/settings/PeerSettingsLayout.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/ProjectCapacityParts.tsx": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/ProjectPeopleParts.tsx": {
+    "t3code/no-em-dash-copy": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/Proposals.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/ReviewChangesDialog.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-unreasoned-state-sync": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/SharedCapacityParts.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/ToolCatalogEditor.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/WebhookDialog.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/WebhookDialog.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/WorkspaceGeneralDomains.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/WorkspacePeopleParts.tsx": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/aiSubscriptions.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/coordinationAndPlugins.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/hubStatus.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/AiSubscriptions.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/CoordinationAndPlugins.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/HubStatus.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/NewProject.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/ProjectAreas.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/ProjectBasics.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/ProjectCapacity.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/ProjectCoordination.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/ProjectRepositories.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/ProjectTools.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/SharedCapacity.tsx": {
+    "react/purity": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    },
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/ToolCatalog.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/WorkspaceGeneral.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/pages/WorkspacePeople.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/peerSettings.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/peerSettingsSearch.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/people/AccessFields.tsx": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/projectCapacity.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/projectCoordination.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/projectPeople.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/projectRepositories.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/projectTools.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/settingsView.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/shared.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/sharedCapacity.logic.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/toolCatalog.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/useInvitePreviews.test.tsx": {
+    "t3code/no-dom-test-environment": {
+      "count": 1
+    },
+    "t3code/require-disposable-render": {
+      "count": 3
+    }
+  },
+  "apps/web/src/components/workspaces/settings/useInvitePreviews.ts": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/webhookForm.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/workspaceGeneral.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/settings/workspaceGeneralYaml.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/settings/workspacePeople.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/sidebarRoutes.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/signals.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/slack/SlackSetup.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/slack/SlackStepper.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/slack/slack.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/slack/slackSteps.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/slots.ts": {
+    "t3code/no-hookless-use-function": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/task/TaskRuns.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/task/TaskView.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/test-reports/ReportSection.test.tsx": {
+    "t3code/require-disposable-render": {
+      "count": 2
+    }
+  },
+  "apps/web/src/components/workspaces/test-reports/ReportSection.tsx": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/test-reports/index.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/usage/WorkspaceUsagePage.tsx": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/useOpenWorkspaceProject.ts": {
+    "t3code/no-unreasoned-state-sync": {
+      "count": 1
+    }
+  },
+  "apps/web/src/components/workspaces/workMenus.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/acceptance.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/agreements.ts": {
+    "t3code/no-em-dash-copy": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "packages/client-runtime/src/peer/changes.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "packages/client-runtime/src/peer/github.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/handoff.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/knowledge.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/ownership.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "packages/client-runtime/src/peer/ownershipRules.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/plansView.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/plugins.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/readiness.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/roles.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/rooms.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/settings.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/testReports.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/client-runtime/src/peer/work.ts": {
+    "t3code/no-hermes-unsupported-apis": {
+      "count": 1
+    },
+    "t3code/no-low-value-comments": {
+      "count": 4
+    }
+  },
+  "packages/client-runtime/src/peerSettings.test.ts": {
+    "t3code/no-wall-clock-in-tests": {
+      "count": 2
+    }
+  },
+  "packages/client-runtime/src/peerSettings.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/contracts/src/peer/acceptance.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/contracts/src/peer/agreements.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 3
+    }
+  },
+  "packages/contracts/src/peer/base.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/contracts/src/peer/changes.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/contracts/src/peer/github.logic.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/contracts/src/peer/handoff.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "packages/contracts/src/peer/impact.test.ts": {
+    "t3code/no-inline-schema-compile": {
+      "count": 4
+    }
+  },
+  "packages/contracts/src/peer/knowledge.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/contracts/src/peer/ownership.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "packages/contracts/src/peer/roles.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/contracts/src/peer/rooms.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/contracts/src/peer/rpcRegistry.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/contracts/src/peer/settings.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 2
+    }
+  },
+  "packages/contracts/src/peer/slack.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/contracts/src/peer/test-reports.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "packages/contracts/src/peerHub.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 3
+    }
+  },
+  "scripts/build-npm-peer.ts": {
+    "t3code/no-low-value-comments": {
+      "count": 1
+    }
+  },
+  "scripts/lib/cursor-sdk-packaging.test.ts": {
+    "t3code/no-test-timeout-or-unreasoned-skip": {
+      "count": 1
+    }
+  }
+}

@@ -70,7 +70,6 @@ const hub = spawnLogged(peerhubBin, ["serve"], {
   PEERHUB_PUBLIC_URL: hubUrl,
   PEERHUB_MAIL: "echo",
   PEERHUB_DNS: "off",
-  PEERHUB_GATEWAY_MODE: "memory",
   PEERHUB_SECRET_KEY: NodeCrypto.randomBytes(32).toString("hex"),
 });
 

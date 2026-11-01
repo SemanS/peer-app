@@ -14,7 +14,7 @@ export function describeOffer(offer: PeerDomainOffer) {
   return {
     title: `Join ${offer.name}?`,
     summary,
-    message: `${summary}${provenance ? ` ${provenance}.` : ""} Its admins decide which projects, tools and shared capacity you get. Its members see the work you report on its projects. Join ${offer.name}?`,
+    message: `${summary}${provenance ? ` ${provenance}.` : ""} Its admins decide which projects and tools you get. Its members see the work you report on its projects. Join ${offer.name}?`,
   };
 }
 export function domainStateLabel(state: PeerDomainState, domain: string) {

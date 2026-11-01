@@ -2,7 +2,7 @@ import type { PeerHubStatus, PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { PeerMobilePlugin } from "./slotTypes";
-import { alwaysWorkspaceSectionsAt, selectPeerPlugins, workspaceSectionsAt } from "./slots.logic";
+import { selectPeerPlugins, workspaceSectionsAt } from "./slots.logic";
 
 const REGISTRY = ["herdr", "changes", "rooms"].map((id) => ({ id }));
 
@@ -75,29 +75,6 @@ describe("workspace sections", () => {
       "changes:0",
       "changes:2",
     ]);
-  });
-
-  it("keeps registered inactive settings available at the end without showing unknown features", () => {
-    const audit: PeerMobilePlugin = {
-      id: "audit",
-      alwaysWorkspaceSections: [{ key: "settings", place: "end", Component: Nothing }],
-    };
-    const changes: PeerMobilePlugin = {
-      id: "changes",
-      alwaysWorkspaceSections: [{ key: "changes", place: "tasks", Component: Nothing }],
-    };
-    const registry = [changes, audit];
-    const listed = status([plugin("audit", false), plugin("changes", false)]);
-    expect(workspaceSectionsAt(selectPeerPlugins(registry, listed), "end")).toEqual([]);
-    expect(alwaysWorkspaceSectionsAt(registry, listed, "end").map((s) => s.key)).toEqual([
-      "always:audit:settings",
-    ]);
-    expect(alwaysWorkspaceSectionsAt(registry, listed, "tasks").map((s) => s.key)).toEqual([
-      "always:changes:changes",
-    ]);
-    expect(alwaysWorkspaceSectionsAt(registry, status([plugin("changes")]), "end")).toEqual([]);
-    expect(alwaysWorkspaceSectionsAt(registry, status(), "end")).toEqual([]);
-    expect(alwaysWorkspaceSectionsAt(registry, null, "end")).toEqual([]);
   });
 });
 

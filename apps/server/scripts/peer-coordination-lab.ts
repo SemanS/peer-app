@@ -426,7 +426,6 @@ const hub = spawnLogged(peerhubBin, ["serve"], {
   PEERHUB_BIND: `127.0.0.1:${hubPort}`,
   PEERHUB_PUBLIC_URL: hubUrl,
   PEERHUB_MAIL: "echo",
-  PEERHUB_GATEWAY_MODE: "memory",
   PEERHUB_SECRET_KEY: NodeCrypto.randomBytes(32).toString("hex"),
   ...(REAL ? { PEERHUB_KEEPER_IDLE_SECS: String(REAL_IDLE_SECS) } : {}),
   ...(ARM === "kernel" ? { PEERHUB_FEATURES_OFF: KERNEL_FEATURES_OFF.join(",") } : {}),

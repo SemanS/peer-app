@@ -40,7 +40,6 @@ import {
 import { useOrganizationStatus } from "./ActiveOrganization";
 import { usePeerHub, useProjectScope } from "./projectScope";
 import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
-import { projectSignals } from "./ProjectSignals";
 import { RenameProjectSetDialog } from "./ProjectSetNav";
 import {
   addToSet,
@@ -229,7 +228,7 @@ function ProjectMenuBody({
   readonly onChangeSets: (sets: ReadonlyArray<ProjectSet>, scope: string | undefined) => void;
   readonly onRename: (set: ProjectSet) => void;
 }) {
-  const { environmentId, status, tree, actions, plugins } = useWorkData();
+  const { environmentId, status, tree, actions } = useWorkData();
   const navigate = useNavigate();
   const openSettings = useOpenPeerSettings();
   const files = useFileContextMenu(environmentId);
@@ -267,11 +266,6 @@ function ProjectMenuBody({
   };
   const folder = menu?.folder;
   const coordination = menu?.kind === "workspace" ? menu.coordination : null;
-  const scoped = tree.find((project) => projectScopeKey(project) === current.scope);
-  const team =
-    status === null || scoped === undefined
-      ? undefined
-      : projectSignals(status, scoped, plugins).find((signal) => signal.id === "team");
   return (
     <>
       <MenuRadioGroup value={current.scope} onValueChange={(value) => onChange(String(value))}>
@@ -386,17 +380,6 @@ function ProjectMenuBody({
                 <Badge variant="outline" size="control">
                   {coordination.action.label}
                 </Badge>
-              </MenuItem>
-            )}
-            {team === undefined ? null : (
-              <MenuItem
-                inset
-                onClick={() => {
-                  leave();
-                  void team.open?.(navigate);
-                }}
-              >
-                People and owners
               </MenuItem>
             )}
             <MenuItem

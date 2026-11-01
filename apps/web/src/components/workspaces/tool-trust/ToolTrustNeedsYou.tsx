@@ -4,9 +4,9 @@ import { useState } from "react";
 import { cn } from "../../../lib/utils";
 import { Button } from "../../ui/button";
 import { TONE_SURFACE } from "../signals";
-import type { NeedsYouSlotProps } from "../slots.types";
+import type { PeerSlotProps } from "../slots.types";
 import { ToolTrustReview } from "./ToolTrustReview";
-export function ToolTrustNeedsYou({ environmentId, status }: NeedsYouSlotProps) {
+export function ToolTrustNeedsYou({ environmentId, status }: PeerSlotProps) {
   const [open, setOpen] = useState(false);
   const count = toolTrustNeedsYouCount(status);
   if (count === 0) return null;

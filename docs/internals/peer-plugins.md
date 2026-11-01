@@ -18,21 +18,17 @@ five primitives (session, claim, versioned context, declared read, shared messag
 contexts and the index carry the guarantees agents rely on, such as an explicit fallback for every
 verdict, so they cannot be turned off and the broker runs them before any plugin.
 
-A feature is a plugin when coordination keeps working without it. A fact people record that gates no move,
-such as a lead's acceptance of delivered work (`acceptance`), is a plugin with no verdict and no
-`beforeReview`: its facts reach agents through `statusBlock` and `taskFacts` and people through slots, and turning it off
-changes no outcome. Extend core instead when:
+A feature is a plugin when coordination keeps working without it. Extend core instead when:
 
 - an edit must be decided through the Hub. Plugin verdicts share a 1,000 ms budget and must be
   local or cached; a check that needs the Hub per edit belongs in core's intent.
 - other features would have to import it. Plugins never import each other.
 - every agent must get it, whatever the environment's owner chose.
 
-Plugins that need each other's work meet in capability slots: a runtime that runs agents, a git
-host, the task launcher, the request acceptor, the review starter, whether a person shares unfinished
-work. At most one active plugin fills each, and core works without it. `PeerPlugins.require(slot)` returns the plugin that fills a slot,
-or fails saying that plugin is off or needs a newer Hub, so core can tell people why a capability is
-missing. Starting an agent from a team request goes through the request acceptor this way.
+Plugins that need each other's work meet in capability slots: a runtime that runs agents, the task
+launcher, whether a person shares unfinished work. At most one active plugin fills each, and core
+works without it. `PeerPlugins.require(slot)` returns the plugin that fills a slot, or fails saying
+that plugin is off or needs a newer Hub, so core can tell people why a capability is missing.
 
 An agent's working context (its own notes, what it marks for the team, the shared context it keeps)
 has no slot: no plugin can move it or change what core says about it. A plugin that needs to take
@@ -64,20 +60,18 @@ contribution never checks whether its plugin is on.
 
 - **Services first.** What a plugin can do is a method of its service, as
   [Effect services](./effect-services.md) describes. Its commands, RPC handlers, hooks and Hub
-  listeners decode, call that method and map errors: `peer request` and `peerHub.sendRequest` call
-  the same `Requests.send`.
+  listeners decode, call that method and map errors, so a `peer` command and an RPC do the same thing.
 - **Verdicts only tighten.** A plugin's verdict on a tool call may deny or ask, never allow, and has
   no side effects, since core may discard it. Its fallback applies when it misses the budget. Letting
   Peer's own files through is `ownPaths`.
 - **Text is bounded and comes after core's.** A plugin's start block is cut at 2,000 characters and
   its text for one step at 1,200, ending with the command that shows the rest. Text not ready by the
   hook's deadline reaches the agent at its next step. Only notices the agent must answer may wake an
-  idle agent, and only a message addressed to the agent may set `landing`: a decision on a request it
-  made, an agreement kept for its task, or the push notice of the `jujutsu` plugin (the session pushes a
-  change that builds on a teammate's unmerged bookmark, so it should name that bookmark as the pull
-  request's base). A landing step (a commit, push, pull request, their jj forms, `peer review` or
-  `peer done`) then stops once to give it, as it does a teammate's note. Advice
-  never does. Text a teammate wrote goes through the fences in
+  idle agent, and only a message addressed to the agent may set `landing`: words in its room, or the
+  push notice of the `jujutsu` plugin (the session pushes a change that builds on a teammate's
+  unmerged bookmark, so it should name that bookmark as the pull request's base). A landing step (a
+  commit, push, pull request or their jj forms) then stops once to give it, as it does a teammate's
+  note. Advice never does. Text a teammate wrote goes through the fences in
   [`peerText.ts`](../../apps/server/src/peerHub/peerText.ts).
 - **Said once stays said.** What a plugin must not tell a session twice goes, as ids, in
   `session.told(plugin)`: core keeps it in the session's memory file across Peer's restarts and drops
@@ -86,20 +80,18 @@ contribution never checks whether its plugin is on.
   in `local`, it is said again after every update of the app, or a change made meanwhile is never told.
 - **Background work runs in `run`.** Core forks it while the plugin is active and interrupts it when
   the plugin stops, whether its owner turned it off or the Hub stopped serving its feature. Stop what
-  the plugin started from finalizers there: observe stops sending views, GitHub ends a sign-in still
-  waiting for its code.
+  the plugin started from finalizers there: observe stops sending views.
 - **`turnOff` undoes what the plugin set up outside Peer**, once, when the owner turns it off. It runs
   under the state lock, so it must not take the lock, and may call what expects it held, such as
   `PeerWork.refresh`. A failure shows as the plugin's error in the status, and the choice stands.
-  Turning the plugin on again must not bring those effects back: shared capacity's revoked keys stay
-  revoked, and observe's threads stay unshared.
+  Turning the plugin on again must not bring those effects back: observe's threads stay unshared.
 - **`workspaceCleanup` forgets local membership data** after sync, leaving a workspace or signing out,
   even while the plugin is inactive. It runs before active lifecycle contributions, under the state
   lock. It must only remove local data; turning a feature off must not preserve a departed
   workspace's approvals or secrets, and enabling it must not bring those back.
 - **Hub pings.** A listener names the pings it follows. `resync` reaches every listener, and so does
   connecting to a workspace's event stream, because pings sent while not connected were missed. A
-  listener that mirrors durable state, like the request inbox, reads it again then. Listeners run
+  listener that mirrors durable state, like a room's inbox, reads it again then. Listeners run
   inline with the event stream, so they queue their reads rather than wait on the Hub.
 
 ## The core API
@@ -110,8 +102,8 @@ Plugins reach core only through `core/plugin.ts` and the services that `PeerCore
 work report, a thread's `view`, its task), `PeerAgents` (the agent sessions coordination knows) and
 `PeerIndex` (the works an agent chooses its context from);
 sessions and works are known only while coordination is on. `PeerCore` also carries the T3 services
-plugins build on: provider settings, where shared capacity adds its provider instances, and the
-server's configuration, HTTP client, projects and thread projections. Headless, Peer Core supplies
+plugins build on: provider settings and the server's configuration, HTTP client, projects and
+thread projections. Headless, Peer Core supplies
 stand-ins for those T3 services, so a plugin that needs the app's threads or provider instances finds them empty there; see
 [Peer Core](./peer-core.md). A plugin's Hub endpoints live in its own `hub.ts`;
 [`hubApi.ts`](../../apps/server/src/peerHub/core/hub/hubApi.ts) and
@@ -149,8 +141,7 @@ Apps, Hubs and clients of different ages work together, so names on the wire nev
   field, beside the `read` that stays in its frozen place. Slices are read on every publish, so they hold
   counts and ids; detail goes behind the plugin's own requests.
 - A plugin keeps its data in its `pluginData` slice of `peer-hub.json`. Features that existed before
-  plugins keep their old fields there (`sharedThreads`, `sharedInstances`), so older files load as
-  they are.
+  plugins keep their old fields there (`sharedThreads`), so older files load as they are.
 - `PeerPluginState`'s `id` and `reason` are plain strings, so a client reads the status of a newer
   environment. A status without a plugin list means the features that existed before plugins are
   active ([`activePlugin`](../../packages/client-runtime/src/peer/plugins.ts)).
@@ -161,18 +152,14 @@ Apps, Hubs and clients of different ages work together, so names on the wire nev
 
 ## Slots
 
-Clients compose plugins through slots. Core views ask the active plugins for their part (Work panel
-sections, Needs you items, project signals on web and mobile, project rows for what holds now and
-History sections for what happened, a task's review sections, items of a project's More menu (each
-with a label, a hint and the dialog it opens) and task actions, thread menus, Settings rows,
+Clients compose plugins through slots. Core views ask the active plugins for their part (Needs you
+items, project rows for what holds now, task actions, a task's changes in its room, Settings rows,
 palette actions) and render nothing for the others. The slot types are in
 [`slots.types.ts`](../../apps/web/src/components/workspaces/slots.types.ts) on web and
 [`slotTypes.ts`](../../apps/mobile/src/features/peer/slotTypes.ts) on mobile. The list of active
 plugins changes only when a plugin turns on or off, and row slots take their data from props, never
 from a subscription per row. Routes stay in `apps/web/src/routes`, since routing is file-based; a
-page of an inactive plugin renders `PluginOff`. A UI capability one plugin gives another is a slot
-too: requests' "Accept & start" renders herdr's `taskLauncher`, and offers only Decline without one.
-A core view's plain line can be the fallback of a slot in the same way: Work's empty state for a
+page of an inactive plugin renders `PluginOff`. A core view's plain line can be the fallback of a slot in the same way: Work's empty state for a
 workspace in which the person is on no project is the settings plugin's `noProjects`, and core
 keeps saying its own line without it.
 
@@ -189,7 +176,7 @@ trait of `server/src/features/mod.rs`, listed in `features::all()`. A feature mo
 `/v1/workspaces/{slug}`, declares the pings it publishes, follows coordination reports and adds
 counts to the coordination view. The Hub lists the features it serves, with their revisions, in
 `/health` and `/v1/me`. An app plugin is active only while its `hubFeature` is listed at its revision
-or a later one. A Hub from before the catalog serves `requests` and `observe` at revision 1, and
+or a later one. A Hub from before the catalog serves `observe` at revision 1, and
 while the Hub cannot be reached the last catalog read stands. `/v1/me` also names
 the features the operator turned off (`featuresOff`) and the Hub's build (`hub`); core keeps what the
 Hub said, none of it assumed, in the status (`hub`), and a plugin's id is its feature's. A client tells

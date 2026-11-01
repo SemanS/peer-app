@@ -72,7 +72,7 @@ const segment = encodeURIComponent;
 export const settingsHub = (client: PeerHubClient.PeerHubClient["Service"]) => {
   const read = <S extends Answer>(schema: S, workspace: string, path: string) =>
     client.request(schema, { workspace, path });
-  /** A call that changes something; the Hub may take long to answer one (a lookup, the gateway). */
+  /** A call that changes something; the Hub may take long to answer one (a DNS lookup). */
   const send = <S extends Answer>(
     schema: S,
     workspace: string,

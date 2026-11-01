@@ -83,7 +83,7 @@ export function ProjectIdField({
     <PeerStackedField
       label="Project ID"
       htmlFor={id}
-      hint={`Fixed: it names ${projectName} in storage and on the gateway.`}
+      hint={`Fixed: it names ${projectName} in storage.`}
     >
       <InputGroup>
         <InputGroupAddon>

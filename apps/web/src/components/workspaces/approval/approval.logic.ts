@@ -1,7 +1,6 @@
 import { overlapTopic, personName } from "@t3tools/client-runtime/peer/needs-you";
 import type { PeerHubStatus } from "@t3tools/contracts";
 
-import type { ProjectSignal } from "../slots.types";
 import {
   openKey,
   type WorkProjectNode,
@@ -24,21 +23,17 @@ export interface ApprovalSignals {
     /** The colleague whose agent is on the same files. */
     readonly with: string | undefined;
   }>;
-  /** What other agents hold in the project, as the resources signal says it. */
-  readonly held: string | undefined;
 }
 
 /**
  * The Peer context of one of this computer's threads (`threadKey` = `<environment>:<thread>`):
- * its project and task in the work tree, the project's open overlaps with the person's agents, and
- * the held resources from the project's signals. Null outside a Peer workspace project.
+ * its project and task in the work tree, and the project's open overlaps with the person's agents.
+ * Null outside a Peer workspace project.
  */
 export function approvalSignals(input: {
   readonly tree: ReadonlyArray<WorkProjectNode>;
   readonly status: PeerHubStatus;
   readonly threadKey: string;
-  /** The signals of the thread's project (core and plugins), from which held resources come. */
-  readonly signals: (project: WorkProjectNode) => ReadonlyArray<ProjectSignal>;
 }): ApprovalSignals | null {
   const { tree, status, threadKey } = input;
   const matches = (thread: WorkThreadNode) =>
@@ -81,12 +76,10 @@ export function approvalSignals(input: {
             };
           })
       : [];
-    const held = input.signals(project).find((signal) => signal.id === "resources");
     return {
       project: { workspace: project.workspace, projectId: project.projectId, name: project.name },
       task,
       overlaps,
-      held: held !== undefined && held.count !== null && held.count > 0 ? held.detail : undefined,
     };
   }
   return null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { gitCommands } from "./handoffCommands.ts";
+import { gitCommands } from "./shellCommands.ts";
 
 describe("what a shell line runs of git and gh", () => {
   it("names each command's subcommand, in order, past options and wrappers", () => {

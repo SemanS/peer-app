@@ -12,13 +12,13 @@ import { useState } from "react";
 import { serverEnvironment } from "../../../state/server";
 import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { Button } from "../../ui/button";
-import type { NeedsYouSlotProps } from "../slots.types";
+import type { PeerSlotProps } from "../slots.types";
 import { DeclineDialog } from "./DeclineDialog";
 import { roomTaskLabel } from "./roomSlots.logic";
 import { useRoomMoves } from "./useRoom";
 
 /** Needs you's room items, grouped per task, so an owner asked ten times sees one place. */
-export function RoomsInbox({ environmentId, status }: NeedsYouSlotProps) {
+export function RoomsInbox({ environmentId, status }: PeerSlotProps) {
   const moves = useRoomMoves(environmentId, () => undefined);
   const canMove = useAtomValue(serverEnvironment.peerRooms.pass.permissionAtom(environmentId));
   const items = roomNeedsYou(status.rooms, (need) =>

@@ -2,7 +2,6 @@ import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { useThreadShells } from "../../../state/entities";
 import { usePrimaryEnvironment } from "../../../state/environments";
 import { useRelativeTimeTick } from "../../settings/settingsLayout";
-import { projectSignals } from "../ProjectSignals";
 import { usePeerPlugins } from "../slots";
 import { canWatchThreads } from "../slots.logic";
 import { usePeerHubStatus } from "../WorkspaceAccess";
@@ -32,11 +31,6 @@ export function usePeerThread(threadEnvironmentId: EnvironmentId, threadId: Thre
     now,
     watch: canWatchThreads(plugins),
   });
-  const signals = approvalSignals({
-    tree,
-    status,
-    threadKey,
-    signals: (project) => projectSignals(status, project, plugins),
-  });
+  const signals = approvalSignals({ tree, status, threadKey });
   return signals === null ? null : { environmentId, status, plugins, signals };
 }

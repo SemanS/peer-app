@@ -5,10 +5,6 @@ import { MessagesSquareIcon } from "lucide-react";
 
 import type { PaletteAction } from "../slots.types";
 
-/** Needs you's share of the rooms: each message that waits and each mention. */
-export const roomNeedsCount = (status: Pick<PeerHubStatus, "rooms">) =>
-  (status.rooms?.waiting.length ?? 0) + (status.rooms?.mentions.length ?? 0);
-
 const projectOf = (status: Pick<PeerHubStatus, "workspaces">, place: RoomPlace) =>
   status.workspaces
     .find((workspace) => workspace.slug === place.workspace)

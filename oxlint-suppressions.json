@@ -15,11 +15,6 @@
       "count": 3
     }
   },
-  "apps/mobile/src/features/peer/PeerBackground.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 2
-    }
-  },
   "apps/mobile/src/features/peer/rooms/useRoom.ts": {
     "t3code/no-unreasoned-state-sync": {
       "count": 3
@@ -1154,16 +1149,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/ProjectSignals.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/ProjectSignals.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/ShareProject.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1440,11 +1425,6 @@
   },
   "apps/web/src/components/workspaces/useOpenWorkspaceProject.ts": {
     "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/workMenus.logic.ts": {
-    "t3code/no-low-value-comments": {
       "count": 1
     }
   },

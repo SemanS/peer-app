@@ -4,7 +4,6 @@
  * them.
  */
 import type {
-  ContextMenuItem,
   EnvironmentId,
   PeerHubStatus,
   PeerPluginId,
@@ -15,21 +14,12 @@ import type { useNavigate } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
-import type { SignalTone } from "./signals";
-import type { WorkProjectNode, WorkTaskNode, WorkThreadNode } from "./workTree.logic";
+import type { WorkProjectNode, WorkTaskNode } from "./workTree.logic";
 
 /** What every slot gets: the environment it shows, and its status as the view read it. */
 export interface PeerSlotProps {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
-}
-
-/**
- * What Needs you's items get: the environment, its status, and the active plugins, whose
- * capabilities (the task launcher, say) an item may use.
- */
-export interface NeedsYouSlotProps extends PeerSlotProps {
-  readonly plugins: ReadonlyArray<PeerWebPlugin>;
 }
 
 export interface ProjectSlotProps extends PeerSlotProps {
@@ -45,19 +35,6 @@ export interface TaskSlotProps extends PeerSlotProps {
   readonly task: WorkTaskNode;
   /** The checkout is on jj, so a section speaks before any of the task's threads does. */
   readonly onJujutsu?: boolean;
-}
-
-export interface ThreadSlotProps {
-  readonly thread: WorkThreadNode;
-}
-
-export interface TaskContextSlotProps extends PeerSlotProps {
-  readonly workspace: string;
-  readonly project: string;
-  /** `task:<id>`, or `project` for the work on no task. */
-  readonly scope: string;
-  /** The context as the page shows it; null while no agent started one. */
-  readonly contextText: string | null;
 }
 
 export interface WorkspaceSettingsSlotProps extends PeerSlotProps {
@@ -93,104 +70,7 @@ export interface TaskLauncherProps extends PeerSlotProps {
   readonly onClose?: () => void;
 }
 
-/** One item a plugin adds to a thread's menu, and what picking it does. */
-export interface TaskMenuEntry {
-  readonly item: ContextMenuItem<string>;
-  readonly run: (choice: string) => void;
-}
-
-export interface ThreadMenuEntry {
-  readonly item: ContextMenuItem<string>;
-  /** `start` sits ahead of "Move to task", `end` after it. */
-  readonly place: "start" | "end";
-  readonly run: () => void;
-}
-
 export type PeerNavigate = ReturnType<typeof useNavigate>;
-
-/**
- * One signal a plugin shows for a project: a tile in the project's Signals in the sidebar, and a
- * chip on the Work board while it counts something. Its tone says what kind of conversation it is.
- */
-export interface ProjectSignal {
-  readonly id: string;
-  readonly label: string;
-  readonly icon: LucideIcon;
-  /** How many wait on people or agents; null for a signal that opens a page without a count. */
-  readonly count: number | null;
-  /** A line on it: what waits, or why there is nothing. */
-  readonly detail: string;
-  readonly tone: SignalTone;
-  /** Opens its page; undefined when the sidebar shows it in place. */
-  readonly open?: (navigate: PeerNavigate) => void;
-  /** Its chip on a project card, count first, e.g. `3 to keep`; else the label and the count. */
-  readonly chip?: (count: number) => string;
-  /** A row of its own in the project's navigation, after Activity; undefined adds none. */
-  readonly navRow?: ProjectNavRow;
-}
-
-/** A navigation row a plugin adds to an open project, beside Activity and Pull requests. */
-export interface ProjectNavRow {
-  readonly label: string;
-  readonly icon: LucideIcon;
-  /** Opens its page. */
-  readonly open: (navigate: PeerNavigate) => void;
-  /** Shown beside the label while above zero. */
-  readonly count?: number | null;
-  /** Whether the row marks the page the sidebar highlights, given the route in `workTree` terms. */
-  readonly active?: (activeThread: string | null) => boolean;
-}
-
-/**
- * What the Team page hands a plugin that adds to it: the status as the page read it, the project
- * as the Work tree has it, and the clock the page counts its waits by. A plugin that is off adds
- * nothing, so it never has to check.
- */
-export interface TeamSlotInput {
-  readonly status: PeerHubStatus;
-  readonly project: WorkProjectNode;
-  readonly now: number;
-}
-
-/** The task a fact is about: its row on the Team page. */
-export interface TeamTaskSlotInput extends TeamSlotInput {
-  readonly task: {
-    readonly id: string;
-    readonly key: string | undefined;
-    readonly title: string;
-  };
-}
-
-/**
- * One short fact a plugin adds to a task's row on the Team page, beside what the page says of its
- * owner and state: "Plans: meets ORD-11 on applyTax". Facts about work only, in a line.
- */
-export interface TeamTaskFact {
-  /** Unique within the plugin. */
-  readonly id: string;
-  readonly text: string;
-  /** What kind of conversation it is: a fact that waits on a person is `needs`, the rest read quietly. */
-  readonly tone: SignalTone;
-  /** Opens the page that says more; undefined for a fact that stands alone. */
-  readonly open?: (navigate: PeerNavigate) => void;
-}
-
-/** Something a plugin says needs a person, among the Team page's own signals. */
-export interface TeamPluginSignal {
-  /** Unique within the plugin. */
-  readonly id: string;
-  /** What it is, in a sentence: "ORD-9 and ORD-11 plan the same function". */
-  readonly what: string;
-  /** The line under it: where, and why it matters. */
-  readonly detail: string;
-  /** When it began, to say how long it has waited; undefined where it has no beginning. */
-  readonly since?: string | undefined;
-  /** The one thing that opens what resolves it; undefined where there is nothing to open. */
-  readonly action?: {
-    readonly label: string;
-    readonly open: (navigate: PeerNavigate) => void;
-  };
-}
 
 /** An action a plugin adds to the command palette. */
 export interface PaletteAction {
@@ -204,63 +84,20 @@ export interface PaletteAction {
 
 export interface PeerWebPlugin {
   readonly id: PeerPluginId;
-  /** One background effect per plugin, shared across the connected environments. */
-  readonly background?: ComponentType<{ readonly environmentIds: ReadonlyArray<EnvironmentId> }>;
-  /** A section of the Work panel, above the projects. */
-  readonly workPanel?: ComponentType<PeerSlotProps>;
-  readonly workPanelPlace?: "after-overlaps";
   /**
    * What Work says, in place of its plain line, for each workspace in which the person is on no
    * project yet: who to ask to be added, or how to start one. The first active plugin that fills it
    * speaks for every such workspace; without one Work keeps its plain line.
    */
   readonly noProjects?: ComponentType<NoProjectsSlotProps>;
-  /** Items that wait on the person. `count` joins the section's count; `Component` follows its cards. */
-  readonly needsYou?: {
-    readonly count?: (status: PeerHubStatus) => number;
-    readonly Component?: ComponentType<NeedsYouSlotProps>;
-    /** What the empty section says when this plugin knows more than "nothing", or null. */
-    readonly emptyText?: (
-      status: PeerHubStatus,
-      input: { readonly running: number },
-    ) => string | null;
-  };
-  /** Items of a project's More menu, each with its label and hint. */
+  /** Items that wait on the person, above the projects. */
+  readonly needsYou?: ComponentType<PeerSlotProps>;
   /** Rows at the top of an open project, for what holds now. */
   readonly projectRows?: ComponentType<ProjectSlotProps>;
-  /**
-   * A project's signals: a row in the open project while it counts something and opens a page, and
-   * a chip on project cards and the Work board while it counts something.
-   */
-  readonly projectSignals?: (
-    status: PeerHubStatus,
-    project: WorkProjectNode,
-  ) => ReadonlyArray<ProjectSignal>;
-  /**
-   * The one short fact a plugin adds to a task's row on the Team page, or undefined where it has
-   * none for that task. Shown while the plugin is active.
-   */
-  readonly teamTaskFacts?: (input: TeamTaskSlotInput) => TeamTaskFact | undefined;
-  /** What a plugin says needs a person on the Team page, after the page's own signals. */
-  readonly teamSignals?: (input: TeamSlotInput) => ReadonlyArray<TeamPluginSignal>;
   /** Actions on a task row, shown on hover or focus. */
   readonly taskActions?: ComponentType<TaskSlotProps>;
-  readonly taskMenu?: (props: TaskSlotProps) => ReadonlyArray<TaskMenuEntry>;
-  /** Marks on a task's card on the Work board. The sidebar's task row says only its state. */
-  readonly taskBadges?: ComponentType<TaskSlotProps>;
-  /** Sections of a task's page, after the task context. */
+  /** A task's changes, in its room. */
   readonly taskSections?: ComponentType<TaskSlotProps>;
-  /** Items in the menu of a thread of the person's on this computer. */
-  readonly threadMenu?: (
-    thread: WorkThreadNode,
-    environmentId: EnvironmentId | null,
-  ) => ReadonlyArray<ThreadMenuEntry>;
-  /** Marks on a thread card. */
-  readonly threadBadges?: ComponentType<ThreadSlotProps>;
-  /** Sections of a task's (or a project's) context page. */
-  readonly taskContext?: ComponentType<TaskContextSlotProps>;
-  /** Sections of a task's review page, above its core actions: the package, pull requests. */
-  readonly taskReview?: ComponentType<TaskContextSlotProps>;
   /** Rows of Settings → Peer for the environment, on the page `slotHost` names. */
   readonly settings?: ComponentType<PeerSlotProps>;
   /** Informational settings for a registered feature, including its inactive state. */
@@ -269,7 +106,4 @@ export interface PeerWebPlugin {
   readonly workspaceSettings?: ComponentType<WorkspaceSettingsSlotProps>;
   /** Actions in the command palette. */
   readonly palette?: (status: PeerHubStatus) => ReadonlyArray<PaletteAction>;
-  /** Capability: starts an agent on a task. At most one plugin fills it. */
-  readonly taskLauncher?: ComponentType<TaskLauncherProps>;
-  /** Capability: asks a teammate to take a task on. At most one plugin fills it. */
 }

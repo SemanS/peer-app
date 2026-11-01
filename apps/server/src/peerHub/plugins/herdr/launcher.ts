@@ -2,9 +2,8 @@
 /**
  * Starting an agent on a task in herdr (the plugin's task launcher): a git worktree of its own on
  * a new branch, or the checkout a run left work in, the agent in a pane of Peer's own herdr
- * workspace, then its first prompt once it is ready for one. Core has checked the task, taken the
- * team request it answers and created the run the agent starts in; the run holds the agent's thread
- * once it runs. A continued run's agent resumes its last provider session where it is known. An
+ * workspace, then its first prompt once it is ready for one. Core has checked the task and created
+ * the run the agent starts in; the run holds the agent's thread once it runs. A continued run's agent resumes its last provider session where it is known. An
  * agent stopped by its harness's question whether to trust the new checkout keeps its prompt here
  * until the person answers (`answered`).
  *

@@ -10,7 +10,7 @@ describe("domain decisions", () => {
       }).message;
       expect(message).toContain("Acme holds it");
       expect(message.includes("proved it through DNS")).toBe(verified);
-      expect(message).toContain("admins decide which projects, tools and shared capacity");
+      expect(message).toContain("admins decide which projects and tools");
       expect(message).toContain("members see the work you report");
     }
   });

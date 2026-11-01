@@ -1,9 +1,7 @@
 import type { EnvironmentId } from "@t3tools/contracts";
 
 import { isElectron } from "../../../env";
-import { appAtomRegistry } from "../../../rpc/atomRegistry";
 import { usePrimaryEnvironmentId } from "../../../state/environments";
-import { primaryEnvironmentIdAtom } from "../../../state/primaryEnvironment";
 
 /**
  * Whether this is the desktop app connected to its own backend: the one place a terminal can open
@@ -15,8 +13,4 @@ const isLocalDesktop = (environmentId: EnvironmentId | null, primaryId: Environm
 
 export function useIsLocalDesktop(environmentId: EnvironmentId | null): boolean {
   return isLocalDesktop(environmentId, usePrimaryEnvironmentId());
-}
-
-export function isLocalDesktopEnvironment(environmentId: EnvironmentId): boolean {
-  return isLocalDesktop(environmentId, appAtomRegistry.get(primaryEnvironmentIdAtom));
 }

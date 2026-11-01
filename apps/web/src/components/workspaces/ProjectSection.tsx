@@ -5,7 +5,6 @@ import { type ReactNode, useState } from "react";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import { ProjectActions } from "./ProjectActions";
-import { SignalTiles } from "./ProjectSignals";
 import { NavCount, ProjectPullRequestsNav } from "./SidebarNav";
 import {
   openAreasByDefault,
@@ -24,9 +23,6 @@ import {
 import { useSidebarRows } from "./useSidebarRows";
 import type { WorkActions } from "./useWorkActions";
 import type { AgentNeed, WorkProjectNode, WorkTaskNode } from "./workTree.logic";
-
-/** Signals another place already holds: Needs your attention, the project menu. */
-const PLACED_SIGNALS: ReadonlySet<string> = new Set(["changes"]);
 
 /**
  * The open project in the Work tab: what holds now (its announcement, what it has in place), then
@@ -91,13 +87,6 @@ export function ProjectSection({
 
   return (
     <section aria-label={project.name} className="flex flex-col gap-2">
-      <SignalTiles
-        status={status}
-        project={project}
-        plugins={plugins}
-        activeThread={activeThread}
-        show={(signal) => !PLACED_SIGNALS.has(signal.id)}
-      />
       {plugins.map(({ id, projectRows: Rows }) =>
         Rows === undefined ? null : <Rows key={id} {...slot} />,
       )}

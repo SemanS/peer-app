@@ -45,7 +45,7 @@ export function firstRunSteps(input: {
     {
       id: "project",
       title: "Add a project or repository",
-      text: "A project gathers its repositories, people, tools and budget.",
+      text: "A project gathers its repositories, people and tools.",
       section: "new-project",
       done: hasProject,
     },

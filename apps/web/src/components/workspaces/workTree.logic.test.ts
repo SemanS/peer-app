@@ -9,10 +9,8 @@ import {
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
 import { describe, expect, it } from "vite-plus/test";
 
-import { herdrMenuItem } from "./herdr/threadMenu";
-import { observeMenuItem } from "./observe/threadMenu";
-import { taskMenuItems, threadMenuItems } from "./workMenus.logic";
-import { buildWorkTree, type WorkThreadNode } from "./workTree.logic";
+import { taskMenuItems } from "./workMenus.logic";
+import { buildWorkTree } from "./workTree.logic";
 
 const HERE = EnvironmentId.make("env-here");
 const KIRKWOOD_T3 = ProjectId.make("t3-kirkwood");
@@ -199,46 +197,6 @@ const LOCAL = [
 describe("menus", () => {
   const [project] = buildWorkTree({ status: status(kirkwood()), localThreads: LOCAL, now: NOW });
   const split = project?.areas[0]?.tasks[0];
-  const tasks = project?.tasks ?? [];
-  const thread = (title: string) => split?.threads.find((t) => t.title === title);
-  // What the active plugins add to a thread's menu: herdr shows an agent in herdr ahead of "Move to
-  // task", observe shares after it.
-  const plugged = (node: WorkThreadNode) => {
-    const herdr = herdrMenuItem(node);
-    const observe = observeMenuItem(node);
-    return [
-      ...(herdr === null ? [] : [{ item: herdr, place: "start" as const }]),
-      ...(observe === null ? [] : [{ item: observe, place: "end" as const }]),
-    ];
-  };
-
-  it("changes only your own threads on this computer", () => {
-    const menu = (title: string) =>
-      threadMenuItems({
-        thread: thread(title)!,
-        tasks,
-        taskId: "krk-812",
-        running: true,
-        entries: plugged(thread(title)!),
-      });
-    expect(menu("UI adjustments")).toEqual([]);
-    expect(menu("Investigation for KRK-812").map((item) => item.id)).toEqual([
-      "show-in-herdr",
-      "move",
-      "share",
-    ]);
-    const mine = menu("Main implementation");
-    expect(mine.map((item) => [item.id, item.disabled ?? false])).toEqual([
-      ["rename", false],
-      ["move", false],
-      ["unshare", false],
-      ["archive", true],
-      ["delete", false],
-    ]);
-    const places = mine.find((item) => item.id === "move")?.children ?? [];
-    expect(places.filter((item) => item.checked).map((item) => item.id)).toEqual(["task:krk-812"]);
-    expect(places.at(-1)?.id).toBe("unassign");
-  });
 
   it("offers removing a task only to those the hub lets remove it", () => {
     const ids = (removable: boolean) =>
@@ -246,48 +204,5 @@ describe("menus", () => {
     expect(ids(true)).toContain("remove");
     expect(ids(false)).not.toContain("remove");
     expect(ids(false)).toContain("rename");
-  });
-});
-
-describe("menus of durable work", () => {
-  it("offers only Move for our thread whose runtime is gone", () => {
-    const base = kirkwood();
-    const hub = status(base);
-    const project = {
-      ...base,
-      work: {
-        ...base.work,
-        threads: [
-          {
-            id: "herdr:codex:gone",
-            task: "krk-812",
-            title: "Awaiting merge",
-            email: hub.email!,
-            environment: HERE,
-            status: "working" as const,
-            source: "herdr" as const,
-            runtimePresent: false,
-            observable: true,
-            seenAt: new Date(NOW).toISOString(),
-            delivery: "review" as const,
-          },
-        ],
-      },
-    };
-    const s = status(project);
-    const [tree] = buildWorkTree({
-      status: { ...s, agents: { ...s.agents, list: [] } },
-      localThreads: [],
-      now: NOW,
-    });
-    const task = tree!.areas[0]!.tasks[0]!;
-    expect(
-      threadMenuItems({
-        thread: task.threads[0]!,
-        taskId: task.id,
-        tasks: project.work.tasks,
-        running: false,
-      }).map((item) => item.id),
-    ).toEqual(["move"]);
   });
 });

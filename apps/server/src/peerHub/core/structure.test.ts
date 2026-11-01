@@ -30,12 +30,9 @@ const ENTRY_BUDGET = 150;
  * integrate and converge, with every jj call and parser in `client/`; `follow.ts` and
  * `operations.ts` are the seams to split along. 82 lines more than at that landing, for the fixes of
  * the simulated lab: the author alignment before a second converge, the fetch's budget, the person's name
- * on an undo and the push notice's fallback. Handoff's is its size when
- * `add-handoff-facts-and-review-policy` landed the delivery observation (design D1: git and jj read
- * in `client/delivery.ts`, the seam to split along) beside the package, its targets and its text.
- * Rooms' is its size when the review of `add-task-rooms` was fixed: consent and capacity checks in
- * `decide`, stuck deliveries, the marked cuts and the diff's search; `follow.ts` and `client/` are
- * the seams to split along.
+ * on an undo and the push notice's fallback. Rooms' is its size when the review of `add-task-rooms`
+ * was fixed: consent checks in `decide`, stuck deliveries, the marked cuts and the diff's search;
+ * `follow.ts` and `client/` are the seams to split along.
  */
 const CEILINGS: Readonly<Record<string, number>> = {
   jujutsu: 2354,
@@ -51,13 +48,9 @@ const SHARED_HELPERS: ReadonlySet<string> = new Set([
   "peerHub/peerText.ts",
   // The git transports and refs Peer lets through.
   "peerHub/gitSafety.ts",
-  // A work's delivery and its pull requests.
-  "peerHub/workLifecycle.ts",
-  // What a failed clone means.
-  "peerHub/cloneFailure.ts",
   // An agent's transcript.
   "peerHub/agentTranscript.ts",
-  // The runtime capacity policy, at the path T3's adapters import it from.
+  // What a workspace gives a thread, at the path T3's adapters import it from.
   "peerHub/hubPolicy.ts",
   // JSON settings files of agents' harnesses and editors, written with a backup.
   "peerHub/core/adapters/files.ts",

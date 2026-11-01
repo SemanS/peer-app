@@ -1,13 +1,13 @@
 /**
  * How Peer's work signals look, everywhere the Work views draw them: one color per kind of
- * conversation, so a chip reads the same in the sidebar, on a board card and on a task's page.
+ * conversation, so a chip reads the same in the sidebar and in a room.
  *
- * - needs: waits on a person (approval, answer, request) — amber
+ * - needs: waits on a person (approval, answer) — amber
  * - working: an agent runs — blue
- * - delivery: finished work, review, pull requests — green
- * - coordination: agent ↔ agent (overlaps, held resources) — orange
+ * - delivery: finished work, pull requests — green
+ * - coordination: agent ↔ agent (overlaps) — orange
  * - knowledge: task context — violet
- * - team: team ↔ agents (announcements, requests, watching) — teal
+ * - team: team ↔ agents (rooms, watching) — teal
  */
 import { projectColor } from "@t3tools/client-runtime/peer/work";
 

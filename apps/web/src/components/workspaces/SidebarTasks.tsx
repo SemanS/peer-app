@@ -245,30 +245,11 @@ function PluginSections({
 }) {
   return (
     <>
-      {plugins.map(({ id, needsYou }) =>
-        needsYou?.Component === undefined ? null : (
-          <needsYou.Component
-            key={id}
-            environmentId={environmentId}
-            status={status}
-            plugins={plugins}
-          />
+      {plugins.map(({ id, needsYou: Section }) =>
+        Section === undefined ? null : (
+          <Section key={id} environmentId={environmentId} status={status} />
         ),
       )}
-      {plugins
-        .filter((plugin) => plugin.workPanelPlace === "after-overlaps")
-        .map(({ id, workPanel: Section }) =>
-          Section === undefined ? null : (
-            <Section key={id} environmentId={environmentId} status={status} />
-          ),
-        )}
-      {plugins
-        .filter((plugin) => plugin.workPanelPlace !== "after-overlaps")
-        .map(({ id, workPanel: Section }) =>
-          Section === undefined ? null : (
-            <Section key={id} environmentId={environmentId} status={status} />
-          ),
-        )}
     </>
   );
 }

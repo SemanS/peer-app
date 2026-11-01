@@ -19,8 +19,8 @@ export function PeerApprovalBand({
   const peer = usePeerThread(environmentId, threadId);
   const navigate = useNavigate();
   if (peer === null) return null;
-  const { task, overlaps, held, project } = peer.signals;
-  if (task === undefined && overlaps.length === 0 && held === undefined) return null;
+  const { task, overlaps, project } = peer.signals;
+  if (task === undefined && overlaps.length === 0) return null;
   return (
     <div
       aria-label="Around this approval"
@@ -62,12 +62,6 @@ export function PeerApprovalBand({
           </span>
         </Badge>
       ))}
-      {held === undefined ? null : (
-        <Badge variant="coordination" size="control">
-          <span className="font-semibold">Held</span>
-          <span className="max-w-64 truncate font-normal text-foreground/80">{held}</span>
-        </Badge>
-      )}
     </div>
   );
 }

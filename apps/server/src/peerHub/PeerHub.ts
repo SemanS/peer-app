@@ -7,15 +7,12 @@ import * as PeerLog from "./core/log/PeerLog.ts";
  * A person signs in with their email address (the hub mails a one-time
  * code), then joins the workspaces their address qualifies for — by its
  * domain or an invite — or creates one. Each workspace tells this environment
- * which projects to check out, which agent tools they use, and
- * what shared AI capacity each one has. Provisioning stays local:
- * repositories are cloned with the person's own git credentials, projects are
- * ordinary T3 projects, and shared capacity becomes an ordinary provider
- * instance holding a per-member, per-project gateway key.
+ * which projects to check out and which agent tools they use. Provisioning
+ * stays local: repositories are cloned with the person's own git credentials,
+ * and projects are ordinary T3 projects.
  *
- * Personal capacity never passes through here. The hub never sees provider
- * logins, and `hubPolicy` keeps hub-provisioned (shared) instances on their
- * own project and personal ones on projects that accept them.
+ * Personal capacity never passes through here: the hub never sees provider
+ * logins.
  *
  * Peer's entry: `layer` builds core and the plugins and keeps them current, and `rpcLayer` serves
  * their WebSocket methods.

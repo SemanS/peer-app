@@ -336,13 +336,13 @@ const SIGNAL_HUES = {
     light: "oklch(0.488 0.243 264.376)",
     dark: "oklch(0.707 0.165 254.624)",
   },
-  // emerald: delivery — finished work, review, pull requests
+  // emerald: delivery — finished work, pull requests
   success: {
     base: "oklch(0.696 0.17 162.48)",
     light: "oklch(0.508 0.118 165.612)",
     dark: "oklch(0.765 0.177 163.223)",
   },
-  // orange: agent ↔ agent — overlaps, held resources
+  // orange: agent ↔ agent — overlaps
   "peer-coordination": {
     base: "oklch(0.705 0.213 47.604)",
     light: "oklch(0.553 0.195 38.402)",
@@ -354,7 +354,7 @@ const SIGNAL_HUES = {
     light: "oklch(0.491 0.27 292.581)",
     dark: "oklch(0.702 0.183 293.541)",
   },
-  // teal: team ↔ agents — announcements, requests, watching
+  // teal: team ↔ agents — rooms, watching
   "peer-team": {
     base: "oklch(0.704 0.14 182.503)",
     light: "oklch(0.511 0.096 186.391)",

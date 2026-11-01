@@ -22,14 +22,7 @@ export interface PeerSectionProps extends PeerEnvironmentProps {
 export type WorkspaceSectionPlace = "tasks" | "end";
 
 export interface PeerMobilePlugin {
-  readonly background?: ComponentType<{ readonly environmentIds: ReadonlyArray<EnvironmentId> }>;
   readonly id: PeerPluginId;
-  /** Readonly presentation of a registered feature, including its inactive state. */
-  readonly alwaysWorkspaceSections?: ReadonlyArray<{
-    readonly key: string;
-    readonly place: WorkspaceSectionPlace;
-    readonly Component: ComponentType<PeerSectionProps>;
-  }>;
   /** Sections of an environment on the Peer workspaces screen. */
   readonly workspaceSections?: ReadonlyArray<{
     readonly place: WorkspaceSectionPlace;

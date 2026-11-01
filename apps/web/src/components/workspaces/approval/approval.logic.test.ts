@@ -1,8 +1,6 @@
 import { EnvironmentId, ThreadId, type PeerHubStatus } from "@t3tools/contracts";
-import { LockIcon } from "lucide-react";
 import { describe, expect, it } from "vite-plus/test";
 
-import type { ProjectSignal } from "../slots.types";
 import type { WorkProjectNode, WorkThreadNode } from "../workTree.logic";
 import { approvalSignals, denyWithNote } from "./approval.logic";
 
@@ -102,44 +100,29 @@ const status = {
   },
 } as unknown as PeerHubStatus;
 
-const held: ProjectSignal = {
-  id: "resources",
-  label: "Held resources",
-  icon: LockIcon,
-  count: 1,
-  detail: "staging-db",
-  tone: "coordination",
-};
-
 describe("the Peer band of a waiting thread", () => {
-  it("names the thread's task, its project's overlaps with your agents and what is held", () => {
+  it("names the thread's task and its project's overlaps with your agents", () => {
     const signals = approvalSignals({
       tree: [booking],
       status,
       threadKey: "here:opera",
-      signals: () => [held],
     });
     expect(signals?.project.name).toBe("Booking");
     expect(signals?.task?.key).toBe("BKG-812");
     expect(signals?.overlaps).toEqual([{ id: "o1", topic: "payments/webhooks.ts", with: "Eva" }]);
-    expect(signals?.held).toBe("staging-db");
   });
 
-  it("knows a thread on no task, and nothing is held when the signal counts nothing", () => {
+  it("knows a thread on no task", () => {
     const signals = approvalSignals({
       tree: [booking],
       status,
       threadKey: "here:loose",
-      signals: () => [{ ...held, count: 0 }],
     });
     expect(signals?.task).toBeUndefined();
-    expect(signals?.held).toBeUndefined();
   });
 
   it("is nothing outside a Peer workspace project", () => {
-    expect(
-      approvalSignals({ tree: [booking], status, threadKey: "here:other", signals: () => [] }),
-    ).toBeNull();
+    expect(approvalSignals({ tree: [booking], status, threadKey: "here:other" })).toBeNull();
   });
 });
 

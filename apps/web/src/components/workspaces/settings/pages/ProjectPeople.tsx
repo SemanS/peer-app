@@ -35,7 +35,7 @@ import { useSettingsView } from "../useSettingsView";
 
 /**
  * A project's People tab (design artboard 04): whether the whole workspace or named people are on
- * the project, who they are with their allocation, and who leads. Leads and admins change it in a
+ * the project, who they are, and who leads. Leads and admins change it in a
  * draft that is saved through the review; everyone else reads it, with who may change it named.
  */
 export function ProjectPeople({ workspace, state }: ProjectPageProps) {

@@ -95,37 +95,19 @@ export function TaskRow({
     if (t3ProjectId !== undefined) void actions.startThread(scope, task.id, t3ProjectId);
   };
   const showMenu = async (position: MenuPosition) => {
-    const entries = plugins.flatMap(
-      (plugin) =>
-        plugin.taskMenu?.({
-          environmentId,
-          status,
-          workspace: scope.workspace,
-          project: projectState,
-          task,
-        }) ?? [],
-    );
     const choice = await pickFromMenu(
-      [
-        ...taskMenuItems({
-          task,
-          canStartThread: t3ProjectId !== undefined,
-          inReview: task.inReview === true,
-          areas,
-          area: taskArea,
-          tree,
-        }),
-        ...entries.map((entry) => entry.item),
-      ],
+      taskMenuItems({
+        task,
+        canStartThread: t3ProjectId !== undefined,
+        inReview: task.inReview === true,
+        areas,
+        area: taskArea,
+        tree,
+      }),
       position,
     );
-    const picked = entries.find(
-      (entry) =>
-        entry.item.id === choice || entry.item.children?.some((item) => item.id === choice),
-    );
     const moved = choice === null ? undefined : chosenArea(choice);
-    if (picked && choice !== null) picked.run(choice);
-    else if (moved !== undefined) {
+    if (moved !== undefined) {
       if ((moved.area ?? undefined) !== taskArea)
         void actions.moveTaskToArea(scope, task, moved.area);
     } else if (choice === "new-thread") startThread();

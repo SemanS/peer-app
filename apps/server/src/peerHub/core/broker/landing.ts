@@ -14,7 +14,7 @@
  *
  * @module peerHub/core/broker/landing
  */
-import { gitCommands } from "../../handoffCommands.ts";
+import { gitCommands } from "../../shellCommands.ts";
 import { cutText, plain } from "../../peerText.ts";
 import {
   type CoordinationView,

@@ -27,8 +27,8 @@ import { PeerSignIn } from "./PeerSignIn";
 import { organizationLine } from "./organizationLine.logic";
 import { PeerAdapters } from "./PeerAdapters";
 import { PeerPluginsSection } from "./PeerPluginsSection";
-import { usePeerMobilePlugins, PEER_MOBILE_PLUGINS } from "./slots";
-import { alwaysWorkspaceSectionsAt, workspaceSectionsAt } from "./slots.logic";
+import { usePeerMobilePlugins } from "./slots";
+import { workspaceSectionsAt } from "./slots.logic";
 
 /**
  * Peer workspaces: the way to the rooms, then for each environment selected in Settings signing in,
@@ -138,10 +138,7 @@ function PeerEnvironment({
               ) : null}
             </SettingsSection>
           ))}
-          {[
-            ...workspaceSectionsAt(plugins, "tasks"),
-            ...alwaysWorkspaceSectionsAt(PEER_MOBILE_PLUGINS, status, "tasks"),
-          ].map(({ key, Component }) => (
+          {workspaceSectionsAt(plugins, "tasks").map(({ key, Component }) => (
             <Component
               key={key}
               environmentId={environmentId}
@@ -157,10 +154,7 @@ function PeerEnvironment({
             message={message}
             onCoordinate={runCoordination}
           />
-          {[
-            ...workspaceSectionsAt(plugins, "end"),
-            ...alwaysWorkspaceSectionsAt(PEER_MOBILE_PLUGINS, status, "end"),
-          ].map(({ key, Component }) => (
+          {workspaceSectionsAt(plugins, "end").map(({ key, Component }) => (
             <Component
               key={key}
               environmentId={environmentId}

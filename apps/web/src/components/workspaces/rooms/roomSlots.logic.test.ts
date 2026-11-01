@@ -1,7 +1,7 @@
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { roomNeedsCount, roomPalette, roomTaskLabel } from "./roomSlots.logic";
+import { roomPalette, roomTaskLabel } from "./roomSlots.logic";
 
 const need = { workspace: "w", project: "p", task: "t1", seq: 1, author: "a", text: "", at: "" };
 const status = {
@@ -29,13 +29,6 @@ const status = {
     revs: { w: { p: { t1: 3, gone: 9 } }, other: { p: { t1: 1 } } },
   },
 } as unknown as PeerHubStatus;
-
-describe("Needs you's share of the rooms", () => {
-  it("counts what waits and each mention, and nothing without the plugin's status", () => {
-    expect(roomNeedsCount(status)).toBe(3);
-    expect(roomNeedsCount({})).toBe(0);
-  });
-});
 
 describe("a task's name in Needs you", () => {
   it("is its key, else its title, else its id", () => {

@@ -8,7 +8,6 @@ import { createContext, type ReactNode, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
 import type { ProviderInstanceEntry } from "../../providerInstances";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
-import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { getTriggerDisplayModelLabel } from "../chat/providerIconUtils";
 import type { WorkAgent } from "./workTree.logic";
 
@@ -103,21 +102,6 @@ export function agentLook(
     displayName: agent.harness,
     model: undefined,
   };
-}
-
-/** The agent's mark, where the Threads list draws it. */
-export function AgentMark({ look }: { readonly look: AgentLook | null }) {
-  if (look === null) return null;
-  return (
-    <ProviderInstanceIcon
-      driverKind={look.driverKind}
-      displayName={look.displayName}
-      accentColor={look.accentColor}
-      acpRegistryAgentId={look.acpRegistryAgentId}
-      acpRegistryIconUrl={look.acpRegistryIconUrl}
-      iconClassName="size-3.5 opacity-60"
-    />
-  );
 }
 
 /** "17h", "now": when a thread was last active, as the Threads list says it. */

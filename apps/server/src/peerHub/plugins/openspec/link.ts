@@ -55,10 +55,6 @@ const WHY: Partial<Record<PeerBriefLink["state"], string>> = {
   unreadable: "its repository cannot be read on this computer",
 };
 
-/** Where the agent's first prompt comes from, as the launch says it. */
-export const briefReason = (state: PeerBriefLink["state"]) =>
-  `From the saved brief (${WHY[state] ?? "the live change cannot be read"}).`;
-
 /**
  * The first prompt from a saved brief: a teammate's words, so fenced as data, with the open
  * checklist; a brief is bounded by the Hub, so this stays within the prompt limit.

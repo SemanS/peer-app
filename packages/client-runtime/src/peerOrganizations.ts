@@ -7,9 +7,6 @@ import * as Option from "effect/Option";
  * administrator founded for the person, the one the app works in, and an invitation's state.
  */
 
-/** The local keys that name a workspace; signing out forgets them so the next person starts clean. */
-export const WORKSPACE_STORAGE_KEYS = ["peer:settings-workspace", "peer:work-scope"] as const;
-
 /** Organizations founded for the signed-in person that wait for their answer. */
 export function pendingFoundings(
   status: Pick<PeerHubStatus, "signedIn" | "foundings"> | null,

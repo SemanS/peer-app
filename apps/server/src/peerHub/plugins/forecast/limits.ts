@@ -38,10 +38,8 @@ export const NOTICE_GAP_MS = 2 * 60_000,
 /** Explicit refresh rate and command detail bound. */
 export const REFRESH_GAP_MS = 30_000,
   COMMAND_FILES = 20;
-/** Wire snapshots and in-memory commit-pair LRU remain bounded. */
-export const SNAPSHOT_PAIRS = 30,
-  SNAPSHOT_FILES = 20,
-  MEMO_ENTRIES = 512;
+/** The in-memory commit-pair LRU remains bounded; `boundForecast` bounds the wire snapshots. */
+export const MEMO_ENTRIES = 512;
 /** Branch arguments and locally parsed conflict paths. */
 export const REF_BYTES = 200,
   MERGE_FILES = 50;

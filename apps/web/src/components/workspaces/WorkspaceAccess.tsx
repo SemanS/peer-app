@@ -38,7 +38,6 @@ import {
 import { withFinally } from "~/lib/withFinally";
 import { FoundingOffers } from "./FoundingOffers";
 import { useOpenPeerSettings } from "./settings/peerSettingsLinks";
-import { ownLimit } from "./workspaceMembers.logic";
 
 /** An environment's link to its Peer Hub: who is signed in, their workspaces, what they may join. */
 export function usePeerHubStatus(environmentId: EnvironmentId | null): PeerHubStatus | null {
@@ -807,33 +806,5 @@ function CreateWorkspaceForm({
         </Button>
       </div>
     </form>
-  );
-}
-
-/** The person's workspaces as a compact list (role and project count). */
-export function WorkspaceList({ status }: { readonly status: PeerHubStatus }) {
-  if (status.workspaces.length === 0) return null;
-  return (
-    <ul className="space-y-2">
-      {status.workspaces.map((workspace) => (
-        <li
-          key={workspace.slug}
-          className="flex items-center gap-3 rounded-lg border border-border bg-background px-3 py-3"
-        >
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium break-words">{workspace.name}</span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              {workspace.projects.length === 0
-                ? "No projects for you yet."
-                : `${workspace.projects.length} project${workspace.projects.length === 1 ? "" : "s"}: ${workspace.projects.map((p) => p.project.name).join(", ")}`}
-            </span>
-          </span>
-          {ownLimit(workspace) === undefined ? null : (
-            <Badge variant="outline">{ownLimit(workspace)}</Badge>
-          )}
-          {workspace.role === "member" ? null : <Badge variant="outline">{workspace.role}</Badge>}
-        </li>
-      ))}
-    </ul>
   );
 }

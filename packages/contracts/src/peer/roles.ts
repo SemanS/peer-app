@@ -26,9 +26,6 @@ export const PEER_SESSION_ROLES = ["review"] as const;
 export const PeerSessionRole = Schema.Literals(PEER_SESSION_ROLES);
 export type PeerSessionRole = typeof PeerSessionRole.Type;
 
-/** Who gave a session its role: its `person` in Peer, or the `agent` itself while it was clean. */
-export const PEER_ROLE_SETTERS = ["person", "agent"] as const;
-
 /**
  * One session's role, as the Hub keeps it: by its run (`rl:{slug}:{project}:{run}`) when the
  * session carries one, so a new session of the run keeps it, else by session.
@@ -42,7 +39,7 @@ export const PeerRoleRow = Schema.Struct({
   email: Schema.String,
   /** The computer that reported the session. */
   environment: Schema.String,
-  /** One of `PEER_ROLE_SETTERS`. */
+  /** Who gave the role: the session's `person` in Peer, or the `agent` itself while clean. */
   setBy: Schema.String,
   at: Schema.String,
   /** Its reported files changed through the shell while it had the role; content-free. */

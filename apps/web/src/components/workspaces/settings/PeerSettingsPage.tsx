@@ -108,15 +108,6 @@ export function PeerSettingsPage({
   );
 }
 
-/** What a page that is still being built says, and what it will hold. */
-export function ComingInThisChange({ children }: { readonly children?: ReactNode }) {
-  return (
-    <p className="text-sm text-muted-foreground">
-      Coming in this change{children === undefined ? "." : <>: {children}.</>}
-    </p>
-  );
-}
-
 /** Who to ask when a page holds what only a workspace's admins change. */
 export function AdminOnlyNote({ workspace }: { readonly workspace: PeerWorkspaceState }) {
   return (

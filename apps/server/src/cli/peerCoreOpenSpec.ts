@@ -30,15 +30,7 @@ import {
 import { readChange, readChanges } from "./openspecItems.ts";
 import type { OneShotIo } from "./peerCoreIo.ts";
 
-export {
-  areaOf,
-  changeTitle,
-  keyOf,
-  readChange,
-  readChanges,
-  titleOfId,
-  type Change,
-} from "./openspecItems.ts";
+export { areaOf, keyOf, readChanges, type Change } from "./openspecItems.ts";
 
 /** Per project (`workspace/project`), per item ref; a change's root's ref is its id. */
 export type ImportRecord = Readonly<Record<string, SyncRecord>>;

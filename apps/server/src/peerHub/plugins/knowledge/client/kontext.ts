@@ -13,12 +13,7 @@ import {
 import { plain } from "../../../peerText.ts";
 import { projectGuidance } from "./store.ts";
 
-export {
-  KontextClient,
-  runKontext,
-  type KontextClientShape,
-  type KontextRun,
-} from "../../../kontext.ts";
+export { KontextClient, type KontextClientShape, type KontextRun } from "../../../kontext.ts";
 
 export interface DistilledEntry {
   readonly kind: string;

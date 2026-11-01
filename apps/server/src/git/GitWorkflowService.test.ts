@@ -70,44 +70,47 @@ describe("GitWorkflowService", () => {
     cwd: "/repo",
     detail: "private detection detail",
   });
+  const invalidationMethods = [
+    "invalidateLocalStatus",
+    "invalidateRemoteStatus",
+    "invalidateStatus",
+  ] as const;
 
-  for (const detected of ["git", "jj", "missing", "failure"] as const) {
-    for (const method of [
-      "invalidateLocalStatus",
-      "invalidateRemoteStatus",
-      "invalidateStatus",
-    ] as const) {
-      it.effect(
-        `routes ${method} to ${detected === "jj" ? "jj" : "git"} for ${detected} detection`,
-        () => {
-          const gitInvalidate = vi.fn(() => Effect.void);
-          const jjInvalidate = vi.fn(() => Effect.void);
-          return Effect.gen(function* () {
-            const workflow = yield* GitWorkflowService.GitWorkflowService;
-            yield* workflow[method]("/repo");
-            expect(
-              detected === "jj" ? jjInvalidate : gitInvalidate,
-            ).toHaveBeenCalledExactlyOnceWith("/repo");
-            expect(detected === "jj" ? gitInvalidate : jjInvalidate).not.toHaveBeenCalled();
-          }).pipe(
-            Effect.provide(
-              makeLayer({
-                detect: () =>
-                  detected === "failure"
-                    ? Effect.fail(detectionFailure)
-                    : Effect.succeed(detected === "missing" ? null : handleFor(detected)),
-                gitManager: { [method]: gitInvalidate },
-                jj: { [method]: jjInvalidate },
-              }),
-            ),
-          );
-        },
+  it.effect.each(
+    (["git", "jj", "missing", "failure"] as const).flatMap((detected) =>
+      invalidationMethods.map((method) => ({
+        detected,
+        method,
+        target: detected === "jj" ? "jj" : "git",
+      })),
+    ),
+  )("routes $method to $target for $detected detection", ({ detected, method }) => {
+    const gitInvalidate = vi.fn(() => Effect.void);
+    const jjInvalidate = vi.fn(() => Effect.void);
+    return Effect.gen(function* () {
+      const workflow = yield* GitWorkflowService.GitWorkflowService;
+      yield* workflow[method]("/repo");
+      expect(detected === "jj" ? jjInvalidate : gitInvalidate).toHaveBeenCalledExactlyOnceWith(
+        "/repo",
       );
-    }
-  }
+      expect(detected === "jj" ? gitInvalidate : jjInvalidate).not.toHaveBeenCalled();
+    }).pipe(
+      Effect.provide(
+        makeLayer({
+          detect: () =>
+            detected === "failure"
+              ? Effect.fail(detectionFailure)
+              : Effect.succeed(detected === "missing" ? null : handleFor(detected)),
+          gitManager: { [method]: gitInvalidate },
+          jj: { [method]: jjInvalidate },
+        }),
+      ),
+    );
+  });
 
-  for (const detected of ["git", "unknown", "missing", "failure"] as const) {
-    it.effect(`preserves original Git facade behavior for ${detected} detection`, () => {
+  it.effect.each(["git", "unknown", "missing", "failure"] as const)(
+    "preserves original Git facade behavior for %s detection",
+    (detected) => {
       const resolveCommit = vi.fn(() => Effect.succeed({ commitSha: "git-head" }));
       const resolveBranchName = vi.fn(() => Effect.succeed("topic"));
       const listWorktreePaths = vi.fn(() => Effect.succeed(["/repo", "/git-worktree"]));
@@ -135,8 +138,9 @@ describe("GitWorkflowService", () => {
           }),
         ),
       );
-    });
-  }
+    },
+  );
+
   it.effect(
     "preserves Git command errors and tolerates Git workspace listing failure after detection fallback",
     () => {
@@ -236,8 +240,9 @@ describe("GitWorkflowService", () => {
     ),
   );
 
-  for (const gitFails of [false, true]) {
-    it.effect(`lists jj workspace roots alongside Git worktrees (Git failure: ${gitFails})`, () =>
+  it.effect.each([false, true])(
+    "lists jj workspace roots alongside Git worktrees (Git failure: %s)",
+    (gitFails) =>
       Effect.gen(function* () {
         const workflow = yield* GitWorkflowService.GitWorkflowService;
         assert.deepEqual(
@@ -271,11 +276,11 @@ describe("GitWorkflowService", () => {
           }),
         ),
       ),
-    );
-  }
+  );
 
-  for (const refName of ["topic", null]) {
-    it.effect(`returns the jj local status ref name ${refName}`, () =>
+  it.effect.each([{ refName: "topic" }, { refName: null }])(
+    "returns the jj local status ref name $refName",
+    ({ refName }) =>
       Effect.gen(function* () {
         const workflow = yield* GitWorkflowService.GitWorkflowService;
         assert.equal(yield* workflow.currentRefName("/repo"), refName);
@@ -297,11 +302,11 @@ describe("GitWorkflowService", () => {
           }),
         ),
       ),
-    );
-  }
+  );
 
-  for (const workspace of ["separate", "same-root", "git", "missing", "failure"] as const) {
-    it.effect(`validates a detected jj project's ${workspace} workspace`, () =>
+  it.effect.each(["separate", "same-root", "git", "missing", "failure"] as const)(
+    "validates a detected jj project's %s workspace",
+    (workspace) =>
       Effect.gen(function* () {
         const workflow = yield* GitWorkflowService.GitWorkflowService;
         assert.equal(
@@ -327,8 +332,7 @@ describe("GitWorkflowService", () => {
           }),
         ),
       ),
-    );
-  }
+  );
 
   it.effect("wraps jj driver failures with static facade details and preserves their causes", () =>
     Effect.gen(function* () {
@@ -399,8 +403,9 @@ describe("GitWorkflowService", () => {
     ),
   );
 
-  for (const kind of ["git", "unknown", null] as const) {
-    it.effect(`reports repository containment for ${kind}`, () =>
+  it.effect.each([{ kind: "git" }, { kind: "unknown" }, { kind: null }] as const)(
+    "reports repository containment for $kind",
+    ({ kind }) =>
       Effect.gen(function* () {
         const workflow = yield* GitWorkflowService.GitWorkflowService;
         assert.equal(yield* workflow.isRepository("/repo"), kind === "git");
@@ -411,8 +416,7 @@ describe("GitWorkflowService", () => {
           }),
         ),
       ),
-    );
-  }
+  );
 
   it.effect("returns an empty local status when no VCS repository is detected", () =>
     Effect.gen(function* () {
@@ -739,38 +743,40 @@ describe("GitWorkflowService", () => {
     );
   });
 
-  for (const method of [
-    "invalidateLocalStatus",
-    "invalidateRemoteStatus",
-    "invalidateStatus",
-  ] as const) {
-    for (const kind of ["git", "jj", null] as const) {
-      it.effect(
-        `routes ${method} to ${kind === "jj" ? "jj" : "git"} for ${kind ?? "no repository"}`,
-        () => {
-          const gitInvalidate = vi.fn(() => Effect.void);
-          const jjInvalidate = vi.fn(() => Effect.void);
+  it.effect.each(
+    invalidationMethods.flatMap((method) =>
+      (["git", "jj", null] as const).map((kind) => ({
+        kind,
+        method,
+        repository: kind ?? "no repository",
+        target: kind === "jj" ? "jj" : "git",
+      })),
+    ),
+  )("routes $method to $target for $repository", ({ kind, method }) => {
+    const gitInvalidate = vi.fn(() => Effect.void);
+    const jjInvalidate = vi.fn(() => Effect.void);
 
-          return Effect.gen(function* () {
-            const workflow = yield* GitWorkflowService.GitWorkflowService;
-            yield* workflow[method]("/repo");
-            yield* workflow[method]("/repo");
+    return Effect.gen(function* () {
+      const workflow = yield* GitWorkflowService.GitWorkflowService;
+      yield* workflow[method]("/repo");
+      yield* workflow[method]("/repo");
 
-            assert.equal(gitInvalidate.mock.calls.length, kind === "jj" ? 0 : 2);
-            assert.equal(jjInvalidate.mock.calls.length, kind === "jj" ? 2 : 0);
-          }).pipe(
-            Effect.provide(
-              makeLayer({
-                detect: () => Effect.succeed(kind === null ? null : handleFor(kind)),
-                gitManager: { [method]: gitInvalidate },
-                jj: { [method]: jjInvalidate },
-              }),
-            ),
-          );
-        },
-      );
-    }
-    it.effect(`keeps ${method} infallible when repository detection fails`, () => {
+      assert.equal(gitInvalidate.mock.calls.length, kind === "jj" ? 0 : 2);
+      assert.equal(jjInvalidate.mock.calls.length, kind === "jj" ? 2 : 0);
+    }).pipe(
+      Effect.provide(
+        makeLayer({
+          detect: () => Effect.succeed(kind === null ? null : handleFor(kind)),
+          gitManager: { [method]: gitInvalidate },
+          jj: { [method]: jjInvalidate },
+        }),
+      ),
+    );
+  });
+
+  it.effect.each(invalidationMethods)(
+    "keeps %s infallible when repository detection fails",
+    (method) => {
       const gitInvalidate = vi.fn(() => Effect.void);
       const jjInvalidate = vi.fn(() => Effect.void);
 
@@ -795,8 +801,8 @@ describe("GitWorkflowService", () => {
           }),
         ),
       );
-    });
-  }
+    },
+  );
 
   it.effect("removes a pre-flip Git worktree inside a Jujutsu project through the Git lane", () => {
     const gitRemoveWorktree = vi.fn(() => Effect.void);

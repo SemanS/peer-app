@@ -61,10 +61,11 @@ export function GitConfirmSheet(props: GitConfirmSheetProps) {
             action: confirmAction,
             branchName,
             includesCommit,
+            terminology,
             vcsTerminology,
           })
         : null,
-    [branchName, confirmAction, includesCommit, vcsTerminology],
+    [branchName, confirmAction, includesCommit, terminology, vcsTerminology],
   );
 
   const continuePendingAction = async () => {

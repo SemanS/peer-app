@@ -3,12 +3,7 @@ import * as DateTime from "effect/DateTime";
 
 import { latestFixedTimeRun } from "@t3tools/shared/scheduledTaskRuns";
 
-import {
-  isMissedFixedTimeRun,
-  isSameSchedule,
-  nextScheduledRunAt,
-  parseTimeOfDay,
-} from "./Schedule.ts";
+import { isMissedFixedTimeRun, isSameSchedule, nextScheduledRunAt } from "./Schedule.ts";
 
 describe("scheduled task schedule calculation", () => {
   it("skips to the next matching fixed-time weekday", () => {

@@ -94,6 +94,7 @@ export function useReviewSections(input: {
       canReadFiles || fileAccess.isPending ? (diffPreview.data?.sources ?? lastGitSections) : [],
     turnDiffById: reviewTurnDiffsBySectionId(readyCheckpoints, lastTurnDiffs),
     loadingGitSections: fileAccess.isPending || diffPreview.isPending,
+    vcsKind,
   });
   const selectedSectionId = resolveReviewSelectedSectionId(
     cachedSections,

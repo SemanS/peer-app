@@ -17,7 +17,7 @@
  * are made of them (`strayJoiners` drops the ones that join nothing).
  */
 const HIDDEN =
-  // eslint-disable-next-line no-control-regex, no-misleading-character-class -- the invisible characters are what it matches.
+  // eslint-disable-next-line no-misleading-character-class -- the invisible characters are what it matches.
   /[\u0000-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b\u200e\u200f\u202a-\u202e\u2060-\u206f\u3164\ufe00-\ufe0d\ufeff\uffa0\ufff9-\ufffb]|[\u{e0000}-\u{e007f}\u{e0100}-\u{e01ef}]/gu;
 
 /**

@@ -29,7 +29,6 @@ const MARGIN = 4_096;
  * controls, zero-width space, word joiner, byte order mark.
  */
 const HIDDEN =
-  // eslint-disable-next-line no-control-regex -- the control characters are what it matches.
   /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u061c\u200b\u200e\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/g;
 
 /** What looks like a credential, in the order it is replaced. */

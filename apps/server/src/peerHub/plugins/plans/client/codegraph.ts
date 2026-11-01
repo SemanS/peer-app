@@ -51,7 +51,7 @@ export function usable(status: unknown): boolean {
   );
 }
 
-// oxlint-disable-next-line eslint/no-control-regex -- Controls are never part of a symbol's name.
+// Controls are never part of a symbol's name.
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 const LISTED = /^- `([^`]+)` \(([^)]*)\)/;
 

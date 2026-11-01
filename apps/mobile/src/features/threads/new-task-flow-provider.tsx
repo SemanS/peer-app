@@ -69,16 +69,7 @@ import {
   resolveVcsTerminology,
   type VcsTerminology,
 } from "@t3tools/shared/vcs";
-import {
-  flattenQueuedThreadMessages,
-  threadOutboxManager,
-  type QueuedThreadMessage,
-} from "../../state/thread-outbox";
-import {
-  holdEditingQueuedMessage,
-  releaseEditingQueuedMessage,
-  useThreadOutboxMessages,
-} from "../../state/use-thread-outbox";
+import { type QueuedThreadMessage } from "../../state/thread-outbox";
 import {
   setPendingConnectionError,
   useRemoteConnectionStatus,

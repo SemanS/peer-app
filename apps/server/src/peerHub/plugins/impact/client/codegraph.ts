@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 import { commandPath } from "../../../core/local.ts";
 import { runProcess, type Runner } from "./process.ts";
 import { BudgetExceeded } from "../scheduler.ts";
-// oxlint-disable-next-line eslint/no-control-regex -- Controls are invalid identifiers and paths.
+// Controls are invalid identifiers and paths.
 const controls = /[\u0000-\u001f\u007f]/;
 export const repositoryPath = (value: string) =>
   value !== "" &&

@@ -112,7 +112,7 @@ describe("Peer plugins", () => {
       const core = yield* startedCore(yield* seedState(), [
         fakePlugin({ id: "find" }, seen),
         fakePlugin({ id: "memory", title: "Peer Memory", defaultEnabled: false }, seen),
-        fakePlugin({ id: "ask", available: false }, seen),
+        fakePlugin({ id: "observe", available: false }, seen),
       ]);
       assert.deepStrictEqual(yield* core.plugins.states, [
         { id: "find", title: "The find plugin", enabled: true, active: true },
@@ -123,15 +123,15 @@ describe("Peer plugins", () => {
         ["find"],
       );
       assert.isTrue(yield* core.plugins.isActive("find"));
-      assert.isFalse(yield* core.plugins.isActive("ask"));
+      assert.isFalse(yield* core.plugins.isActive("observe"));
       assert.isNull(yield* refusal(core.plugins.requireActive("find")));
       assert.strictEqual(
         yield* refusal(core.plugins.requireActive("memory")),
         "Peer Memory is turned off on this environment.",
       );
       assert.strictEqual(
-        yield* refusal(core.plugins.requireActive("ask")),
-        'There is no Peer plugin "ask" on this environment.',
+        yield* refusal(core.plugins.requireActive("observe")),
+        'There is no Peer plugin "observe" on this environment.',
       );
       // Only the active plugin's work runs.
       assert.strictEqual(yield* Queue.take(seen), "started");
@@ -251,7 +251,7 @@ describe("Peer plugins", () => {
               },
               seen,
             ),
-            fakePlugin({ id: "ask", available: false }, seen),
+            fakePlugin({ id: "observe", available: false }, seen),
           ],
           "phs_test",
         );

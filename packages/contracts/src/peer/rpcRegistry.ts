@@ -126,6 +126,7 @@ import {
 } from "./test-reports.rpc.ts";
 import { PEER_ROLES_METHODS, RolesRpcGroup, RolesRpcScopes } from "./roles.rpc.ts";
 import { PEER_ROOMS_METHODS, RoomsRpcGroup, RoomsRpcScopes } from "./rooms.rpc.ts";
+import { CardRpcGroup, CardRpcScopes, PEER_CARD_METHODS } from "./card.rpc.ts";
 import { PEER_RUNS_METHODS, RunsRpcGroup, RunsRpcScopes } from "./runs.rpc.ts";
 import {
   AcceptanceRpcGroup,
@@ -622,6 +623,7 @@ export const PEER_WS_METHODS = {
   ...PEER_TEST_REPORTS_METHODS,
   ...PEER_ROLES_METHODS,
   ...PEER_ROOMS_METHODS,
+  ...PEER_CARD_METHODS,
   ...PEER_ACCEPTANCE_METHODS,
   ...PEER_RUNS_METHODS,
 } as const;
@@ -662,6 +664,7 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   TestReportsRpcGroup,
   RolesRpcGroup,
   RoomsRpcGroup,
+  CardRpcGroup,
   AcceptanceRpcGroup,
   RunsRpcGroup,
 );
@@ -704,6 +707,7 @@ export const PEER_RPC_SCOPES = {
   ...TestReportsRpcScopes,
   ...RolesRpcScopes,
   ...RoomsRpcScopes,
+  ...CardRpcScopes,
   ...AcceptanceRpcScopes,
   ...RunsRpcScopes,
 } as const;

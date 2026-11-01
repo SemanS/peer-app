@@ -72,6 +72,8 @@ export function withLocalCoordination(
       isLocal(w)
         ? local.coordEvents(...args)
         : (host.coordEvents?.(w, ...args) ?? Promise.resolve([])),
+    createChat: (w, ...args) =>
+      isLocal(w) || host.createChat === undefined ? teamOnly() : host.createChat(w, ...args),
     createTask: (w, ...args) =>
       isLocal(w) || host.createTask === undefined ? teamOnly() : host.createTask(w, ...args),
     updateTask: (w, ...args) =>

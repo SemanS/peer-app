@@ -21,6 +21,9 @@ import { reminderText, START_LINE, stepText } from "./text.ts";
 
 /** An agent still booting is idle too: its typed prompt gets this long to arrive before a wake. */
 const PROMPT_SETTLES_MS = 30_000;
+/** How often agents' words may wake one session in an hour, so two agents cannot answer each other forever. */
+const AGENT_WAKES = 6;
+const HOUR_MS = 3_600_000;
 
 /** What the plugin keeps per session (`session.local("rooms")`). */
 export interface Local {
@@ -36,6 +39,12 @@ export interface Local {
   readonly told: Set<string>;
   /** It heard where a shared room's other projects are. */
   projectsTold?: boolean;
+  /** When agents' words woke it, in the last hour. */
+  agentWakes: number[];
+  /** The overlaps its room was told of. */
+  readonly overlaps: Set<string>;
+  /** Notes on lines since `peer ready`; absent before it. */
+  readyNotes?: number;
 }
 
 export const localOf = (session: PeerSessionView) =>
@@ -45,6 +54,8 @@ export const localOf = (session: PeerSessionView) =>
     unanswered: new Set(),
     remind: new Set(),
     told: new Set(),
+    agentWakes: [],
+    overlaps: new Set(),
   }));
 
 const toldOf = (session: PeerSessionView) => session.told?.("rooms") ?? localOf(session).told;
@@ -63,23 +74,26 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
       const own = localOf(session);
       const told = toldOf(session);
       const now = yield* Clock.currentTimeMillis;
+      own.agentWakes = own.agentWakes.filter((at) => now - at < HOUR_MS);
+      const wakesLeft = own.agentWakes.length < AGENT_WAKES;
       const candidates = rooms
         .waiting(session.run)
         .filter(
-          ({ ref, promptedAt }) =>
+          ({ ref, promptedAt, quiet, byAgent }) =>
             !told.has(ref) &&
             !own.offering.has(ref) &&
-            (promptedAt === undefined || (waking && now - promptedAt >= PROMPT_SETTLES_MS)),
+            (promptedAt === undefined || (waking && now - promptedAt >= PROMPT_SETTLES_MS)) &&
+            !(waking && (quiet === true || (byAgent === true && !wakesLeft))),
         );
       if (candidates.length === 0 || own.checking) return null;
       own.checking = true;
-      const step = stepText(
-        yield* rooms
-          .tellable(session.run, candidates)
-          .pipe(Effect.ensuring(Effect.sync(() => void (own.checking = false)))),
-      );
+      const sure = yield* rooms
+        .tellable(session.run, candidates)
+        .pipe(Effect.ensuring(Effect.sync(() => void (own.checking = false))));
+      const step = stepText(sure, session.task);
       if (step === null) return null;
       for (const ref of step.refs) own.offering.add(ref);
+      if (waking && sure.some(({ byAgent }) => byAgent === true)) own.agentWakes.push(now);
       // A first prompt can be lost, and its folders with it: what reaches the agent carries them.
       const projects = own.projectsTold ? undefined : yield* rooms.projectsOf(session.run);
       if (projects === undefined) return step satisfies PeerHookText;
@@ -89,6 +103,7 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
   const notice = (ctx: PeerHookContext) =>
     Effect.gen(function* () {
       const own = localOf(ctx.session);
+      yield* rooms.overlapLines(ctx.session, own.overlaps);
       const offered = yield* offer(ctx.session, ctx.waking === true);
       if (offered !== null) return offered;
       if (own.remind.size === 0) return null;

@@ -54,6 +54,7 @@ import {
   sealWork,
   shareWork,
 } from "../../core/workSnapshots.ts";
+import { cardOf } from "../../core/state/card.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import { runKeys } from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
@@ -62,7 +63,7 @@ import * as PeerWork from "../../core/work/PeerWork.ts";
 import { changeToReview, pushedRefs, roomDiff, workRun, worktreeOf } from "./client/diff.ts";
 import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/steps.ts";
 import { fetchPins, newestHandoff, pinnedRoot, readPin, storeOf } from "./client/snapshots.ts";
-import { runQueues, tellable } from "./client/queue.ts";
+import { hearsWhileWaiting, runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
 import { projectsText, roomReach, runRootsData } from "../../core/work/runRoots.ts";
 import {
@@ -75,7 +76,7 @@ import {
 } from "./client/start.ts";
 import { actOn, type FollowDeps, type HereRun } from "./follow.ts";
 import { roomsHub, type Place, type PostBody } from "./client/hub.ts";
-import { refOf, type Heard, type HeardKind } from "./text.ts";
+import { overlapLine, refOf, type Heard, type HeardKind } from "./text.ts";
 
 interface HeardJob {
   readonly kind: "heard";
@@ -163,11 +164,12 @@ const make = Effect.gen(function* () {
 
   const runsHere = (workspace: string, item: PeerRoomInboxItem, delivery: PeerRoomTarget) =>
     Effect.gen(function* () {
+      // A delivery may name a run on another task: the agent that asked from there.
       const live = new Set(
         (yield* agents.sessions).flatMap((session) =>
           session.workspace === workspace &&
           session.project === item.project &&
-          session.task === item.task &&
+          (session.task === item.task || session.run === delivery.run) &&
           session.run !== undefined
             ? [session.run]
             : [],
@@ -344,11 +346,38 @@ const make = Effect.gen(function* () {
       seq: item.message.seq,
       task: item.task,
       taskName,
-      author: state.nameOf(workspace, item.message.author.email),
+      author: `${state.nameOf(workspace, item.message.author.email)}${item.message.author.run === undefined ? "" : "'s agent"}`,
       owner: state.nameOf(workspace, me),
       text: item.message.text,
       anchor: item.message.anchor,
+      ...(item.message.author.run === undefined ? {} : { byAgent: true }),
     }));
+
+  /**
+   * A colleague's words to a run of this person here: it hears them at its next step, and its person
+   * still decides whether they start anything. Only their card's yes lets them wake an idle agent.
+   */
+  const hearWaiting = Effect.fn("Rooms.hearWaiting")(function* (
+    workspace: string,
+    item: PeerRoomInboxItem,
+    me: string,
+  ) {
+    const delivery = item.message.to.find(
+      (target) => target.kind === "agent" && target.email.toLowerCase() === me.toLowerCase(),
+    );
+    if (
+      delivery === undefined ||
+      delivery.run === undefined ||
+      !hearsWhileWaiting(delivery) ||
+      delivery.environment !== state.environmentId ||
+      queues.wasTold(delivery.run, refOf(item.task, item.message.seq))
+    )
+      return;
+    const { teammatesMayWake } = yield* cardOf(state);
+    const heard = yield* heardOf(workspace, item, "colleague", me);
+    queues.add(delivery.run, { ...heard, quiet: !teammatesMayWake });
+    if (teammatesMayWake) yield* agents.wake;
+  });
 
   const followDeps = (workspace: string, me: string): FollowDeps => ({
     me,
@@ -458,6 +487,9 @@ const make = Effect.gen(function* () {
       for (const job of unsent.values()) if (workspaceOf(job) === workspace) yield* handle(job);
       const deps = followDeps(workspace, email);
       yield* Effect.forEach(inbox.work, (item) => actOn(deps, item), { discard: true });
+      yield* Effect.forEach(inbox.waiting, (item) => hearWaiting(workspace, item, email), {
+        discard: true,
+      });
     }).pipe(Effect.ignore);
 
   const readAll = Effect.gen(function* () {
@@ -522,14 +554,27 @@ const make = Effect.gen(function* () {
       const { workspace, project, task, ...body } = input;
       return post({ workspace, project, task }, { ...body, environment: state.environmentId });
     },
+    /** The session as it is once it has a room: the first thing it says opens a chat. */
+    roomOf: (session: PeerSessionView) =>
+      session.run !== undefined
+        ? Effect.succeed(session)
+        : agents.openRoom(session.id).pipe(Effect.map((opened) => opened ?? session)),
     /** An agent's post, from its run; `peer room say` and its tool go through here. */
-    postAs: (session: PeerSessionView, run: string, body: Omit<PostBody, "environment" | "run">) =>
+    postAs: (
+      session: PeerSessionView,
+      run: string,
+      body: Omit<PostBody, "environment" | "run">,
+      elsewhere?: string,
+    ) =>
       Effect.gen(function* () {
         const place = {
           workspace: session.workspace,
           project: session.project,
-          task: session.task ?? "",
+          task: elsewhere ?? session.task ?? "",
         };
+        // Words in another task's room say nothing of the state of the work there.
+        if (elsewhere !== undefined && elsewhere !== session.task)
+          return yield* post(place, { ...body, run, environment: state.environmentId });
         // Sealed before the post, so the message is never ahead of the state it shows.
         const at = DateTime.formatIso(DateTime.makeUnsafe(yield* Clock.currentTimeMillis));
         const startedAt = (yield* state.read).persisted.runs?.[run]?.startedAt;
@@ -557,6 +602,40 @@ const make = Effect.gen(function* () {
         }
         return message;
       }),
+    /** Says once in the session's room that it touches what another agent touches. */
+    overlapLines: Effect.fn("Rooms.overlapLines")(function* (
+      session: PeerSessionView,
+      lines: Set<string>,
+    ) {
+      const run = session.run;
+      if (run === undefined || session.task === undefined) return;
+      const view = yield* agents.view(session.workspace);
+      for (const overlap of view.overlaps) {
+        if (
+          overlap.state !== "open" ||
+          !overlap.sessions.includes(session.id) ||
+          lines.has(overlap.id)
+        )
+          continue;
+        lines.add(overlap.id);
+        const other = view.sessions.find(
+          (candidate) => overlap.sessions.includes(candidate.id) && candidate.id !== session.id,
+        );
+        const subject = overlap.files.filter((file) => !file.startsWith("task:")).join(", ");
+        if (other === undefined || subject === "") continue;
+        yield* post(
+          { workspace: session.workspace, project: session.project, task: session.task },
+          {
+            op: `overlap-${overlap.id}`.slice(0, 64),
+            text: overlapLine(state.nameOf(session.workspace, other.email), subject),
+            to: [],
+            run,
+            mark: "overlap",
+            environment: state.environmentId,
+          },
+        ).pipe(Effect.ignore);
+      }
+    }),
     // What was read leaves Needs you: the Hub's list changes, and no ping says so.
     /** Where a run across projects works besides its own, in words; undefined for any other. */
     projectsOf: (run: string | undefined) =>

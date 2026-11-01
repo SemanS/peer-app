@@ -22,7 +22,7 @@ import * as Result from "effect/Result";
 import { clip, cutText, neutral } from "../../peerText.ts";
 import { scopeOf } from "../contexts/text.ts";
 import { generatedFile, shortId } from "../coordination/edits.ts";
-import { closerOf, statusText } from "../coordination/news.ts";
+import { statusText } from "../coordination/news.ts";
 import { BOARD_ALL } from "../index/board.ts";
 import { type CommandsOn, discoveryKey, INDEX_ALL, indexText } from "../index/text.ts";
 import type { PeerCommand } from "../plugin.ts";
@@ -143,7 +143,6 @@ const CORE_FLAGS: Readonly<Record<string, ReadonlyArray<string>>> = {
   archive: ["--cursor", "--limit", "--history", "--topic"],
   evidence: ["--cursor", "--limit"],
   inputs: ["--since", "--page", "--drop"],
-  note: ["--overlap"],
   resolve: ["--overlap"],
   log: ["--task", "--path"],
   task: TASK_FLAGS,
@@ -418,44 +417,6 @@ export async function runCli(
       );
       this.markSeen(session);
       return [out, ...blocks.filter((block) => block)].join("\n");
-    }
-    case "note": {
-      if (text === "")
-        throw usage("say what to note", 'run peer note "I only change submit() in pay.ts".');
-      await this.syncNow(session.workspace, 3000);
-      const targets = mine("open");
-      if (targets.length === 0) {
-        throw refused(
-          "you share no files with another agent right now, so there is no one to note to",
-          'peer room say "<text>" reaches your task\'s people and agents; peer ask <task> "<question>" another task\'s agents.',
-        );
-      }
-      // One command, one op; each overlap's note carries it with the overlap's id, so that it is
-      // never taken for another's however the hub scopes it.
-      const op = newOp();
-      let applied = false;
-      for (const overlap of targets) {
-        const updated = await hubWrite(
-          "note",
-          () =>
-            this.host.note(
-              session.workspace,
-              session.project,
-              overlap.id,
-              text,
-              session.id,
-              `${op}:${overlap.id}`.slice(0, 64),
-            ),
-          `run peer ${command} again when the requirement is met.`,
-          applied,
-        );
-        applied = true;
-        this.applyOverlap(session.workspace, updated);
-        this.acknowledge(session, overlap);
-      }
-      this.record("note.agent", { session: session.id, overlaps: targets.map((o) => o.id), text });
-      const closes = targets.every((o) => closerOf(o, view().sessions) === session.id);
-      return `Noted on overlap ${targets.map((o) => shortId(o.id)).join(", ")}; the other agent hears it at its next step, or wakes up if idle. ${closes ? `Once you agree, close it: ${this.cli} resolve "<agreement>".` : "Once you agree, the other agent closes it."}`;
     }
     case "resolve": {
       if (text === "")

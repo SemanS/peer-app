@@ -43,11 +43,13 @@ describe("what plugins give the broker", () => {
               { id: "memory", title: "Peer Memory", contributions: adding("app-runtime") },
             ]),
             built: Effect.succeed([]),
-            excluded: Effect.succeed([{ plugin: "ask", name: "ask", refused: "off" }]),
+            excluded: Effect.succeed([{ plugin: "observe", name: "observe", refused: "off" }]),
           }),
         ),
       );
-      assert.deepStrictEqual(given.excluded, [{ plugin: "ask", name: "ask", refused: "off" }]);
+      assert.deepStrictEqual(given.excluded, [
+        { plugin: "observe", name: "observe", refused: "off" },
+      ]);
       assert.deepStrictEqual(
         given.reportSessions.map(({ plugin }) => plugin),
         ["memory", "herdr"],

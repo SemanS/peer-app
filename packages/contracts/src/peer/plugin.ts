@@ -16,12 +16,12 @@ export const PEER_PLUGIN_IDS = [
   "requests",
   "observe",
   "knowledge",
-  "ask",
   "find",
   "memory",
   "webhooks",
   "slack",
 
+  "card",
   "audit",
   "tool-trust",
   "mcp",

@@ -185,6 +185,8 @@ export class PeerAgents extends Context.Service<
     ) => Effect.Effect<PeerHubContinueRunResult>;
     /** Queues a turn on a native session's Peer thread; false when it could not be queued. */
     readonly queueNative: (session: string, text: string, thread: string) => Effect.Effect<boolean>;
+    /** Gives a session on no task a chat, and so a room; its view, or nothing when none can open here. */
+    readonly openRoom: (session: string) => Effect.Effect<PeerSessionView | undefined>;
     /** A plugin's notice that wakes is ready: idle agents hear it now, not at the next report. */
     readonly wake: Effect.Effect<void>;
     /** Hands over the broker coordination runs on, or none once it stops (PeerCoordination does). */
@@ -379,6 +381,8 @@ const make = Effect.gen(function* () {
           (await broker?.host.queueNative?.(session, text, thread).catch(() => false)) ?? false,
       ),
     wake: ask((running) => running.wakeWaiters(), undefined),
+    openRoom: (session) =>
+      Effect.promise(async () => broker?.openRoom(session).catch(() => undefined)),
     attach: (next) =>
       Effect.sync(() => {
         stopHearing?.();

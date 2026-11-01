@@ -125,6 +125,13 @@ describe("the check before telling", () => {
     },
   );
 
+  it("tells a colleague's words a run hears while they wait for its owner", () => {
+    const heardWaiting = messageOf({
+      to: [{ kind: "agent", email: BOB, state: "waiting", run: "run_1" }],
+    });
+    assert.isTrue(stillTellable(heardWaiting, BOB));
+  });
+
   it("never tells a message gone from the room, or addressed to someone else", () => {
     assert.isFalse(stillTellable(undefined, BOB));
     assert.isFalse(stillTellable(inState("passed"), "eva@acme.test"));

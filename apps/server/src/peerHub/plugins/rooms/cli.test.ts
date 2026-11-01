@@ -4,9 +4,10 @@ import * as TestClock from "effect/testing/TestClock";
 import { PeerHubError } from "@t3tools/contracts";
 
 import { CliError, render, type PeerSessionView } from "../../core/plugin.ts";
+import type * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import type * as PeerState from "../../core/state/PeerState.ts";
 import type * as PeerWork from "../../core/work/PeerWork.ts";
-import { roomCommand } from "./cli.ts";
+import { roomCommands } from "./cli.ts";
 import { roomTools } from "./client/transport.ts";
 import { BOB, EVA, messageOf, sessionOf } from "./fixtures.test.ts";
 import { localOf } from "./hooks.ts";
@@ -33,14 +34,29 @@ const stand = (over: Partial<Rooms["Service"]> = {}) => {
     postAs: (_session: PeerSessionView, run: string, body: unknown) =>
       Effect.sync(() => {
         posted.push({ run, body });
-        return messageOf({ seq: 13 });
+        return messageOf({ seq: 13, to: [] });
       }),
     settled: (_run: string | undefined, ref: string) => void settled.push(ref),
+    roomOf: (session: PeerSessionView) => Effect.succeed(session),
     ...over,
   } as unknown as Rooms["Service"];
+  const statuses: string[] = [];
   const work = {
     taskName: () => Effect.succeed("VL-7 · Order totals"),
-    tasks: () => Effect.succeed([{ id: "vl-7", key: "VL-7", title: "Order totals" }]),
+    tasks: () =>
+      Effect.succeed([
+        { id: "vl-7", key: "VL-7", title: "Order totals" },
+        { id: "vl-8", key: "VL-8", title: "Receipts" },
+      ]),
+    updateTask: ({ status }: { readonly status: string }) =>
+      Effect.sync(() => void statuses.push(status)),
+  };
+  const agents = {
+    view: () =>
+      Effect.succeed({
+        sessions: [{ id: "codex:eva", project: "app", task: "vl-8", email: EVA }],
+        overlaps: [],
+      }),
   };
   const state = {
     email: Effect.succeed(BOB),
@@ -55,12 +71,14 @@ const stand = (over: Partial<Rooms["Service"]> = {}) => {
         },
       }),
   };
-  const command = roomCommand(
+  const commands = roomCommands(
     rooms,
     work as unknown as PeerWork.PeerWork["Service"],
     state as unknown as PeerState.PeerState["Service"],
+    agents as unknown as PeerAgents.PeerAgents["Service"],
   );
-  return { command, posted, settled };
+  const named = (name: string) => commands.find((one) => one.name === name)!;
+  return { command: named("room"), named, posted, settled, statuses };
 };
 
 const peerRoom = (
@@ -210,7 +228,7 @@ describe("peer room", () => {
   it.effect("is a usage refusal on no task", () =>
     Effect.gen(function* () {
       const said = yield* peerRoom(stand().command, [], sessionOf({ task: undefined }));
-      assert.match(said, /^peer: usage: This session is on no task, so it has no room\./);
+      assert.match(said, /^peer: usage: This session is on no task, so it has no room yet\./);
     }),
   );
 
@@ -287,13 +305,15 @@ describe("peer room say", () => {
     }),
   );
 
-  it.effect("refuses a session with no run, so an agent never posts as its person", () =>
-    Effect.gen(function* () {
-      const { command, posted } = stand();
-      const said = yield* peerRoom(command, ["say", "x"], sessionOf({ run: undefined as never }));
-      assert.match(said, /^peer: refused: this session has no run/);
-      assert.deepStrictEqual(posted, []);
-    }),
+  it.effect(
+    "refuses a session that cannot open a room, so an agent never posts as its person",
+    () =>
+      Effect.gen(function* () {
+        const { command, posted } = stand();
+        const said = yield* peerRoom(command, ["say", "x"], sessionOf({ run: undefined as never }));
+        assert.match(said, /^peer: refused: This session has no room/);
+        assert.deepStrictEqual(posted, []);
+      }),
   );
 
   it.effect("works from a review session: the role denies only edits and landing", () =>
@@ -346,4 +366,87 @@ describe("the agent tools", () => {
     assert.throws(() => say?.arguments({ text: "--reply 3" }), CliError);
     assert.throws(() => say?.arguments({ text: "x", to: ["--at"] }), CliError);
   });
+});
+
+describe("what an agent says of its work", () => {
+  it.effect("peer ready posts a mark, moves the task to review and asks for notes", () =>
+    Effect.gen(function* () {
+      const { named, posted, statuses } = stand();
+      const said = yield* peerRoom(named("ready"), ["Refunds work."]);
+      assert.include(said, "reread your diff");
+      assert.include(said, "Five notes at most");
+      const { body } = posted[0] as { body: { mark: string; text: string } };
+      assert.deepStrictEqual([body.mark, body.text], ["ready", "Refunds work."]);
+      assert.deepStrictEqual(statuses, ["review"]);
+    }),
+  );
+
+  it.effect("after peer ready the sixth note on a line is refused", () =>
+    Effect.gen(function* () {
+      const { command, named } = stand();
+      const session = sessionOf();
+      yield* peerRoom(named("ready"), [], session);
+      for (const line of [1, 2, 3, 4, 5])
+        assert.include(
+          yield* peerRoom(command, ["say", "note", "--at", `a.ts:${line}`], session),
+          "Posted",
+        );
+      assert.include(
+        yield* peerRoom(command, ["say", "more", "--at", "a.ts:6"], session),
+        "you left 5 notes",
+      );
+    }),
+  );
+
+  it.effect("peer blocked needs words, and says nothing else stops", () =>
+    Effect.gen(function* () {
+      const { named, posted } = stand();
+      assert.include(yield* peerRoom(named("blocked"), []), "say what you need");
+      assert.include(yield* peerRoom(named("blocked"), ["The", "key"]), "your person sees this");
+      assert.strictEqual((posted[0] as { body: { mark: string } }).body.mark, "blocked");
+    }),
+  );
+});
+
+describe("speaking to other agents", () => {
+  it.effect("--agent names a person's agent and --in writes in another task's room", () =>
+    Effect.gen(function* () {
+      const seen: unknown[] = [];
+      const { command } = stand({
+        postAs: ((_s: PeerSessionView, _r: string, body: unknown, elsewhere?: string) =>
+          Effect.sync(() => {
+            seen.push({ body, elsewhere });
+            return messageOf({
+              seq: 4,
+              to: [{ kind: "agent", email: EVA, state: "waiting", run: "run_eva" }],
+            });
+          })) as never,
+      });
+      const said = yield* peerRoom(command, ["say", "Why?", "--agent", "Eva", "--in", "VL-8"]);
+      assert.include(said, "Eva's agent hears it at its next step.");
+      const { body, elsewhere } = seen[0] as {
+        body: { to: ReadonlyArray<{ kind: string; email: string }> };
+        elsewhere: string;
+      };
+      assert.deepStrictEqual(body.to[0], { kind: "agent", email: EVA });
+      assert.strictEqual(elsewhere, "vl-8");
+    }),
+  );
+
+  it.effect("peer ask addresses the agents at work on the task, and says who hears it", () =>
+    Effect.gen(function* () {
+      const seen: unknown[] = [];
+      const { named } = stand({
+        postAs: ((_s: PeerSessionView, _r: string, body: unknown, elsewhere?: string) =>
+          Effect.sync(() => {
+            seen.push({ body, elsewhere });
+            return messageOf({ seq: 5, to: [{ kind: "agent", email: EVA, state: "waiting" }] });
+          })) as never,
+      });
+      const said = yield* peerRoom(named("ask"), ["VL-8", "Where", "is", "it?"]);
+      assert.include(said, "Eva's agent is not running, so it waits for its person.");
+      const { body, elsewhere } = seen[0] as { body: { text: string }; elsewhere: string };
+      assert.deepStrictEqual([body.text, elsewhere], ["Where is it?", "vl-8"]);
+    }),
+  );
 });

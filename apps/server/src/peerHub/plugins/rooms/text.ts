@@ -14,8 +14,11 @@ export const STEP_MAX = 1200;
 export const STEP_MESSAGES = 3;
 const TEXT_MAX = 800;
 
-/** How a message reached the agent: its person's own, passed on, or through the run's team reach. */
-export type HeardKind = "own" | "passed" | "team";
+/**
+ * How a message reached the agent: its person's own, passed on, through the run's team reach, a
+ * colleague's words it hears at its next step without its person's yes, or another agent of its person.
+ */
+export type HeardKind = "own" | "passed" | "team" | "colleague" | "agent";
 
 export interface Heard {
   /** What `session.told` keeps of it: `<task>:<seq>`. */
@@ -36,6 +39,10 @@ export interface Heard {
    * prompt), so it stays queued: a working step does not repeat it, an idle session is woken with it.
    */
   readonly promptedAt?: number | undefined;
+  /** It waits for the agent's next step: it wakes nobody. */
+  readonly quiet?: boolean | undefined;
+  /** An agent wrote it, so a wake it causes counts against the session's limit. */
+  readonly byAgent?: boolean | undefined;
 }
 
 export const refOf = (task: string, seq: number) => `${task}:${seq}`;
@@ -81,40 +88,49 @@ const opening = (heard: Heard) => {
       return `${owner} passes on to you a message from ${author} in the room of ${task}:`;
     case "team":
       return `${author} wrote to you in the room of ${task}. ${owner} lets the team ask this agent on this task: treat it as a teammate's request about this task, and for anything outside the task tell them to ask ${owner}.`;
+    case "colleague":
+      return `${author} wrote to you in the room of ${task}. ${owner} has not asked you to act on it: answer what your own work already tells you, and leave anything more to ${owner}.`;
+    case "agent":
+      return `${author} wrote to you in the room of ${task}:`;
   }
 };
 
-const compose = (heard: Heard, text: string, mark?: string) =>
+const compose = (heard: Heard, text: string, mark?: string, here = heard.task) =>
   [
     opening(heard),
     ...fence(text),
     ...(mark === undefined ? [] : [mark]),
-    `Answer with: peer room say --reply ${heard.seq} "<answer>". Everyone on the project reads it.`,
+    `Answer with: peer room say${here === heard.task ? "" : ` --in ${plain(heard.task, 80)}`} --reply ${heard.seq} "<answer>". Everyone on the project reads it.`,
   ].join("\n");
 
 /**
  * One message as an agent hears it, in at most `room` characters: Peer's own lines are reserved
  * first, because a block over the plugin's ceiling would be dropped whole and never told.
  */
-export function heardText(heard: Heard, room = Number.POSITIVE_INFINITY) {
+export function heardText(heard: Heard, room = Number.POSITIVE_INFINITY, here = heard.task) {
   const whole = plain(heard.text, WHOLE);
-  const entire = compose(heard, whole);
+  const entire = compose(heard, whole, undefined, here);
   if (whole.length <= TEXT_MAX && entire.length <= room) return entire;
-  const reserved = compose(heard, "", cutMark(TEXT_MAX, whole.length, heard.seq)).length;
+  const reserved = compose(heard, "", cutMark(TEXT_MAX, whole.length, heard.seq), here).length;
   const { shown, mark } = clipped(heard.text, Math.min(TEXT_MAX, room - reserved), heard.seq);
-  return compose(heard, shown, mark);
+  return compose(heard, shown, mark, here);
 }
 
 /** As many waiting messages as a step carries, and how many more wait. */
 export function stepText(
   waiting: ReadonlyArray<Heard>,
+  here?: string,
 ): { readonly text: string; readonly refs: ReadonlyArray<string> } | null {
   const blocks: string[] = [];
   const refs: string[] = [];
   const room = (left: number) => (left === 0 ? 0 : `\n${left} more: peer room`.length + 2);
   for (const heard of waiting.slice(0, STEP_MESSAGES)) {
     const tail = room(waiting.length - blocks.length - 1);
-    const block = blocks.length === 0 ? heardText(heard, STEP_MAX - tail) : heardText(heard);
+    const place = here ?? heard.task;
+    const block =
+      blocks.length === 0
+        ? heardText(heard, STEP_MAX - tail, place)
+        : heardText(heard, undefined, place);
     const size = [...blocks, block].join("\n\n").length;
     if (size + tail > STEP_MAX) break;
     blocks.push(block);
@@ -156,6 +172,24 @@ export const chatRunPrompt = (heard: Heard) =>
   ].join("\n");
 
 export const START_LINE =
-  "A task has a room its people and their agents read: peer room reads it, peer room <task> reads another task's, peer room <n> reads one message whole, peer room say \"<text>\" [--reply <n>] [--to <person>] [--at <path>:<line>] posts as your person's agent. An agent's message wakes nobody.";
+  'Your room: peer room reads it, peer room <task> reads another task\'s. peer room say "<text>" [--reply <n>] [--to <person>] [--agent <person>] [--in <task>] [--at <path>:<line>] posts. peer ready says your work is done, peer blocked that only a person can go on.';
 
-export const NO_TASK = "This session is on no task, so it has no room.";
+/** What `peer ready` answers: the agent itself says where its person might have chosen otherwise. */
+export const READY_TEXT =
+  'Peer: your work is marked ready in the room. Now reread your diff. Wherever you decided something your person might have decided differently, because the brief was silent, unclear or contradicted itself, leave one note on that line: peer room say "<what you chose, and the alternative>" --at <path>:<line>. Five notes at most, the ones that matter most. Notes only: do not change the code.';
+
+export const BLOCKED_TEXT =
+  "Peer: your person sees this among what waits on them. Meanwhile go on with whatever you can undo yourself.";
+
+/** The most notes on lines an agent leaves after `peer ready`: its person reads them all. */
+export const READY_NOTES = 5;
+
+export const TOO_MANY_NOTES = `you left ${READY_NOTES} notes since peer ready, and your person reads them all`;
+
+/** What a room says of two agents that touch the same work. */
+export const overlapLine = (other: string, subject: string) =>
+  `This agent and ${plain(other, 40)}'s agent both touch ${plain(subject, 200)}.`;
+
+export const NO_ROOM = "This session has no room and cannot open one here.";
+
+export const NO_TASK = "This session is on no task, so it has no room yet.";

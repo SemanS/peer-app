@@ -31,6 +31,7 @@ const hooksOf = (
   let wakes = 0;
   const rooms = {
     waiting: () => waiting,
+    overlapLines: () => Effect.void,
     projectsOf: () => Effect.succeed(projects),
     tellable: (_run: string | undefined, candidates: ReadonlyArray<Heard>) =>
       Effect.succeed(tellable(candidates)),
@@ -57,6 +58,38 @@ const read = (hooks: ReturnType<typeof hooksOf>["hooks"], session: PeerSessionVi
   hooks.notices[0]!.read(ctxOf(session));
 const refsOf = (said: unknown) =>
   typeof said === "object" && said !== null ? (said as { refs: string[] }).refs : [];
+
+describe("a colleague's words to a running agent", () => {
+  const waking = (hooks: ReturnType<typeof hooksOf>["hooks"], session: PeerSessionView) =>
+    hooks.notices[0]!.read({ ...ctxOf(session), waking: true });
+
+  it.effect("reach it at its next step and never wake it", () =>
+    Effect.gen(function* () {
+      const { hooks } = hooksOf([{ ...heard(12), quiet: true }]);
+      const session = sessionOf();
+      assert.strictEqual(yield* waking(hooks, session), null);
+      assert.deepStrictEqual(refsOf(yield* read(hooks, session)), ["vl-7:12"]);
+    }),
+  );
+
+  it.effect("wake it six times an hour at most when they are agents' words", () =>
+    Effect.gen(function* () {
+      const waiting = [1, 2, 3, 4, 5, 6, 7].map((seq) => ({ ...heard(seq), byAgent: true }));
+      const { hooks } = hooksOf(waiting);
+      const session = sessionOf();
+      for (const seq of [1, 2, 3, 4, 5, 6]) {
+        const said = yield* waking(hooks, session);
+        assert.isTrue(refsOf(said).length > 0, `wake ${seq}`);
+        localOf(session).offering.clear();
+        waiting.splice(0, refsOf(said).length);
+        if (waiting.length === 0) waiting.push({ ...heard(8), byAgent: true });
+      }
+      assert.strictEqual(yield* waking(hooks, session), null);
+      yield* TestClock.adjust("61 minutes");
+      assert.isTrue(refsOf(yield* waking(hooks, session)).length > 0, "an hour later");
+    }),
+  );
+});
 
 describe("a run across projects whose first prompt was lost", () => {
   it.effect("hears where its projects are with the message, once", () =>

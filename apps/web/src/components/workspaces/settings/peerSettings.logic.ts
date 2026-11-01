@@ -52,7 +52,7 @@ export const PROJECT_TABS = [
 ] as const;
 export type ProjectTab = (typeof PROJECT_TABS)[number];
 
-export const COMPUTER_SECTIONS = ["coordination", "tool-trust"] as const;
+export const COMPUTER_SECTIONS = ["card", "coordination", "tool-trust"] as const;
 export type ComputerSection = (typeof COMPUTER_SECTIONS)[number];
 
 export const DEFAULT_WORKSPACE_SECTION: WorkspaceSection = "general";
@@ -86,6 +86,7 @@ export const PROJECT_TAB_LABELS: Readonly<Record<ProjectTab, string>> = {
 };
 
 export const COMPUTER_SECTION_LABELS: Readonly<Record<ComputerSection, string>> = {
+  card: "Your card",
   coordination: "Coordination & plugins",
   "tool-trust": "Tool trust",
 };

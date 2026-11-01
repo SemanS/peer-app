@@ -6,7 +6,12 @@
  *
  * @module peerHub/plugins/rooms/client/queue
  */
-import type { PeerHubError, PeerRoomInbox, PeerRoomMessage } from "@t3tools/contracts";
+import type {
+  PeerHubError,
+  PeerRoomInbox,
+  PeerRoomMessage,
+  PeerRoomTarget,
+} from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
@@ -19,13 +24,17 @@ const CHECK_TIME = "800 millis";
 /** What may still reach a model; anything else, a newer Hub's state included, may not. */
 const TELLABLE: ReadonlySet<string> = new Set(["passed", "taken", "heard"]);
 
+/** A delivery that waits for its owner and that a running agent hears meanwhile, at its next step. */
+export const hearsWhileWaiting = (target: PeerRoomTarget) =>
+  target.state === "waiting" && target.run !== undefined;
+
 /** Whether a message as the Hub reads it now may be told to `me`'s agent. */
 export const stillTellable = (message: PeerRoomMessage | undefined, me: string) =>
   message?.to.some(
     (target) =>
       target.kind === "agent" &&
       target.email.toLowerCase() === me.toLowerCase() &&
-      TELLABLE.has(target.state ?? ""),
+      (TELLABLE.has(target.state ?? "") || hearsWhileWaiting(target)),
   ) === true;
 
 export const runQueues = () => {
@@ -73,8 +82,11 @@ export const runQueues = () => {
     /** Drops a workspace's messages the inbox no longer lists as work. */
     prune: (workspace: string, inbox: PeerRoomInbox) => {
       if (inbox.work.length >= WORK_LISTED) return;
+      const heard = inbox.waiting.filter(({ message }) => message.to.some(hearsWhileWaiting));
       const listed = new Set(
-        inbox.work.map(({ project, task, message }) => `${project}/${refOf(task, message.seq)}`),
+        [...inbox.work, ...heard].map(
+          ({ project, task, message }) => `${project}/${refOf(task, message.seq)}`,
+        ),
       );
       remove(
         (heard) => heard.workspace !== workspace || listed.has(`${heard.project}/${heard.ref}`),

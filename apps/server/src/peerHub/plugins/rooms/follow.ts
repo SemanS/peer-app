@@ -68,7 +68,7 @@ const isTeamReach = (message: PeerRoomMessage, delivery: PeerRoomTarget, me: str
 
 /** How the message reaches the agent: words only, the Hub already decided that it may. */
 export function kindOf(message: PeerRoomMessage, delivery: PeerRoomTarget, me: string): HeardKind {
-  if (same(message.author.email, me)) return "own";
+  if (same(message.author.email, me)) return message.author.run === undefined ? "own" : "agent";
   return delivery.by !== undefined && same(delivery.by, me) ? "passed" : "team";
 }
 
@@ -104,6 +104,16 @@ export function decide(
     return stood >= PEER_ROOM_START_GRACE_MS
       ? { do: "lost", run: named }
       : { do: "wait", ms: PEER_ROOM_START_GRACE_MS - Math.max(0, stood) };
+  }
+  // A person's agent reaches their other agents that run; it starts none.
+  if (message.author.run !== undefined && same(message.author.email, me)) {
+    const live = reached?.live === true ? reached : runs.find((run) => run.live);
+    const running = reached?.running === true ? reached : runs.find((run) => run.running);
+    if (live !== undefined && (named === undefined || live.id === named))
+      return { do: "take-offer", run: live.id };
+    return running === undefined
+      ? { do: "fail", reason: NOT_RUNNING }
+      : { do: "take-queue", run: running.id };
   }
   // Try again is a `pass` as Pass on is, and the Hub forgets the run it had. `by` says its owner sent
   // it on, and what a person sends on goes on with the work a run left, not beside it.

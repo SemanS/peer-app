@@ -103,7 +103,7 @@ describe("the Hub's change pings", () => {
         listening("requests", { changes: ["requests"] }, heard),
         listening("knowledge", { changes: ["knowledge.changed"], ownEcho: true }, heard),
         listening("find", { changes: ["requests"] }, heard, false),
-        listening("ask", { changes: ["done"] }, heard),
+        listening("observe", { changes: ["done"] }, heard),
         listening("memory", { changes: ["plans"] }, heard),
       ]);
       // Connecting is a resync for every active listener. Nobody follows `gossip`; this
@@ -130,7 +130,7 @@ describe("the Hub's change pings", () => {
   it.effect("read a workspace's work once for a burst, and skip what this environment did", () =>
     Effect.gen(function* () {
       const { heard, reacted } = yield* following((heard) => [
-        listening("ask", { changes: ["done"] }, heard),
+        listening("observe", { changes: ["done"] }, heard),
         listening("memory", { changes: ["plans"] }, heard),
       ]);
       assert.deepStrictEqual(yield* nextHeard(heard, 6), [

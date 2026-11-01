@@ -399,6 +399,12 @@ const make = Effect.gen(function* () {
       taskOfKeys(current(), workspace, project, keys, texts),
     tasks: (workspace, project) => tasksOf(current().work, workspace, project),
     taskName: (workspace, project, task) => taskName(current().work, workspace, project, task),
+    createChat: (workspace, projectId, title) =>
+      runPromise(
+        work
+          .createTask({ workspace, projectId, title: title.slice(0, 200), chat: true })
+          .pipe(Effect.map(({ createdTask }) => createdTask.id)),
+      ),
     createTask: (workspace, projectId, task) =>
       runPromise(work.createTask({ workspace, projectId, ...task }).pipe(Effect.asVoid)),
     updateTask: (workspace, projectId, taskId, change) =>

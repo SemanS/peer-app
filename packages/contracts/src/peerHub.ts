@@ -38,6 +38,7 @@ export * from "./peer/github.ts";
 export * from "./peer/herdr.ts";
 export * from "./peer/knowledge.ts";
 export * from "./peer/observe.ts";
+export * from "./peer/card.ts";
 export * from "./peer/requests.ts";
 
 /**

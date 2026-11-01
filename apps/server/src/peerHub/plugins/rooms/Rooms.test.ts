@@ -69,8 +69,8 @@ describe("the rooms plugin", () => {
   it("is defined as its Settings row says", () => {
     assert.strictEqual(RoomsPlugin.id, "rooms");
     assert.isTrue(RoomsPlugin.defaultEnabled);
-    assert.deepStrictEqual(RoomsPlugin.hubFeature, { id: "rooms", revision: 1 });
-    assert.deepStrictEqual(RoomsPlugin.commandNames, ["room"]);
+    assert.deepStrictEqual(RoomsPlugin.hubFeature, { id: "rooms", revision: 2 });
+    assert.deepStrictEqual(RoomsPlugin.commandNames, ["room", "ready", "blocked", "ask", "note"]);
   });
 
   it.effect("is inactive where the Hub does not serve rooms, and refuses saying so", () =>
@@ -323,7 +323,13 @@ describe("the status", () => {
           }),
         );
         const rooms = yield* roomsWhen(peer.status, (next) => next !== undefined);
-        assert.deepStrictEqual(rooms, { waiting: [], mentions: [], seqs: {}, revs: {} });
+        assert.deepStrictEqual(rooms, {
+          waiting: [],
+          mentions: [],
+          seqs: {},
+          revs: {},
+          rooms: {},
+        });
       }),
     ),
   );

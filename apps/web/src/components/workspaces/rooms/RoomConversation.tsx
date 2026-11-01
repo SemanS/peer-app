@@ -42,6 +42,13 @@ const ACTION_LABEL: Readonly<Record<RoomAction, string>> = {
   tryAgain: "Try again",
 };
 
+/** What an agent's message says of its work; a newer Hub's mark shows as it is. */
+const ROOM_MARK_LABELS: Readonly<Record<string, string>> = {
+  ready: "Ready",
+  blocked: "Blocked",
+  overlap: "Overlap",
+};
+
 /** The element a message is on, for what scrolls to it from the diff; seqs are per project. */
 export const roomMessageId = (seq: number, project?: string) =>
   `room-message-${project === undefined ? "" : `${project}-`}${seq}`;
@@ -241,6 +248,9 @@ function RoomMessage({
           <span className="text-xs">{formatShortTimestamp(message.at, timestampFormat)}</span>
           {author.kind === "agent" ? <Badge variant="outline">{author.name}</Badge> : null}
           {project === undefined ? null : <Badge variant="outline">{project}</Badge>}
+          {message.mark === undefined ? null : (
+            <Badge variant="secondary">{ROOM_MARK_LABELS[message.mark] ?? message.mark}</Badge>
+          )}
         </p>
         {anchor === undefined ? null : (
           <p className="flex min-w-0 flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">

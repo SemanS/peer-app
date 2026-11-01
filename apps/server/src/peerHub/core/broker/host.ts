@@ -238,6 +238,12 @@ export interface PeerBrokerHost {
       readonly executable?: boolean;
     },
   ) => Promise<void>;
+  /** Opens a chat of a project, a task nobody works from; its id. Absent: this Peer cannot. */
+  readonly createChat?: (
+    workspace: string,
+    project: string,
+    title: string,
+  ) => Promise<string | undefined>;
   /** Changes a task's title, area (empty clears it), status or place in the tree (`parent: ""` makes it a root). */
   readonly updateTask?: (
     workspace: string,

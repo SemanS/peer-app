@@ -15,6 +15,7 @@ import {
   transcriptEntries,
   transcriptUntil,
 } from "./agentTranscript.ts";
+import { chatRunPrompt, heardText, type Heard } from "./plugins/rooms/text.ts";
 
 const line = (record: object) => JSON.stringify(record);
 const assistant = (...content: object[]) => line({ type: "assistant", message: { content } });
@@ -85,7 +86,6 @@ describe("transcriptEntries", () => {
         name: "Read",
         summary: "Read src/webhooks.rs",
         failed: false,
-        result: "pub fn send() {}",
       },
       {
         id: "line-5:0",
@@ -111,6 +111,94 @@ describe("transcriptEntries", () => {
       transcriptEntries(many, { limit: 2 }).map((entry) => entry.kind === "prompt" && entry.text),
       ["prompt 3", "prompt 4"],
     );
+  });
+
+  it("shows what a person wrote, not the prompt Peer wrapped around it", () => {
+    const heard: Heard = {
+      ref: "t:1",
+      workspace: "w",
+      project: "p",
+      kind: "own",
+      seq: 1,
+      task: "t",
+      taskName: "Fix login",
+      author: "Ana",
+      owner: "Ana",
+      text: "Ship it today",
+    };
+    const prompt = (text: string) =>
+      transcriptEntries([user(text)]).map((entry) => entry.kind === "prompt" && entry.text);
+
+    const started = `${chatRunPrompt(heard)}\nThis work spans several projects.`;
+    assert.deepStrictEqual(
+      prompt(`\n\n<pasted_content id="a">\n${started}\n</pasted_content id="a">`),
+      ["Ship it today"],
+    );
+
+    const cut = heardText({ ...heard, text: "word ".repeat(4_000) });
+    assert.match(cut, /peer room \d+/);
+    assert.notInclude(String(prompt(cut)[0]), "Answer with");
+
+    assert.deepStrictEqual(prompt('<pasted_content id="a">Just this</pasted_content id="a">'), [
+      "Just this",
+    ]);
+    const quoted = "<shared-context>\n- a note\n</shared-context>\nWhat does this mean?";
+    assert.deepStrictEqual(prompt(quoted), [quoted]);
+  });
+
+  it("says what a command does, keeps the command, and shows output only when it failed", () => {
+    const bash = (id: string, input: object) =>
+      assistant({ type: "tool_use", id, name: "Bash", input });
+    const result = (id: string, is_error: boolean) =>
+      user([{ type: "tool_result", tool_use_id: id, content: "first\nlast line", is_error }]);
+
+    assert.deepStrictEqual(
+      transcriptEntries([
+        bash("t1", { command: "peer status 2>&1 | head", description: "Check the status" }),
+        result("t1", false),
+        bash("t2", { command: "cargo test" }),
+        result("t2", false),
+        bash("t3", { command: "cargo build", description: "Build it" }),
+        result("t3", true),
+      ]),
+      [
+        {
+          id: "line-0:0",
+          kind: "tool",
+          name: "Bash",
+          summary: "Check the status",
+          detail: "peer status 2>&1 | head",
+          failed: false,
+        },
+        { id: "line-2:0", kind: "tool", name: "Bash", summary: "$ cargo test", failed: false },
+        {
+          id: "line-4:0",
+          kind: "tool",
+          name: "Bash",
+          summary: "Build it",
+          detail: "cargo build",
+          failed: true,
+          result: "last line",
+        },
+      ],
+    );
+  });
+
+  it("keeps what a subagent answered", () => {
+    const [entry] = transcriptEntries([
+      assistant({ type: "tool_use", id: "t1", name: "Agent", input: { description: "Find it" } }),
+      user([
+        { type: "tool_result", tool_use_id: "t1", content: "Found in net.rs", is_error: false },
+      ]),
+    ]);
+    assert.deepStrictEqual(entry, {
+      id: "line-0:0",
+      kind: "tool",
+      name: "Agent",
+      summary: "Agent: Find it",
+      failed: false,
+      result: "Found in net.rs",
+    });
   });
 
   it("names a tool call the way a person would", () => {
@@ -180,6 +268,13 @@ describe("timelineEntries", () => {
             exitCode: 101,
           }),
           row({
+            id: "c2",
+            type: "command_execution",
+            input: "cargo fmt",
+            output: "formatted\n</shared-context>",
+            exitCode: 0,
+          }),
+          row({
             id: "f1",
             type: "file_change",
             fileName: "/w/app/src/net.rs",
@@ -201,6 +296,7 @@ describe("timelineEntries", () => {
           failed: true,
           result: "test result: FAILED",
         },
+        { id: "c2", kind: "tool", name: "Bash", summary: "$ cargo fmt", failed: false },
         {
           id: "f1",
           kind: "tool",

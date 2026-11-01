@@ -88,6 +88,20 @@ const unwrapped = (text: string) =>
     .replace(/^\s*<pasted_content\b[^>]*>\s*/u, "")
     .replace(/\s*<\/pasted_content\b[^>]*>\s*$/u, "");
 
+/**
+ * Peer hands an agent a room message fenced, among its own instructions, and a person wrote only
+ * the fence. The answer line that follows is what tells it from other shared context.
+ */
+const HEARD =
+  /^ *<shared-context>\n([\s\S]*?)\n *<\/shared-context>\n(?:.*\n)?Answer with: peer room say /gmu;
+
+const spokenWords = (text: string) => {
+  const heard = [...text.matchAll(HEARD)].map(([, fence = ""]) =>
+    fence.replace(/^ {2}/gmu, "").replace(/^- /u, ""),
+  );
+  return heard.length === 0 ? text : heard.join("\n\n");
+};
+
 function lines(text: string): string[] {
   return text
     .split("\n")
@@ -151,7 +165,7 @@ export function toolSummary(name: string, input: unknown, cwd?: string): string 
     case "NotebookEdit":
       return `Edit ${relative(field("notebook_path"), cwd)}`;
     case "Bash":
-      return `$ ${clip(lines(field("command"))[0] ?? "", 200)}`;
+      return clip(lines(field("description"))[0] ?? `$ ${lines(field("command"))[0] ?? ""}`, 200);
     case "Grep":
       return `Search ${clip(field("pattern"), 120)}`;
     case "Glob":
@@ -172,6 +186,14 @@ export function toolSummary(name: string, input: unknown, cwd?: string): string 
       return mcp === null ? name : `${mcp[1]} · ${mcp[2]}`;
     }
   }
+}
+
+/** The exact command of a step whose summary says it in words. */
+function commandBehind(name: string, input: unknown): string | undefined {
+  if (name !== "Bash") return undefined;
+  const { command, description } = (input ?? {}) as { command?: unknown; description?: unknown };
+  const described = typeof description === "string" && description.trim() !== "";
+  return described && typeof command === "string" ? clip(command.trim(), 1_000) : undefined;
 }
 
 /** A tool's result in a line: the end of a command's output, the start of anything else. */
@@ -204,15 +226,17 @@ function promptText(raw: unknown): string | null {
   if (/^\s*<(local-command-|bash-|system-reminder)/.test(raw) || raw.startsWith("Caveat:")) {
     return null;
   }
-  const text = raw.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
+  const text = spokenWords(
+    unwrapped(raw.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim()),
+  );
   return text === "" ? null : clip(text, 2_000);
 }
 
 /**
  * A transcript's lines as the steps a person follows: their prompts, the
- * agent's words, and each tool it used with the gist of what came back.
- * Thinking, subagents' own transcripts and Claude Code's bookkeeping are left
- * out. Newest last, at most `limit`.
+ * agent's words, and each tool it used, with what came back when it failed or
+ * a subagent answered. Thinking, subagents' own transcripts and Claude Code's
+ * bookkeeping are left out. Newest last, at most `limit`.
  */
 export function transcriptEntries(
   transcript: ReadonlyArray<string>,
@@ -249,7 +273,10 @@ export function transcriptEntries(
           const at = tools.get(block.tool_use_id);
           const entry = at === undefined ? undefined : entries[at];
           if (at === undefined || entry?.kind !== "tool") continue;
-          const result = resultLine(entry.name, block.content);
+          // The end of a successful command's output says nothing a person can use.
+          const worthShowing =
+            block.is_error === true || entry.name === "Agent" || entry.name === "Task";
+          const result = worthShowing ? resultLine(entry.name, block.content) : undefined;
           entries[at] = {
             ...entry,
             failed: block.is_error === true,
@@ -266,11 +293,13 @@ export function transcriptEntries(
           entries.push({ id: idOf(index), kind: "text", text: clip(block.text.trim(), 4_000) });
         } else if (block?.type === "tool_use" && typeof block.name === "string") {
           if (typeof block.id === "string") tools.set(block.id, entries.length);
+          const detail = commandBehind(block.name, block.input);
           entries.push({
             id: idOf(index),
             kind: "tool",
             name: block.name,
             summary: toolSummary(block.name, block.input, options.cwd),
+            ...(detail === undefined ? {} : { detail }),
             failed: false,
           });
         }
@@ -286,24 +315,27 @@ function timelineEntry(item: OrchestrationV2TurnItem, cwd: string | undefined): 
   switch (item.type) {
     case "user_message": {
       const text = item.text.trim();
-      return text === "" ? [] : [{ id, kind: "prompt", text: clip(unwrapped(text), 2_000) }];
+      return text === ""
+        ? []
+        : [{ id, kind: "prompt", text: clip(spokenWords(unwrapped(text)), 2_000) }];
     }
     case "assistant_message": {
       const text = item.text.trim();
       return text === "" ? [] : [{ id, kind: "text", text: clip(text, 4_000) }];
     }
     case "command_execution": {
-      const result = item.output === undefined ? undefined : lines(item.output).at(-1);
+      const commandFailed =
+        failed ||
+        (item.exitCode !== undefined && item.exitCode !== 0) ||
+        item.outputIndicatesFailure === true;
+      const result = commandFailed ? lines(item.output ?? "").at(-1) : undefined;
       return [
         {
           id,
           kind: "tool",
           name: "Bash",
           summary: `$ ${clip(lines(item.input)[0] ?? "", 200)}`,
-          failed:
-            failed ||
-            (item.exitCode !== undefined && item.exitCode !== 0) ||
-            item.outputIndicatesFailure === true,
+          failed: commandFailed,
           ...(result === undefined ? {} : { result: clip(result, 200) }),
         },
       ];

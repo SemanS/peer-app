@@ -1000,27 +1000,6 @@
       "count": 4
     }
   },
-  "apps/server/src/peerHub/plugins/find/Find.ts": {
-    "t3code/no-em-dash-copy": {
-      "count": 2
-    },
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/find/findModel.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/find/findModel.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/plugins/github/GitHub.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1771,19 +1750,6 @@
   "apps/server/src/peerHub/plugins/tool-trust/trustStore.ts": {
     "t3code/prefer-effect-fn": {
       "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/usage/privacy.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/usage/reporter.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 5
     }
   },
   "apps/server/src/vcs/JjAvailability.test.ts": {
@@ -2627,11 +2593,6 @@
   },
   "apps/web/src/components/workspaces/test-reports/index.ts": {
     "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/usage/WorkspaceUsagePage.tsx": {
-    "t3code/no-unreasoned-state-sync": {
       "count": 1
     }
   },

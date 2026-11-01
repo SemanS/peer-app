@@ -1,4 +1,3 @@
-import { UsagePlugin } from "../plugins/usage/index.ts";
 import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
 import { SettlePlugin } from "../plugins/settle/index.ts";
 import { ImpactPlugin } from "../plugins/impact/index.ts";
@@ -23,7 +22,6 @@ import { AuditPlugin } from "../plugins/audit/index.ts";
 import { AnnouncementsPlugin } from "../plugins/announcements/index.ts";
 import { AskPlugin } from "../plugins/ask/index.ts";
 import { CapacityPlugin } from "../plugins/capacity/index.ts";
-import { FindPlugin } from "../plugins/find/index.ts";
 import { GitHubPlugin } from "../plugins/github/index.ts";
 import { HerdrPlugin } from "../plugins/herdr/index.ts";
 import { JujutsuPlugin } from "../plugins/jujutsu/index.ts";
@@ -80,7 +78,6 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   ObservePlugin,
   KnowledgePlugin,
   AskPlugin,
-  FindPlugin,
   MemoryPlugin,
 
   AuditPlugin,
@@ -90,7 +87,6 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   NeedsYouPlugin,
   SettlePlugin,
   ResourcesPlugin,
-  UsagePlugin,
   ImpactPlugin,
   OwnershipPlugin,
   PlansPlugin,

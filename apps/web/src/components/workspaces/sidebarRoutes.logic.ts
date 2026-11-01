@@ -28,7 +28,6 @@ const TASK_SCREENS: ReadonlySet<string> = new Set([
   "knowledge",
   "memory",
   "team",
-  "team-usage",
   "overlap",
   "observe",
   "agent",
@@ -102,7 +101,7 @@ export function routeForView(input: {
 }
 
 /** Screens this app no longer has: a person's last Work screen may still name one. */
-const GONE_SCREENS: ReadonlySet<string> = new Set(["integration"]);
+const GONE_SCREENS: ReadonlySet<string> = new Set(["integration", "team-usage"]);
 
 /** A remembered address worth going back to: a path on this app, nothing that leaves it. */
 function sanitizeRoute(value: unknown): string | undefined {
@@ -142,7 +141,6 @@ export function activeRouteKey(
 ): string | null {
   const { agentId, workspace, project, scope, task, environment, thread } = params;
   if (agentId) return `agent:${agentId}`;
-  if (workspace && pathname.split("/")[1] === "team-usage") return `usage:${workspace}`;
   if (workspace && project && scope) return `context:${workspace}:${project}:${scope}`;
   if (workspace && project && task) return `task:${workspace}:${project}:${task}`;
   if (workspace && project) {

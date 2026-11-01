@@ -373,7 +373,7 @@ describe("plugins' verdicts on tool calls", () => {
 
   it("stops an edit a plugin denies before the hub hears of it", async () => {
     let asked = 0;
-    const guard = plugin("find", {
+    const guard = plugin("audit", {
       hooks: {
         preTool: {
           on: "edits",
@@ -489,7 +489,7 @@ describe("plugins' verdicts on tool calls", () => {
 
   it("applies a plugin's fallback when it misses its budget, logs it, and still asks the hub", async () => {
     let asked = 0;
-    const slow = plugin("find", {
+    const slow = plugin("audit", {
       hooks: {
         preTool: {
           on: "all",
@@ -537,7 +537,7 @@ describe("plugins' verdicts on tool calls", () => {
       expect(
         (await logged(fixture)).find((line) => line.event === "plugin.verdict.fallback"),
       ).toMatchObject({
-        plugin: "find",
+        plugin: "audit",
         session: "claude:one",
         paths: ["src/pay.ts"],
         reason: "budget",

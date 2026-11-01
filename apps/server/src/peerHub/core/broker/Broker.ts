@@ -154,7 +154,7 @@ export class CoordinationBroker {
   readonly presettled = new Map<string, Set<string>>();
   /** Copies of the project's other works' contexts being made, per workspace. */
   readonly boardMirroring = new Map<string, Promise<void>>();
-  /** Ends plugins' commands still running when the broker stops (a model a `peer find` asked). */
+  /** Ends plugins' commands still running when the broker stops. */
   readonly stopping = new AbortController();
   /** Who hears that a workspace's view changed (`PeerAgents.viewChanges`). */
   readonly viewListeners = new Set<(workspace: string) => void>();

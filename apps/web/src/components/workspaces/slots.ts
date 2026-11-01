@@ -3,7 +3,6 @@ import { plansWebPlugin } from "./plans";
 import { agreementsWebPlugin } from "./agreements";
 import { changesWebPlugin } from "./changes";
 
-import { usageWebPlugin } from "./usage";
 import { handoffWebPlugin } from "./handoff";
 import { needsYouWebPlugin } from "./needs-you";
 import { settleWebPlugin } from "./settle";
@@ -65,7 +64,6 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   settleWebPlugin,
   resourcesWebPlugin,
 
-  usageWebPlugin,
   impactWebPlugin,
   ownershipWebPlugin,
   plansWebPlugin,

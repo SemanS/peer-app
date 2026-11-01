@@ -100,7 +100,7 @@ export function boardLine(
 }
 
 /**
- * Whether an agent may run a plugin's `peer` command now (`ask`, `find`, `knowledge`): Peer's own
+ * Whether an agent may run a plugin's `peer` command now (`ask`, `knowledge`): Peer's own
  * texts name a plugin's command only while its plugin is active.
  */
 export type CommandsOn = (command: string) => boolean;
@@ -136,9 +136,6 @@ function howToUse(cli: string, on: CommandsOn): string {
     `\`${cli} context <task>\` reads a work's shared context`,
     ...(on("ask") ? [`\`${cli} ask <task> "<question>"\` asks the agents at work on it`] : []),
     ...(on("knowledge") ? [`\`${cli} knowledge <id>\` reads a decision of the project`] : []),
-    ...(on("find")
-      ? [`\`${cli} find "<what you will do>"\` lets a model look when you cannot tell`]
-      : []),
   ];
   const listed =
     reads.length === 1 ? reads[0] : `${reads.slice(0, -1).join(", ")}, and ${reads.at(-1)}`;

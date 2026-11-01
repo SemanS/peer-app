@@ -268,9 +268,6 @@ const PEER_METHOD_NAMES = [
   "peer.testReports.setOwner",
   "peer.testReports.inherited",
   "peer.rooms.withdraw",
-  "peer.usage.overview",
-  "peer.usage.setSharing",
-  "peer.usage.sharing",
   "peerHub.answerAgentTrust",
 ];
 

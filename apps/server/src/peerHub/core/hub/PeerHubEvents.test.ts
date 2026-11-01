@@ -102,7 +102,7 @@ describe("the Hub's change pings", () => {
       const { heard } = yield* following((heard) => [
         listening("requests", { changes: ["requests"] }, heard),
         listening("knowledge", { changes: ["knowledge.changed"], ownEcho: true }, heard),
-        listening("find", { changes: ["requests"] }, heard, false),
+        listening("audit", { changes: ["requests"] }, heard, false),
         listening("ask", { changes: ["done"] }, heard),
         listening("memory", { changes: ["plans"] }, heard),
       ]);

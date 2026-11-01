@@ -88,7 +88,6 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // A review policy accepts handoffs in the name of the lead who set it.
   [WS_METHODS.peerAcceptanceSetReviewPolicy]: AuthOrchestrationOperateScope,
   // Consent to send this person's usage off the computer; turning it off erases it on the Hub.
-  [WS_METHODS.peerUsageSetSharing]: AuthAccessWriteScope,
   // These also need the terminal scope: see NATIVE_CLI_METHODS.
   [WS_METHODS.nativeCliStart]: AuthOrchestrationOperateScope,
   [WS_METHODS.nativeCliFinish]: AuthOrchestrationOperateScope,

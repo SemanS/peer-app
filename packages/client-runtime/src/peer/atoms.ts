@@ -1,4 +1,3 @@
-import { createPeerUsageAtoms } from "./usage.ts";
 import { createPeerImpactAtoms } from "./impact.ts";
 import { createPeerPlansAtoms } from "./plans.ts";
 import { createPeerAgreementsAtoms } from "./agreements.ts";
@@ -36,7 +35,6 @@ export function createPeerPluginAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ) {
   return {
-    ...createPeerUsageAtoms(runtime),
     peerResources: createResourcesEnvironmentAtoms(runtime),
     peerAnnouncements: createAnnouncementsEnvironmentAtoms(runtime),
     ...createPeerHerdrAtoms(runtime),

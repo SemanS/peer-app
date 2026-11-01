@@ -165,7 +165,6 @@
         "src/components/workspaces/settings/webhookForm.logic.ts": ["exports"],
         "src/components/workspaces/task/runs.logic.ts": ["exports"],
         "src/components/workspaces/task/task.logic.ts": ["exports"],
-        "src/components/workspaces/usage/usagePalette.ts": ["exports"],
         "src/components/workspaces/vcsWords.ts": ["exports"],
         // Upstream exports read only by upstream's shell or tests, which Peer's shell
         // replaced. Removing the keyword would conflict on the next upstream merge.

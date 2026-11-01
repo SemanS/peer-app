@@ -149,7 +149,6 @@ describe("the index when the agent asks for it (`peer index`)", () => {
       "`peer context <task>`",
       '`peer ask <task> "<question>"`',
       "`peer knowledge <id>`",
-      '`peer find "<what you will do>"`',
     ]) {
       assert.include(text, command);
     }
@@ -188,7 +187,6 @@ describe("the commands the index names", () => {
       'read it first (`peer context <task>`; `peer ask <task> "<question>"` reaches its agents): a read costs one command, work done twice costs far more.',
     );
     assert.notInclude(asked, "peer knowledge");
-    assert.notInclude(asked, "peer find");
     assert.include(
       askIndexText({
         works: [KRK11],
@@ -226,7 +224,6 @@ describe("what goes with an ask", () => {
       "Before you build for this ask, check whether any of these shares a topic, data or a function with it, even loosely, or an `.ai` entry named above governs what you will touch",
     );
     assert.include(text, "a read costs one command, work done twice costs far more");
-    assert.include(text, '`peer find "<what you will do>"`');
   });
 
   it("does not mention `.ai` when the project has no entries", () => {

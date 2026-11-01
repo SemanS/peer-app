@@ -197,12 +197,12 @@ describe("the Peer status", () => {
 
   it.effect("gives a later plugin a field of its own, omitted while it is inactive", () =>
     Effect.gen(function* () {
-      const { status, plugins } = yield* startedCore([slicePlugin("find", { searches: 3 })]);
+      const { status, plugins } = yield* startedCore([slicePlugin("audit", { searches: 3 })]);
       const on = yield* status.publish;
-      assert.deepStrictEqual(Object.getOwnPropertyDescriptor(on, "find")?.value, { searches: 3 });
+      assert.deepStrictEqual(Object.getOwnPropertyDescriptor(on, "audit")?.value, { searches: 3 });
 
-      yield* plugins.setPlugin({ id: "find", enabled: false });
-      assert.isFalse(Object.hasOwn(yield* status.publish, "find"));
+      yield* plugins.setPlugin({ id: "audit", enabled: false });
+      assert.isFalse(Object.hasOwn(yield* status.publish, "audit"));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
@@ -270,7 +270,7 @@ describe("the Peer status", () => {
     () =>
       Effect.gen(function* () {
         const view = bindPlugin({
-          id: "find",
+          id: "audit",
           title: "Test view",
           summary: "Projection only",
           defaultEnabled: true,

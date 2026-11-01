@@ -213,7 +213,6 @@ export function statusText(input: {
     `${input.cli} index`,
     `${input.cli} context [<task>]`,
     ...(on("knowledge") ? [`${input.cli} knowledge [<id or words>]`] : []),
-    ...(on("find") ? [`${input.cli} find "<what you will do>"`] : []),
     ...(on("ask") ? [`${input.cli} ask <task> "<question>"`] : []),
     `${input.cli} note "<text>"`,
     `${input.cli} resolve "<agreement>"`,

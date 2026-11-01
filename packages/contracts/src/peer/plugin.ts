@@ -17,7 +17,6 @@ export const PEER_PLUGIN_IDS = [
   "observe",
   "knowledge",
   "ask",
-  "find",
   "memory",
 
   "audit",
@@ -27,7 +26,6 @@ export const PEER_PLUGIN_IDS = [
   "needs-you",
   "settle",
   "resources",
-  "usage",
   "impact",
   "ownership",
   "plans",

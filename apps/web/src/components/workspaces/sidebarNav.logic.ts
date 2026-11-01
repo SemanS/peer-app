@@ -1,8 +1,6 @@
 import type { NeedsYouItem } from "@t3tools/client-runtime/peer/needs-you";
 
-import type { PeerWorkspaceState } from "@t3tools/contracts";
-
-import type { PeerWebPlugin, ProjectNavRow, ProjectSignal } from "./slots.types";
+import type { ProjectNavRow, ProjectSignal } from "./slots.types";
 import { ALL_PROJECTS, taskCards } from "./workBoard.logic";
 import { groupTasks } from "./workGroups.logic";
 import type { WorkProjectNode } from "./workTree.logic";
@@ -93,19 +91,5 @@ export function pluginNavRows(
 ): ReadonlyArray<{ readonly id: string; readonly row: ProjectNavRow }> {
   return signals.flatMap((signal) =>
     signal.navRow === undefined ? [] : [{ id: signal.id, row: signal.navRow }],
-  );
-}
-
-/** The rows active plugins add for each workspace in view, a plugin that is off adding none. */
-export function workspaceNavRows(
-  plugins: ReadonlyArray<Pick<PeerWebPlugin, "id" | "workspaceNavRow">>,
-  workspaces: ReadonlyArray<PeerWorkspaceState>,
-): ReadonlyArray<{ readonly id: string; readonly row: ProjectNavRow }> {
-  return workspaces.flatMap((workspace) =>
-    plugins.flatMap((plugin) =>
-      plugin.workspaceNavRow === undefined
-        ? []
-        : [{ id: `${plugin.id}:${workspace.slug}`, row: plugin.workspaceNavRow(workspace) }],
-    ),
   );
 }

@@ -79,14 +79,17 @@ describe("Peer plugins", () => {
       Effect.gen(function* () {
         const seen = yield* Queue.unbounded<SeenEvent>();
         const core = yield* startedCore(yield* seedState(), [
-          fakePlugin({ id: "find", forcedOff: () => "FORCE_TEST=off" }, seen),
+          fakePlugin({ id: "audit", forcedOff: () => "FORCE_TEST=off" }, seen),
         ]);
-        yield* core.state.updatePersisted((p) => ({ ...p, plugins: { ...p.plugins, find: true } }));
+        yield* core.state.updatePersisted((p) => ({
+          ...p,
+          plugins: { ...p.plugins, audit: true },
+        }));
         const before = (yield* core.state.read).persisted;
         assert.deepStrictEqual(yield* core.plugins.states, [
           {
-            id: "find",
-            title: "The find plugin",
+            id: "audit",
+            title: "The audit plugin",
             enabled: false,
             active: false,
             reason: "FORCE_TEST=off",
@@ -94,10 +97,10 @@ describe("Peer plugins", () => {
           },
         ]);
         assert.include(
-          (yield* refusal(core.plugins.setPlugin({ id: "find", enabled: true })))!,
+          (yield* refusal(core.plugins.setPlugin({ id: "audit", enabled: true })))!,
           "FORCE_TEST=off",
         );
-        yield* core.plugins.setPlugin({ id: "find", enabled: false });
+        yield* core.plugins.setPlugin({ id: "audit", enabled: false });
         assert.strictEqual((yield* core.state.read).persisted, before);
         assert.equal(yield* Queue.size(seen), 0);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
@@ -106,21 +109,21 @@ describe("Peer plugins", () => {
     Effect.gen(function* () {
       const seen = yield* Queue.unbounded<SeenEvent>();
       const core = yield* startedCore(yield* seedState(), [
-        fakePlugin({ id: "find" }, seen),
+        fakePlugin({ id: "audit" }, seen),
         fakePlugin({ id: "memory", title: "Peer Memory", defaultEnabled: false }, seen),
         fakePlugin({ id: "ask", available: false }, seen),
       ]);
       assert.deepStrictEqual(yield* core.plugins.states, [
-        { id: "find", title: "The find plugin", enabled: true, active: true },
+        { id: "audit", title: "The audit plugin", enabled: true, active: true },
         { id: "memory", title: "Peer Memory", enabled: false, active: false, reason: "off" },
       ]);
       assert.deepStrictEqual(
         (yield* core.plugins.active).map((plugin) => plugin.id),
-        ["find"],
+        ["audit"],
       );
-      assert.isTrue(yield* core.plugins.isActive("find"));
+      assert.isTrue(yield* core.plugins.isActive("audit"));
       assert.isFalse(yield* core.plugins.isActive("ask"));
-      assert.isNull(yield* refusal(core.plugins.requireActive("find")));
+      assert.isNull(yield* refusal(core.plugins.requireActive("audit")));
       assert.strictEqual(
         yield* refusal(core.plugins.requireActive("memory")),
         "Peer Memory is turned off on this environment.",
@@ -141,29 +144,29 @@ describe("Peer plugins", () => {
       Effect.gen(function* () {
         const seen = yield* Queue.unbounded<SeenEvent>();
         const baseDir = yield* seedState();
-        const first = yield* startedCore(baseDir, [fakePlugin({ id: "find" }, seen)]);
+        const first = yield* startedCore(baseDir, [fakePlugin({ id: "audit" }, seen)]);
         assert.strictEqual(yield* Queue.take(seen), "started");
 
-        yield* first.plugins.setPlugin({ id: "find", enabled: false });
+        yield* first.plugins.setPlugin({ id: "audit", enabled: false });
         assert.deepStrictEqual(yield* Queue.takeAll(seen), ["stopped", "cleaned"]);
         // Turning it off again changes nothing, and runs no second cleanup.
-        yield* first.plugins.setPlugin({ id: "find", enabled: false });
+        yield* first.plugins.setPlugin({ id: "audit", enabled: false });
         assert.strictEqual(yield* Queue.size(seen), 0);
-        assert.deepStrictEqual((yield* first.state.read).persisted.plugins, { find: false });
+        assert.deepStrictEqual((yield* first.state.read).persisted.plugins, { audit: false });
         assert.strictEqual(
           yield* refusal(first.plugins.setPlugin({ id: "telepathy", enabled: true })),
           'There is no Peer plugin "telepathy" on this environment.',
         );
 
         // After a restart it is still off, and turning it on starts its work without one.
-        const restarted = yield* startedCore(baseDir, [fakePlugin({ id: "find" }, seen)]);
+        const restarted = yield* startedCore(baseDir, [fakePlugin({ id: "audit" }, seen)]);
         assert.deepStrictEqual(yield* restarted.plugins.states, [
-          { id: "find", title: "The find plugin", enabled: false, active: false, reason: "off" },
+          { id: "audit", title: "The audit plugin", enabled: false, active: false, reason: "off" },
         ]);
         assert.strictEqual(yield* Queue.size(seen), 0);
-        yield* restarted.plugins.setPlugin({ id: "find", enabled: true });
+        yield* restarted.plugins.setPlugin({ id: "audit", enabled: true });
         assert.strictEqual(yield* Queue.take(seen), "started");
-        assert.isTrue(yield* restarted.plugins.isActive("find"));
+        assert.isTrue(yield* restarted.plugins.isActive("audit"));
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
@@ -236,7 +239,7 @@ describe("Peer plugins", () => {
         const core = yield* startedCore(
           yield* seedState(signedInSeed(hub.url)),
           [
-            fakePlugin({ id: "find", commandNames: ["find"] }, seen),
+            fakePlugin({ id: "audit", commandNames: ["audit"] }, seen),
             fakePlugin(
               {
                 id: "memory",

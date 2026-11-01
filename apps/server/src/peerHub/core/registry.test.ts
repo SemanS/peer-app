@@ -17,7 +17,7 @@ describe("the plugin registry", () => {
     assert.deepStrictEqual(
       validatePlugins([
         { id: "requests", commands: [{ name: "request" }] },
-        { id: "find", commands: [{ name: "find" }] },
+        { id: "audit", commands: [{ name: "audit" }] },
         { id: "two-words", commands: [] },
       ]),
       [],
@@ -53,19 +53,19 @@ describe("the plugin registry", () => {
   });
 
   it("refuses a plugin listed twice", () => {
-    assert.deepStrictEqual(validatePlugins([{ id: "find" }, { id: "ask" }, { id: "find" }]), [
-      'Plugin "find" is listed twice.',
+    assert.deepStrictEqual(validatePlugins([{ id: "audit" }, { id: "ask" }, { id: "audit" }]), [
+      'Plugin "audit" is listed twice.',
     ]);
   });
 
   it("refuses a command another plugin or core already has", () => {
     assert.deepStrictEqual(
       validatePlugins([
-        { id: "find", commands: [{ name: "find" }] },
-        { id: "search", commands: [{ name: "find" }, { name: "status" }] },
+        { id: "audit", commands: [{ name: "audit" }] },
+        { id: "search", commands: [{ name: "audit" }, { name: "status" }] },
       ]),
       [
-        'Command "find" of plugin "search" is already find\'s.',
+        'Command "audit" of plugin "search" is already audit\'s.',
         'Command "status" of plugin "search" is already core\'s.',
       ],
     );
@@ -84,7 +84,7 @@ describe("a bound plugin", () => {
     Effect.gen(function* () {
       const released = yield* Ref.make(false);
       const entry = bindPlugin({
-        id: "find",
+        id: "audit",
         title: "Find",
         summary: "A model looks for what bears on a change.",
         defaultEnabled: true,
@@ -99,7 +99,7 @@ describe("a bound plugin", () => {
           return {
             commands: [
               {
-                name: "find",
+                name: "audit",
                 usage: 'find "<what you will do>"',
                 summary: greeting.text,
                 run: () => Effect.succeed(greeting.text),
@@ -108,7 +108,7 @@ describe("a bound plugin", () => {
           };
         }),
       });
-      assert.strictEqual(entry.id, "find");
+      assert.strictEqual(entry.id, "audit");
 
       const scope = yield* Scope.make();
       const contributions = yield* entry.contributions.pipe(

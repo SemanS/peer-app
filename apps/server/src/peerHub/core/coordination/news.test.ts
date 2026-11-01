@@ -192,7 +192,6 @@ describe("the project's other work", () => {
     assert.include(text, `peer ask <task> "<question>"`);
     assert.include(text, `peer index`);
     assert.include(text, `peer knowledge [<id or words>]`);
-    assert.include(text, `peer find "<what you will do>"`);
     assert.notInclude(text, "You hold:");
     assert.notInclude(text, "Your task");
     const held = statusText({
@@ -244,11 +243,11 @@ describe("the project's other work", () => {
       view: { sessions: [asking], overlaps: [] },
       nameOf,
       cli: "peer",
-      on: (command) => command === "find",
+      on: (command) => command === "ask",
     });
     assert.include(
       status,
-      'Commands: peer index · peer context [<task>] · peer find "<what you will do>" · peer note "<text>"',
+      'Commands: peer index · peer context [<task>] · peer ask <task> "<question>" · peer note "<text>"',
     );
   });
 });

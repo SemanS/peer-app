@@ -165,7 +165,7 @@ function SidebarUtilityItem({
 /**
  * The sidebar's utility row. The Peer sidebar names its buttons (`labelled`: Settings and Usage,
  * with the Hub's state at the end); the original sidebar keeps its icons. Pull requests are a row
- * of the Tasks view for people in a workspace, so the labelled row has them only for those without
+ * of the Work tab for people in a workspace, so the labelled row has them only for those without
  * one (`pullRequests`); the original sidebar always has them.
  */
 const SidebarUtilityMenu = memo(function SidebarUtilityMenu({

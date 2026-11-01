@@ -16,7 +16,7 @@ export const SIDEBAR_VIEW_LABELS: Readonly<Record<SidebarView, string>> = {
 export type SidebarTab = "tasks" | "knowledge" | "activity";
 
 export const SIDEBAR_TABS: ReadonlyArray<{ readonly id: SidebarTab; readonly label: string }> = [
-  { id: "tasks", label: "Tasks" },
+  { id: "tasks", label: "Work" },
   { id: "knowledge", label: "Knowledge" },
   { id: "activity", label: "Activity" },
 ];

@@ -71,7 +71,7 @@ function usePeerProjectIndex(): ReadonlyArray<PeerProjectEntry> {
 }
 
 /**
- * The one project scope of the Tasks and Chats views (`peer:work-scope`) against the projects there
+ * The one project scope of the Work and Chats views (`peer:work-scope`) against the projects there
  * are: its name, the projects whose chats it keeps (`keys`, null for every project), and how to
  * change it. `groups` is the sidebar's project catalog, which says what a local project is.
  */

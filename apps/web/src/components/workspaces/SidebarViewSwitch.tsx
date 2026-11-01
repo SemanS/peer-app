@@ -27,7 +27,7 @@ export function useSidebarTab(): readonly [SidebarTab, (tab: SidebarTab) => void
   return useLocalStorage("peer:sidebar-tab", "tasks", StoredTab);
 }
 
-/** The chosen view; until someone chooses, Tasks for people in a workspace, Chats otherwise. */
+/** The chosen view; until someone chooses, Work for people in a workspace, Chats otherwise. */
 export function useSidebarView(): readonly [SidebarView, (view: SidebarView) => void] {
   const primary = usePrimaryEnvironment();
   const status = usePeerHubStatus(
@@ -54,7 +54,7 @@ export function useRememberSidebarRoute(): void {
 }
 
 /**
- * Tasks, Knowledge and Activity (the team's work, each with a purpose of its own) and, by its icon,
+ * Work, Knowledge and Activity (the team's work, each with a purpose of its own) and, by its icon,
  * Chats (this computer's threads).
  */
 export function SidebarViewSwitch({

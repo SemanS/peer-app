@@ -12,7 +12,7 @@ Your AI provider's own account and usage terms still apply.
    environment; an existing pause is preserved. Choose Notify, Coordinate or Ask me.
 3. Add Peer hooks for Claude Code or Codex. Review and trust Codex's hooks in each configured home.
    Start a new agent session after changing hooks. Adding a provider alone does not enable its hooks.
-4. Open **Tasks** or **Overview** to see local agents, overlaps, notes and recorded resolutions.
+4. Open **Work** or **Overview** to see local agents, overlaps, notes and recorded resolutions.
    Open an overlap to ask its agents to coordinate or close it yourself. Agents use the same
    `peer status`, `peer claim`, `peer note`, `peer resolve` and context commands as on a shared project.
 

@@ -38,9 +38,9 @@ import { sharedRoomsOf } from "./rooms/sharedRoom.logic";
 
 /**
  * The team's work in the sidebar, for the project the project button names (`scope`, which the root
- * checked against the projects there are). Each tab has a purpose of its own: Tasks is the work by
- * area, Knowledge what holds beyond one task, Activity what moved. With all projects, Tasks groups
- * the work under expandable headings, this computer's project sets first. A project no workspace
+ * checked against the projects there are). Each tab has a purpose of its own: Work is the chats,
+ * rooms and tasks, Knowledge what holds beyond one task, Activity what moved. With all projects,
+ * Work groups the work under expandable headings, this computer's project sets first. A project no workspace
  * shares has no team tasks, and the view says so.
  */
 export function WorkPanel({
@@ -432,7 +432,7 @@ function PluginSections({
   );
 }
 
-/** What the Tasks view says over a project that no workspace shares. */
+/** What the Work tab says over a project that no workspace shares. */
 function LocalProjectNote() {
   const openChats = useOpenScopedChats();
   const onWork = useLocation({ select: (location) => location.pathname === "/work" });

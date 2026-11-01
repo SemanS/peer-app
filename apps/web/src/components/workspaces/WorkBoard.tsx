@@ -260,7 +260,7 @@ export function WorkBoard() {
                 className="max-w-md"
                 fallback={
                   <p className="text-sm text-muted-foreground">
-                    No team projects yet. Share one from the sidebar’s Tasks view.
+                    No team projects yet. Share one from the sidebar’s Work tab.
                   </p>
                 }
               />

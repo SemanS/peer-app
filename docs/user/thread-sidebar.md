@@ -3,7 +3,7 @@
 Use a new thread for a separate task. Choose **New worktree** when its code changes
 need a separate branch and working directory.
 
-Peer's sidebar has two views: **Tasks** lists the team's tasks, and **Chats** lists your
+Peer's sidebar has two views: **Work** lists the team's chats, rooms and tasks, and **Chats** lists your
 own threads, which this page describes.
 
 ## Start a thread

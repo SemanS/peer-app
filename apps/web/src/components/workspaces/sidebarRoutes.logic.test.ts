@@ -13,11 +13,14 @@ import {
 } from "./sidebarRoutes.logic";
 
 describe("viewOfPath", () => {
-  it("puts the Work screens, and what opens from them, under Tasks", () => {
+  it("puts the Work screens, and what opens from them, under Work", () => {
     for (const path of [
       "/work",
       "/task/acme/app/t-1",
       "/review/acme/app/t-1",
+      "/room/acme/app/t-1",
+      "/together/group-1",
+      "/workspace/set-1",
       "/context/acme/app/task:t-1",
       "/knowledge/acme/app",
       "/memory/acme/app",
@@ -85,7 +88,7 @@ describe("route-aware sidebar view", () => {
     }
   });
 
-  it("returns Settings to Tasks after work → chat → browser Back to work", () => {
+  it("returns Settings to Work after work → chat → browser Back to work", () => {
     const history = createMemoryHistory({ initialEntries: ["/work"] });
     let routes = rememberRoute({}, history.location.href);
     history.push("/env-1/thread-1");

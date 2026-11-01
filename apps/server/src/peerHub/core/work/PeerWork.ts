@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - where Peer makes a repository's task checkouts.
 /**
  * PeerWork: the work of this environment's workspaces as their Hub keeps it — tasks, every
  * member's threads, and the task each of this computer's threads is on, which its run says.
@@ -11,6 +12,8 @@
  *
  * @module peerHub/core/work/PeerWork
  */
+import * as NodePath from "node:path";
+
 import {
   PeerHubError,
   ThreadId,
@@ -53,6 +56,7 @@ import {
 } from "../../workLifecycle.ts";
 import type { ReportedThread } from "../hub/hubApi.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
+import type { PeerLifecycleEvent } from "../plugin.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
 import {
@@ -85,6 +89,8 @@ export interface PeerWorkPass {
     ProjectionStore.ProjectionStoreV2Error
   >;
 }
+
+type TaskWorktreeCreated = Extract<PeerLifecycleEvent, { readonly kind: "task-worktree-created" }>;
 
 /** A task in a workspace project, which a thread is put on. */
 export interface PeerTaskPlace {
@@ -157,10 +163,23 @@ export class PeerWork extends Context.Service<
      * Starts an agent in a run Peer creates first (`launchInRun`): a plugin's start (a role's
      * agent) gets its run as `startAgent`'s does, and the run holds the agent's thread.
      */
-    readonly launchRun: <A extends { readonly threadKey: string; readonly paneId: string }, E, R>(
+    readonly launchRun: <
+      A extends { readonly threadKey: string; readonly paneId: string; readonly root?: string },
+      E,
+      R,
+    >(
       input: CreateRun,
       launch: (env: RunEnv) => Effect.Effect<A, E, R>,
     ) => Effect.Effect<{ readonly run: string; readonly started: A }, E | PeerHubError, R>;
+    /**
+     * Tells the plugins of a checkout a launch made, once the run holds the agent's thread. They
+     * remove, index and configure it on this word, so it counts only under the folder Peer makes the
+     * repository's task checkouts in. A launch that went on in a run's checkout made none.
+     */
+    readonly taskWorktreeCreated: (
+      place: Omit<TaskWorktreeCreated, "kind" | "root" | "identity">,
+      made: Pick<TaskWorktreeCreated, "root" | "identity"> | undefined,
+    ) => Effect.Effect<void>;
     /**
      * Reports this computer's threads to each workspace, or only to `only`, and reads everyone's
      * work back. Run it under the state lock.
@@ -602,6 +621,33 @@ const make = Effect.gen(function* () {
       }),
     assign,
     launchRun: (input, launch) => launchInRun(peerRuns, input, launch),
+    taskWorktreeCreated: (place, made) =>
+      Effect.gen(function* () {
+        if (made === undefined) return;
+        const relative = NodePath.relative(
+          NodePath.join(
+            state.workspaceRoot,
+            ".worktrees",
+            place.workspace,
+            place.project,
+            place.repository,
+          ),
+          made.root,
+        );
+        if (
+          !NodePath.isAbsolute(made.root) ||
+          relative === "" ||
+          relative.startsWith("..") ||
+          NodePath.isAbsolute(relative)
+        )
+          return;
+        const event = { kind: "task-worktree-created" as const, ...place, ...made };
+        yield* Effect.forEach(
+          yield* plugins.contributions,
+          (contribution) => contribution.taskWorktreeCreated?.(event) ?? Effect.void,
+          { discard: true },
+        );
+      }),
     rename,
     refresh,
     readWork,

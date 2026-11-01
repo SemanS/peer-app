@@ -37,6 +37,8 @@ export interface HereRun {
   readonly staysPut?: boolean;
   /** Its agent runs and waits on its person before its session can start: not lost, however long. */
   readonly waiting?: boolean;
+  /** No session of it runs and its checkout holds work; read only for a delivery its owner sent on. */
+  readonly left?: boolean;
 }
 
 export type Decision =
@@ -103,13 +105,19 @@ export function decide(
       ? { do: "lost", run: named }
       : { do: "wait", ms: PEER_ROOM_START_GRACE_MS - Math.max(0, stood) };
   }
+  // Try again is a `pass` as Pass on is, and the Hub forgets the run it had. `by` says its owner sent
+  // it on, and what a person sends on goes on with the work a run left, not beside it.
+  const left = delivery.by === undefined ? undefined : runs.find((run) => run.left === true);
   // A model its author chose is a new session on it: an open run has its model already.
   if (same(message.author.email, me) && delivery.model !== undefined)
-    return { do: chat ? "take-start" : "take-review" };
+    return left === undefined
+      ? { do: chat ? "take-start" : "take-review" }
+      : { do: "take-continue", run: left.id };
   const live = reached?.live === true ? reached : team ? undefined : runs.find((run) => run.live);
   if (live !== undefined) return { do: "take-offer", run: live.id };
   const own = same(message.author.email, me);
-  const kept = reached ?? (own ? runs.find((run) => run.running || !run.staysPut) : runs[0]);
+  const kept =
+    reached ?? left ?? (own ? runs.find((run) => run.running || !run.staysPut) : runs[0]);
   if (kept !== undefined)
     return { do: kept.running === true ? "take-queue" : "take-continue", run: kept.id };
   return own && !chat ? { do: "take-review" } : { do: "take-start" };
@@ -132,7 +140,10 @@ export interface Started {
 
 export interface FollowDeps {
   readonly me: string;
-  readonly runsHere: (item: PeerRoomInboxItem) => Effect.Effect<ReadonlyArray<HereRun>>;
+  readonly runsHere: (
+    item: PeerRoomInboxItem,
+    delivery: PeerRoomTarget,
+  ) => Effect.Effect<ReadonlyArray<HereRun>>;
   readonly isChat: (item: PeerRoomInboxItem) => Effect.Effect<boolean>;
   /** `take`: the one-winner step. Fails when another took it or the state moved. */
   readonly take: (
@@ -180,7 +191,7 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
     const decision = decide(
       item.message,
       delivery,
-      yield* deps.runsHere(item),
+      yield* deps.runsHere(item, delivery),
       deps.me,
       stood,
       yield* deps.isChat(item),

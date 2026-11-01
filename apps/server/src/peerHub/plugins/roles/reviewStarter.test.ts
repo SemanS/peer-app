@@ -1,10 +1,13 @@
+// @effect-diagnostics nodeBuiltinImport:off - the checkout the stand-in launcher says it made.
+import * as NodePath from "node:path";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 
-import { bindPlugin, type PeerTaskLauncher } from "../../core/plugin.ts";
+import { bindPlugin, type PeerLifecycleEvent, type PeerTaskLauncher } from "../../core/plugin.ts";
 import { acmeHub, acmeHubOf, rolesPeer, rolesWhen } from "./fixtures.test.ts";
 import { RolesPlugin } from "./index.ts";
 
@@ -13,7 +16,7 @@ type Launch = Parameters<PeerTaskLauncher["launch"]>[0];
 const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
-const herdrOf = (launched: Launch[]) =>
+const herdrOf = (launched: Launch[], created: PeerLifecycleEvent[]) =>
   bindPlugin({
     id: "herdr",
     title: "herdr",
@@ -21,12 +24,18 @@ const herdrOf = (launched: Launch[]) =>
     defaultEnabled: true,
     layer: Layer.empty,
     make: Effect.succeed({
+      taskWorktreeCreated: (event) => Effect.sync(() => void created.push(event)),
       taskLauncher: {
         unavailable: Effect.succeed(null),
         launch: (asked) =>
           Effect.sync(() => {
             launched.push(asked);
-            return { paneId: "pane-9", terminalId: "term-9", threadKey: "herdr:term-9" };
+            return {
+              paneId: "pane-9",
+              terminalId: "term-9",
+              threadKey: "herdr:term-9",
+              worktree: { root: NodePath.join(asked.worktrees, "review"), identity: "1:2" },
+            };
           }),
       },
     }),
@@ -41,7 +50,7 @@ const start = {
 };
 
 /** Peer as Bob with roles and a stand-in launcher, its Hub's roles read once. */
-const peerWith = (launched: Launch[]) =>
+const peerWith = (launched: Launch[], created: PeerLifecycleEvent[] = []) =>
   Effect.gen(function* () {
     const current = {
       ...acmeHubOf(),
@@ -49,7 +58,7 @@ const peerWith = (launched: Launch[]) =>
         method === "POST" && url.includes("/runs") ? ([200, { ok: true }] as const) : undefined,
     };
     const server = yield* acmeHub(current);
-    const peer = yield* rolesPeer(server, [herdrOf(launched), RolesPlugin]);
+    const peer = yield* rolesPeer(server, [herdrOf(launched, created), RolesPlugin]);
     yield* rolesWhen(peer.status, (roles) => (roles?.projects.length ?? 0) > 0);
     return peer;
   });
@@ -71,6 +80,29 @@ describe("the reviewStarter slot", () => {
           roles?.threads.map(({ thread, role }) => ({ thread, role })),
           [{ thread: "herdr:term-9", role: "review" }],
         );
+      }),
+    ),
+  );
+
+  it.effect("reports the checkout it made, so a done task's review leaves no folder behind", () =>
+    run(
+      Effect.gen(function* () {
+        const launched: Launch[] = [];
+        const created: PeerLifecycleEvent[] = [];
+        const peer = yield* peerWith(launched, created);
+        yield* (yield* peer.plugins.require("reviewStarter")).start(start);
+        assert.deepStrictEqual(created, [
+          {
+            kind: "task-worktree-created",
+            workspace: "acme",
+            project: "app",
+            repository: "api",
+            task: "vl-7",
+            thread: "herdr:term-9",
+            root: NodePath.join(launched[0]!.worktrees, "review"),
+            identity: "1:2",
+          },
+        ]);
       }),
     ),
   );

@@ -31,6 +31,7 @@ import {
   type PeerRoomsSeenInput,
   type PeerRoomsSetReachInput,
   type PeerRoomsWithdrawInput,
+  type PeerRoomTarget,
 } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
@@ -56,7 +57,7 @@ import {
 import * as PeerState from "../../core/state/PeerState.ts";
 import { runKeys } from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
-import { checkoutKind } from "../../core/vcs.ts";
+import { checkoutKind, holdsWork } from "../../core/vcs.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { changeToReview, pushedRefs, roomDiff, workRun, worktreeOf } from "./client/diff.ts";
 import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/steps.ts";
@@ -64,7 +65,14 @@ import { fetchPins, newestHandoff, pinnedRoot, readPin, storeOf } from "./client
 import { runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
 import { projectsText, roomReach, runRootsData } from "../../core/work/runRoots.ts";
-import { capacityOf, checkoutOf, openRuns, roomStarts } from "./client/start.ts";
+import {
+  capacityOf,
+  checkoutOf,
+  openRuns,
+  rootHere,
+  roomStarts,
+  taskRuns,
+} from "./client/start.ts";
 import { actOn, type FollowDeps, type HereRun } from "./follow.ts";
 import { roomsHub, type Place, type PostBody } from "./client/hub.ts";
 import { refOf, type Heard, type HeardKind } from "./text.ts";
@@ -130,7 +138,26 @@ const make = Effect.gen(function* () {
     task: item.task,
   });
 
-  const runsHere = (workspace: string, item: PeerRoomInboxItem) =>
+  /** The branch a project's work starts from on this computer. */
+  const baseHere = (workspace: string, projectId: string) =>
+    state.project(workspace, projectId).pipe(
+      Effect.flatMap(({ project }) =>
+        Effect.map(
+          checkoutOf(state, workspace, project),
+          (checkout) => checkout?.repository.branch ?? project.repositories[0]?.branch,
+        ),
+      ),
+      Effect.orElseSucceed(() => undefined),
+    );
+
+  /** The project's runs that only read the work, as the review starter knows them. */
+  const reviewsOf = (place: PeerRoomsPlace) =>
+    plugins.require("reviewStarter").pipe(
+      Effect.flatMap((starter) => starter.reviewRuns(place.workspace, place.project)),
+      Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
+    );
+
+  const runsHere = (workspace: string, item: PeerRoomInboxItem, delivery: PeerRoomTarget) =>
     Effect.gen(function* () {
       const live = new Set(
         (yield* agents.sessions).flatMap((session) =>
@@ -148,23 +175,36 @@ const make = Effect.gen(function* () {
         .pipe(Effect.orElseSucceed(() => undefined));
       // Before the first work report nothing says which thread carries a run.
       const read = (yield* work.latestPass) !== null;
+      // Reading a checkout costs git or jj, so only a delivery `decide` would use it on pays for one.
+      const sentOn = delivery.state === "passed" && delivery.by !== undefined;
+      const reviews = sentOn ? yield* reviewsOf(placeOf(workspace, item)) : new Set<string>();
+      const base = sentOn ? yield* baseHere(workspace, item.project) : undefined;
       return yield* Effect.forEach(
         [...new Set([...open.map((run) => run.id), ...live])],
         (id): Effect.Effect<HereRun> =>
-          Effect.map(
-            read ? capacityOf(state, work, workspace, item.project, id) : Effect.succeed(undefined),
-            (capacity) => {
-              const run = open.find((candidate) => candidate.id === id);
-              return {
-                id,
-                live: live.has(id),
-                capacity,
-                running: run?.sessions.some((session) => session.to === undefined) === true,
-                staysPut: run?.runtime === "terminal" || run?.runtime === "mcp",
-                waiting: run !== undefined && launcher?.waiting?.(runKeys(run)) === true,
-              };
-            },
-          ),
+          Effect.gen(function* () {
+            const capacity = read
+              ? yield* capacityOf(state, work, workspace, item.project, id)
+              : undefined;
+            const run = open.find((candidate) => candidate.id === id);
+            const running = run?.sessions.some((session) => session.to === undefined) === true;
+            const quiet = run !== undefined && !running && !live.has(id) && !reviews.has(id);
+            return {
+              id,
+              live: live.has(id),
+              capacity,
+              running,
+              staysPut: run?.runtime === "terminal" || run?.runtime === "mcp",
+              waiting: run !== undefined && launcher?.waiting?.(runKeys(run)) === true,
+              left:
+                quiet &&
+                base !== undefined &&
+                (yield* Effect.promise(async () => {
+                  const root = await rootHere(run);
+                  return root !== undefined && (await holdsWork(root, base));
+                })),
+            };
+          }),
       );
     });
 
@@ -222,13 +262,6 @@ const make = Effect.gen(function* () {
         }
       : { steps: [] };
 
-  /** The project's runs that only read the work, as the review starter knows them. */
-  const reviewsOf = (place: PeerRoomsPlace) =>
-    plugins.require("reviewStarter").pipe(
-      Effect.flatMap((starter) => starter.reviewRuns(place.workspace, place.project)),
-      Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
-    );
-
   /** The checkout of this computer's newest run that does the task's work, detached ones too. */
   const runsHereToo = (place: PeerRoomsPlace, only: string | undefined) =>
     Effect.gen(function* () {
@@ -255,10 +288,22 @@ const make = Effect.gen(function* () {
           session.project === place.project &&
           session.task === place.task,
       );
+      const asked = (yield* taskRuns(state, place)).filter(
+        (run) => only === undefined || run.id === only,
+      );
       const found = workRun({
-        runs: (yield* openRuns(state, place))
-          .filter((run) => only === undefined || run.id === only)
-          .map((run) => ({ id: run.id, keys: runKeys(run) })),
+        // A run that ended leaves its commits in its checkout, perhaps the only place they are.
+        runs: yield* Effect.forEach(
+          [
+            ...asked.filter((run) => run.endedAt === undefined),
+            ...asked.filter((run) => run.endedAt !== undefined),
+          ],
+          (run) =>
+            Effect.map(
+              Effect.promise(() => rootHere(run)),
+              (root) => ({ id: run.id, keys: runKeys(run), root }),
+            ),
+        ),
         reviews,
         sessions,
         threads: (yield* work.localThreads).get(place.workspace) ?? [],
@@ -303,7 +348,7 @@ const make = Effect.gen(function* () {
 
   const followDeps = (workspace: string, me: string): FollowDeps => ({
     me,
-    runsHere: (item) => runsHere(workspace, item),
+    runsHere: (item, delivery) => runsHere(workspace, item, delivery),
     isChat: (item) =>
       work.tasks(workspace, item.project).pipe(
         Effect.map((tasks) => tasks.some((task) => task.id === item.task && task.chat === true)),

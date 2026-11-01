@@ -1,9 +1,22 @@
-// @effect-diagnostics preferSchemaOverJson:off - the bodies the Hub was sent.
+// @effect-diagnostics preferSchemaOverJson:off nodeBuiltinImport:off - the bodies the Hub was sent, and a checkout in a temporary directory.
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
+import type { PeerRoomDiff } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 
+import {
+  bindPlugin,
+  type PeerContributions,
+  type PeerLifecycleEvent,
+  type PeerTaskLauncher,
+} from "../../core/plugin.ts";
 import { TEST_ENVIRONMENT, type HubCall } from "../../core/testkit.ts";
 import { harnessOf, runCapacity } from "./client/start.ts";
 import {
@@ -18,6 +31,7 @@ import {
   roomPeer,
   roomsWhen,
   sessionOf,
+  TASK,
 } from "./fixtures.test.ts";
 import { RoomsPlugin } from "./index.ts";
 import { jobsAfterLeaving } from "./Rooms.ts";
@@ -385,6 +399,340 @@ describe("marking a room seen", () => {
         current.inbox = { ...current.inbox, mentions: [] };
         yield* rpc(peer, "peer.rooms.seen", { ...place, seq: 12 });
         yield* roomsWhen(peer.status, (rooms) => rooms?.mentions.length === 0);
+      }),
+    ),
+  );
+});
+
+describe("a delivery its owner sent on again", () => {
+  const url = `${ROOM}/12/deliveries/${encodeURIComponent(BOB)}`;
+
+  const gitIn = (cwd: string, ...args: ReadonlyArray<string>) =>
+    NodeChildProcess.execFileSync("git", ["-C", cwd, ...args], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: "Bob",
+        GIT_AUTHOR_EMAIL: BOB,
+        GIT_COMMITTER_NAME: "Bob",
+        GIT_COMMITTER_EMAIL: BOB,
+      },
+    });
+
+  /** The project's checkout and a task's worktree of it, on a branch with nothing on it yet. */
+  const repository = Effect.acquireRelease(
+    Effect.sync(() => {
+      const directory = NodeFS.realpathSync(
+        NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-retry-")),
+      );
+      const project = NodePath.join(directory, "project");
+      NodeFS.mkdirSync(project);
+      gitIn(project, "init", "--quiet", "--initial-branch=main");
+      gitIn(project, "commit", "--quiet", "--allow-empty", "-m", "start");
+      const tree = NodePath.join(directory, "tree");
+      gitIn(project, "worktree", "add", "--quiet", "-b", "feature/vl-7", tree, "main");
+      return { directory, project, tree };
+    }),
+    ({ directory }) =>
+      Effect.sync(() => NodeFS.rmSync(directory, { recursive: true, force: true })),
+  );
+
+  const commitIn = (tree: string) => {
+    NodeFS.writeFileSync(NodePath.join(tree, "total.ts"), "1\n");
+    gitIn(tree, "add", ".");
+    gitIn(tree, "commit", "--quiet", "-m", "the work");
+  };
+
+  type Launch = Parameters<PeerTaskLauncher["launch"]>[0];
+
+  /** Bob's Peer over a stand-in for herdr's launcher, with one run of his that left `tree`. */
+  const retried = (project: string, tree: string, chat = false) =>
+    Effect.gen(function* () {
+      const launched: Array<Launch> = [];
+      const created: Array<PeerLifecycleEvent> = [];
+      const made = (worktrees: string) => NodePath.join(worktrees, "VL-7-new");
+      const contributions: PeerContributions = {
+        taskWorktreeCreated: (event) => Effect.sync(() => void created.push(event)),
+        taskLauncher: {
+          unavailable: Effect.succeed(null),
+          launch: (asked: Launch) =>
+            Effect.sync(() => {
+              launched.push(asked);
+              return {
+                paneId: "pane-9",
+                terminalId: "term-9",
+                threadKey: "herdr:term-9",
+                root: asked.reuse ?? made(asked.worktrees),
+                ...(asked.reuse === undefined
+                  ? { worktree: { root: made(asked.worktrees), identity: "1:2" } }
+                  : {}),
+                alsoTrees: (asked.also ?? []).map((other) => ({
+                  root: made(other.worktrees),
+                  identity: "3:4",
+                })),
+              };
+            }),
+        },
+      };
+      const herdr = bindPlugin({
+        id: "herdr",
+        title: "herdr",
+        summary: "test",
+        defaultEnabled: true,
+        layer: Layer.empty,
+        make: Effect.succeed(contributions),
+      });
+      const current = roomHubOf();
+      const peer = yield* roomPeer(current, [herdr]);
+      yield* peer.state.updatePersisted((persisted) => ({
+        ...persisted,
+        localCheckouts: { "acme/app/api": project },
+      }));
+      if (chat)
+        yield* peer.state.updateRuntime((runtime) => ({
+          ...runtime,
+          work: new Map([
+            ["acme/app", { areas: [], tasks: [{ ...TASK, chat: true }], threads: [] }],
+          ]),
+        }));
+      const { book } = peer.runs;
+      const first = yield* Effect.promise(() =>
+        book.create({
+          workspace: "acme",
+          project: "app",
+          task: "vl-7",
+          agent: "claude",
+          runtime: "herdr",
+        }),
+      );
+      yield* Effect.promise(() => book.hold(first.run.id, "herdr:term-1", "pane-1", tree));
+      return { current, peer, first: first.run.id, launched, created };
+    });
+
+  /** The next read of the inbox finds `message` to carry. */
+  const sendOn = (
+    peer: Peer,
+    current: ReturnType<typeof roomHubOf>,
+    message: ReturnType<typeof messageOf>,
+  ) =>
+    Effect.gen(function* () {
+      current.inbox = {
+        ...current.inbox,
+        work: [{ project: "app", task: "vl-7", message }],
+      };
+      yield* rpc(peer, "peer.rooms.seen", { ...place, seq: 12 });
+    });
+
+  /** The start is over: the run it made is on the delivery. */
+  const startedRun = (peer: Peer) =>
+    waitFor(() =>
+      callsTo(peer, "PATCH", url).some((call) => {
+        const body = bodyOf(call) as { readonly expect?: string };
+        return body.expect === "taken";
+      }),
+    );
+
+  it.effect("goes on with an open run that left work, on its model, and starts none", () =>
+    run(
+      Effect.gen(function* () {
+        const { project, tree } = yield* repository;
+        commitIn(tree);
+        const { current, peer, first, launched } = yield* retried(project, tree);
+        yield* sendOn(
+          peer,
+          current,
+          messageOf({
+            author: { email: BOB },
+            to: [{ kind: "agent", email: BOB, state: "passed", by: BOB, model: "claude-opus-5-5" }],
+          }),
+        );
+        yield* waitFor(() => callsTo(peer, "PATCH", url).length > 0);
+        assert.deepStrictEqual(bodyOf(callsTo(peer, "PATCH", url)[0]), {
+          move: "take",
+          environment: TEST_ENVIRONMENT,
+          run: first,
+          expect: "passed",
+        });
+        assert.deepStrictEqual(launched, []);
+      }),
+    ),
+  );
+
+  it.effect("starts a run in the checkout an ended run left work in", () =>
+    run(
+      Effect.gen(function* () {
+        const { project, tree } = yield* repository;
+        commitIn(tree);
+        const { current, peer, first, launched } = yield* retried(project, tree);
+        yield* Effect.promise(() => peer.runs.book.end(first, "handed-off"));
+        yield* sendOn(
+          peer,
+          current,
+          messageOf({ to: [{ kind: "agent", email: BOB, state: "passed", by: BOB }] }),
+        );
+        yield* waitFor(() => launched.length > 0);
+        assert.strictEqual(launched[0]!.reuse, tree);
+        const started = launched[0]!.env.PEER_RUN!;
+        assert.notStrictEqual(started, first);
+        yield* waitFor(() => peer.runs.book.get(started)?.root !== undefined);
+        assert.strictEqual(peer.runs.book.get(started)!.root, tree);
+      }),
+    ),
+  );
+
+  it.effect("starts from the base where the ended run left nothing", () =>
+    run(
+      Effect.gen(function* () {
+        const { project, tree } = yield* repository;
+        const { current, peer, first, launched } = yield* retried(project, tree);
+        yield* Effect.promise(() => peer.runs.book.end(first, "handed-off"));
+        yield* sendOn(
+          peer,
+          current,
+          messageOf({ to: [{ kind: "agent", email: BOB, state: "passed", by: BOB }] }),
+        );
+        yield* waitFor(() => launched.length > 0);
+        assert.isUndefined(launched[0]!.reuse);
+      }),
+    ),
+  );
+
+  it.effect("reports the checkout a start made, once", () =>
+    run(
+      Effect.gen(function* () {
+        const { project, tree } = yield* repository;
+        const { current, peer, first, launched, created } = yield* retried(project, tree);
+        yield* Effect.promise(() => peer.runs.book.end(first, "handed-off"));
+        yield* sendOn(
+          peer,
+          current,
+          messageOf({ to: [{ kind: "agent", email: BOB, state: "passed", by: BOB }] }),
+        );
+        yield* startedRun(peer);
+        assert.deepStrictEqual(created, [
+          {
+            kind: "task-worktree-created",
+            workspace: "acme",
+            project: "app",
+            repository: "api",
+            task: "vl-7",
+            thread: "herdr:term-9",
+            root: NodePath.join(launched[0]!.worktrees, "VL-7-new"),
+            identity: "1:2",
+          },
+        ]);
+      }),
+    ),
+  );
+
+  it.effect("reports no checkout where a start goes on in the one a run left", () =>
+    run(
+      Effect.gen(function* () {
+        const { project, tree } = yield* repository;
+        commitIn(tree);
+        const { current, peer, first, launched, created } = yield* retried(project, tree);
+        yield* Effect.promise(() => peer.runs.book.end(first, "handed-off"));
+        yield* sendOn(
+          peer,
+          current,
+          messageOf({ to: [{ kind: "agent", email: BOB, state: "passed", by: BOB }] }),
+        );
+        yield* startedRun(peer);
+        assert.strictEqual(launched[0]!.reuse, tree);
+        assert.deepStrictEqual(created, []);
+      }),
+    ),
+  );
+
+  it.effect("reports a shared room's other checkout under its own project and task", () =>
+    run(
+      Effect.gen(function* () {
+        const { project, tree } = yield* repository;
+        const { current, peer, first, launched, created } = yield* retried(project, tree);
+        yield* Effect.promise(() => peer.runs.book.end(first, "handed-off"));
+        yield* peer.state.updatePersisted((persisted) => ({
+          ...persisted,
+          localCheckouts: { ...persisted.localCheckouts, "acme/web/api": project },
+          workspaces: persisted.workspaces.map((workspace) => ({
+            ...workspace,
+            manifest: {
+              ...workspace.manifest!,
+              projects: [
+                ...workspace.manifest!.projects,
+                { ...workspace.manifest!.projects[0]!, id: "web", name: "Web" },
+              ],
+            },
+          })),
+        }));
+        yield* peer.state.updateRuntime((runtime) => ({
+          ...runtime,
+          work: new Map([
+            [
+              "acme/app",
+              { areas: [], tasks: [{ ...TASK, chat: true, group: "both" }], threads: [] },
+            ],
+            [
+              "acme/web",
+              { areas: [], tasks: [{ ...TASK, id: "vl-8", group: "both" }], threads: [] },
+            ],
+          ]),
+        }));
+        yield* sendOn(
+          peer,
+          current,
+          messageOf({
+            author: { email: BOB },
+            to: [{ kind: "agent", email: BOB, state: "passed" }],
+          }),
+        );
+        yield* startedRun(peer);
+        assert.deepStrictEqual(
+          created.map((event) =>
+            event.kind === "task-worktree-created"
+              ? [event.project, event.task, event.root, event.identity]
+              : [],
+          ),
+          [
+            ["app", "vl-7", NodePath.join(launched[0]!.worktrees, "VL-7-new"), "1:2"],
+            ["web", "vl-8", NodePath.join(launched[0]!.also![0]!.worktrees, "VL-7-new"), "3:4"],
+          ],
+        );
+      }),
+    ),
+  );
+
+  it.effect("leaves a person's next message in a chat to a new checkout", () =>
+    run(
+      Effect.gen(function* () {
+        const { project, tree } = yield* repository;
+        commitIn(tree);
+        const { current, peer, first, launched } = yield* retried(project, tree, true);
+        yield* Effect.promise(() => peer.runs.book.end(first, "handed-off"));
+        yield* sendOn(
+          peer,
+          current,
+          messageOf({
+            author: { email: BOB },
+            to: [{ kind: "agent", email: BOB, state: "passed" }],
+          }),
+        );
+        yield* waitFor(() => launched.length > 0);
+        assert.isUndefined(launched[0]!.reuse);
+      }),
+    ),
+  );
+
+  it.effect("shows what a run that ended left in its checkout, in the room's diff", () =>
+    run(
+      Effect.gen(function* () {
+        const { project, tree } = yield* repository;
+        commitIn(tree);
+        const { peer, first } = yield* retried(project, tree);
+        yield* Effect.promise(() => peer.runs.book.end(first, "handed-off"));
+        const diff = (yield* rpc(peer, "peer.rooms.diff", place)) as PeerRoomDiff;
+        assert.strictEqual(diff.state, "here");
+        assert.strictEqual(diff.folder, tree);
+        if (diff.state === "here") assert.include(diff.patch, "total.ts");
       }),
     ),
   );

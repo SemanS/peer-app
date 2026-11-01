@@ -2,8 +2,9 @@
 /**
  * Continuing a detached run (`peerHub.continueRun`, design D6): a new session in the run. A Peer
  * thread's run wakes its thread as a teammate's news would; a herdr run starts again through the
- * task launcher with the run's identity, resuming its last provider session where this computer
- * has it; a terminal run continues in the terminal, where its person runs it.
+ * task launcher with the run's identity, in the checkout it left where that holds work and else in
+ * a new one from the base, resuming its last provider session where this computer has it; a
+ * terminal run continues in the terminal, where its person runs it.
  *
  * A run another computer of the same person minted is taken over first (design D8): the Hub hands
  * it to this environment, this computer keeps it as its own with a token minted here, and it
@@ -28,6 +29,7 @@ import * as PeerAgents from "../coordination/PeerAgents.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
 import type { PersistedRun } from "../state/PeerState.ts";
+import { holdsWork } from "../vcs.ts";
 import * as PeerWork from "./PeerWork.ts";
 import { runRootsData } from "./runRoots.ts";
 import * as PeerRuns from "./runs.ts";
@@ -129,11 +131,12 @@ const continueInHerdr = (
     if (!isHarness(run.agent)) return notStarted(`herdr cannot start ${run.agent} again.`);
     const harness = run.agent;
     const peerState = yield* PeerState.PeerState;
+    const work = yield* PeerWork.PeerWork;
     const launcher = yield* (yield* PeerPlugins.PeerPlugins).require("taskLauncher");
     const unavailable = yield* launcher.unavailable;
     if (unavailable !== null) return notStarted(unavailable);
     const { workspace, project } = yield* peerState.project(run.workspace, run.project);
-    const task = (yield* (yield* PeerWork.PeerWork).tasks(workspace.slug, project.id)).find(
+    const task = (yield* work.tasks(workspace.slug, project.id)).find(
       (candidate) => candidate.id === run.task,
     );
     const repository = project.repositories[0];
@@ -147,6 +150,11 @@ const continueInHerdr = (
         ? undefined
         : { agent: identity.resume.agent, session: identity.resume.nativeId };
     const name = `${task.key === undefined ? "" : `${task.key}: `}${task.title}`;
+    const left = run.root;
+    const reuse =
+      left !== undefined && (yield* Effect.promise(() => holdsWork(left, repository.branch)))
+        ? left
+        : undefined;
     const started = yield* launcher.launch({
       checkout: peerState.checkoutPath(
         (yield* peerState.read).persisted,
@@ -170,12 +178,27 @@ const continueInHerdr = (
           : `Peer: your person continues run ${run.id} on ${name}. Pick it up where you left it.`,
       env: identity.env,
       resume,
+      reuse,
+      model: run.model,
+      effort: run.effort,
       dirs: (Option.getOrUndefined(yield* runRootsData(peerState).read)?.runs[run.id] ?? []).map(
         (entry) => entry.root,
       ),
     });
     yield* Effect.promise(() =>
-      runs.book.hold(run.id, started.threadKey, started.paneId).catch(() => undefined),
+      runs.book
+        .hold(run.id, started.threadKey, started.paneId, started.root)
+        .catch(() => undefined),
+    );
+    yield* work.taskWorktreeCreated(
+      {
+        workspace: workspace.slug,
+        project: project.id,
+        repository: repository.id,
+        task: task.id,
+        thread: started.threadKey,
+      },
+      started.worktree,
     );
     return { started: true } satisfies PeerHubContinueRunResult;
   });

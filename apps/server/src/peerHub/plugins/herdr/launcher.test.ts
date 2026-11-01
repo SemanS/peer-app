@@ -143,6 +143,87 @@ describe("task worktree", () => {
   });
 });
 
+describe("a launch that goes on in a checkout a run left", () => {
+  const agentIn = (cwd: string): HerdrAgentState =>
+    ({
+      paneId: "w1:p1",
+      terminalId: "t1",
+      name: "peer-1",
+      agent: "claude",
+      status: "idle",
+      title: "claude",
+      branch: undefined,
+      cwd,
+    }) as HerdrAgentState;
+
+  const launching = (listed: ReadonlyArray<HerdrAgentState>, started: HerdrAgentState) => {
+    const folders: Array<string> = [];
+    let current = listed;
+    const client = {
+      start: async (input: { readonly cwd: string }) => {
+        folders.push(input.cwd);
+        current = [started];
+        return { paneId: "w1:p1", terminalId: "t1" };
+      },
+      prompt: async () => undefined,
+    } as unknown as HerdrClientShape;
+    const agents = {
+      current: () => current,
+      keyOf: (one: HerdrAgent) => `herdr:${one.terminalId}`,
+      refresh: Effect.void,
+    } as unknown as HerdrAgents;
+    return Effect.map(
+      makeLauncher(agents).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(HerdrClient, client),
+            Layer.succeed(HerdrRuntime, {
+              blocker: Effect.succeed(null),
+            } as unknown as HerdrRuntime["Service"]),
+          ),
+        ),
+      ),
+      (launcher) => ({ launcher, folders }),
+    );
+  };
+
+  const asked = (directory: string, reuse: string) => ({
+    // Neither exists: making a checkout would fail, so a launch that passes made none.
+    checkout: NodePath.join(directory, "no-repository"),
+    worktrees: NodePath.join(directory, "no-trees"),
+    baseBranch: "main",
+    task: { id: "task", key: "KRK-1" } as PeerTask,
+    harness: "claude" as const,
+    prompt: "Go on.",
+    env: {},
+    reuse,
+  });
+
+  it.effect("starts its agent there, and says it made no checkout", () =>
+    Effect.gen(function* () {
+      const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-reuse-"));
+      removed.push(directory);
+      const { launcher, folders } = yield* launching([], agentIn(directory));
+      const started = yield* launcher.launch(asked(directory, directory));
+      assert.deepStrictEqual(folders, [directory]);
+      assert.strictEqual(started.root, directory);
+      assert.isUndefined(started.worktree);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("refuses while herdr lists an agent there, and starts nothing", () =>
+    Effect.gen(function* () {
+      const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-reuse-"));
+      removed.push(directory);
+      const open = agentIn(directory);
+      const { launcher, folders } = yield* launching([open], open);
+      const refused = yield* launcher.launch(asked(directory, directory)).pipe(Effect.flip);
+      assert.include(refused.detail, "still open");
+      assert.deepStrictEqual(folders, []);
+    }).pipe(Effect.scoped),
+  );
+});
+
 describe("an agent that asks to trust its folder", () => {
   it.effect("keeps its prompt until the person trusts it, and counts as waiting meanwhile", () =>
     Effect.gen(function* () {

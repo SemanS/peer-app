@@ -27,6 +27,8 @@ import {
   parseJjVersion,
 } from "../../vcs/JjAvailability.ts";
 import { mainWorkspaceRootFromRepoPointer } from "../../vcs/JjRepo.ts";
+import { escapeRevsetString } from "../../vcs/JjRevset.ts";
+import { isSafeGitRef } from "../gitSafety.ts";
 import { run } from "./local.ts";
 
 export type CheckoutKind =
@@ -305,6 +307,57 @@ export async function currentRef(cwd: string): Promise<string | undefined> {
     timeoutMs: 3000,
   }).catch(() => "");
   return name === "" || name === "HEAD" ? undefined : name;
+}
+
+/**
+ * Whether the task checkout at `root` holds work its base does not: commits of its own, or changes
+ * no commit holds yet, which a new checkout from the base would leave behind. A read that fails
+ * says no. A jj read snapshots first, so what the agent left in its files counts, which is also
+ * why this is only for a checkout no agent works in. An empty change without a description is jj's
+ * fresh working copy, not work.
+ */
+export async function holdsWork(root: string, base: string): Promise<boolean> {
+  if (!isSafeGitRef(base)) return false;
+  const found = await checkoutKind(root).catch(() => null);
+  if (found?.kind === "jj") {
+    const name = escapeRevsetString(base);
+    const known = `bookmarks(exact:"${name}") | remote_bookmarks(exact:"${name}", exact:"origin")`;
+    return runJj(
+      root,
+      [
+        "log",
+        "--no-graph",
+        "-r",
+        `(::@ ~ ::(${known})) ~ (empty() & description(exact:"") & ~merges())`,
+        "-T",
+        "change_id",
+      ],
+      { timeoutMs: 15_000 },
+    ).then(
+      (changes) => changes.trim() !== "",
+      () => false,
+    );
+  }
+  if (found?.kind !== "git") return false;
+  const git = (args: ReadonlyArray<string>) =>
+    run("git", ["--no-optional-locks", "-C", root, ...args], { timeoutMs: 15_000 });
+  try {
+    const bases = (
+      await git([
+        "for-each-ref",
+        "--format=%(refname)",
+        `refs/heads/${base}`,
+        `refs/remotes/origin/${base}`,
+      ])
+    )
+      .split("\n")
+      .filter(Boolean);
+    if (bases.length === 0) return false;
+    const ahead = await git(["rev-list", "--count", "HEAD", "--not", ...bases]);
+    return Number(ahead) > 0 || (await git(["status", "--porcelain=v1"])) !== "";
+  } catch {
+    return false;
+  }
 }
 
 /** Test hook: forget every cached kind and jj's availability. */

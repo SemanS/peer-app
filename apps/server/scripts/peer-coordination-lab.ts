@@ -104,6 +104,11 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   default; with REAL_AGENTS=1 real agents, reported as one `handoff:` line (LAB_ARM names the build, LAB_REPORT a file).
 //   REAL_SCENARIO=rooms LAB_SHARED=1 REAL_AGENTS=1 (LAB_VCS=jj for Jujutsu) proves one room across two projects: a
 //   message in the room starts one real agent, with a checkout of its own in both, and each project's diff shows its work.
+//   REAL_SCENARIO=rooms LAB_RETRY=1 REAL_AGENTS=1 (LAB_VCS=jj for Jujutsu) proves Try again on real agents in chats: an
+//   open run that committed goes on in its checkout, on its model, as one run; a run that ended gets a new one there; a
+//   run that left nothing starts over from the base. The room's diff shows the commit throughout. A task starts from
+//   what a teammate pushed, and the person's own checkout stays where it was. Peer remembers each checkout it made, once;
+//   closing a chat removes those that hold nothing and keeps the one with a commit no remote has.
 //   REAL_SCENARIO=rooms (peer-lab/rooms.ts) proves a task's room: Bob names Ana's agent and nothing reaches it until she
 //   passes it on, she declines and Bob's status moves with no new message, Bob withdraws, a hostile message stays
 //   fenced, an agent cannot name an agent, Bob's own agent answers from a review session on his computer after Ana's run
@@ -464,6 +469,8 @@ const KNOWLEDGE = process.env.REAL_SCENARIO === "knowledge";
 const ROOMS = process.env.REAL_SCENARIO === "rooms";
 /** LAB_SHARED=1: the room of a workspace, two projects and one real agent. */
 const SHARED = ROOMS && REAL && process.env.LAB_SHARED === "1";
+/** LAB_RETRY=1: Try again on the work real agents left in chats. */
+const RETRY = ROOMS && REAL && process.env.LAB_RETRY === "1";
 /** REAL_SCENARIO=handoff (`peer-lab/handoffSteps.ts`): what an agent clears after a handoff, what reaches a person. */
 const HANDOFF = process.env.REAL_SCENARIO === "handoff";
 if (process.env.LAB_VCS !== undefined && !["git", "jj"].includes(process.env.LAB_VCS)) {
@@ -4866,6 +4873,7 @@ function writeClaudeWrapper(h: HerdrServer, computer: Computer) {
     [
       "#!/bin/sh",
       `if [ "$1" = "--setting-sources" ]; then exec ${quoted(real)} "$@"; fi`,
+      `printf '%s\\n' "$*" >> ${quoted(NodePath.join(h.base, "claude-args.log"))}`,
       `exec ${quoted(real)} --setting-sources project --settings ${quoted(settings)} --strict-mcp-config --permission-mode acceptEdits --model ${quoted(process.env.LAB_CLAUDE_MODEL ?? "sonnet")} "$@"`,
       "",
     ].join("\n"),
@@ -7573,6 +7581,367 @@ const sharedRoomProgram = Effect.gen(function* () {
   }
 }).pipe(Effect.scoped);
 
+/** LAB_RETRY: the work at a first hearing; at a later one the agent finds its file and answers. */
+const RETRY_ASK = (file: string) =>
+  `I send you this message twice. The first time, ${file} is missing: create it with the one line \`// ${file}\`, commit it on your branch (${JJ ? "jj commit" : "git add, then git commit"}), then stop, without a word in this room and without peer review or peer done. The second time, you find the file there, or you remember making it: then answer this message in the room with peer room say --reply, naming the commit that holds it.`;
+const RETRY_NOTHING =
+  "Change nothing and commit nothing. Stop, without a word in this room and without peer review or peer done.";
+
+/**
+ * LAB_RETRY=1: Try again on real agents, in chats of Lab. Each agent stops without answering, and Ana tries again. Judged
+ * from where the retry went: its run, its checkout, the commit and the room's diff.
+ */
+const roomsRetryProgram = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  writeFakeModel();
+  const herdr = startHerdr("Ana");
+  const ana = yield* startComputer("Ana", "ana@acme.test", herdr.socket);
+  writeClaudeWrapper(herdr, ana);
+  const email = "ana@acme.test";
+  const model = process.env.LAB_MODEL ?? "claude-haiku-5-5";
+  const rpc = <A>(effect: Effect.Effect<A, unknown>) => Effect.runPromise(effect);
+  const missed: string[] = [];
+  const must = (ok: unknown, what: string) => {
+    observe(ok, what);
+    if (!ok) missed.push(what);
+  };
+  const live: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [];
+  const agents = () =>
+    (herdrJson(herdr, "agent", "list").result?.agents ?? []) as ReadonlyArray<{
+      readonly pane_id: string;
+      readonly cwd?: string;
+    }>;
+  /** What a person at the screen does while the lab waits. */
+  const tend = () => {
+    const panes = agents().map((one) => one.pane_id);
+    for (const pane of panes) {
+      if (!live.some((one) => one.pane === pane)) live.push({ computer: ana, h: herdr, pane });
+      const screen = herdrText(herdr, "pane", "read", pane, "--source", "visible");
+      if (screen.includes("Yes, I trust this folder"))
+        herdrText(
+          herdr,
+          "pane",
+          "send-keys",
+          pane,
+          /❯\s*Yes, I trust this folder/.test(screen) ? "enter" : "down",
+        );
+    }
+    approveAll(live.filter((one) => panes.includes(one.pane)));
+  };
+  const waitOn = async (what: string, ready: () => boolean | Promise<boolean>, ms: number) => {
+    for (let waited = 0; waited < ms; waited += 3000) {
+      if (await ready()) return true;
+      await sleep(3000);
+      tend();
+    }
+    say("gave up waiting", what);
+    return false;
+  };
+  const commitsIn = (cwd: string, base = "main") => {
+    try {
+      return Number(
+        NodeChildProcess.execFileSync("git", ["-C", cwd, "rev-list", "--count", `${base}..HEAD`], {
+          encoding: "utf8",
+        }).trim(),
+      );
+    } catch {
+      return 0;
+    }
+  };
+  const idle = (pane: string) => ["idle", "done"].includes(statusOf(herdr, pane));
+  const agentGone = async (pane: string) => {
+    await waitOn("the agent to idle", () => idle(pane), 3 * 60_000);
+    herdrJson(herdr, "agent", "prompt", pane, "/exit");
+    await waitOn("the agent to leave", () => !agents().some((a) => a.pane_id === pane), 30_000);
+    herdrText(herdr, "pane", "close", pane);
+  };
+  const started = () => agents()[0];
+  const claudeArgs = () =>
+    NodeFS.readFileSync(NodePath.join(herdr.base, "claude-args.log"), "utf8").trim().split("\n");
+  const realPath = (path: string) => (NodeFS.existsSync(path) ? NodeFS.realpathSync(path) : path);
+  /** The checkouts Peer means to remove once their task is done, sorted. */
+  const remembered = (): ReadonlyArray<string> => {
+    const file = (NodeFS.readdirSync(ana.home, { recursive: true }) as string[]).find(
+      (entry) => NodePath.basename(entry) === "peer-hub.json",
+    );
+    try {
+      const persisted = JSON.parse(
+        NodeFS.readFileSync(NodePath.join(ana.home, file ?? ""), "utf8"),
+      );
+      return Object.keys(persisted.pluginData?.herdr?.checkouts ?? {})
+        .map(realPath)
+        .toSorted();
+    } catch {
+      return [];
+    }
+  };
+
+  /** Ana's message in a new chat, until its agent is done with it and `leave` has let it go. */
+  const chatUntilStopped = async (
+    title: string,
+    text: string,
+    chosen: string | undefined,
+    done: (cwd: string) => boolean,
+    leave: (run: string) => Promise<void> = async () => undefined,
+  ) => {
+    const created = await rpc(
+      ana.client[WS_METHODS.peerHubCreateTask]({
+        workspace: "acme",
+        projectId: "lab",
+        title,
+        chat: true,
+      }),
+    );
+    const place = { workspace: "acme", project: "lab", task: created.createdTask?.id ?? "" };
+    const asked = await rpc(
+      ana.client[PEER_ROOMS_METHODS.peerRoomsPost]({
+        ...place,
+        op: `retry-${place.task}`,
+        text,
+        to: [{ kind: "agent", email, ...(chosen === undefined ? {} : { model: chosen }) }],
+      }),
+    );
+    const roomPath = `/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(place.task)}/room`;
+    const delivery = async () =>
+      deliveryOf(
+        (
+          (await hubCall(`${roomPath}?limit=50`, { session: hubSession }))
+            .messages as ReadonlyArray<PeerRoomMessage>
+        ).find((one) => one.seq === asked.seq),
+        email,
+      );
+    if (!(await waitOn(`${title}: its agent`, () => agents().length > 0, 3 * 60_000)))
+      throw new Error(`${title}: no agent started`);
+    const { pane_id: pane, cwd = "" } = started()!;
+    say(`${title}: the agent`, `${pane} in ${cwd}`);
+    must(
+      await waitOn(`${title}: its work`, () => done(cwd) && idle(pane), 6 * 60_000),
+      `${title}: its agent did what it was asked`,
+    );
+    const run = (await delivery())?.run ?? "";
+    await leave(run);
+    await agentGone(pane);
+    // Nothing reads the room when a session ends: the next ping or sync does, as here.
+    must(
+      await waitOn(
+        `${title}: the room says it stopped`,
+        async () => {
+          await rpc(ana.client[WS_METHODS.peerHubSync]({}));
+          return (await delivery())?.state === "failed";
+        },
+        4 * 60_000,
+      ),
+      `${title}: the delivery failed once its session ended`,
+    );
+    say(`${title}: the delivery`, JSON.stringify(await delivery()));
+    const openRuns = async () =>
+      (
+        await rpc(
+          ana.client[WS_METHODS.peerHubRuns]({
+            workspace: "acme",
+            projectId: "lab",
+            taskId: place.task,
+          }),
+        )
+      ).runs.filter((one) => one.state !== "ended");
+    const shows = async (file: string) => {
+      const diff = await rpc(ana.client[PEER_ROOMS_METHODS.peerRoomsDiff](place));
+      say(`${title}: the room's diff`, JSON.stringify(diff).slice(0, 300));
+      return diff.state === "here" && diff.patch.includes(file);
+    };
+    const tryAgain = () =>
+      rpc(
+        ana.client[PEER_ROOMS_METHODS.peerRoomsPass]({
+          ...place,
+          seq: asked.seq,
+          expect: "failed",
+        }),
+      );
+    return { cwd, delivery, openRuns, run, shows, task: place.task, tryAgain };
+  };
+
+  try {
+    const trust = yield* Effect.promise(() =>
+      startClaude(herdr, ana, "trust", { cwd: NodeFS.realpathSync(ana.checkout) }),
+    );
+    herdrJson(herdr, "agent", "prompt", trust, "/exit");
+    yield* Effect.promise(() => sleep(4000));
+    herdrText(herdr, "pane", "close", trust);
+    // Peer remembers a checkout's kind for 30 s, and the lab made it a jj repository just now.
+    if (JJ) yield* Effect.promise(() => sleep(31_000));
+
+    yield* Effect.promise(async () => {
+      // An open run on a chosen model: Try again used to start a second run beside it, from main.
+      const committed = (file: string) => (cwd: string) =>
+        NodeFS.existsSync(NodePath.join(cwd, file)) && commitsIn(cwd) > 0;
+      const a = await chatUntilStopped(
+        "A",
+        RETRY_ASK("retry-a.ts"),
+        model,
+        committed("retry-a.ts"),
+      );
+      const firstStart = claudeArgs().length;
+      must(
+        !JJ || NodeFS.existsSync(NodePath.join(a.cwd, ".jj")),
+        "A: on Jujutsu its checkout is a jj workspace",
+      );
+      must(await a.shows("retry-a.ts"), "A: the room shows the commit of the run that stopped");
+      await a.tryAgain();
+      must(
+        await waitOn(
+          "A: the retry's answer",
+          async () => (await a.delivery())?.state === "answered",
+          6 * 60_000,
+        ),
+        "A: the retry answered in the room",
+      );
+      const againA = started();
+      say("A: the delivery after Try again", JSON.stringify(await a.delivery()));
+      must((await a.delivery())?.run === a.run, "A: the retry is the same run");
+      must(againA?.cwd === a.cwd, `A: in the same checkout (${String(againA?.cwd)})`);
+      must(commitsIn(a.cwd) > 0, "A: the commit is still there");
+      must((await a.openRuns()).length === 1, "A: one open run, so one toggle in the room");
+      must(await a.shows("retry-a.ts"), "A: the room still shows the commit");
+      const resumed = claudeArgs()[firstStart] ?? "";
+      say("A: the retry's claude", resumed);
+      must(resumed.includes("--resume"), "A: it resumed its conversation");
+      must(resumed.includes(`--model ${model}`), "A: on the model Ana chose");
+      await agentGone(againA?.pane_id ?? "");
+
+      // A run that ended: nothing continues it, so a new run goes on in its checkout.
+      const b = await chatUntilStopped(
+        "B",
+        RETRY_ASK("retry-b.ts"),
+        undefined,
+        committed("retry-b.ts"),
+        async (run) => {
+          await rpc(
+            ana.client[WS_METHODS.peerHubEndRun]({
+              workspace: "acme",
+              projectId: "lab",
+              runId: run,
+            }),
+          );
+        },
+      );
+      must(await b.shows("retry-b.ts"), "B: the room shows the commit of the run that ended");
+      await b.tryAgain();
+      must(
+        await waitOn(
+          "B: the retry's answer",
+          async () => (await b.delivery())?.state === "answered",
+          6 * 60_000,
+        ),
+        "B: the retry answered in the room",
+      );
+      const againB = started();
+      must((await b.delivery())?.run !== b.run, "B: the retry is a new run");
+      must(againB?.cwd === b.cwd, `B: in the same checkout (${String(againB?.cwd)})`);
+      must(commitsIn(b.cwd) > 0, "B: the commit is still there");
+      must((await b.openRuns()).length === 1, "B: one open run");
+      must(await b.shows("retry-b.ts"), "B: the room still shows the commit");
+      await agentGone(againB?.pane_id ?? "");
+
+      // A teammate pushes to main, which Ana's clone has not fetched.
+      const teammate = NodePath.join(lab, "teammate");
+      git(lab, "clone", "--quiet", NodePath.join(lab, "origin.git"), teammate);
+      NodeFS.writeFileSync(NodePath.join(teammate, "team-pushed.ts"), "// pushed\n");
+      git(teammate, "add", ".");
+      git(teammate, "commit", "--quiet", "-m", "the team's work");
+      git(teammate, "push", "--quiet", "origin", "HEAD:main");
+      const standing = () =>
+        JJ
+          ? jj(
+              ana.checkout,
+              "--ignore-working-copy",
+              "log",
+              "--no-graph",
+              "-r",
+              "@ | @-",
+              "-T",
+              'commit_id ++ "\\n"',
+            )
+          : git(ana.checkout, "rev-parse", "HEAD");
+      const stoodAt = standing();
+
+      // Nothing to keep: the retry goes as it always did, from the base in a new checkout.
+      let quiet = 0;
+      const c = await chatUntilStopped("C", RETRY_NOTHING, model, () => {
+        quiet += 1;
+        return quiet > 8;
+      });
+      must(
+        NodeFS.existsSync(NodePath.join(c.cwd, "team-pushed.ts")),
+        "C: its agent started from what the team pushed",
+      );
+      must(
+        !NodeFS.existsSync(NodePath.join(ana.checkout, "team-pushed.ts")) && standing() === stoodAt,
+        "C: Ana's own checkout stayed where it was",
+      );
+      await c.tryAgain();
+      must(
+        await waitOn("C: a new agent", () => agents().length > 0, 3 * 60_000),
+        "C: the retry started an agent",
+      );
+      const againC = started();
+      must(againC?.cwd !== c.cwd, `C: in a new checkout (${String(againC?.cwd)})`);
+      // Not local main: a fetch moves neither Git's nor a jj bookmark that tracks nothing.
+      must(commitsIn(againC?.cwd ?? "", "refs/remotes/origin/main") === 0, "C: from the base");
+      await agentGone(againC?.pane_id ?? "");
+
+      // A and B went on in their checkouts, so only C's retry made one more.
+      const made = [a.cwd, b.cwd, c.cwd, againC?.cwd ?? ""].map(realPath).toSorted();
+      const allKnown = await waitOn(
+        "Peer to remember its checkouts",
+        () => remembered().join() === made.join(),
+        30_000,
+      );
+      say("the checkouts Peer remembers", remembered().join(" "));
+      must(allKnown, "Peer remembers each checkout a chat's run made, once");
+
+      for (const task of [a.task, c.task])
+        await hubCall(`/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(task)}`, {
+          method: "PATCH",
+          session: hubSession,
+          body: { status: "done" },
+        });
+      const gone = await waitOn(
+        "closed chats' checkouts to go",
+        async () => {
+          await rpc(ana.client[WS_METHODS.peerHubSync]({}));
+          return !NodeFS.existsSync(c.cwd) && !NodeFS.existsSync(againC?.cwd ?? "");
+        },
+        3 * 60_000,
+      );
+      say("the checkouts Peer remembers once closed", remembered().join(" "));
+      must(gone, "C: closing the chat removed both checkouts, which held nothing");
+      must(
+        NodeFS.existsSync(a.cwd) && remembered().includes(realPath(a.cwd)),
+        "A: closing the chat kept the checkout with a commit no remote has",
+      );
+      must(
+        remembered().join() === [a.cwd, b.cwd].map(realPath).toSorted().join(),
+        "Peer forgot only what it removed",
+      );
+    });
+    check(missed.length === 0, `Try again kept the work (missing: ${missed.join("; ")})`);
+  } finally {
+    for (const { pane } of live) {
+      console.log(`\n===== agent ${pane}, last screen =====`);
+      console.log(
+        herdrText(herdr, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "60"),
+      );
+    }
+    for (const entry of events(ana)) {
+      if (/^rooms|^run\./.test(entry.event)) console.log(JSON.stringify(entry).slice(0, 300));
+    }
+    herdrText(herdr, "server", "stop");
+  }
+}).pipe(Effect.scoped);
+
 /**
  * REAL_SCENARIO=rooms REAL_AGENTS=1: real Claude Code on both computers. Peer starts Bob's review session in his real
  * herdr, so its pane runs the lab's `claude` wrapper. What agents do is observed and reported, never failed on, except
@@ -8842,9 +9211,11 @@ try {
               : ROOMS
                 ? SHARED
                   ? sharedRoomProgram
-                  : REAL
-                    ? roomsRealProgram
-                    : roomsProgram
+                  : RETRY
+                    ? roomsRetryProgram
+                    : REAL
+                      ? roomsRealProgram
+                      : roomsProgram
                 : KNOWLEDGE
                   ? knowledgeProgram
                   : TASKS

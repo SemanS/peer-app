@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { chosenBookmarkConfigKey } from "../../jj/JjStatus.ts";
 import { workspaceNameForRef } from "../../jj/JjWorkspaces.ts";
-import { checkoutKind, checkoutState, currentRef, resetVcsCaches } from "./vcs.ts";
+import { checkoutKind, checkoutState, currentRef, holdsWork, resetVcsCaches } from "./vcs.ts";
 
 const sh = (cwd: string, command: string, args: ReadonlyArray<string>) =>
   NodeChildProcess.execFileSync(command, [...args], {
@@ -77,6 +77,61 @@ function logRuns(commands: ReadonlyArray<string>): () => ReadonlyArray<string> {
           .filter((line) => line !== "" && !line.endsWith("--version"))
       : [];
 }
+
+describe("holdsWork", () => {
+  /** A repository and a task's worktree of it, on a branch of its own off `main`. */
+  const taskTree = () => {
+    const root = gitRepo("project");
+    const tree = NodePath.join(dir, "tree");
+    sh(root, "git", ["worktree", "add", "-q", "-b", "feature/task", tree, "main"]);
+    return { root, tree };
+  };
+
+  it("says no for a branch with nothing beyond its base", async () => {
+    const { tree } = taskTree();
+    expect(await holdsWork(tree, "main")).toBe(false);
+  });
+
+  it("says yes for a commit of the branch's own", async () => {
+    const { tree } = taskTree();
+    sh(tree, "git", ["commit", "-q", "--allow-empty", "-m", "the work"]);
+    expect(await holdsWork(tree, "main")).toBe(true);
+  });
+
+  it("says yes for what no commit holds yet", async () => {
+    const { tree } = taskTree();
+    NodeFS.writeFileSync(NodePath.join(tree, "draft.ts"), "1\n");
+    expect(await holdsWork(tree, "main")).toBe(true);
+  });
+
+  it("counts a base that moved on as no work of the branch's", async () => {
+    const { root, tree } = taskTree();
+    sh(root, "git", ["commit", "-q", "--allow-empty", "-m", "the team's"]);
+    expect(await holdsWork(tree, "main")).toBe(false);
+  });
+
+  it("says no once the base holds the branch's commits, as a merge does", async () => {
+    const { root, tree } = taskTree();
+    sh(tree, "git", ["commit", "-q", "--allow-empty", "-m", "the work"]);
+    sh(root, "git", ["merge", "-q", "--ff-only", "feature/task"]);
+    expect(await holdsWork(tree, "main")).toBe(false);
+  });
+
+  it("goes by the remote's base too, where the local one is behind", async () => {
+    const { root, tree } = taskTree();
+    sh(tree, "git", ["commit", "-q", "--allow-empty", "-m", "the work"]);
+    sh(root, "git", ["update-ref", "refs/remotes/origin/main", "feature/task"]);
+    expect(await holdsWork(tree, "main")).toBe(false);
+  });
+
+  it("says no for a folder gone, a base it cannot name and a base nobody knows", async () => {
+    const { tree } = taskTree();
+    NodeFS.writeFileSync(NodePath.join(tree, "draft.ts"), "1\n");
+    expect(await holdsWork(NodePath.join(dir, "gone"), "main")).toBe(false);
+    expect(await holdsWork(tree, "--output=/tmp/x")).toBe(false);
+    expect(await holdsWork(tree, "trunk")).toBe(false);
+  });
+});
 
 describe("checkoutKind", () => {
   it("reads a Git repository as Git", async () => {

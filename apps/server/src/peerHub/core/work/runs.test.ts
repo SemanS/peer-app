@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import type { PersistedRun } from "../state/PeerState.ts";
 import * as PeerState from "../state/PeerState.ts";
 import { coreLayer, paymentsSeed, seedState, standInHub } from "../testkit.ts";
-import { mintRunId, RunBook, stateOf, workRunsOf } from "./runs.ts";
+import { mintRunId, RunBook, stateOf, toPeerRun, workRunsOf } from "./runs.ts";
 import * as PeerRuns from "./runs.ts";
 
 const place = { workspace: "acme", project: "pay" };
@@ -116,6 +116,26 @@ describe("RunBook", () => {
     const ended = await runs.end(run.id, "done");
     assert.strictEqual(stateOf(ended!), "ended");
     assert.strictEqual(ended!.outcome, "done");
+  });
+
+  it("keeps_its_checkout_on_this_computer", async () => {
+    const { runs } = book();
+    const { run } = await runs.create({
+      ...place,
+      task: "krk-1",
+      agent: "claude",
+      runtime: "herdr",
+      model: "claude-haiku-5-5",
+      effort: "low",
+    });
+    await runs.hold(run.id, "herdr:one", "p-1", "/trees/one");
+    await runs.hold(run.id, "herdr:two", "p-2");
+    assert.strictEqual(runs.get(run.id)!.root, "/trees/one");
+    await runs.end(run.id, "stopped");
+    assert.strictEqual(runs.get(run.id)!.root, "/trees/one");
+    // A folder of this computer means nothing to the Hub or another client, and the Hub keeps no choice.
+    const shown = toPeerRun(runs.get(run.id)!);
+    for (const name of ["root", "model", "effort"]) assert.notProperty(shown, name);
   });
 
   it("thread_keys_follow_live_runs", async () => {

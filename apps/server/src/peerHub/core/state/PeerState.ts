@@ -95,6 +95,11 @@ export const PersistedRun = Schema.Struct({
   keys: Schema.optional(Schema.Array(Schema.String)),
   /** Its last session's herdr pane: a new session there continues it. */
   pane: Schema.optional(Schema.String),
+  /** The checkout a launch put it in: its sessions leave no other trace of it once they end. */
+  root: Schema.optional(Schema.String),
+  /** The model and effort its author chose: a session that continues it runs on them too. */
+  model: Schema.optional(Schema.String),
+  effort: Schema.optional(Schema.String),
   /** Changed since the Hub last took it. */
   pending: Schema.optional(Schema.Boolean),
   /** The task the Hub last took it on, so a move goes to the Hub as one. */

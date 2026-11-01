@@ -62,7 +62,18 @@ export function stateOf(run: Pick<PersistedRun, "endedAt" | "sessions">): PeerRu
 
 /** A run as the contracts and the Hub's views show it. */
 export function toPeerRun(run: PersistedRun): PeerRun {
-  const { tokenHash: _t, keys: _k, pane: _p, pending: _s, hubTask: _h, local: _l, ...shown } = run;
+  const {
+    tokenHash: _t,
+    keys: _k,
+    pane: _p,
+    root: _r,
+    model: _m,
+    effort: _f,
+    pending: _s,
+    hubTask: _h,
+    local: _l,
+    ...shown
+  } = run;
   return { ...shown, state: stateOf(run) };
 }
 
@@ -124,6 +135,9 @@ export interface CreateRun {
   readonly pane?: string | undefined;
   /** An id minted ahead, so a session's files can be named by it before the run is written. */
   readonly id?: string | undefined;
+  /** What its author chose it to start on. */
+  readonly model?: string | undefined;
+  readonly effort?: string | undefined;
 }
 
 export interface CreatedRun {
@@ -267,6 +281,8 @@ export class RunBook {
       tokenHash: hashToken(token),
       ...(keys.length === 0 ? {} : { keys: [...keys] }),
       ...(input.pane === undefined ? {} : { pane: input.pane }),
+      ...(input.model === undefined ? {} : { model: input.model }),
+      ...(input.effort === undefined ? {} : { effort: input.effort }),
       pending: true,
     };
     if (input.requestId !== undefined) this.tokens.set(id, token);
@@ -351,7 +367,7 @@ export class RunBook {
   }
 
   /** A run holds a thread key besides its sessions' (a herdr terminal before its session is known). */
-  async hold(id: string, key: string, pane?: string): Promise<void> {
+  async hold(id: string, key: string, pane?: string, root?: string): Promise<void> {
     const run = this.get(id);
     if (run === undefined) return;
     const next = this.withoutKeys([key], id);
@@ -359,6 +375,7 @@ export class RunBook {
       ...run,
       keys: [...new Set([...(run.keys ?? []), key])],
       ...(pane === undefined ? {} : { pane }),
+      ...(root === undefined ? {} : { root }),
     };
     await this.write(next);
   }
@@ -752,10 +769,11 @@ export type RunEnv = Readonly<Record<string, string>>;
 /**
  * A start in a runtime Peer launches (herdr's, for `startAgent`, a role's agent): the run exists
  * before its agent does, so the agent's first hook proves it with the token; once the agent runs,
- * the run holds its thread key and pane, which is how the work view and Observe find it.
+ * the run holds its thread key and pane, which is how the work view and Observe find it, and the
+ * checkout it runs in, which is how a later start finds its work.
  */
 export const launchInRun = <
-  A extends { readonly threadKey: string; readonly paneId: string },
+  A extends { readonly threadKey: string; readonly paneId: string; readonly root?: string },
   E,
   R,
 >(
@@ -771,7 +789,9 @@ export const launchInRun = <
       PEER_TASK: run.task,
     });
     yield* Effect.promise(() =>
-      runs.book.hold(run.id, started.threadKey, started.paneId).catch(() => undefined),
+      runs.book
+        .hold(run.id, started.threadKey, started.paneId, started.root)
+        .catch(() => undefined),
     );
     return { run: run.id, started };
   });

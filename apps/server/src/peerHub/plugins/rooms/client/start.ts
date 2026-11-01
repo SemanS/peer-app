@@ -22,7 +22,8 @@ import * as Schema from "effect/Schema";
 
 import type * as PeerPlugins from "../../../core/plugins/PeerPlugins.ts";
 import type * as PeerState from "../../../core/state/PeerState.ts";
-import { projectKey } from "../../../core/state/PeerState.ts";
+import { projectKey, type PersistedRun } from "../../../core/state/PeerState.ts";
+import { holdsWork } from "../../../core/vcs.ts";
 import type * as PeerWork from "../../../core/work/PeerWork.ts";
 import { foldersBeyond, runRootsData, type RunRoot } from "../../../core/work/runRoots.ts";
 import { run } from "../../../core/local.ts";
@@ -117,8 +118,8 @@ export const capacityOf = (
     );
   });
 
-/** The person's open runs on the task kept on this computer, newest first. */
-export const openRuns = (
+/** The person's runs on the task kept on this computer, newest first. */
+export const taskRuns = (
   state: PeerState.PeerState["Service"],
   place: { readonly workspace: string; readonly project: string; readonly task: string },
 ) =>
@@ -128,11 +129,59 @@ export const openRuns = (
         (run) =>
           run.workspace === place.workspace &&
           run.project === place.project &&
-          run.task === place.task &&
-          run.endedAt === undefined,
+          run.task === place.task,
       )
       .toSorted((a, b) => b.startedAt.localeCompare(a.startedAt)),
   );
+
+/** Those that have not ended. */
+export const openRuns = (
+  state: PeerState.PeerState["Service"],
+  place: { readonly workspace: string; readonly project: string; readonly task: string },
+) => Effect.map(taskRuns(state, place), (runs) => runs.filter((run) => run.endedAt === undefined));
+
+/** The checkout a launch put a run in, while it is still on this computer. */
+export const rootHere = (run: Pick<PersistedRun, "root">) =>
+  run.root === undefined
+    ? Promise.resolve(undefined)
+    : NodeFSP.stat(run.root).then(
+        (found) => (found.isDirectory() ? run.root : undefined),
+        () => undefined,
+      );
+
+/**
+ * What a working run's start goes on from: the checkout of the person's newest run on the task, when
+ * that run ended and left work in it. Nothing continues an ended run, so a new one goes on there;
+ * an open run with work is `follow`'s to continue. Only for a delivery its owner sent on: a person's
+ * next message in a chat is a new turn, and a branch squashed into its base still reads as work.
+ */
+const checkoutLeft = (
+  state: PeerState.PeerState["Service"],
+  plugins: PeerPlugins.PeerPlugins["Service"],
+  place: { readonly workspace: string; readonly project: string; readonly task: string },
+  item: PeerRoomInboxItem,
+  me: string,
+  base: string,
+) =>
+  Effect.gen(function* () {
+    const mine = (email: string) => email.toLowerCase() === me.toLowerCase();
+    const delivery = item.message.to.find(
+      (target) => target.kind === "agent" && mine(target.email),
+    );
+    if (delivery?.by === undefined) return undefined;
+    const reviews = yield* plugins.require("reviewStarter").pipe(
+      Effect.flatMap((starter) => starter.reviewRuns(place.workspace, place.project)),
+      Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
+    );
+    const newest = (yield* taskRuns(state, place)).find(
+      (run) => mine(run.email) && !reviews.has(run.id),
+    );
+    if (newest?.endedAt === undefined) return undefined;
+    return yield* Effect.promise(async () => {
+      const root = await rootHere(newest);
+      return root !== undefined && (await holdsWork(root, base)) ? root : undefined;
+    });
+  });
 
 /** The other open chats of a shared room that this computer has a checkout for. */
 const sharedRooms = (
@@ -276,8 +325,24 @@ export const roomStarts = (
         const launcher = yield* plugins.require("taskLauncher");
         const unavailable = yield* launcher.unavailable;
         if (unavailable !== null) return yield* refusal(unavailable);
+        const reuse = yield* checkoutLeft(
+          state,
+          plugins,
+          { workspace, project: project.id, task: task.id },
+          item,
+          me,
+          checkout.repository.branch,
+        );
         const { run, started } = yield* work.launchRun(
-          { workspace, project: project.id, task: task.id, agent: harness, runtime: "herdr" },
+          {
+            workspace,
+            project: project.id,
+            task: task.id,
+            agent: harness,
+            runtime: "herdr",
+            model,
+            effort,
+          },
           (env) =>
             launcher.launch({
               checkout: checkout.path,
@@ -293,6 +358,7 @@ export const roomStarts = (
               harness,
               prompt: task.chat === true ? chatRunPrompt(heard) : passedRunPrompt(heard),
               env,
+              reuse,
               also: [
                 ...others.map((other) => ({
                   project: other.project.name,
@@ -331,37 +397,39 @@ export const roomStarts = (
             ? []
             : [{ project: folder.project, repository: "", task: "", root: tree.root }];
         });
-        if (roots.length + folderRoots.length > 0) {
+        if (roots.length + folderRoots.length > 0)
           yield* runRootsData(state)
             .update((current) => {
               const stored = Option.getOrUndefined(current);
               return { ...stored, runs: { ...stored?.runs, [run]: [...roots, ...folderRoots] } };
             })
             .pipe(state.lock.withPermits(1));
-          // The same record as the run's own checkout, so it is cleaned up when its task is done.
-          const contributions = yield* plugins.contributions;
-          yield* Effect.forEach(
-            roots,
-            (root, index) =>
-              Effect.forEach(
-                contributions,
-                (contribution) =>
-                  contribution.taskWorktreeCreated?.({
-                    kind: "task-worktree-created",
-                    workspace,
-                    project: root.project,
-                    repository: root.repository,
-                    task: root.task,
-                    thread: started.threadKey,
-                    root: root.root,
-                    identity: started.alsoTrees?.[index]?.identity ?? "",
-                  }) ?? Effect.void,
-                { discard: true },
-              ),
-            { discard: true },
-          );
-        }
         yield* work.refresh().pipe(state.lock.withPermits(1));
+        yield* work.taskWorktreeCreated(
+          {
+            workspace,
+            project: project.id,
+            repository: checkout.repository.id,
+            task: task.id,
+            thread: started.threadKey,
+          },
+          started.worktree,
+        );
+        yield* Effect.forEach(
+          others,
+          (other, index) =>
+            work.taskWorktreeCreated(
+              {
+                workspace,
+                project: other.project.id,
+                repository: other.checkout.repository.id,
+                task: other.task.id,
+                thread: started.threadKey,
+              },
+              started.alsoTrees?.[index],
+            ),
+          { discard: true },
+        );
         return { run, typed: started.promptError === undefined };
       }),
   };

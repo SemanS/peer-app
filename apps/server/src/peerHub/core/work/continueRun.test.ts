@@ -1,3 +1,9 @@
+// @effect-diagnostics nodeBuiltinImport:off - a task's checkout in a temporary directory.
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
+import * as NodePath from "node:path";
+
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import { RunsRpcGroup } from "@t3tools/contracts";
@@ -11,7 +17,12 @@ import * as PeerAdapters from "../coordination/PeerAdapters.ts";
 import * as PeerAgents from "../coordination/PeerAgents.ts";
 import * as PeerCoordination from "../coordination/PeerCoordination.ts";
 import * as PeerContextView from "../index/PeerContextView.ts";
-import { bindPlugin, type PeerRpcWrap, type PeerTaskLauncher } from "../plugin.ts";
+import {
+  bindPlugin,
+  type PeerLifecycleEvent,
+  type PeerRpcWrap,
+  type PeerTaskLauncher,
+} from "../plugin.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerWork from "./PeerWork.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
@@ -19,6 +30,8 @@ import { coreLayer, meAnswer, paymentsSeed, seedState, standInHub } from "../tes
 import * as PeerRuns from "./runs.ts";
 import { stateOf } from "./runs.ts";
 
+/** The folder the stand-in launcher makes a new checkout in, under the one it was told. */
+const NEW_CHECKOUT = "KRK-1-new";
 const FOREIGN = "run_FOREIGN00000000000";
 /** Ana's own run that her other computer minted and left detached. */
 const DESK = "run_DESK0000000000000000";
@@ -78,6 +91,7 @@ const wrap: PeerRpcWrap = {
 const setup = Effect.gen(function* () {
   // What herdr's task launcher was asked to start, through a stand-in for the plugin.
   const launched: Array<Parameters<PeerTaskLauncher["launch"]>[0]> = [];
+  const created: Array<PeerLifecycleEvent> = [];
   const herdr = bindPlugin({
     id: "herdr",
     title: "herdr",
@@ -85,12 +99,20 @@ const setup = Effect.gen(function* () {
     defaultEnabled: true,
     layer: Layer.empty,
     make: Effect.succeed({
+      taskWorktreeCreated: (event) => Effect.sync(() => void created.push(event)),
       taskLauncher: {
         unavailable: Effect.succeed(null),
         launch: (asked) =>
           Effect.sync(() => {
             launched.push(asked);
-            return { paneId: "pane-9", terminalId: "term-9", threadKey: "herdr:term-9" };
+            const made = NodePath.join(asked.worktrees, NEW_CHECKOUT);
+            return {
+              paneId: "pane-9",
+              terminalId: "term-9",
+              threadKey: "herdr:term-9",
+              root: asked.reuse ?? made,
+              ...(asked.reuse === undefined ? { worktree: { root: made, identity: "1:2" } } : {}),
+            };
           }),
       },
     }),
@@ -167,7 +189,7 @@ const setup = Effect.gen(function* () {
     ),
   );
   const client = yield* RpcTest.makeClient(RunsRpcGroup).pipe(Effect.provide(handlers));
-  return { hub, runs, queued, fixture, client, launched, desk, core };
+  return { hub, runs, queued, fixture, client, launched, created, desk, core };
 });
 
 /** A run of this computer whose one session ended. */
@@ -191,6 +213,30 @@ const detached = (
   });
 
 const place = { workspace: "acme", projectId: "pay" };
+
+const gitIn = (cwd: string, ...args: ReadonlyArray<string>) =>
+  NodeChildProcess.execFileSync("git", ["-C", cwd, ...args], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "Ana",
+      GIT_AUTHOR_EMAIL: "ana@acme.test",
+      GIT_COMMITTER_NAME: "Ana",
+      GIT_COMMITTER_EMAIL: "ana@acme.test",
+    },
+  });
+
+/** A task's checkout on a branch of its own off `main`, with nothing on it yet. */
+const taskCheckout = Effect.acquireRelease(
+  Effect.sync(() => {
+    const directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-continue-"));
+    gitIn(directory, "init", "--quiet", "--initial-branch=main");
+    gitIn(directory, "commit", "--quiet", "--allow-empty", "-m", "start");
+    gitIn(directory, "switch", "--quiet", "-c", "feature/krk-1");
+    return directory;
+  }),
+  (directory) => Effect.sync(() => NodeFS.rmSync(directory, { recursive: true, force: true })),
+);
 
 describe("continuing a run", () => {
   it.effect("wakes a detached Peer thread's run through its last session", () =>
@@ -247,6 +293,75 @@ describe("continuing a herdr run", () => {
       // The new pane is the run's, so the work view and Observe find it.
       assert.strictEqual(runs.book.holderOf("herdr:term-9")?.id, id);
       assert.strictEqual(runs.book.get(id)!.pane, "pane-9");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("goes on in the checkout it left when that holds work", () =>
+    Effect.gen(function* () {
+      const { runs, client, launched, created } = yield* setup;
+      const tree = yield* taskCheckout;
+      const id = yield* detached(runs, "herdr", "claude:native-4");
+      yield* Effect.promise(() => runs.book.hold(id, "herdr:term-1", "pane-1", tree));
+      NodeFS.writeFileSync(NodePath.join(tree, "work.ts"), "1\n");
+      gitIn(tree, "add", ".");
+      gitIn(tree, "commit", "--quiet", "-m", "the work");
+
+      assert.deepStrictEqual(yield* client["peerHub.continueRun"]({ ...place, runId: id }), {
+        started: true,
+      });
+
+      assert.strictEqual(launched[0]!.reuse, tree);
+      assert.strictEqual(runs.book.get(id)!.root, tree);
+      assert.deepStrictEqual(created, []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("starts again on the model and effort its author chose", () =>
+    Effect.gen(function* () {
+      const { runs, client, launched } = yield* setup;
+      const { run } = yield* Effect.promise(() =>
+        runs.book.create({
+          workspace: "acme",
+          project: "pay",
+          task: "krk-1",
+          agent: "claude",
+          runtime: "herdr",
+          model: "claude-haiku-5-5",
+          effort: "low",
+        }),
+      );
+      yield* client["peerHub.continueRun"]({ ...place, runId: run.id });
+      assert.strictEqual(launched[0]!.model, "claude-haiku-5-5");
+      assert.strictEqual(launched[0]!.effort, "low");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("starts from the base when the checkout it left holds nothing", () =>
+    Effect.gen(function* () {
+      const { runs, client, launched, created } = yield* setup;
+      const tree = yield* taskCheckout;
+      const id = yield* detached(runs, "herdr", "claude:native-4");
+      yield* Effect.promise(() => runs.book.hold(id, "herdr:term-1", "pane-1", tree));
+
+      assert.deepStrictEqual(yield* client["peerHub.continueRun"]({ ...place, runId: id }), {
+        started: true,
+      });
+
+      assert.isUndefined(launched[0]!.reuse);
+      const root = NodePath.join(launched[0]!.worktrees, NEW_CHECKOUT);
+      assert.strictEqual(runs.book.get(id)!.root, root);
+      assert.deepStrictEqual(created, [
+        {
+          kind: "task-worktree-created",
+          workspace: "acme",
+          project: "pay",
+          repository: "api",
+          task: "krk-1",
+          thread: "herdr:term-9",
+          root,
+          identity: "1:2",
+        },
+      ]);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

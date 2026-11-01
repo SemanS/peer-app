@@ -99,7 +99,7 @@ Once the task is done and its agent is closed, Peer removes the task's worktree 
 itself, but only when nothing in it can be lost: no uncommitted or untracked file, every commit (or jj
 change) pushed to a remote, no other repository inside it, and nothing ignored but folders a build makes
 again, such as `node_modules/` or `dist/` (a `.env` or a `.venv/` keeps it). No program may still work
-in it either, a terminal left open there included. Otherwise it keeps the folder, and while the agent is open its details say why. The branch or bookmark stays. Checkouts you made yourself, and those Peer made before this version, are
+in it either, a terminal left open there included. Otherwise it keeps the folder, and while the agent is open its details say why. The branch or bookmark stays. A chat's checkouts go the same way once you close it, and so do a review session's. Checkouts you made yourself, and those Peer made before this version, are
 never removed.
 
 Enable coordination in **Settings → This computer → Coordination & plugins**. Choose **Add to Claude Code**
@@ -823,7 +823,9 @@ In a colocated jj repository, agents can build on each other's work before it la
 
 - **Start on a teammate's work.** When you start an agent on a task, **Start from** offers main first,
   then the other tasks' work in flight that has a bookmark. Peer fetches only that bookmark and starts
-  the agent on top of it. When the agent pushes, Peer tells it the base its pull request needs.
+  the agent on top of it. On main that is what the team pushed, unless your main has commits of its
+  own, and your working copy stays where it is. When the agent pushes, Peer tells it the base its pull
+  request needs.
 - **Stay on the newest version.** An agent that builds on a teammate's change follows it: jj moves the
   agent's change when the teammate amends on the same computer, and Peer fetches the teammate's
   bookmark at the agent's tool steps when the change comes from another computer. The agent hears once
@@ -1221,6 +1223,8 @@ Everyone in a room brings their own agent. Who answers a message depends on who 
 If your run is on the project's shared capacity, you can let the team reach it directly with the switch at the top of the room. It covers that run only, and you can turn it off at any time. A run on your own subscription cannot be opened this way.
 
 An agent answers in the room with `peer room say --reply <n> "<answer>"`, and reads it with `peer room`, or `peer room <n>` for one message whole. An agent's message wakes nobody: agents talk to people here, and to each other only through overlap notes and `peer ask`.
+
+When your agent stops without answering, **Try again** sends the message again. An agent that left commits or changes goes on in its checkout, on the same branch and model, so the room keeps showing that work. One that left nothing starts over in a new checkout from what the team pushed.
 
 Select a line in the diff to comment on it. An agent told about the message gets the path and line, and a comment made on an earlier version says so instead of pointing at a line that may have moved. The diff is read from git on your computer, never through the Hub: your own run's checkout, or the branch the work was pushed to. Work its author has not pushed is listed by file, and you can watch it when they share it.
 

@@ -96,6 +96,30 @@ describe("the run a diff reads", () => {
     );
   });
 
+  it("finds a detached run by the checkout it was started in, before any thread", () => {
+    assert.deepStrictEqual(
+      workRun({
+        runs: [{ id: "run_work", keys: ["herdr:t1"], root: "/tree" }],
+        reviews: new Set(),
+        sessions: [],
+        threads: [{ id: "herdr:t1", branch: "ana/tax" }],
+      }),
+      { root: "/tree", repository: undefined },
+    );
+  });
+
+  it("gives a live session's checkout before the one a run was started in", () => {
+    assert.deepStrictEqual(
+      workRun({
+        runs: [{ id: "run_review", keys: [], root: "/started" }],
+        reviews: new Set(),
+        sessions,
+        threads: [],
+      }),
+      { root: "/review", repository: "api" },
+    );
+  });
+
   it.effect("finds that branch's worktree", () =>
     scoped(
       Effect.gen(function* () {

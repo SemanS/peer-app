@@ -5,7 +5,6 @@ import {
   PeerContextArchiveInput,
 } from "./contextView.ts";
 import { PEER_OPENSPEC_METHODS, OpenSpecRpcGroup, OpenSpecRpcScopes } from "./openspec.rpc.ts";
-import { PEER_DIGEST_METHODS, DigestRpcGroup, DigestRpcScopes } from "./digest.ts";
 import { PEER_USAGE_METHODS, UsageRpcGroup, UsageRpcScopes } from "./usage.rpc.ts";
 import { PEER_RECIPES_METHODS, RecipesRpcGroup, RecipesRpcScopes } from "./recipes.ts";
 import { PEER_IMPACT_METHODS, PeerImpactRpcs, ImpactRpcScopes } from "./impact.ts";
@@ -584,7 +583,6 @@ const PeerCoreRpcScopes = {
 /** Every Peer method, as `WS_METHODS` spreads them. */
 export const PEER_WS_METHODS = {
   ...PEER_RECIPES_METHODS,
-  ...PEER_DIGEST_METHODS,
   ...PEER_RESOURCES_METHODS,
   ...PEER_METRICS_METHODS,
   ...PEER_USAGE_METHODS,
@@ -622,7 +620,6 @@ export const PEER_WS_METHODS = {
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   RecipesRpcGroup,
-  DigestRpcGroup,
   ResourcesRpcGroup,
   MetricsRpcGroup,
   UsageRpcGroup,
@@ -660,7 +657,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
 export const PEER_RPC_SCOPES = {
   ...RecipesRpcScopes,
-  ...DigestRpcScopes,
   ...ResourcesRpcScopes,
   ...MetricsRpcScopes,
   ...UsageRpcScopes,

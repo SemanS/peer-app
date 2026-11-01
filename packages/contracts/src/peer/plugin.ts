@@ -30,7 +30,6 @@ export const PEER_PLUGIN_IDS = [
   "recipes",
   "metrics",
   "usage",
-  "digest",
   "impact",
   "ownership",
   "plans",

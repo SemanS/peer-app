@@ -87,7 +87,6 @@ const ThreadProject = Schema.Struct({
 const isThreadProject = Schema.is(ThreadProject);
 
 export interface Preferences {
-  readonly peerDigestVisits?: Readonly<Record<string, string>>;
   /** The project Peer's Work screen shows: `all`, or `<workspace>/<project>`. */
   readonly peerWorkScope?: string;
   readonly navigationTabOrder?: readonly string[];
@@ -172,7 +171,6 @@ export class MobilePreferencesStore extends Context.Service<
 
 function sanitizePreferences(parsed: Preferences): Preferences {
   const preferences: {
-    peerDigestVisits?: Readonly<Record<string, string>>;
     peerWorkScope?: string;
     navigationTabOrder?: readonly string[];
     hiddenNavigationTabs?: readonly string[];
@@ -212,18 +210,6 @@ function sanitizePreferences(parsed: Preferences): Preferences {
     workspaceSelections?: WorkspaceSelections;
   } = {};
 
-  if (
-    parsed.peerDigestVisits &&
-    typeof parsed.peerDigestVisits === "object" &&
-    !Array.isArray(parsed.peerDigestVisits)
-  )
-    preferences.peerDigestVisits = Object.fromEntries(
-      Object.entries(parsed.peerDigestVisits)
-        .filter(
-          ([key, value]) => key.length <= 254 && typeof value === "string" && value.length <= 16000,
-        )
-        .slice(-20),
-    );
   if (typeof parsed.peerWorkScope === "string" && parsed.peerWorkScope.length <= 512) {
     preferences.peerWorkScope = parsed.peerWorkScope;
   }

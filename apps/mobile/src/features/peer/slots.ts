@@ -2,7 +2,6 @@ import { impactMobilePlugin } from "./impact";
 import { plansMobilePlugin } from "./plans";
 import { agreementsMobilePlugin } from "./agreements";
 import { changesMobilePlugin } from "./changes";
-import { digestMobilePlugin } from "./digest";
 import { recipesMobilePlugin } from "./recipes";
 
 import { metricsMobilePlugin } from "./metrics";
@@ -60,7 +59,6 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   recipesMobilePlugin,
 
   metricsMobilePlugin,
-  digestMobilePlugin,
   impactMobilePlugin,
   ownershipMobilePlugin,
   plansMobilePlugin,

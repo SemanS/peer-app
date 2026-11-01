@@ -220,16 +220,6 @@ const FEATURES: ReadonlyArray<Feature> = [
     },
   },
   {
-    id: "digest",
-    name: "Catch-up digest",
-    without: "plugin",
-    words: {
-      on: "“Since you were away” tells people what changed.",
-      off: "People get no catch-up from the Hub: this Hub doesn’t run it.",
-      newer: "People get no catch-up from the Hub until it is updated.",
-    },
-  },
-  {
     id: "impact",
     name: "Impact overlaps",
     without: "nothing",

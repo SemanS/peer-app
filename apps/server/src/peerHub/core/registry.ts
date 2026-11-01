@@ -1,7 +1,6 @@
 import { OpenSpecPlugin } from "../plugins/openspec/index.ts";
 import { MetricsPlugin } from "../plugins/metrics/index.ts";
 import { UsagePlugin } from "../plugins/usage/index.ts";
-import { DigestPlugin } from "../plugins/digest/index.ts";
 import { RecipesPlugin } from "../plugins/recipes/index.ts";
 import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
 import { SettlePlugin } from "../plugins/settle/index.ts";
@@ -97,7 +96,6 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   RecipesPlugin,
   MetricsPlugin,
   UsagePlugin,
-  DigestPlugin,
   ImpactPlugin,
   OwnershipPlugin,
   PlansPlugin,

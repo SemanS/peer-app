@@ -157,12 +157,6 @@ export const bindPlugin = <R>({ layer, make, ...info }: PeerPlugin<R>): PeerPlug
 });
 
 export interface PeerContributions {
-  /** Own marked files beside native hooks; runs only during explicit adapter setup or teardown. */
-  readonly adapterFiles?: (input: {
-    readonly codexHomes: ReadonlyArray<string>;
-    readonly peerScript: string;
-    readonly install: boolean;
-  }) => Effect.Effect<void, PeerHubError>;
   /** Optional target namespace for core claim/release; validation finishes before either side writes. */
   readonly claimScheme?: {
     readonly prefix: string;
@@ -235,18 +229,6 @@ export interface PeerContributions {
   readonly mcp?: Layer.Layer<never, never, PeerCore | PeerMcpHost>;
   /** Tools exposed by the lightweight Peer stdio server; calls reuse the command router. */
   readonly agentTools?: ReadonlyArray<PeerAgentTool>;
-  /** Prompts are read at each request, so a plugin can change its catalog without a restart. */
-  readonly agentPrompts?: {
-    readonly list: (session: PeerSessionView) => Effect.Effect<ReadonlyArray<PeerAgentPrompt>>;
-    readonly get: (
-      session: PeerSessionView,
-      name: string,
-      args: Readonly<Record<string, string>>,
-    ) => Effect.Effect<
-      { readonly description?: string; readonly text: string },
-      CliError | PeerCommandError
-    >;
-  };
   /** Per-thread stdio servers, read synchronously by provider adapters while this plugin is active. */
   readonly threadMcpServers?: (
     thread: string,
@@ -534,16 +516,6 @@ export interface PeerAgentTool {
   readonly command: string;
   /** Decode tool parameters into CLI arguments; invalid input throws `CliError` with usage. */
   readonly arguments: (args: Readonly<Record<string, unknown>>) => ReadonlyArray<string>;
-}
-
-export interface PeerAgentPrompt {
-  readonly name: string;
-  readonly description?: string;
-  readonly arguments?: ReadonlyArray<{
-    readonly name: string;
-    readonly description?: string;
-    readonly required?: boolean;
-  }>;
 }
 
 export interface PeerToolBinding {

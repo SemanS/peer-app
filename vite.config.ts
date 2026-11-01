@@ -157,7 +157,6 @@ export default defineConfig({
   },
   fmt: {
     ignorePatterns: [
-      "**/plugins/recipes/recipes/*.md",
       ".repos/**",
       "infra/task-cache/vendor/**",
       // Macroscope requires one glob per line; Markdown formatting corrupts it.
@@ -171,7 +170,6 @@ export default defineConfig({
       "**/routeTree.gen.ts",
       "**/*.graphql.ts",
       "packages/source-control-github/schema/**",
-      "**/recipeTable.generated.ts",
       // The Hub's own cases, kept byte for byte: formatting would make the two copies differ.
       "packages/client-runtime/src/peer/ownership.fixtures.json",
       "apps/server/schema/**",
@@ -206,7 +204,6 @@ export default defineConfig({
       "**/routeTree.gen.ts",
       "**/*.graphql.ts",
       "packages/source-control-github/schema/**",
-      "**/recipeTable.generated.ts",
       "apps/server/schema/**",
       "apps/mobile/android/**",
       "apps/mobile/ios/**",

@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { CliError, refused, render, usage, type PeerSessionView } from "../../core/plugin.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
-import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import { protocol } from "./protocol.ts";
 
 export class Sessions extends Context.Service<
@@ -21,12 +20,10 @@ export class Sessions extends Context.Service<
 
 const make = Effect.gen(function* () {
   const agents = yield* PeerAgents.PeerAgents;
-  const plugins = yield* PeerPlugins.PeerPlugins;
   const context = yield* Effect.context<never>();
   const run = Effect.runPromiseWith(context);
   const servers = new Map<string, string>();
   const started = new Set<string>();
-  const promptLists = new Map<string, string>();
   /** The name each MCP client gave on `initialize`, by its conversation id. */
   const clients = new Map<string, string>();
   const calling = new Map<string, Promise<{ readonly text: string; readonly isError: boolean }>>();
@@ -48,7 +45,6 @@ const make = Effect.gen(function* () {
   const close = Effect.fnUntraced(function* (server: string) {
     const session = servers.get(server);
     servers.delete(server);
-    promptLists.delete(server);
     clients.delete(server);
     if (session === undefined || [...servers.values()].includes(session)) return;
     yield* Effect.promise(async () => {
@@ -74,7 +70,6 @@ const make = Effect.gen(function* () {
       yield* close(server);
       return "";
     }
-    const contributions = yield* plugins.contributions;
     const requestGeneration = generation;
     const { instructions, tools: catalog } = yield* agents.tools;
     let session: PeerSessionView | undefined;
@@ -94,15 +89,7 @@ const make = Effect.gen(function* () {
       servers.set(server, session.id);
       return session;
     };
-    const providers = contributions.flatMap((entry) =>
-      entry.agentPrompts === undefined ? [] : [entry.agentPrompts],
-    );
-    const list = async () => {
-      if (providers.length === 0) return [];
-      const bound = await getSession();
-      return (await Promise.all(providers.map((provider) => run(provider.list(bound))))).flat();
-    };
-    const answer = yield* Effect.promise(() =>
+    return yield* Effect.promise(() =>
       protocol(line, {
         instructions: () => instructions,
         client: (info) => {
@@ -167,28 +154,8 @@ const make = Effect.gen(function* () {
             if (calling.get(bound.id) === current) calling.delete(bound.id);
           }
         },
-        prompts: list,
-        prompt: async (name, args) => {
-          const bound = await getSession();
-          for (const provider of providers)
-            if ((await run(provider.list(bound))).some((prompt) => prompt.name === name))
-              return run(provider.get(bound, name, args));
-          throw refused(`no prompt ${name}`, "list the available Peer prompts.");
-        },
       }),
     );
-    // Notification is sent between replies. The next request is the earliest observable refresh.
-    if (
-      (session !== undefined || servers.has(server)) &&
-      (providers.length > 0 || promptLists.has(server))
-    ) {
-      const current = JSON.stringify(yield* Effect.promise(list));
-      const previous = promptLists.get(server);
-      promptLists.set(server, current);
-      if (previous !== undefined && previous !== current)
-        return `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/prompts/list_changed" })}\n${answer}`;
-    }
-    return answer;
   });
   const end = Effect.gen(function* () {
     generation++;

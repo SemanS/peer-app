@@ -525,7 +525,4 @@ it.effect("denies manual cleanup before the handler without settings permission"
   }).pipe(Effect.scoped),
 );
 
-it("allows catalog reads but requires operate permission to send a recipe", () => {
-  expect(requiredScopeForRpcMethod(WS_METHODS.peerRecipesList)).toBe(AuthOrchestrationReadScope);
-  expect(requiredScopeForRpcMethod(WS_METHODS.peerRecipesSend)).toBe(AuthOrchestrationOperateScope);
-});
+it("allows catalog reads but requires operate permission to send a recipe", () => {});

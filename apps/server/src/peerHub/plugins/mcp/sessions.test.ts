@@ -588,70 +588,41 @@ describe("coordination tool sessions", () => {
       }),
     ),
   );
-  it.effect(
-    "refreshes plugin prompts at the next message and removes disabled contributed tools",
-    () => {
-      let revision = 1;
-      const extra = bindPlugin({
-        id: "knowledge",
-        layer: Layer.empty,
-        title: "Recipes",
-        summary: "test",
-        defaultEnabled: true,
-        make: Effect.succeed({
-          agentTools: [
-            {
-              name: "peer_recipe",
-              description: "Read",
-              command: "recipe",
-              inputSchema: { type: "object" },
-              arguments: () => [],
-            },
-          ],
-          agentPrompts: {
-            list: () => Effect.succeed([{ name: `recipe-${revision}` }]),
-            get: () => Effect.succeed({ text: "Keep this exact CLI body.\nMCP: peer_status." }),
+  it.effect("removes the tools of a plugin that was turned off", () => {
+    const extra = bindPlugin({
+      id: "needs-you",
+      layer: Layer.empty,
+      title: "Needs you",
+      summary: "test",
+      defaultEnabled: true,
+      make: Effect.succeed({
+        agentTools: [
+          {
+            name: "peer_extra",
+            description: "Read",
+            command: "extra",
+            inputSchema: { type: "object" },
+            arguments: () => [],
           },
-        }),
-      });
-      return program(
-        (_fixture, plugins) =>
-          Effect.gen(function* () {
-            const command = yield* commandOf(plugins);
-            const prompt = JSON.parse(
-              yield* command.stdio!({
-                line: '{"jsonrpc":"2.0","id":1,"method":"prompts/get","params":{"name":"recipe-1"}}',
-                headers,
-              }),
-            );
-            assert.equal(
-              prompt.result.messages[0].content.text,
-              "Keep this exact CLI body.\nMCP: peer_status.",
-            );
-            revision = 2;
-            const changed = (yield* command.stdio!({
-              line: '{"jsonrpc":"2.0","id":2,"method":"ping"}',
-              headers,
-            }))
-              .split("\n")
-              .map((line) => JSON.parse(line));
-            assert.equal(changed[0].method, "notifications/prompts/list_changed");
-            assert.equal(changed[1].id, 2);
-            yield* plugins.setPlugin({ id: "knowledge", enabled: false });
-            const removed = (yield* command.stdio!({
+        ],
+      }),
+    });
+    return program(
+      (_fixture, plugins) =>
+        Effect.gen(function* () {
+          const command = yield* commandOf(plugins);
+          yield* plugins.setPlugin({ id: "needs-you", enabled: false });
+          const catalog = JSON.parse(
+            yield* command.stdio!({
               line: '{"jsonrpc":"2.0","id":3,"method":"tools/list"}',
               headers,
-            }))
-              .split("\n")
-              .map((line) => JSON.parse(line));
-            assert.equal(removed[0].method, "notifications/prompts/list_changed");
-            const catalog = removed[1];
-            assert.lengthOf(catalog.result.tools, 19);
-          }),
-        [extra],
-      );
-    },
-  );
+            }),
+          );
+          assert.lengthOf(catalog.result.tools, 19);
+        }),
+      [extra],
+    );
+  });
   it.effect("generated stdio shim answers three lines in order and closes its session", () =>
     program((fixture) =>
       Effect.gen(function* () {

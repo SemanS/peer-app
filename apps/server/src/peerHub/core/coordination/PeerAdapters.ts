@@ -37,6 +37,7 @@ import {
   readCodexPeerHookReview,
   refreshCodexPeerHooks,
   trustConfiguredCodexPeerHooks,
+  removeCodexRecipeSkill,
 } from "../../codexHooks.ts";
 import {
   claudeHookGroups,
@@ -48,7 +49,6 @@ import {
 import * as PeerState from "../state/PeerState.ts";
 import type { RuntimeState } from "../state/PeerState.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
-import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerCoordination from "./PeerCoordination.ts";
 
 const hubError = (detail: string) => new PeerHubError({ detail });
@@ -73,7 +73,6 @@ const make = Effect.gen(function* () {
   const state = yield* PeerState.PeerState;
   const status = yield* PeerStatus.PeerStatus;
   const coordination = yield* PeerCoordination.PeerCoordination;
-  const plugins = yield* PeerPlugins.PeerPlugins;
   const { dir, socket, log, contexts, peer, scripts } = coordination.paths;
 
   const claudeSettingsPath = NodePath.join(
@@ -222,17 +221,12 @@ const make = Effect.gen(function* () {
     );
   });
 
-  yield* plugins
-    .configureAdapterFiles(
-      codexHookReviews.pipe(
-        Effect.map((homes) => ({
-          codexHomes: homes.filter((home) => home.installed).map((home) => home.home),
-          peerScript: peer,
-          install: true,
-        })),
-      ),
-    )
-    .pipe(Effect.catch((failure) => Effect.logWarning(failure.detail)));
+  // A Peer from before left a skill in these homes that names a command that is gone.
+  yield* codexHookReviews.pipe(
+    Effect.flatMap((homes) =>
+      Effect.promise(() => Promise.all(homes.map(({ home }) => removeCodexRecipeSkill(home)))),
+    ),
+  );
 
   /** Coordination as people see it: its settings, the hooks here and what the broker heard. */
   const coordinationStatus = (s: RuntimeState): Effect.Effect<PeerHubStatus["coordination"]> =>
@@ -414,11 +408,6 @@ const make = Effect.gen(function* () {
             await installCodexPeerHooks(home, scripts, input.codexHooks === true);
         },
         catch: (failure) => hubError(`Codex's hooks could not change: ${messageOf(failure)}`),
-      });
-      yield* plugins.applyAdapterFiles({
-        codexHomes: homes,
-        peerScript: peer,
-        install: input.codexHooks,
       });
     }
     if (input.codexHookApproval !== undefined) {

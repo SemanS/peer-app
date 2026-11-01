@@ -35,11 +35,6 @@
       "count": 2
     }
   },
-  "apps/mobile/src/features/peer/digest/VisitsBackground.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 3
-    }
-  },
   "apps/mobile/src/features/peer/impact/PeerImpactSettings.tsx": {
     "t3code/no-unreasoned-state-sync": {
       "count": 1
@@ -700,7 +695,7 @@
       "count": 1
     },
     "t3code/prefer-effect-fn": {
-      "count": 6
+      "count": 5
     }
   },
   "apps/server/src/peerHub/core/state/PeerState.ts": {
@@ -1008,14 +1003,6 @@
   "apps/server/src/peerHub/plugins/dependencies/service.ts": {
     "t3code/prefer-effect-fn": {
       "count": 4
-    }
-  },
-  "apps/server/src/peerHub/plugins/digest/catchup.ts": {
-    "t3code/no-em-dash-copy": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 1
     }
   },
   "apps/server/src/peerHub/plugins/find/Find.ts": {
@@ -2082,11 +2069,6 @@
   "apps/web/src/components/workspaces/announcements/AnnouncementReceipts.tsx": {
     "t3code/no-unreasoned-state-sync": {
       "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/digest/DigestBackground.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
     }
   },
   "apps/web/src/components/workspaces/github/GitHubConnect.tsx": {

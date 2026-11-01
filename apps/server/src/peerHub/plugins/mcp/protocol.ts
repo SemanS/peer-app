@@ -1,5 +1,5 @@
 import * as Schema from "effect/Schema";
-import { type PeerAgentPrompt, type PeerAgentTool, CliError, render } from "../../core/plugin.ts";
+import { type PeerAgentTool, CliError, render } from "../../core/plugin.ts";
 
 const envelope = Schema.Struct({
   jsonrpc: Schema.Literal("2.0"),
@@ -10,10 +10,6 @@ const envelope = Schema.Struct({
 const callParams = Schema.Struct({
   name: Schema.String,
   arguments: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-});
-const promptParams = Schema.Struct({
-  name: Schema.String,
-  arguments: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 });
 const clientInfo = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200)),
@@ -32,11 +28,6 @@ interface Host {
     command: string,
     args: ReadonlyArray<string>,
   ) => Promise<{ readonly text: string; readonly isError: boolean }>;
-  readonly prompts: () => Promise<ReadonlyArray<PeerAgentPrompt>>;
-  readonly prompt: (
-    name: string,
-    args: Readonly<Record<string, string>>,
-  ) => Promise<{ readonly description?: string; readonly text: string }>;
 }
 export async function protocol(line: string, host: Host): Promise<string> {
   let raw: unknown;
@@ -74,7 +65,7 @@ export async function protocol(line: string, host: Host): Promise<string> {
         protocolVersion: ["2025-06-18", "2025-03-26", "2024-11-05"].includes(String(version))
           ? version
           : "2025-06-18",
-        capabilities: { tools: {}, prompts: { listChanged: true } },
+        capabilities: { tools: {} },
         serverInfo: { name: "peer", version: "1" },
         instructions: host.instructions(),
       });
@@ -102,28 +93,6 @@ export async function protocol(line: string, host: Host): Promise<string> {
         if (failure instanceof CliError)
           return reply({ content: [{ type: "text", text: render(failure) }], isError: true });
         return error(-32603, "Peer could not answer this tool call");
-      }
-    }
-    case "prompts/list":
-      try {
-        return reply({ prompts: await host.prompts() });
-      } catch (failure) {
-        return error(
-          -32602,
-          failure instanceof CliError ? render(failure) : "Peer could not list prompts",
-        );
-      }
-    case "prompts/get": {
-      const params = Schema.decodeUnknownOption(promptParams)(message.params);
-      if (params._tag === "None") return error(-32602, "Invalid prompt parameters");
-      try {
-        const prompt = await host.prompt(params.value.name, params.value.arguments ?? {});
-        return reply({
-          ...(prompt.description === undefined ? {} : { description: prompt.description }),
-          messages: [{ role: "user", content: { type: "text", text: prompt.text } }],
-        });
-      } catch (failure) {
-        return error(-32602, failure instanceof Error ? failure.message : "Unknown prompt");
       }
     }
     default:

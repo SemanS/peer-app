@@ -6,6 +6,7 @@ import { assert, describe, it, expect } from "@effect/vitest";
 import {
   installCodexPeerHooks,
   readCodexPeerHookReview,
+  removeCodexRecipeSkill,
   trustCodexPeerHooks,
   trustConfiguredCodexPeerHooks,
 } from "./codexHooks.ts";
@@ -423,6 +424,27 @@ describe("Codex Peer hook review", () => {
       assert.include(config, `[hooks.state.${JSON.stringify(review.hooks[0]!.key)}]`);
       assert.notInclude(config, `"${linked}/hooks.json:`);
       assert.isTrue((await readCodexPeerHookReview(linked, scripts)).trusted);
+    });
+  });
+});
+
+describe("the skill an earlier Peer left in a Codex home", () => {
+  it("goes when it is Peer's own, and a person's own stays", async () => {
+    await fixture(async (home) => {
+      const folder = NodePath.join(home, "skills", "peer-recipes");
+      const skill = NodePath.join(folder, "SKILL.md");
+      await NodeFSP.mkdir(folder, { recursive: true });
+      await NodeFSP.writeFile(
+        skill,
+        "---\nname: peer-recipes\n---\n<!-- peer-owned: recipes -->\n",
+      );
+      await removeCodexRecipeSkill(home);
+      await expect(NodeFSP.stat(folder)).rejects.toThrow();
+
+      await NodeFSP.mkdir(folder, { recursive: true });
+      await NodeFSP.writeFile(skill, "a person's own skill");
+      await removeCodexRecipeSkill(home);
+      expect(await NodeFSP.readFile(skill, "utf8")).toBe("a person's own skill");
     });
   });
 });

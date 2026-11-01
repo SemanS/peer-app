@@ -184,6 +184,16 @@ export async function readCodexPeerHookReview(
   };
 }
 
+/** Only Peer's own marked skill goes, and its folder if nothing else is in it. */
+export async function removeCodexRecipeSkill(home: string) {
+  const directory = NodePath.join(home, "skills", "peer-recipes");
+  const file = NodePath.join(directory, "SKILL.md");
+  const text = await NodeFSP.readFile(file, "utf8").catch(() => null);
+  if (text === null || !text.includes("<!-- peer-owned: recipes -->")) return;
+  await NodeFSP.rm(file, { force: true });
+  await NodeFSP.rmdir(directory).catch(() => undefined);
+}
+
 /** Installation never grants trust. Move legacy hooks without changing other integrations' trust. */
 export async function installCodexPeerHooks(
   home: string,

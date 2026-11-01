@@ -9,8 +9,6 @@ const host = {
   client: () => undefined,
   tools: () => tools,
   call: async () => ({ text: "ok", isError: false }),
-  prompts: async () => [],
-  prompt: async () => ({ text: "prompt" }),
 };
 const ask = async (message: unknown) => JSON.parse(await protocol(JSON.stringify(message), host));
 describe("Peer MCP protocol", () => {

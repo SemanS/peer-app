@@ -92,19 +92,6 @@ const failureText = (cause: Cause.Cause<unknown>) => {
 export class PeerPlugins extends Context.Service<
   PeerPlugins,
   {
-    /** Own native companion files, refreshed on adapter setup and plugin enable changes. */
-    readonly configureAdapterFiles: (
-      read: Effect.Effect<{
-        readonly codexHomes: ReadonlyArray<string>;
-        readonly peerScript: string;
-        readonly install: boolean;
-      }>,
-    ) => Effect.Effect<void, PeerHubError>;
-    readonly applyAdapterFiles: (input: {
-      readonly codexHomes: ReadonlyArray<string>;
-      readonly peerScript: string;
-      readonly install: boolean;
-    }) => Effect.Effect<void, PeerHubError>;
     /** Whether the plugin is active now. */
     readonly isActive: (id: string) => Effect.Effect<boolean>;
     /**
@@ -327,42 +314,6 @@ const make = Effect.gen(function* () {
       return yield* hubError("This environment has no Peer plugin that does that.");
     });
 
-  let adapterFilesRead:
-    | Effect.Effect<{
-        readonly codexHomes: ReadonlyArray<string>;
-        readonly peerScript: string;
-        readonly install: boolean;
-      }>
-    | undefined;
-  const applyAdapterFiles: PeerPlugins["Service"]["applyAdapterFiles"] = (input) =>
-    Effect.gen(function* () {
-      if (input.codexHomes.length > 64)
-        return yield* new PeerHubError({
-          detail: "Too many configured Codex homes for companion setup.",
-        });
-      for (const { state, contributions } of yield* built)
-        if (contributions.adapterFiles)
-          yield* contributions
-            .adapterFiles({ ...input, install: input.install && state.active })
-            .pipe(
-              Effect.timeout(1000),
-              Effect.mapError(
-                () =>
-                  new PeerHubError({
-                    detail:
-                      "An agent companion file could not be updated. Retry the hook or plugin change.",
-                  }),
-              ),
-            );
-    });
-  const refreshAdapterFiles = Effect.suspend(() =>
-    adapterFilesRead ? adapterFilesRead.pipe(Effect.flatMap(applyAdapterFiles)) : Effect.void,
-  );
-  const configureAdapterFiles: PeerPlugins["Service"]["configureAdapterFiles"] = (read) =>
-    Effect.sync(() => {
-      adapterFilesRead = read;
-    }).pipe(Effect.andThen(refreshAdapterFiles));
-
   const setPlugin: PeerPlugins["Service"]["setPlugin"] = (input) =>
     Effect.gen(function* () {
       const entry = registry.find((candidate) => candidate.id === input.id);
@@ -381,15 +332,12 @@ const make = Effect.gen(function* () {
       // Its work stops before its cleanup runs, so nothing redoes what the cleanup undoes.
       yield* reconcile;
       if (input.enabled) {
-        yield* refreshAdapterFiles;
         yield* setError(entry.id, null);
         return;
       }
-      if (!wasEnabled) return yield* refreshAdapterFiles;
+      if (!wasEnabled) return;
       const turnOff = (yield* Ref.get(attached)).get(entry.id)?.turnOff;
-      const cleaned = yield* Effect.exit(
-        (turnOff ?? Effect.void).pipe(Effect.andThen(refreshAdapterFiles)),
-      );
+      const cleaned = yield* Effect.exit(turnOff ?? Effect.void);
       if (Exit.isSuccess(cleaned)) {
         yield* setError(entry.id, null);
         return;
@@ -417,7 +365,6 @@ const make = Effect.gen(function* () {
       yield* Ref.set(attached, built);
       yield* Ref.set(toolkits, bound);
       yield* reconcile;
-      yield* refreshAdapterFiles.pipe(Effect.catch((failure) => Effect.logWarning(failure.detail)));
     });
 
   // A Hub that starts or stops serving a feature turns its plugins on or off here.
@@ -427,8 +374,6 @@ const make = Effect.gen(function* () {
   );
 
   return PeerPlugins.of({
-    configureAdapterFiles,
-    applyAdapterFiles,
     isActive,
     requireActive,
     states,

@@ -72,7 +72,6 @@ it.effect(
       assert.isUndefined(contribution.hubChanges);
       assert.isUndefined(contribution.mcp);
       assert.isUndefined(contribution.agentTools);
-      assert.isUndefined(contribution.agentPrompts);
       assert.isUndefined(MetricsPlugin.hubFeature);
       yield* plugins.attach(new Map([["metrics", contribution]]), []);
       yield* Effect.promise(() => started.promise);

@@ -1,5 +1,4 @@
 import { createOpenSpecEnvironmentAtoms } from "./openspec.ts";
-import { createRecipesEnvironmentAtoms } from "./recipes.ts";
 import { createPeerMetricsAtoms } from "./metrics.ts";
 import { createPeerUsageAtoms } from "./usage.ts";
 import { createPeerImpactAtoms } from "./impact.ts";
@@ -39,7 +38,6 @@ export function createPeerPluginAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ) {
   return {
-    peerRecipes: createRecipesEnvironmentAtoms(runtime),
     ...createPeerMetricsAtoms(runtime),
     ...createPeerUsageAtoms(runtime),
     peerResources: createResourcesEnvironmentAtoms(runtime),

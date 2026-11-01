@@ -8,15 +8,15 @@ import { brokerFixture } from "./testkit.ts";
 
 it("adds bounded plugin instructions only to start text and counts the complete context", async () => {
   let on = true;
-  const line = "Peer recipes: catch-up. Print one with peer recipe <name>.";
+  const line = "Peer changes: one stack. Read them with peer changes.";
   const fixture = await brokerFixture(() => ({
     plugins: async () => ({
       ...NO_PLUGINS,
       active: on
         ? [
             {
-              id: "recipes",
-              title: "Recipes",
+              id: "changes",
+              title: "Changes",
               contributions: { hooks: { startLine: Effect.succeed(line) } },
             },
           ]

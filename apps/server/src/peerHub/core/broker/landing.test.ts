@@ -1012,7 +1012,7 @@ describe("peer review and peer done", () => {
       try {
         view([overlap([note("n1", TOTALS)])]);
         const refused = await outcome(
-          fixture.broker["runCli"](command, [], { "x-peer-cwd": session.cwd }, session, true),
+          fixture.broker["runCli"](command, [], { "x-peer-cwd": session.cwd }, session),
         );
         expect(refused.split("\n")[0]).toBe(
           "peer: refused: a message from a teammate waits for you",

@@ -2,37 +2,6 @@ import { describe, it, expect } from "vite-plus/test";
 import { CATALOG, project, metricsOf, reasonClassOf } from "./metricsCatalog.ts";
 import { PeerHubError } from "@t3tools/contracts";
 describe("catalog projection", () => {
-  it("projects impact sizes and state without symbol names, roots, diffs, uses or contracts", () => {
-    const detail = {
-      session: "claude:a",
-      changed: 2,
-      uses: 3,
-      deferred: false,
-      state: "ready",
-      root: "/private/source",
-      name: "privateSymbol",
-      contract: "private contract",
-      source: "private diff",
-    };
-    expect(project("impact.check", detail)).toEqual({
-      session: "claude:a",
-      changed: 2,
-      uses: 3,
-      deferred: false,
-      state: "ready",
-    });
-    expect(project("impact.report", { ...detail, sessions: 1, success: true })).toEqual({
-      session: "claude:a",
-      sessions: 1,
-      changed: 2,
-      uses: 3,
-      success: true,
-    });
-    expect(project("impact.told", { ...detail, chars: 700 })).toEqual({
-      session: "claude:a",
-      chars: 700,
-    });
-  });
   it("projects ownership's kinds, places and outcomes, and never a path, a name, a reason or a note", () => {
     const detail = {
       session: "claude:a",

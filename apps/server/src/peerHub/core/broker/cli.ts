@@ -263,7 +263,6 @@ export async function runCli(
   args: ReadonlyArray<string>,
   headers: NodeHttp.IncomingHttpHeaders,
   verifiedSession?: LocalSession,
-  tools = false,
 ): Promise<string> {
   const commandStarted = Date.now();
   if (
@@ -290,29 +289,6 @@ export async function runCli(
     );
   const publicCommand = plugins.commands.find((entry) => entry.command.name === command)?.command
     .public;
-  const globalRead = plugins.commands.find((entry) => entry.command.name === command)?.command
-    .globalRead;
-  if (globalRead) {
-    if (owned && "refusal" in owned)
-      throw refused(
-        owned.refusal.replace(/^peer: /, ""),
-        owned.next ?? "ask your person to enable the plugin.",
-      );
-    const result = await this.host.run(Effect.result(globalRead(args, { tools })), {
-      signal: this.stopping.signal,
-    });
-    if (Result.isFailure(result)) {
-      const error = result.failure;
-      if (error instanceof CliError) throw error;
-      const reason = error.message.replace(/^peer: /, "");
-      throw error.status === 400
-        ? usage(reason, `run peer ${command} --help.`)
-        : error.status < 500
-          ? refused(reason, "run peer status and retry when the requirement is met.")
-          : uncertain(command);
-    }
-    return result.success;
-  }
   // Sharing explicitly enrolls a local repository in a team workspace.
   if (command === "share") return shareCommand(this, args, headers);
   // A tool call comes with its verified session: a plugin's public command then acts for that agent,

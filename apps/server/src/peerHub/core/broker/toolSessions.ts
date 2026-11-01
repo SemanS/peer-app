@@ -195,7 +195,7 @@ export async function callTools(
         "the shared handoff context has not reached the Hub",
         "call peer_status to retry publishing it, then hand the task over.",
       );
-    text = await this.runCli(command, args, { "x-peer-cwd": session.cwd }, session, true);
+    text = await this.runCli(command, args, { "x-peer-cwd": session.cwd }, session);
   } catch (failure) {
     text = render(failure instanceof CliError ? failure : uncertain(command));
     isError = true;

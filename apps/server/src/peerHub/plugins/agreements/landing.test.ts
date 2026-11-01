@@ -285,9 +285,7 @@ describe("peer review and peer done", () => {
           yield* Effect.promise(() => fixture.register("one"));
           const session = fixture.broker["sessions"].get("claude:one")!;
           const call = () =>
-            outcome(
-              fixture.broker["runCli"]("review", [], { "x-peer-cwd": session.cwd }, session, true),
-            );
+            outcome(fixture.broker["runCli"]("review", [], { "x-peer-cwd": session.cwd }, session));
           const refused = yield* Effect.promise(call);
           assert.strictEqual(
             refused.split("\n")[0],

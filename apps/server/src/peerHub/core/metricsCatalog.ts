@@ -58,54 +58,6 @@ const herdrRuntime = {
   },
 } as const;
 export const CATALOG = defineEvents({
-  catchup: ev({ entries: "count", chars: "count", windowSeconds: "count" }),
-  "forecast.git": ev({
-    state: { enum: ["supported", "git-missing", "git-old", "git-unreadable"] },
-  }),
-  "forecast.round": ev({
-    branches: "count",
-    reused: "count",
-    merges: "count",
-    deferred: "count",
-    ms: "ms",
-  }),
-  "forecast.told": ev({ pairs: "count", chars: "count" }),
-  "impact.check": ev({
-    changed: "count",
-    uses: "count",
-    deferred: "flag",
-    state: {
-      enum: [
-        "ready",
-        "missing",
-        "uninitialized",
-        "corrupt",
-        "pending",
-        "partial",
-        "mismatch",
-        "failed",
-      ],
-    },
-  }),
-  "impact.report": ev({ sessions: "count", changed: "count", uses: "count", success: "flag" }),
-  "impact.told": ev({ chars: "count" }),
-  "impact.codegraph.failed": ev({ failures: "count" }),
-  "impact.off": ev({}),
-  "plans.declared": ev({
-    version: "count",
-    changes: "count",
-    maybes: "count",
-    uses: "count",
-    provides: "count",
-    relations: "count",
-    unresolved: "count",
-    chars: "count",
-    ms: "ms",
-  }),
-  "plans.withdrawn": ev({ count: "count" }),
-  "plans.told": ev({ relations: "count", chars: "count" }),
-  "plans.nudged": ev({ where: { enum: ["start", "plan-mode"] } }),
-  "plans.resent": ev({ outcome: { enum: ["sent", "stale", "refused", "failed"] } }),
   "resource.claim": ev({}),
   "resource.refused": ev({}),
   "resource.release": ev({}),
@@ -146,9 +98,6 @@ export const CATALOG = defineEvents({
     budgetLeft: "ms",
   }),
   "dependencies.told": ev({ chars: "count" }),
-  "find.skipped": ev({}),
-  "find.failed": ev({}),
-  "find.asked": ev({ works: "tasks" }),
   "context.updated": ev({ bytes: "bytes" }),
   "context.nudged": ev({}),
   "context.checkpoint": ev({}),
@@ -327,12 +276,6 @@ export const CATALOG = defineEvents({
   // Changes: how many changes a report held, never which, whose or what they said.
   "changes.reported": ev({ changes: "count", ms: "ms" }),
   // Forecast's Jujutsu sources: work shared as refs and the merge checks run on it, in counts.
-  "forecast.shared": ev({ refs: "count", outcome: { enum: ["pushed", "skipped", "refused"] } }),
-  "forecast.check": ev({
-    pairs: "count",
-    ms: "ms",
-    outcome: { enum: ["clean", "conflicts", "unknown"] },
-  }),
   // Agreements: how much of an agreement an agent was told (its size, never its words), that one
   // fell due, and how one closed; never which one, between which tasks, or whose.
   "agreements.told": ev({ chars: "count" }),
@@ -476,9 +419,6 @@ export const CATALOG = defineEvents({
   }),
   "log.format": { v: "count" },
   "metrics.failed": { where: { enum: ["fold", "flush", "upload"] }, count: "count" },
-  "memory.started": ev({}),
-  "memory.prepare.failed": ev({}),
-  "memory.legacy.failed": ev({}),
   "herdr.runtime.started": herdrRuntime,
   "herdr.runtime.adopted": herdrRuntime,
   "herdr.runtime.stopped": herdrRuntime,

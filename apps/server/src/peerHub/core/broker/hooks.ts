@@ -632,9 +632,6 @@ export function toolContext(
 ): PeerToolContext {
   const input = body.tool_input as Record<string, unknown> | null;
   const tool = typeof body.tool_name === "string" ? body.tool_name : "";
-  const mcp = tool.startsWith("mcp__");
-  const answered =
-    event === "post-tool" && (mcp || tool === "Bash") ? responseText(body.tool_response) : "";
   const edited = this.editedPaths(session, body);
   return {
     session: this.sessionView(session),
@@ -645,32 +642,8 @@ export function toolContext(
       return file === null ? [] : [file];
     }),
     ...(typeof input?.command === "string" ? { command: input.command } : {}),
-    ...(mcp && typeof input === "object" && input !== null && !Array.isArray(input)
-      ? { input }
-      : {}),
-    ...(answered === "" ? {} : { output: answered }),
     remainingMs: remaining,
   };
-}
-
-/** The text a tool's response carries, as hooks send it: a string, content blocks, or a shell's output. */
-export function responseText(value: unknown, max = 2000): string {
-  const parts: string[] = [];
-  let size = 0;
-  const walk = (item: unknown, depth: number) => {
-    if (depth > 3 || size >= max) return;
-    if (typeof item === "string") {
-      parts.push(item);
-      size += item.length;
-    } else if (Array.isArray(item)) for (const part of item) walk(part, depth + 1);
-    else if (typeof item === "object" && item !== null) {
-      const record = item as Record<string, unknown>;
-      for (const key of ["text", "stdout", "output", "content", "result"])
-        if (key in record) walk(record[key], depth + 1);
-    }
-  };
-  walk(value, 0);
-  return parts.join("\n").slice(0, max);
 }
 
 /** Whether every file a call edits is one the active plugins keep for the session. */

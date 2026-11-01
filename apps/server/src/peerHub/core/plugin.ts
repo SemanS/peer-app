@@ -302,22 +302,6 @@ export interface PeerSessionView {
    * session's memory across Peer's restarts, and drops it with `local` on a new runtime generation.
    */
   readonly told?: (plugin: PeerPluginId) => Set<string>;
-  /**
-   * Findings a plugin showed or counted to the session (a challenge's sources): what it says on its
-   * own afterwards is then no independent discovery, as with the findings core tells it of.
-   */
-  readonly hear?: (findings: Iterable<string>) => void;
-  /** Exact cached context inputs: snapshots only, never new reads or receipt claims. */
-  readonly contextReads?: ReadonlyArray<{
-    readonly scope: string;
-    readonly version: number;
-    readonly text: string;
-  }>;
-  readonly sharedContext?: {
-    readonly scope: string;
-    readonly version: number;
-    readonly text: string;
-  } | null;
   /** The version explicitly read; a telling never becomes a read receipt. */
   readonly contextReadVersion?: (scope: string) => number | undefined;
   /** Mark the current index entry told when another contribution carried it. */
@@ -436,10 +420,6 @@ export interface PeerToolContext extends PeerHookContext {
   readonly paths: ReadonlyArray<string>;
   /** The shell command, for Bash. */
   readonly command?: string;
-  /** What an MCP tool (`mcp__<server>__<tool>`) was called with. */
-  readonly input?: Readonly<Record<string, unknown>>;
-  /** After the call, for Bash and MCP tools: the start of what it answered, as text (2,000 characters at most). */
-  readonly output?: string;
   /**
    * The call ended in an error (Claude Code's PostToolUseFailure), so `paths` are what git sees it
    * changed. Codex reports a command that exits non-zero as finished.
@@ -465,11 +445,6 @@ export interface PeerCommand {
   readonly waitSeconds?: number;
   /** Checkout-scoped read, with no caller credential and no agent receipt. */
   readonly public?: boolean;
-  /** Local static read that needs neither a session nor a checkout. */
-  readonly globalRead?: (
-    args: ReadonlyArray<string>,
-    context: { readonly tools: boolean },
-  ) => Effect.Effect<string, PeerCommandError | CliError>;
   /** One stdio message: the socket transport decodes the line and bypasses shell caller binding. */
   readonly stdio?: (input: {
     readonly line: string;

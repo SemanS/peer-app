@@ -24,7 +24,6 @@ import {
   parseDraft,
   peopleOf,
   moveKey,
-  reachRows,
   recipientsOf,
   roomAgentEntries,
   roomAgentGroups,
@@ -341,43 +340,10 @@ describe("a delivery's tone", () => {
   });
 });
 
-describe("the reach switch", () => {
-  const me = "me@acme.test";
-  const runs = [run(me, "running", "r1"), run(me, "ended", "r2"), run("ana@acme.test", "running")];
-
-  it("shows the person's open runs only", () => {
-    const rows = reachRows(runs as never, me, { reaches: [], capacities: { r1: "shared" } });
-    expect(rows.map((row) => row.run)).toEqual(["r1"]);
-    expect(rows[0]).toMatchObject({ team: false, unavailable: undefined });
-  });
-
-  it("gives a reason on personal capacity, and on a capacity Peer cannot tell", () => {
-    const personal = reachRows(runs as never, me, { reaches: [], capacities: { r1: "personal" } });
-    const untold = reachRows(runs as never, me, { reaches: [], capacities: {} });
-    expect(personal[0]?.unavailable).toContain("own capacity");
-    expect(untold[0]?.unavailable).toContain("cannot tell");
-    expect(untold[0]?.unavailable).not.toContain("own capacity");
-  });
-
-  it("makes no claim on a switch that is on: it can always be turned off", () => {
-    const rows = reachRows(runs as never, me, {
-      reaches: [{ run: "r1", reach: "team" }],
-      capacities: {},
-    });
-    expect(rows[0]).toMatchObject({ team: true, unavailable: undefined });
-  });
-
+describe("a move's key", () => {
   it("keeps two rooms' same message apart in a list of moves", () => {
     const place = { workspace: "w", project: "p", task: "t-1" };
     expect(moveKey(place, 1)).not.toBe(moveKey({ ...place, task: "t-2" }, 1));
-  });
-
-  it("reads a reach the Hub reports", () => {
-    const rows = reachRows(runs as never, me, {
-      reaches: [{ run: "r1", reach: "team" }],
-      capacities: { r1: "shared" },
-    });
-    expect(rows[0]?.team).toBe(true);
   });
 });
 
@@ -464,11 +430,7 @@ describe("the agent chosen for Your agent", () => {
       isAvailable: true,
     });
     const entries = [entry("claudeAgent"), entry("codex"), entry("cursor"), entry("codex", false)];
-    expect(roomAgentEntries(entries, []).map((e) => e.driverKind)).toEqual([
-      "claudeAgent",
-      "codex",
-    ]);
-    expect(roomAgentEntries(entries, ["codex"]).map((e) => e.driverKind)).toEqual(["codex"]);
+    expect(roomAgentEntries(entries).map((e) => e.driverKind)).toEqual(["claudeAgent", "codex"]);
   });
 });
 

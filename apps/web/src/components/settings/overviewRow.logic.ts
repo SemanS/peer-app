@@ -12,7 +12,7 @@ import { CONNECTION_STATE_LABEL } from "./connectionStatus.logic";
 import type { SettingsPath } from "./settingsSearch";
 import { validateSettingsScopeSearch } from "./settingsScope";
 
-export type OverviewGroupId = "workspace" | "me" | "computer";
+export type OverviewGroupId = "workspace" | "computer";
 
 /** Where a row's action goes: a page of Peer's area (and the part of it), or a settings page. */
 export type OverviewTarget =

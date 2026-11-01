@@ -10,9 +10,15 @@ import { getAt } from "@t3tools/client-runtime/peer-settings";
 import type { PeerTool } from "@t3tools/contracts";
 
 import { projectIdFromName } from "./newProject.logic";
-import { joinNames } from "./projectCapacity.logic";
 import { addTool, removeTool, toolEntries, type Transport } from "./projectTools.logic";
 import type { ReviewOperation } from "./reviewChanges.logic";
+
+/** "Ana and Vir", "Ana, Vir and Bob", "Ana, Vir, Bob and 3 more". */
+function joinNames(names: ReadonlyArray<string>): string {
+  if (names.length <= 1) return names[0] ?? "";
+  if (names.length <= 4) return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  return `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
+}
 
 type Mapping = Readonly<Record<string, unknown>>;
 const isMapping = (value: unknown): value is Mapping =>

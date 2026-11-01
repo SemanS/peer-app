@@ -3,7 +3,6 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   addCandidates,
   addPeople,
-  customAllocation,
   leadNamesOf,
   leadsOf,
   membersForMode,
@@ -33,15 +32,6 @@ const booking = (overrides: Record<string, unknown> = {}) => ({
   name: "Booking",
   members: ["slavo@acme.dev", "eva@acme.dev", "ana@acme.dev", "vir@acme.dev", "bob@acme.dev"],
   leads: ["slavo@acme.dev", "eva@acme.dev"],
-  capacity: {
-    personal: "any",
-    shared: {
-      pool: "main",
-      budget: { amount: 600 },
-      defaultAllocation: 80,
-      allocations: { "slavo@acme.dev": 150, "eva@acme.dev": 150, "bob@acme.dev": 120 },
-    },
-  },
   ...overrides,
 });
 
@@ -58,7 +48,6 @@ const model = (entry: unknown, extra: { me?: string | null; people?: typeof rost
     entry,
     people: extra.people ?? roster,
     me: extra.me === undefined ? "slavo@acme.dev" : extra.me,
-    currency: "EUR",
     manifest,
   });
 
@@ -96,33 +85,11 @@ describe("the people table", () => {
     expect([count, more]).toEqual([3, 0]);
   });
 
-  it("gives each person their allocation and whose rule it is", () => {
-    const { rows } = model(booking());
-    expect(rows.map((row) => [row.name, row.allocation])).toEqual([
-      ["Slavo", { text: "€150", source: "custom" }],
-      ["Eva", { text: "€150", source: "custom" }],
-      ["Ana", { text: "€80", source: "project default" }],
-      ["Vir", { text: "€80", source: "project default" }],
-      ["Bob", { text: "€120", source: "custom" }],
-    ]);
-  });
-
-  it("says no cap where shared capacity gives a person none, and nothing without shared capacity", () => {
-    const withoutDefault = booking({
-      capacity: { personal: "any", shared: { pool: "main", budget: { amount: 600 } } },
-    });
-    expect(model(withoutDefault).rows[2]?.allocation).toEqual({
-      text: "No cap",
-      source: "project default",
-    });
-    expect(model(booking({ capacity: { personal: "any" } })).rows[0]?.allocation).toBeNull();
-  });
-
-  it("lists the leads and the people with a custom allocation for the whole workspace, and counts the rest", () => {
+  it("lists the leads for the whole workspace, and counts the rest", () => {
     const { rows, mode, count, more } = model(booking({ members: ["*"] }));
     expect(mode).toBe("all");
-    expect(rows.map((row) => row.name)).toEqual(["Slavo", "Eva", "Bob"]);
-    expect([count, more]).toEqual([6, 3]);
+    expect(rows.map((row) => row.name)).toEqual(["Slavo", "Eva"]);
+    expect([count, more]).toEqual([6, 4]);
   });
 
   it("leaves out people the workspace no longer has", () => {
@@ -144,8 +111,8 @@ describe("the people table", () => {
     const { rows, mode } = model(undefined);
     expect(mode).toBeNull();
     expect(rows).toEqual([
-      { email: "slavo@acme.dev", name: "Slavo", you: true, lead: true, allocation: null },
-      { email: "ana@acme.dev", name: "Ana", you: false, lead: null, allocation: null },
+      { email: "slavo@acme.dev", name: "Slavo", you: true, lead: true },
+      { email: "ana@acme.dev", name: "Ana", you: false, lead: null },
     ]);
   });
 });
@@ -165,13 +132,12 @@ describe("switching who is on the project", () => {
     );
   });
 
-  it("starts from the person editing, the leads and the custom allocations when the project had the whole workspace", () => {
+  it("starts from the person editing and the leads when the project had the whole workspace", () => {
     const saved = booking({ members: ["*"] });
     expect(membersForMode("selected", { entry: saved, saved, me: "mia@acme.dev" })).toEqual([
       "mia@acme.dev",
       "slavo@acme.dev",
       "eva@acme.dev",
-      "bob@acme.dev",
     ]);
   });
 
@@ -200,26 +166,11 @@ describe("adding, making a lead and removing", () => {
     ]);
   });
 
-  it("takes a person's place, lead and custom allocation with them", () => {
+  it("takes a person's place and lead with them", () => {
     expect(removePerson(booking(), "eva@acme.dev")).toEqual({
       members: ["slavo@acme.dev", "ana@acme.dev", "vir@acme.dev", "bob@acme.dev"],
       leads: ["slavo@acme.dev"],
-      allocations: { "slavo@acme.dev": 150, "bob@acme.dev": 120 },
     });
-  });
-
-  it("leaves allocations alone for a person who has none of their own", () => {
-    const removal = removePerson(booking(), "ana@acme.dev");
-    expect(removal.members).not.toContain("ana@acme.dev");
-    expect(removal).not.toHaveProperty("allocations");
-  });
-
-  it("reads a person's custom allocation as text", () => {
-    expect(customAllocation(booking(), "bob@acme.dev", "EUR")).toBe("€120");
-    expect(customAllocation(booking(), "ana@acme.dev", "EUR")).toBeNull();
-    expect(
-      customAllocation(booking({ capacity: { personal: "any" } }), "bob@acme.dev", "EUR"),
-    ).toBeNull();
   });
 });
 
@@ -316,41 +267,26 @@ describe("taking someone off the project", () => {
       projectName: "Booking",
       workspaceName: "Acme",
       person: { name: "Eva", you: false },
-      sharedCapacity: true,
-      allocation: null,
       ...overrides,
     });
 
-  it("says what stops, what is revoked and that they stay in the workspace", () => {
+  it("says what stops and that they stay in the workspace", () => {
     expect(words()).toEqual({
       title: "Remove Eva from Booking?",
       confirm: "Remove Eva",
       consequences: [
         "Stops seeing Booking’s tasks, threads and events, and stops getting its notifications.",
-        "Their key for Booking’s shared capacity is revoked.",
         "Eva stays in Acme and in other projects.",
       ],
     });
   });
 
-  it("mentions a key only where the project has shared capacity", () => {
-    expect(words({ sharedCapacity: false }).consequences.join(" ")).not.toContain("key");
-  });
-
-  it("says a custom allocation goes with them", () => {
-    expect(words({ allocation: "€150" }).consequences).toContain(
-      "Their allocation of €150 is dropped.",
-    );
-  });
-
   it("speaks to the person removing themselves", () => {
-    expect(words({ person: { name: "Slavo", you: true }, allocation: "€150" })).toEqual({
+    expect(words({ person: { name: "Slavo", you: true } })).toEqual({
       title: "Remove yourself from Booking?",
       confirm: "Remove yourself",
       consequences: [
         "You stop seeing Booking’s tasks, threads and events, and stop getting its notifications.",
-        "Your key for Booking’s shared capacity is revoked.",
-        "Your allocation of €150 is dropped.",
         "You stay in Acme and in other projects.",
       ],
     });

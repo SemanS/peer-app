@@ -194,7 +194,7 @@ export type PeerLifecycleEvent =
       readonly identity: string;
     }
   /** Before the Hub session is dropped. */
-  | { readonly kind: "signing-out"; readonly keysAlreadyQueued?: boolean }
+  | { readonly kind: "signing-out" }
   | { readonly kind: "synced"; readonly workspaces: ReadonlyArray<PersistedWorkspace> }
   | { readonly kind: "left-workspace"; readonly workspace: string };
 

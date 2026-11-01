@@ -644,14 +644,6 @@
       "count": 1
     }
   },
-  "apps/server/src/peerHub/plugins/capacity/Capacity.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 4
-    }
-  },
   "apps/server/src/peerHub/plugins/changes/Changes.ts": {
     "oxc/no-accumulating-spread": {
       "count": 1
@@ -983,7 +975,7 @@
       "count": 1
     },
     "t3code/prefer-effect-fn": {
-      "count": 17
+      "count": 16
     }
   },
   "apps/server/src/peerHub/plugins/rooms/cli.ts": {
@@ -1014,7 +1006,7 @@
   },
   "apps/server/src/peerHub/plugins/rooms/client/start.ts": {
     "t3code/prefer-effect-fn": {
-      "count": 7
+      "count": 6
     }
   },
   "apps/server/src/peerHub/plugins/rooms/follow.ts": {
@@ -1286,11 +1278,6 @@
       "count": 3
     }
   },
-  "apps/web/src/components/workspaces/settings/AiSubscriptionsParts.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/AskAgent.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1332,14 +1319,9 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/settings/ProjectCapacityParts.tsx": {
-    "t3code/no-em-dash-copy": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/ProjectPeopleParts.tsx": {
     "t3code/no-em-dash-copy": {
-      "count": 2
+      "count": 1
     }
   },
   "apps/web/src/components/workspaces/settings/Proposals.tsx": {
@@ -1353,11 +1335,6 @@
     },
     "t3code/no-unreasoned-state-sync": {
       "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/settings/SharedCapacityParts.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
     }
   },
   "apps/web/src/components/workspaces/settings/ToolCatalogEditor.tsx": {
@@ -1375,22 +1352,12 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/settings/aiSubscriptions.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
-    }
-  },
   "apps/web/src/components/workspaces/settings/coordinationAndPlugins.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
   },
   "apps/web/src/components/workspaces/settings/hubStatus.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/settings/pages/AiSubscriptions.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -1421,16 +1388,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/settings/pages/ProjectBasics.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/settings/pages/ProjectCapacity.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/pages/ProjectRepositories.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1438,17 +1395,6 @@
   },
   "apps/web/src/components/workspaces/settings/pages/ProjectTools.tsx": {
     "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/settings/pages/SharedCapacity.tsx": {
-    "react/purity": {
-      "count": 1
-    },
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/no-unreasoned-state-sync": {
       "count": 1
     }
   },
@@ -1482,11 +1428,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/settings/projectCapacity.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/projectPeople.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1508,14 +1449,6 @@
     }
   },
   "apps/web/src/components/workspaces/settings/shared.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/settings/sharedCapacity.logic.ts": {
-    "t3code/no-em-dash-copy": {
-      "count": 1
-    },
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -1550,7 +1483,7 @@
   },
   "apps/web/src/components/workspaces/settings/workspacePeople.logic.ts": {
     "t3code/no-low-value-comments": {
-      "count": 2
+      "count": 1
     }
   },
   "apps/web/src/components/workspaces/signals.tsx": {

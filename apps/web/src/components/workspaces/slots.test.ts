@@ -21,7 +21,6 @@ describe("the web plugin registry", () => {
       "herdr",
       "jujutsu",
       "github",
-      "capacity",
       "observe",
       "audit",
       "tool-trust",

@@ -151,7 +151,6 @@ export const paymentsSeed = (hubUrl: string) =>
               members: [],
               repositories: [{ id: "api", url: "https://github.com/acme/api.git", branch: "main" }],
               tools: [],
-              capacity: { personal: "any", personalHarnesses: [] },
             },
           ],
         },
@@ -160,7 +159,6 @@ export const paymentsSeed = (hubUrl: string) =>
     ],
     joinable: [],
     lastSyncAt: null,
-    sharedInstances: {},
     // Ana's thread-1 on krk-1, as a person placed it before runs reached the Hub.
     runs: {
       [SEED_RUN]: {
@@ -380,8 +378,7 @@ export const signedInSeed = (hubUrl: string) =>
   [
     `{"hubUrl":"${hubUrl}","email":"ana@acme.test","pendingSignIn":null,`,
     '"workspaces":[{"slug":"acme","name":"Acme","role":"member","allowedDomains":[],',
-    '"manifest":null,"lastSyncAt":null}],"joinable":[],"lastSyncAt":null,',
-    '"sharedInstances":{}}\n',
+    '"manifest":null,"lastSyncAt":null}],"joinable":[],"lastSyncAt":null}\n',
   ].join("");
 
 /**

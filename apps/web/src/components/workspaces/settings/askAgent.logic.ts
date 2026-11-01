@@ -11,14 +11,9 @@ import type { PeerSettingsLocation, WorkspaceSection } from "./peerSettings.logi
 /**
  * The workspace pages that offer "Ask an agent": those of settings an agent can propose changes to.
  * Not Secrets (an agent can neither read nor store one), the audit log and the Hub (records, and
- * the operator's), a new project (its own form) or the Me pages (the person's own).
+ * the operator's) or a new project (its own form).
  */
-const ASK_SECTIONS: ReadonlySet<WorkspaceSection> = new Set([
-  "general",
-  "people",
-  "capacity",
-  "tools",
-]);
+const ASK_SECTIONS: ReadonlySet<WorkspaceSection> = new Set(["general", "people", "tools"]);
 
 /**
  * The workspace whose settings a page offers "Ask an agent" for, from its address: those of a

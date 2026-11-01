@@ -16,7 +16,6 @@ import {
   type PeerRoomAuthor,
   type PeerRoomMessage,
   type PeerRoomNeed,
-  type PeerRoomReach,
   type PeerRoomTarget,
   type PeerRoomTargetInput,
   type PeerRoomsStatus,
@@ -89,10 +88,6 @@ export function createPeerRoomsAtoms<R, ER>(
     withdraw: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer.rooms.withdraw",
       tag: WS_METHODS.peerRoomsWithdraw,
-    }),
-    setReach: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer.rooms.set-reach",
-      tag: WS_METHODS.peerRoomsSetReach,
     }),
     shareWork: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer.rooms.share-work",
@@ -250,7 +245,6 @@ export function targetsFor(
   options: {
     /** This computer has a checkout of the project. */
     readonly hasCheckout?: boolean;
-    readonly reaches?: ReadonlyArray<PeerRoomReach>;
     readonly nameOf?: NameOf;
     /** A chat: anyone on the project can be named. */
     readonly chat?: boolean;
@@ -271,13 +265,6 @@ export function targetsFor(
       ...(options.chat === true ? project.members.map((member) => member.email) : []),
     ]),
   ].filter((email) => !same(email, me));
-  const reached = (email: string) =>
-    onTask.some(
-      (run) =>
-        same(run.email, email) &&
-        runOpen(run) &&
-        options.reaches?.some((row) => row.run === run.id && row.reach === "team") === true,
-    );
   return [
     { key: "team", label: "Team", kind: "team", to: [] },
     {
@@ -307,9 +294,7 @@ export function targetsFor(
           label: `${name}'s agent`,
           kind: "agent",
           to: [{ kind: "agent", email }],
-          note: reached(email)
-            ? `${name} lets the team ask this agent on the project's shared capacity.`
-            : `${name} decides whether to pass this on.`,
+          note: `${name} decides whether to pass this on.`,
         },
       ];
     }),

@@ -6,7 +6,6 @@ import {
   COMPUTER_SECTION_LABELS,
   COMPUTER_SECTIONS,
   DEFAULT_PROJECT_TAB,
-  ME_NAV_SECTIONS,
   WORKSPACE_NAV_SECTIONS,
   WORKSPACE_SECTION_LABELS,
   isPluginHidden,
@@ -19,7 +18,7 @@ import {
   type WorkspaceSection,
 } from "../workspaces/settings/peerSettings.logic";
 
-export type SettingsNavGroupId = "workspace" | "projects" | "me" | "computer" | "app";
+export type SettingsNavGroupId = "workspace" | "projects" | "computer" | "app";
 
 /** Where a row of the navigation goes: a page of Peer's area, or a page of the app's settings. */
 export type SettingsNavTarget =
@@ -179,7 +178,6 @@ export const APP_PAGES = [
 
 /** The Workspace pages whose plugins decide whether they are listed. */
 const SECTION_PLUGINS: Readonly<Partial<Record<WorkspaceSection, ReadonlyArray<string>>>> = {
-  capacity: ["capacity"],
   audit: ["audit"],
 };
 
@@ -268,14 +266,6 @@ export function settingsNavGroups(input: SettingsNavInput): SettingsNav {
         ),
         workspaceItem(workspace, "new-project", { label: "+ New project", quiet: true }),
       ],
-    });
-    groups.push({
-      id: "me",
-      label: "Me",
-      folded: false,
-      items: ME_NAV_SECTIONS.filter((section) => shown(section, workspace)).map((section) =>
-        workspaceItem(workspace, section),
-      ),
     });
   } else if (input.signedOut !== undefined) {
     // Nobody is signed in, or no workspace was joined yet: the way in is the area's front door.

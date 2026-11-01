@@ -409,7 +409,7 @@ describe("every page of the app's settings", () => {
 });
 
 describe("searching Peer's pages", () => {
-  const PLUGINS = ["github", "capacity", "audit", "tool-trust"].map((id) => ({
+  const PLUGINS = ["github", "audit", "tool-trust"].map((id) => ({
     id,
     title: id,
     enabled: true,
@@ -440,11 +440,6 @@ describe("searching Peer's pages", () => {
   const find = (query: string, list = entries()) =>
     searchSettingsEntries(query, list).map((entry) => [entry.title, searchEntryPath(entry)]);
 
-  it("finds the gateway's master key by 'token'", () => {
-    const titles = find("token").map(([title]) => title);
-    expect(titles).toContain("Gateway master key");
-  });
-
   it("finds each page, section and key field by the words people remember it by", () => {
     const found = (query: string, title: string) =>
       expect(
@@ -455,12 +450,7 @@ describe("searching Peer's pages", () => {
     found("coordination", "Coordination policy");
     found("tool trust", "Tool trust");
     found("catalog", "Tools catalog");
-    found("capacity", "Shared capacity");
-    found("gateway", "Gateway");
-    found("master key", "Gateway master key");
-    found("pools", "Model pools");
     found("secrets", "Hub secrets");
-    found("ai subscriptions", "AI subscriptions");
     found("people", "People and roles");
     found("domains", "Email domains");
     found("history", "Settings history");
@@ -492,8 +482,6 @@ describe("searching Peer's pages", () => {
   it("does not hand a member the admin pages or their fields", () => {
     const member = entries("member");
     expect(find("github checks", member).map(([title]) => title)).not.toContain("GitHub PR checks");
-    const tokens = find("token", member).map(([title]) => title);
-    expect(tokens).not.toContain("Gateway master key");
     expect(find("secrets", member).map(([title]) => title)).not.toContain("Hub secrets");
     expect(find("yaml", member)).toEqual([]);
     expect(find("yaml").map(([title]) => title)).toEqual(["Workspace YAML"]);
@@ -527,12 +515,11 @@ describe("searching Peer's pages", () => {
 
   it("shows where a connection stands on the result", () => {
     const withStatus = entries("admin", {
-      statuses: { "workspace:github": "Needs setup", "me:plans": "2 detected" },
+      statuses: { "workspace:github": "Needs setup" },
     });
     const byTitle = (title: string) =>
       searchSettingsEntries(title, withStatus).find((entry) => entry.title === title);
     expect(byTitle("GitHub PR checks")).toMatchObject({ status: "Needs setup" });
-    expect(byTitle("AI subscriptions")).toMatchObject({ status: "2 detected" });
     expect(byTitle("Hub secrets")).not.toHaveProperty("status");
   });
 

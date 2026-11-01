@@ -1,26 +1,13 @@
 /**
- * Plugins fill four settings slots (`settings`, `alwaysSettings`, `workspaceSettings`,
- * `projectSettings`) without knowing where the page that shows them is. `slotHost` says which page
+ * Plugins fill three settings slots (`settings`, `alwaysSettings`, `workspaceSettings`) without
+ * knowing where the page that shows them is. `slotHost` says which page
  * of the area hosts each plugin's slot; a page renders the ones hosted on it.
  */
 import type { ReactNode } from "react";
 
-import { PEER_WEB_PLUGINS, usePeerPlugins, type PeerWebPlugin } from "../slots";
-import type {
-  PeerSlotProps,
-  ProjectSettingsSlotProps,
-  WorkspaceSettingsSlotProps,
-} from "../slots.types";
-import { slotHost, type SlotHost, type SlotKind } from "./peerSettings.logic";
-
-/** Whether an active plugin has a slot of this kind hosted on the page. */
-export function hostsSlot(
-  plugins: ReadonlyArray<PeerWebPlugin>,
-  kind: SlotKind,
-  host: SlotHost,
-): boolean {
-  return plugins.some((plugin) => plugin[kind] !== undefined && slotHost(kind, plugin.id) === host);
-}
+import { PEER_WEB_PLUGINS, usePeerPlugins } from "../slots";
+import type { PeerSlotProps, WorkspaceSettingsSlotProps } from "../slots.types";
+import { slotHost, type SlotHost } from "./peerSettings.logic";
 
 /**
  * The environment-wide rows of the plugins hosted on a page: the active plugins' `settings`, and
@@ -61,28 +48,6 @@ export function HostedWorkspaceSettings({
   return plugins.map(({ id, workspaceSettings: Section }) =>
     Section !== undefined && slotHost("workspaceSettings", id) === host ? (
       <Section key={id} environmentId={environmentId} status={status} workspace={workspace} />
-    ) : null,
-  );
-}
-
-/** The rows of the active plugins' `projectSettings` hosted on a page, for one project. */
-export function HostedProjectSettings({
-  host,
-  environmentId,
-  status,
-  workspace,
-  state,
-}: ProjectSettingsSlotProps & { readonly host: SlotHost }): ReactNode {
-  const plugins = usePeerPlugins(status);
-  return plugins.map(({ id, projectSettings: Rows }) =>
-    Rows !== undefined && slotHost("projectSettings", id) === host ? (
-      <Rows
-        key={id}
-        environmentId={environmentId}
-        status={status}
-        workspace={workspace}
-        state={state}
-      />
     ) : null,
   );
 }

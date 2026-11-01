@@ -77,8 +77,7 @@ function SecretsOfAdmin({
       ) : null}
       {rows === null ? null : rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No secrets yet. GitHub PR checks and the gateway’s key each store theirs when you set them
-          up.
+          No secrets yet. A tool that asks for a secret stores it here when you set it.
         </p>
       ) : (
         <SecretsTable rows={rows} onSet={setSetting} onDelete={setDeleting} />
@@ -109,7 +108,6 @@ function SecretsOfAdmin({
         <DeleteSecretDialog
           environmentId={environmentId}
           workspace={workspace.slug}
-          workspaceName={workspace.name}
           row={deleting}
           onDeleted={query.refresh}
           onClose={() => setDeleting(null)}

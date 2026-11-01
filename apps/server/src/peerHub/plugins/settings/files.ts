@@ -1,6 +1,6 @@
 /**
  * The settings as YAML files, in the layout the Hub exports and `peerhub workspace apply` reads:
- * `workspace.yaml`, then `projects/`, `tools/` and `capacity/` with a file for each id. `settingsFiles` lays a visible document out that way for an agent; `bundleOf` reads such
+ * `workspace.yaml`, then `projects/` and `tools/` with a file for each id. `settingsFiles` lays a visible document out that way for an agent; `bundleOf` reads such
  * files back into what the Hub imports.
  *
  * @module peerHub/plugins/settings/files
@@ -10,10 +10,10 @@ import { parse, stringify } from "yaml";
 
 import { block } from "../../peerText.ts";
 
-const DIRECTORIES = ["projects", "tools", "capacity"] as const;
+const DIRECTORIES = ["projects", "tools"] as const;
 /** What `workspace.yaml` holds of the configuration; the workspace's name and domains are its own. */
-export const WORKSPACE_KEYS = ["currency", "gateway", "people", "github"] as const;
-const FILE = /^(projects|tools|capacity)\/([a-z0-9][a-z0-9-]*)\.ya?ml$/;
+export const WORKSPACE_KEYS = ["currency", "people", "github"] as const;
+const FILE = /^(projects|tools)\/([a-z0-9][a-z0-9-]*)\.ya?ml$/;
 
 const isMapping = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -22,8 +22,7 @@ export const isEmpty = (value: unknown) => isMapping(value) && Object.keys(value
 
 /**
  * `workspace.yaml` when the document holds any of its settings, then each id's file. An empty
- * section is left out: the Hub shows a member that a gateway exists as `gateway: {}`, which is
- * nothing to read or to propose.
+ * section is left out.
  */
 export function settingsFiles(document: Readonly<Record<string, unknown>>) {
   const own = Object.fromEntries(
@@ -87,7 +86,6 @@ export function bundleOf(files: Readonly<Record<string, string>>, given?: number
     ...rest,
     projects: sections.projects ?? {},
     tools: sections.tools ?? {},
-    capacity: sections.capacity ?? {},
   };
   return {
     bundle: { settings, config },

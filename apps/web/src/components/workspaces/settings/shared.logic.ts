@@ -1,23 +1,8 @@
 /**
  * What more than one page of the settings area needs, kept in one place so that no page's own logic
- * file is where another page's helper lives: how an amount of money is written, and what makes a
- * repository address and a branch safe for a computer to clone.
+ * file is where another page's helper lives: what makes a repository address and a branch safe
+ * for a computer to clone.
  */
-
-const CURRENCY_SYMBOLS: Readonly<Record<string, string>> = { EUR: "€", USD: "$" };
-
-/** The mark before an amount: `€` for EUR, `$` for USD, else the code and a space. */
-export const currencySymbol = (currency: string): string =>
-  CURRENCY_SYMBOLS[currency] ?? `${currency} `;
-
-/** `€630`, `€12.50`, `$1,200`: whole amounts without decimals, others with two. */
-export function formatMoney(amount: number, currency: string): string {
-  const text = amount.toLocaleString("en-US", {
-    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
-    maximumFractionDigits: 2,
-  });
-  return `${currencySymbol(currency)}${text}`;
-}
 
 /** Characters that `git clone` would take for a space or a command's end, or that nobody types in an address. */
 const UNFIT = /[\p{White_Space}\p{Cc}]/u;

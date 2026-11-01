@@ -9,7 +9,7 @@ import { getAt } from "@t3tools/client-runtime/peer-settings";
 import type { PeerInvitePreview, PeerRemovalPlan, PeerSettingsSet } from "@t3tools/contracts";
 
 import { looksLikeEmail } from "../workspaceAccess.logic";
-import { customAllocation, leadsOf, membersOf } from "./projectPeople.logic";
+import { leadsOf, membersOf } from "./projectPeople.logic";
 import { countInWords, joinNames } from "./reviewChanges.logic";
 import type { SettingsDocument } from "./settingsView.logic";
 
@@ -78,7 +78,7 @@ export function invitedTitle(invited: ReadonlyArray<string>, role: InviteRole): 
 export interface NamingProject {
   readonly id: string;
   readonly name: string;
-  /** What names them there, as the design writes it: "lead", "allocation €80", "member". */
+  /** What names them there, as the design writes it: "lead", "member". */
   readonly detail: string;
   /** They are the only lead, so the project is left without one. */
   readonly onlyLead: boolean;
@@ -97,9 +97,9 @@ const compareNames = (a: NamingProject, b: NamingProject) =>
   a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
 
 /**
- * The projects that still name the person: those the document lists them in (as a member, a lead
- * or with an allocation), and those the Hub's removal plan names that the document does not show
- * (listed, but not to be changed here). Without the document only the plan's are known.
+ * The projects that still name the person: those the document lists them in (as a member or a
+ * lead), and those the Hub's removal plan names that the document does not show (listed, but not
+ * to be changed here). Without the document only the plan's are known.
  * `fallbackName` names a project the document does not hold.
  */
 export function projectsNaming(input: {
@@ -107,7 +107,6 @@ export function projectsNaming(input: {
   readonly email: string;
   /** The ids the removal plan says the configuration still names the person in. */
   readonly planned: ReadonlyArray<string>;
-  readonly currency: string;
   readonly fallbackName?: (projectId: string) => string | undefined;
 }): ReadonlyArray<NamingProject> {
   const { document, email } = input;
@@ -119,17 +118,12 @@ export function projectsNaming(input: {
     const leads = leadsOf(entry);
     const member = includesAddress(membersOf(entry), email);
     const lead = includesAddress(leads, email);
-    const allocation = customAllocation(entry, email, input.currency);
-    if (!member && !lead && allocation === null) continue;
+    if (!member && !lead) continue;
     const name = typeof entry.name === "string" && entry.name !== "" ? entry.name : id;
-    const detail =
-      [lead ? "lead" : null, allocation === null ? null : `allocation ${allocation}`]
-        .filter((part) => part !== null)
-        .join(" · ") || "member";
     rows.set(id, {
       id,
       name,
-      detail,
+      detail: lead ? "lead" : "member",
       onlyLead: lead && leads.length === 1,
       editable: true,
     });
@@ -149,9 +143,8 @@ export function projectsNaming(input: {
 
 /**
  * The sets that take the person out of these projects, in one save: their place in `members`
- * (never the `*` of a project open to everyone), in `leads`, and their custom allocation, since the
- * Hub refuses a lead or an allocation for someone the project does not name. Only what names them
- * is set, so a project the person is only a lead of changes nothing else. Projects the document
+ * (never the `*` of a project open to everyone) and in `leads`, since the Hub refuses a lead the
+ * project does not name. Only what names them is set, so a project the person is only a lead of changes nothing else. Projects the document
  * does not have are left alone.
  */
 export function cleanupSets(
@@ -175,15 +168,6 @@ export function cleanupSets(
       sets.push({
         path: ["projects", id, "leads"],
         value: leads.filter((lead) => !sameAddress(lead, email)),
-      });
-    }
-    const allocations = getAt(entry, ["capacity", "shared", "allocations"]);
-    if (isMapping(allocations) && Object.keys(allocations).some((key) => sameAddress(key, email))) {
-      sets.push({
-        path: ["projects", id, "capacity", "shared", "allocations"],
-        value: Object.fromEntries(
-          Object.entries(allocations).filter(([key]) => !sameAddress(key, email)),
-        ),
       });
     }
   }
@@ -218,8 +202,8 @@ export function unchangeableText(name: string, projects: ReadonlyArray<string>):
 }
 
 /**
- * What removing a member does, one line each, from the Hub's plan: the access that ends, the keys
- * that are revoked, the way back, the invitations that are withdrawn, and what the Hub cannot reach.
+ * What removing a member does, one line each, from the Hub's plan: the access that ends, the way
+ * back, the invitations that are withdrawn, and what the Hub cannot reach.
  * A Hub that cannot say what removal does says so.
  */
 export function removalConsequences(input: {
@@ -235,13 +219,9 @@ export function removalConsequences(input: {
       reach,
     ];
   }
-  const keys = plan.keys;
   const invites = plan.invites ?? 0;
   return [
     `${name} loses access to ${workspaceName}.`,
-    ...(keys > 0
-      ? [`${name}’s ${keys} shared-capacity ${keys === 1 ? "key is" : "keys are"} revoked.`]
-      : []),
     `${name} cannot rejoin by domain until an admin invites ${name} again.`,
     ...(invites > 0
       ? [

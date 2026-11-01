@@ -35,7 +35,6 @@ const project: PeerProject = {
   role: "member",
   members: [],
   repositories: [],
-  capacity: { personal: "any", personalHarnesses: [] },
   tools: [
     {
       id: "tracker",
@@ -300,7 +299,6 @@ describe("workspace gate through provider policy", () => {
               ],
             ]),
             roots: new Map(),
-            sharedInstances: new Map(),
           });
         publish();
         yield* Effect.scoped(

@@ -5,11 +5,9 @@ import {
   PeerInvitePreview,
   PeerWorkspaceMembers,
   PeerRemovalPlan,
-  PeerMemberKeys,
   type PeerHubInvitePreviewInput,
   type PeerHubMemberInput,
   type PeerHubMemberRoleInput,
-  type PeerHubMemberKeysInput,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -127,23 +125,6 @@ export const accessApi = (request: HubCall) => {
         path: `/v1/workspaces/${encodeURIComponent(input.workspace)}/invites/${encodeURIComponent(input.email)}`,
         method: "DELETE",
       }),
-    memberKeys: (hubUrl: string, session: string, input: PeerHubMemberInput) =>
-      request(PeerMemberKeys, {
-        hubUrl,
-        session,
-        path: path(input.workspace, input.email, "/keys"),
-      }),
-    revokeMemberKeys: (hubUrl: string, session: string, input: PeerHubMemberKeysInput) => {
-      const query = new URLSearchParams();
-      if (input.project !== undefined) query.set("project", input.project);
-      if (input.environment !== undefined) query.set("environment", input.environment);
-      return request(ok, {
-        hubUrl,
-        session,
-        path: path(input.workspace, input.email, `/keys${query.size ? `?${query}` : ""}`),
-        method: "DELETE",
-      });
-    },
     signOutEverywhere: (hubUrl: string, session: string) =>
       request(ok, {
         hubUrl,

@@ -1,27 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { currencySymbol, formatMoney, isSafeGitRef, isSafeGitRemote } from "./shared.logic";
-
-describe("money", () => {
-  it.each<[number, string, string]>([
-    [630, "EUR", "€630"],
-    [150, "EUR", "€150"],
-    [12.5, "EUR", "€12.50"],
-    [80.5, "USD", "$80.50"],
-    [1200, "USD", "$1,200"],
-    [0, "EUR", "€0"],
-    [12, "XX", "XX 12"],
-    [30, "CZK", "CZK 30"],
-  ])("writes %d %s as %s", (amount, currency, text) => {
-    expect(formatMoney(amount, currency)).toBe(text);
-  });
-
-  it("marks an amount with the symbol of its currency, else with its code", () => {
-    expect(currencySymbol("EUR")).toBe("€");
-    expect(currencySymbol("USD")).toBe("$");
-    expect(currencySymbol("CZK")).toBe("CZK ");
-  });
-});
+import { isSafeGitRef, isSafeGitRemote } from "./shared.logic";
 
 describe("a repository address git may clone", () => {
   it.each([

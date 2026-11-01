@@ -77,7 +77,6 @@ export * from "./peer/registry.ts";
 export * from "./peer/rpcRegistry.ts";
 export * from "./peer/herdr.rpc.ts";
 export * from "./peer/github.rpc.ts";
-export * from "./peer/capacity.rpc.ts";
 export * from "./peer/observe.rpc.ts";
 export * from "./peer/card.rpc.ts";
 export * from "./peer/settings.ts";

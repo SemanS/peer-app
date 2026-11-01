@@ -475,18 +475,17 @@ export function Proposals({
 
 /**
  * The proposals banner of the page being shown, for the scope that page is of (a project's pages the
- * project, a workspace's the workspace, AI subscriptions the person); nothing on pages with no
- * settings to propose changes to. Pages of the area get it from their frame.
+ * project, a workspace's the workspace); nothing on pages with no settings to propose changes to. Pages of the area get it from their frame.
  */
 export function ProposalsBanner() {
   const peer = useOptionalPeerSettings();
   if (peer === null) return null;
-  return <ProposalsOfThisPage email={peer.status.email} />;
+  return <ProposalsOfThisPage />;
 }
 
-function ProposalsOfThisPage({ email }: { readonly email: string | null }) {
+function ProposalsOfThisPage() {
   const pathname = useLocation({ select: (location) => location.pathname });
-  const page = proposalPageOf(parsePeerSettingsPath(pathname), email);
+  const page = proposalPageOf(parsePeerSettingsPath(pathname));
   if (page === null) return null;
   return (
     <Proposals

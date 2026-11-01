@@ -14,13 +14,11 @@ export function peerMcpFixture(thread: ThreadId, root = "/workspace") {
     members: [],
     repositories: [],
     tools: [],
-    capacity: { personal: "any", personalHarnesses: [] },
   };
   const bound = { workspace: { slug: "acme", name: "Acme" }, project, repositoryPath: root };
   setHubPolicyState({
     projects: new Map([["project-mcp", bound]]),
     roots: new Map([[root, bound]]),
-    sharedInstances: new Map(),
   });
   bindThreadProject(thread, ProjectId.make("project-mcp"));
   setPluginMcpProviders([

@@ -20,7 +20,6 @@ import {
   defaultChoices,
   diagnosticTone,
   discardMine,
-  gatewayNote,
   isNoop,
   joinNames,
   latestTheirs,
@@ -284,13 +283,6 @@ describe("the review's words", () => {
       "Saved · revision 43",
     );
     expect(savedTitle(preview())).toBe("Saved");
-    expect(gatewayNote(undefined)).toBeNull();
-    expect(gatewayNote({ ok: true })).toEqual({ kind: "ok" });
-    expect(gatewayNote({ error: "no answer in 10 s" })).toEqual({
-      kind: "failed",
-      error: "no answer in 10 s",
-    });
-    expect(gatewayNote({ ok: false })?.kind).toBe("failed");
   });
 
   it("says who may change what a refusal names", () => {

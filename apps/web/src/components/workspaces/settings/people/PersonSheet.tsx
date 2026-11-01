@@ -1,20 +1,16 @@
 import { invitationView } from "@t3tools/client-runtime/peer-organizations";
 import type { EnvironmentId, PeerHubStatus, PeerWorkspaceState } from "@t3tools/contracts";
-import { ChevronRightIcon } from "lucide-react";
 import { useState } from "react";
 
 import { serverEnvironment } from "../../../../state/server";
 import { useAtomCommand } from "../../../../state/use-atom-command";
 import { Button } from "../../../ui/button";
-import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../../../ui/collapsible";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../../../ui/select";
 import { Sheet, SheetHeader, SheetPopup, SheetTitle, SheetDescription } from "../../../ui/sheet";
 import { toastManager } from "../../../ui/toast";
-import { MemberKeys } from "../../MemberKeys";
 import { PeerDialogMessage } from "../../PeerDialog";
 import { failureMessage, hubFailure } from "../../WorkspaceAccess";
 import { limitActions, memberActions } from "../../workspaceMembers.logic";
-import { isWorkspaceAdmin } from "../peerSettings.logic";
 import { invitationActionRefusal } from "../workspacePeople.logic";
 import { ProjectAccessFields } from "./AccessFields";
 import { accessOf, accessText, limitOf, type PersonRow, type ProjectAccess } from "./people.logic";
@@ -263,29 +259,6 @@ export function PersonSheet({
                   )}
                 </section>
               )}
-              {isWorkspaceAdmin(workspace.role) ? (
-                <Collapsible>
-                  <CollapsibleTrigger
-                    type="button"
-                    className="group flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-                  >
-                    <ChevronRightIcon
-                      aria-hidden
-                      className="size-4 group-data-panel-open:rotate-90"
-                    />
-                    Advanced
-                  </CollapsibleTrigger>
-                  <CollapsiblePanel>
-                    <div className="pt-2">
-                      <MemberKeys
-                        environmentId={environmentId}
-                        workspace={workspace.slug}
-                        email={member.email}
-                      />
-                    </div>
-                  </CollapsiblePanel>
-                </Collapsible>
-              ) : null}
             </>
           )}
           {error === null ? null : <PeerDialogMessage tone="error">{error}</PeerDialogMessage>}

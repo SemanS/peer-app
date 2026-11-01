@@ -9,13 +9,10 @@ import {
   type WorkspaceSection,
 } from "./peerSettings.logic";
 import type { WorkspacePageProps } from "./pageProps";
-import { AiSubscriptions } from "./pages/AiSubscriptions";
 import { AuditLogPage } from "./pages/AuditLogPage";
 import { HubStatus } from "./pages/HubStatus";
-import { KeysPage } from "./pages/KeysPage";
 import { NewProject } from "./pages/NewProject";
 import { Secrets } from "./pages/Secrets";
-import { SharedCapacity } from "./pages/SharedCapacity";
 import { ToolCatalog } from "./pages/ToolCatalog";
 import { WorkspaceGeneral } from "./pages/WorkspaceGeneral";
 import { WorkspacePeople } from "./pages/WorkspacePeople";
@@ -23,17 +20,14 @@ import { WorkspacePeople } from "./pages/WorkspacePeople";
 const PAGES: Readonly<Record<WorkspaceSection, ComponentType<WorkspacePageProps>>> = {
   general: WorkspaceGeneral,
   people: WorkspacePeople,
-  capacity: SharedCapacity,
   tools: ToolCatalog,
   secrets: Secrets,
   audit: AuditLogPage,
   hub: HubStatus,
   "new-project": NewProject,
-  plans: AiSubscriptions,
-  keys: KeysPage,
 };
 
-/** `/settings/peer/w/<workspace>/<section>`: one workspace's page, or the Me page of that workspace. */
+/** `/settings/peer/w/<workspace>/<section>`: one workspace's page. */
 export function WorkspaceSectionRoute({
   workspace: slug,
   section,

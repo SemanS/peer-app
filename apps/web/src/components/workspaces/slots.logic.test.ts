@@ -9,9 +9,7 @@ import {
   selectPeerPlugins,
 } from "./slots.logic";
 
-const REGISTRY = ["herdr", "github", "capacity", "changes", "observe", "rooms"].map((id) => ({
-  id,
-}));
+const REGISTRY = ["herdr", "github", "changes", "observe", "rooms"].map((id) => ({ id }));
 
 const plugin = (id: string, active = true): PeerPluginState => ({
   id,
@@ -63,7 +61,7 @@ describe("selectPeerPlugins", () => {
   });
 
   it("selects the features that existed before plugins when the status lists none", () => {
-    const legacy = ["herdr", "github", "capacity", "observe"];
+    const legacy = ["herdr", "github", "observe"];
     expect(ids(selectPeerPlugins(REGISTRY, status()))).toEqual(legacy);
     expect(ids(selectPeerPlugins(REGISTRY, status([])))).toEqual(legacy);
   });

@@ -34,11 +34,9 @@ import {
   type PeerProject,
   type PeerWorkspaceMembers,
   type PeerRemovalPlan,
-  type PeerMemberKeys,
   type PeerHubMemberInput,
   type PeerHubMemberProjectsInput,
   type PeerHubMemberRoleInput,
-  type PeerHubMemberKeysInput,
   type PeerHubFoundingInput,
   type PeerInvitation,
   type PeerInvitationList,
@@ -114,7 +112,6 @@ export class PeerWorkspaces extends Context.Service<
     readonly removalPlan: (
       input: PeerHubMemberInput,
     ) => Effect.Effect<PeerRemovalPlan, PeerHubError>;
-    readonly memberKeys: (input: PeerHubMemberInput) => Effect.Effect<PeerMemberKeys, PeerHubError>;
     readonly removeMember: (
       input: PeerHubMemberInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
@@ -126,9 +123,6 @@ export class PeerWorkspaces extends Context.Service<
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     readonly withdrawInvite: (
       input: PeerHubMemberInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    readonly revokeMemberKeys: (
-      input: PeerHubMemberKeysInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     /** Reads every workspace's manifest again; checkouts follow in the background. */
     readonly sync: Effect.Effect<PeerHubStatus, PeerHubError>;
@@ -327,7 +321,6 @@ const make = Effect.gen(function* () {
   }, lock.withPermits(1));
 
   const signOut: PeerWorkspaces["Service"]["signOut"] = Effect.gen(function* () {
-    // What plugins keep at the Hub goes while its session still holds (shared capacity's keys).
     yield* announce({ kind: "signing-out" });
     yield* client.signOut;
     yield* state.updateRuntime((s) => ({
@@ -344,7 +337,7 @@ const make = Effect.gen(function* () {
     const { hubUrl, session } = yield* client.session;
     // A refusal leaves both the session and all local providers intact.
     yield* hubApi.signOutEverywhere(hubUrl, session);
-    yield* announce({ kind: "signing-out", keysAlreadyQueued: true });
+    yield* announce({ kind: "signing-out" });
     yield* client.signOut;
     yield* state.updateRuntime((s) => ({
       ...s,
@@ -363,10 +356,6 @@ const make = Effect.gen(function* () {
   const removalPlan = (input: PeerHubMemberInput) =>
     Effect.flatMap(client.session, ({ hubUrl, session }) =>
       hubApi.removalPlan(hubUrl, session, input),
-    );
-  const memberKeys = (input: PeerHubMemberInput) =>
-    Effect.flatMap(client.session, ({ hubUrl, session }) =>
-      hubApi.memberKeys(hubUrl, session, input),
     );
   const changeMember =
     <I extends PeerHubMemberInput>(
@@ -728,12 +717,10 @@ const make = Effect.gen(function* () {
     signOutEverywhere,
     members,
     removalPlan,
-    memberKeys,
     removeMember: changeMember(hubApi.removeMember),
     setMemberRole: changeMember(hubApi.setMemberRole),
     setMemberProjects: changeMember(hubApi.setMemberProjects),
     withdrawInvite: changeMember(hubApi.withdrawInvite),
-    revokeMemberKeys: changeMember(hubApi.revokeMemberKeys),
     sync: syncNow.pipe(lock.withPermits(1)),
     createWorkspace,
     joinWorkspace,

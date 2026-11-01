@@ -8,7 +8,7 @@ import type { ProjectSet } from "../projectSets.logic";
  * One room across projects is one chat per project with a `group` mark in common. One chat is its
  * home: what is written goes there and its agent's run starts there, with a checkout of its own in
  * every other project. The other chats hold that project's rights and the place of its work, so
- * runs, capacity and diffs stay per project, and a reader on one project just sees that part.
+ * runs and diffs stay per project, and a reader on one project just sees that part.
  */
 export interface SharedRoomMember {
   readonly place: RoomPlace;

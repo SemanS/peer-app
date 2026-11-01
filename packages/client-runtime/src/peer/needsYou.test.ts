@@ -64,7 +64,6 @@ function kirkwood(): PeerProjectState {
       ],
       repositories: [{ id: "app", url: "git@example.test:acme/app.git", branch: "main" }],
       tools: [],
-      capacity: { personal: "any", personalHarnesses: [] },
     },
     repositories: [
       {
@@ -77,7 +76,6 @@ function kirkwood(): PeerProjectState {
       },
     ],
     tools: [],
-    sharedCapacity: { enabled: false, instanceIds: [] },
     work: {
       areas: ["Groups & Events", "Revenue", "Infrastructure"],
       tasks: [
@@ -135,7 +133,6 @@ function status(project: PeerProjectState, role: "owner" | "member" = "owner"): 
         name: "Acme",
         role,
         allowedDomains: ["acme.test"],
-        currency: "EUR",
         memberName: "Slavo",
         projects: [project],
         lastSyncAt: null,

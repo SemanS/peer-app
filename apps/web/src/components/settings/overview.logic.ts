@@ -1,21 +1,21 @@
 /**
  * Settings › Overview: every integration Peer connects to, grouped by where it lives (the
- * Workspace, Me, This computer), each with its status in the status language, what is left to do
+ * Workspace, This computer), each with its status in the status language, what is left to do
  * and the page to do it on. `overviewRows` turns the facts the pages already read into the groups;
  * `overviewSummary` counts what needs attention and names the first thing to finish, for the
  * banner on the page and the badge in the navigation.
  *
- * Admin-only rows (GitHub's checks, shared capacity) are listed for the workspace's admins only, as the navigation lists their pages; a plugin turned off removes its rows.
+ * Admin-only rows (GitHub's checks) are listed for the workspace's admins only, as the navigation lists their pages; a plugin turned off removes its rows.
  */
 import { isWorkspaceAdmin } from "../workspaces/settings/peerSettings.logic";
 import { CHECKING, type ConnectionView } from "./connectionFacts";
 import { computerRows, type ComputerFacts } from "./overviewComputer.logic";
 import { overviewRow, type OverviewGroupId, type OverviewRow } from "./overviewRow.logic";
-import { meRows, workspaceRows, type PeerFacts } from "./overviewWorkspace.logic";
+import { workspaceRows, type PeerFacts } from "./overviewWorkspace.logic";
 
 export type { ComputerFacts } from "./overviewComputer.logic";
 export type { OverviewGroupId, OverviewRow } from "./overviewRow.logic";
-export type { PeerFacts, PlansFact, WorkspaceFacts } from "./overviewWorkspace.logic";
+export type { PeerFacts, WorkspaceFacts } from "./overviewWorkspace.logic";
 
 /** What the Overview knows of this computer's Peer: not connected, not read yet, or its status. */
 export type PeerAccess =
@@ -74,7 +74,6 @@ export function overviewRows(facts: OverviewFacts): ReadonlyArray<OverviewGroup>
             : workspace.name,
       rows: workspaceRows(peer),
     });
-    groups.push({ id: "me", title: "Me", who: peer.status.email ?? "", rows: meRows(peer) });
   } else if (access.kind === "ready") {
     groups.push(
       hubOnlyGroup(

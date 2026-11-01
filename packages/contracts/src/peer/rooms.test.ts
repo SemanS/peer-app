@@ -12,14 +12,12 @@ import {
   PeerRoomMessage,
   PeerRoomRead,
   PeerRoomsPostInput,
-  PeerRoomsSetReachInput,
 } from "./rooms.ts";
 
 const decodeMessage = Schema.decodeUnknownSync(PeerRoomMessage);
 const decodeRead = Schema.decodeUnknownSync(PeerRoomRead);
 const decodeInbox = Schema.decodeUnknownSync(PeerRoomInbox);
 const decodePost = Schema.decodeUnknownSync(PeerRoomsPostInput);
-const decodeReach = Schema.decodeUnknownSync(PeerRoomsSetReachInput);
 const decodeDiff = Schema.decodeUnknownSync(PeerRoomDiff);
 
 const message = {
@@ -52,13 +50,8 @@ describe("room rows", () => {
   });
 
   it("read as the routes answer", () => {
-    const read = decodeRead({
-      seq: 12,
-      seen: 3,
-      messages: [message],
-      reaches: [{ run: "run_1", reach: "team", capacity: "shared" }],
-    });
-    expect(read.reaches[0]?.reach).toBe("team");
+    const read = decodeRead({ seq: 12, seen: 3, messages: [message] });
+    expect(read.messages).toHaveLength(1);
     const inbox = decodeInbox({
       waiting: [{ project: "app", task: "t-1", message }],
       mentions: [],
@@ -78,12 +71,6 @@ describe("room inputs", () => {
       decodePost({ ...post, to: [{ kind: "agent", email: "a@b.c", harness: "codex" }] }).to,
     ).toEqual([{ kind: "agent", email: "a@b.c", harness: "codex" }]);
     expect(() => decodePost({ ...post, to: [{ kind: "group", email: "a@b.c" }] })).toThrow();
-  });
-
-  it("set a reach to own or team, with no capacity from a client", () => {
-    const input = { workspace: "acme", project: "app", run: "run_1", reach: "team" };
-    expect(decodeReach({ ...input, capacity: "shared" })).toEqual(input);
-    expect(() => decodeReach({ ...input, reach: "everyone" })).toThrow();
   });
 
   it("answer a diff from here or say it is not here", () => {
@@ -112,7 +99,6 @@ describe("the rooms plugin's place", () => {
       methods.peerRoomsPass,
       methods.peerRoomsDecline,
       methods.peerRoomsWithdraw,
-      methods.peerRoomsSetReach,
     ]) {
       expect(CLIENT_GUARDED_RPC_SCOPES).toHaveProperty([method], AuthOrchestrationOperateScope);
       expect(RoomsRpcScopes[method]).toBe(AuthOrchestrationOperateScope);

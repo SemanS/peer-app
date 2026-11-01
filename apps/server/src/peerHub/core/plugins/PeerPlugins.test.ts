@@ -251,25 +251,25 @@ describe("Peer plugins", () => {
       const seen = yield* Queue.unbounded<SeenEvent>();
       const core = yield* startedCore(yield* seedState(), [
         fakePlugin(
-          { id: "capacity", title: "Shared capacity" },
+          { id: "observe", title: "Observe" },
           seen,
-          Effect.fail(new PeerHubError({ detail: "The Hub did not revoke the key." })),
+          Effect.fail(new PeerHubError({ detail: "The Hub did not answer." })),
         ),
       ]);
-      yield* core.plugins.setPlugin({ id: "capacity", enabled: false });
+      yield* core.plugins.setPlugin({ id: "observe", enabled: false });
       assert.deepStrictEqual(yield* core.plugins.states, [
         {
-          id: "capacity",
-          title: "Shared capacity",
+          id: "observe",
+          title: "Observe",
           enabled: false,
           active: false,
           reason: "off",
-          error: "The Hub did not revoke the key.",
+          error: "The Hub did not answer.",
         },
       ]);
-      yield* core.plugins.setPlugin({ id: "capacity", enabled: true });
+      yield* core.plugins.setPlugin({ id: "observe", enabled: true });
       assert.deepStrictEqual(yield* core.plugins.states, [
-        { id: "capacity", title: "Shared capacity", enabled: true, active: true },
+        { id: "observe", title: "Observe", enabled: true, active: true },
       ]);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );

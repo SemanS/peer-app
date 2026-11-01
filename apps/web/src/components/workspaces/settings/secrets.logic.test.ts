@@ -152,18 +152,14 @@ describe("what a row says", () => {
 
 describe("what stops when a secret goes", () => {
   it.each([
-    [
-      "Shared capacity · the gateway",
-      "Shared capacity turns off for all of Acme until a new key is set.",
-    ],
     ["GitHub PR checks", "GitHub’s deliveries will fail, so PR checks stop."],
     ["The nightly export", "The nightly export stops working until the secret is set again."],
   ])("says of %j: %s", (use, impact) => {
-    expect(impactOf(use, "Acme")).toBe(impact);
+    expect(impactOf(use)).toBe(impact);
   });
 
   it("deletes a secret nothing uses with a plain Delete", () => {
-    expect(deleteWords({ name: "OLD_JIRA_HOOK", uses: [] }, "Acme")).toEqual({
+    expect(deleteWords({ name: "OLD_JIRA_HOOK", uses: [] })).toEqual({
       title: "Delete OLD_JIRA_HOOK?",
       impacts: [],
       nothing: "Nothing uses it, so nothing stops.",
@@ -172,21 +168,15 @@ describe("what stops when a secret goes", () => {
   });
 
   it("lists every use of one that is used, and asks for Delete anyway", () => {
-    const words = deleteWords(
-      {
-        name: "ops-url",
-        uses: ["Shared capacity · the gateway", "The nightly export"],
-      },
-      "Acme",
-    );
+    const words = deleteWords({
+      name: "ops-url",
+      uses: ["GitHub PR checks", "The nightly export"],
+    });
     expect(words.title).toBe("Delete ops-url?");
     expect(words.nothing).toBeNull();
     expect(words.confirm).toBe("Delete anyway");
     expect(words.impacts).toEqual([
-      {
-        use: "Shared capacity · the gateway",
-        impact: "Shared capacity turns off for all of Acme until a new key is set.",
-      },
+      { use: "GitHub PR checks", impact: "GitHub’s deliveries will fail, so PR checks stop." },
       {
         use: "The nightly export",
         impact: "The nightly export stops working until the secret is set again.",

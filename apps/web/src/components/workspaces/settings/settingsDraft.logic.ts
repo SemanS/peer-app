@@ -26,25 +26,15 @@ export interface Change {
 type ListKind = "set" | "keyed";
 
 /**
- * The lists the Hub merges element by element (design H1): sets of strings (members, leads, a
- * shared model list, a model's harnesses) and lists keyed by a field (repositories and models by
- * `id`, tools by tool id). Every other list is one value. `path` is the list's place in the
+ * The lists the Hub merges element by element (design H1): sets of strings (members, leads) and
+ * lists keyed by a field (repositories by `id`, tools by tool id). Every other list is one value. `path` is the list's place in the
  * document, a keyed list's elements being addressed by their key.
  */
 function listKindAt(path: Path): ListKind | undefined {
-  const [section, , field, shared, last] = path;
-  if (section === "projects") {
-    if (path.length === 3) {
-      if (field === "members" || field === "leads") return "set";
-      if (field === "repositories" || field === "tools") return "keyed";
-    }
-    if (path.length === 5 && field === "capacity" && shared === "shared" && last === "models") {
-      return "set";
-    }
-  }
-  if (section === "capacity") {
-    if (path.length === 3 && field === "models") return "keyed";
-    if (path.length === 5 && field === "models" && last === "harness") return "set";
+  const [section, , field] = path;
+  if (section === "projects" && path.length === 3) {
+    if (field === "members" || field === "leads") return "set";
+    if (field === "repositories" || field === "tools") return "keyed";
   }
   return undefined;
 }

@@ -45,28 +45,14 @@ describe("which proposals a page shows", () => {
     section: name as never,
   });
 
-  it("gives a project's pages the project, a workspace's pages the workspace, AI subscriptions the person", () => {
-    expect(proposalPageOf(project, "ana@acme.dev")).toEqual({
-      workspace: "acme",
-      scope: "project:booking",
-    });
-    expect(proposalPageOf(section("tools"), "ana@acme.dev")).toEqual({
-      workspace: "acme",
-      scope: "workspace",
-    });
-    expect(proposalPageOf(section("plans"), "ana@acme.dev")).toEqual({
-      workspace: "acme",
-      scope: "person:ana@acme.dev",
-    });
+  it("gives a project's pages the project, a workspace's pages the workspace", () => {
+    expect(proposalPageOf(project)).toEqual({ workspace: "acme", scope: "project:booking" });
+    expect(proposalPageOf(section("tools"))).toEqual({ workspace: "acme", scope: "workspace" });
   });
 
-  it("gives Keys, the computer's pages and an unknown page none", () => {
-    expect(proposalPageOf(section("keys"), "ana@acme.dev")).toBeNull();
-    expect(proposalPageOf(section("plans"), null)).toBeNull();
-    expect(
-      proposalPageOf({ kind: "computer", section: "coordination" }, "ana@acme.dev"),
-    ).toBeNull();
-    expect(proposalPageOf(null, "ana@acme.dev")).toBeNull();
+  it("gives the computer's pages and an unknown page none", () => {
+    expect(proposalPageOf({ kind: "computer", section: "coordination" })).toBeNull();
+    expect(proposalPageOf(null)).toBeNull();
   });
 
   it("filters to pending proposals that touch the page's scope, newest first", () => {

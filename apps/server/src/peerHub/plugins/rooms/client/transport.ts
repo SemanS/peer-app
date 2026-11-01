@@ -24,8 +24,6 @@ export const roomsRpc = (rooms: Rooms["Service"]) =>
           wrap.effect(methods.peerRoomsDecline, rooms.decline(input)),
         [methods.peerRoomsWithdraw]: (input) =>
           wrap.effect(methods.peerRoomsWithdraw, rooms.withdraw(input)),
-        [methods.peerRoomsSetReach]: (input) =>
-          wrap.effect(methods.peerRoomsSetReach, rooms.setReach(input)),
         [methods.peerRoomsDiff]: (input) => wrap.effect(methods.peerRoomsDiff, rooms.diff(input)),
         [methods.peerRoomsThread]: (input) =>
           wrap.effect(methods.peerRoomsThread, rooms.thread(input)),

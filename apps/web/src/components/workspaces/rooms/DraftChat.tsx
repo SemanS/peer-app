@@ -145,7 +145,6 @@ function NewChat({
                 chat: true,
               })}
               people={peopleOf(project.members, me, nameOf)}
-              personalHarnesses={project.capacity.personalHarnesses}
               line={null}
               paths={null}
               toOwnAgent

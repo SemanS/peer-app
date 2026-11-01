@@ -12,7 +12,7 @@ import {
 import * as Option from "effect/Option";
 import { describe, expect, it } from "vite-plus/test";
 
-import { CHECKING, failedFact, readyFact } from "./connectionFacts";
+import { CHECKING, readyFact } from "./connectionFacts";
 import {
   filterOverview,
   finishText,
@@ -34,7 +34,7 @@ const plugin = (id: string, extra: Partial<PeerPluginState> = {}): PeerPluginSta
   ...extra,
 });
 
-const PLUGINS = ["github", "capacity", "settings"].map((id) => plugin(id));
+const PLUGINS = ["github", "settings"].map((id) => plugin(id));
 
 const github = (extra: Partial<PeerGitHubStatus> = {}): PeerGitHubStatus => ({
   configured: false,
@@ -51,18 +51,6 @@ const workspace = (extra: Partial<WorkspaceFacts> = {}): WorkspaceFacts => ({
   name: "Webinson",
   role: "admin",
   github: readyFact(github()),
-  gateway: readyFact({
-    view: {
-      configured: true,
-      url: "https://llm.webinson.com",
-      adminUrl: null,
-      currency: "EUR",
-      masterKey: { stored: true, at: "2026-10-01T09:00:00Z" },
-      sync: { at: "2026-10-12T10:00:00Z", ok: true, lastOkAt: "2026-10-12T10:00:00Z" },
-    },
-    pools: 2,
-  }),
-  plans: { kind: "ready", added: [], detected: 2 },
   ...extra,
 });
 
@@ -190,15 +178,12 @@ describe("the Overview of an admin", () => {
   it("groups what Peer connects to by where it lives, in the design's order", () => {
     expect(groups.map((group) => [group.id, group.title, group.who])).toEqual([
       ["workspace", "Workspace", "Webinson · admins set these up"],
-      ["me", "Me", "slavosmn@gmail.com"],
       ["computer", "This computer", "MacBook Pro"],
     ]);
     expect(rowsOf(groups, "workspace").map((row) => row.name)).toEqual([
       "Peer Hub",
       "GitHub PR checks",
-      "Shared capacity",
     ]);
-    expect(rowsOf(groups, "me").map((row) => row.name)).toEqual(["AI subscriptions"]);
     expect(rowsOf(groups, "computer").map((row) => row.name)).toEqual([
       "GitHub CLI",
       "Bitbucket",
@@ -221,16 +206,11 @@ describe("the Overview of an admin", () => {
     });
   });
 
-  it("reads GitHub's checks and the gateway from what their pages read", () => {
+  it("reads GitHub's checks from what their page reads", () => {
     expect(rowNamed(groups, "GitHub PR checks")).toMatchObject({
       connection: { state: "off", detail: "Agents can’t prove a merge yet." },
       action: { label: "Turn on" },
       attention: false,
-    });
-    expect(rowNamed(groups, "Shared capacity")?.connection).toEqual({
-      state: "connected",
-      detail: "Gateway synced · 2 model pools",
-      checkedAt: "2026-10-12T10:00:00Z",
     });
   });
 
@@ -288,26 +268,10 @@ describe("something to finish", () => {
     );
   });
 
-  it("offers Review for plans the providers detected and the person has not added", () => {
-    expect(rowNamed(groups, "AI subscriptions")).toMatchObject({
-      connection: { state: "setup", detail: "2 plans detected on this computer, none added." },
-      action: { label: "Review" },
-      underway: false,
-    });
-  });
-
   it("has nothing to finish, and no badge, when everything is connected or off", () => {
     const done = overviewSummary(
       overviewRows(
         facts({
-          peer: {
-            kind: "ready",
-            peer: peerFacts(
-              workspace({
-                plans: { kind: "ready", added: ["Claude Max"], detected: 0 },
-              }),
-            ),
-          },
           computer: computer({
             sourceControl: readyFact(discovery([tool("github", "GitHub", { status: "missing" })])),
           }),
@@ -321,20 +285,15 @@ describe("something to finish", () => {
 
   it("filters to the rows that need attention, and drops a group with none", () => {
     expect(filterOverview(groups, "all")).toBe(groups);
-    expect(filterOverview(groups, "attention").map((group) => group.id)).toEqual([
-      "workspace",
-      "me",
-      "computer",
-    ]);
-    const quiet = overviewRows(
+    const waiting = overviewRows(
       facts({
-        computer: computer({ sourceControl: null, providers: null, deviceHub: null }),
+        peer: {
+          kind: "ready",
+          peer: peerFacts(workspace({ github: readyFact(github({ configured: true })) })),
+        },
       }),
     );
-    expect(filterOverview(quiet, "attention").map((group) => group.id)).toEqual([
-      "workspace",
-      "me",
-    ]);
+    expect(filterOverview(waiting, "attention").map((group) => group.id)).toEqual(["workspace"]);
   });
 
   it("tells a problem in words, with its consequence", () => {
@@ -373,7 +332,7 @@ describe("what a member sees", () => {
   );
 
   it("lists no page a member may not open: only the Hub of the workspace", () => {
-    expect(member.map((group) => group.id)).toEqual(["workspace", "me", "computer"]);
+    expect(member.map((group) => group.id)).toEqual(["workspace", "computer"]);
     expect(rowsOf(member, "workspace").map((row) => row.name)).toEqual(["Peer Hub"]);
     expect(member.find((group) => group.id === "workspace")?.who).toBe("Webinson");
   });
@@ -427,17 +386,12 @@ describe("what is not read yet, and what failed", () => {
           peer: peerFacts(
             workspace({
               github: { kind: "loading" },
-              gateway: failedFact("The Hub refused."),
             }),
           ),
         },
       }),
     );
     expect(rowNamed(groups, "GitHub PR checks")?.connection).toBe(CHECKING);
-    expect(rowNamed(groups, "Shared capacity")?.connection).toEqual({
-      state: "problem",
-      detail: "The Hub refused.",
-    });
   });
 
   it("says a failed Hub sync is a Problem, and a sync that has not happened yet is not one", () => {

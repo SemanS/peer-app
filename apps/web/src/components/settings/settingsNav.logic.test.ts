@@ -31,7 +31,7 @@ const plugin = (id: string, extra: Record<string, unknown> = {}) => ({
   active: true,
   ...extra,
 });
-const PLUGINS = ["github", "capacity", "audit", "tool-trust"].map((id) => plugin(id));
+const PLUGINS = ["github", "audit", "tool-trust"].map((id) => plugin(id));
 const off = (...ids: string[]) =>
   PLUGINS.map((entry) =>
     ids.includes(entry.id) ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
@@ -47,7 +47,7 @@ const nav = (extra: Partial<SettingsNavInput> = {}) =>
   });
 
 const labels = (
-  groupId: "workspace" | "projects" | "me" | "computer" | "app",
+  groupId: "workspace" | "projects" | "computer" | "app",
   extra: Partial<SettingsNavInput> = {},
 ) =>
   nav(extra)
@@ -55,13 +55,12 @@ const labels = (
     ?.items.map((item) => item.label);
 
 describe("the one settings navigation", () => {
-  it("lists Overview, then Workspace, Projects, Me, This computer and App, in the design's order", () => {
+  it("lists Overview, then Workspace, Projects, This computer and App, in the design's order", () => {
     const { overview, groups } = nav();
     expect(overview.label).toBe("Overview");
     expect(groups.map((group) => [group.id, group.label, group.who])).toEqual([
       ["workspace", "Workspace", "Acme"],
       ["projects", "Projects", undefined],
-      ["me", "Me", undefined],
       ["computer", "This computer", undefined],
       ["app", "App", undefined],
     ]);
@@ -71,7 +70,6 @@ describe("the one settings navigation", () => {
     expect(labels("workspace")).toEqual([
       "General",
       "People",
-      "Shared capacity",
       "Tools",
       "Secrets",
       "Audit log",
@@ -82,7 +80,6 @@ describe("the one settings navigation", () => {
   });
 
   it("puts Peer's pages and the app's own together under This computer and App", () => {
-    expect(labels("me")).toEqual(["AI subscriptions", "Keys"]);
     expect(labels("computer")).toEqual([
       "Coordination & plugins",
       "Tool trust",
@@ -139,20 +136,19 @@ describe("who sees which page", () => {
       "Tools",
       "Hub",
     ]);
-    // Their projects and keys are theirs whatever their role.
+    // Their projects are theirs whatever their role.
     for (const role of ["owner", "admin", "member"] as const) {
       expect(labels("projects", { workspace: acme(role) })).toEqual([
         "Booking",
         "Peer Hub",
         "+ New project",
       ]);
-      expect(labels("me", { workspace: acme(role) })).toEqual(["AI subscriptions", "Keys"]);
     }
   });
 
   it("takes the pages of a plugin that is turned off", () => {
     const status = (...ids: string[]) => ({ plugins: off(...ids), signedIn: true });
-    expect(labels("workspace", { status: status("capacity", "audit") })).toEqual([
+    expect(labels("workspace", { status: status("audit") })).toEqual([
       "General",
       "People",
       "Tools",
@@ -164,16 +160,16 @@ describe("who sees which page", () => {
 
   it("keeps a page whose plugin waits for a newer Hub, since the page says so", () => {
     const waiting = PLUGINS.map((entry) =>
-      entry.id === "capacity" ? { ...entry, active: false, reason: "hub" } : entry,
+      entry.id === "audit" ? { ...entry, active: false, reason: "hub" } : entry,
     );
     expect(labels("workspace", { status: { plugins: waiting, signedIn: true } })).toContain(
-      "Shared capacity",
+      "Audit log",
     );
   });
 
   it("lists everything, plugins included, when no status is known", () => {
     expect(labels("computer", { status: undefined })).toContain("Tool trust");
-    expect(labels("workspace", { status: undefined })).toContain("Shared capacity");
+    expect(labels("workspace", { status: undefined })).toContain("Audit log");
   });
 
   it("shows the app's Project page under This computer only while a project is chosen", () => {
@@ -320,12 +316,6 @@ describe("what the navigation marks", () => {
         }),
       ],
     },
-    {
-      id: "me",
-      title: "Me",
-      who: "",
-      rows: [row({ id: "me:plans", group: "me", attention: true, badge: "2 detected" })],
-    },
   ];
 
   it("marks the split browser and device pages independently", () => {
@@ -347,17 +337,15 @@ describe("what the navigation marks", () => {
     ]);
   });
 
-  it("puts a dot on General while GitHub is at a step, and '2 detected' beside AI subscriptions", () => {
+  it("puts a dot on General while GitHub is at a step", () => {
     const marks = navMarks(groups);
     expect(marks.toFinish).toBe("1 to finish");
     expect([...marks.dots]).toEqual(["workspace:general"]);
-    expect([...marks.tags]).toEqual([["workspace:plans", "2 detected"]]);
+    expect([...marks.tags]).toEqual([]);
     const built = nav({ marks });
     expect(built.overview.badge).toBe("1 to finish");
     const general = built.groups[0]?.items.find((item) => item.label === "General");
     expect(general).toMatchObject({ dot: true });
-    const plans = built.groups.find((group) => group.id === "me")?.items[0];
-    expect(plans).toMatchObject({ label: "AI subscriptions", tag: "2 detected" });
   });
 
   it("marks nothing when nothing is to finish", () => {

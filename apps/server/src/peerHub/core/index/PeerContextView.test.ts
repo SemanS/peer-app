@@ -121,7 +121,6 @@ function serving(
         Layer.mock(PeerState.PeerState)({
           environmentId: EnvironmentId.make("test-environment"),
           workspaceRoot: "",
-          hubHome: "",
           current: () => runtime,
           lock: Semaphore.makeUnsafe(1),
           checkoutPath: () => "",

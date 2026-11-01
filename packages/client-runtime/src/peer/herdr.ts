@@ -82,17 +82,14 @@ export function peerAgentStartBlocker(
 export function peerLaunchBlocker(
   status: Parameters<typeof peerAgentStartBlocker>[0],
   project: {
-    readonly project: { readonly capacity: { readonly personal: string } };
     readonly repositories: ReadonlyArray<{ readonly state: string }>;
   },
 ): string | null {
   return (
     peerAgentStartBlocker(status) ??
-    (project.project.capacity.personal !== "any"
-      ? "Use a Peer thread with an approved provider for this project's capacity policy."
-      : !project.repositories.some((repository) => repository.state === "ready")
-        ? "Clone and open the project on this environment first."
-        : null)
+    (project.repositories.some((repository) => repository.state === "ready")
+      ? null
+      : "Clone and open the project on this environment first.")
   );
 }
 

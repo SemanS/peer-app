@@ -10,7 +10,6 @@ import type {
   PeerSettingsChangeResult,
   PeerSettingsConflict,
   PeerSettingsDiagnostic,
-  PeerSettingsGatewayOutcome,
   PeerSettingsGitHubDisableInput,
   PeerSettingsImportInput,
   PeerSettingsLine,
@@ -625,19 +624,6 @@ export function localAudit(
 ): string {
   const local = at === undefined ? "" : time(at);
   return local === "" ? audit : audit.replace(/^\d{2}:\d{2}(?= · )/, local);
-}
-
-/** How the gateway took a save: nothing to say, it did, or why it did not. */
-export type GatewayNote =
-  | { readonly kind: "ok" }
-  | { readonly kind: "failed"; readonly error: string };
-
-export function gatewayNote(outcome: PeerSettingsGatewayOutcome | undefined): GatewayNote | null {
-  if (outcome === undefined) return null;
-  if ("error" in outcome) return { kind: "failed", error: outcome.error };
-  return outcome.ok
-    ? { kind: "ok" }
-    : { kind: "failed", error: "the gateway did not take the changes" };
 }
 
 /** Who may change what a refused path is, as a sentence for the forbidden view. */

@@ -40,7 +40,7 @@ const ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const HEADER =
   /^# Peer settings · ([a-z0-9][a-z0-9-]{0,62}) · revision (\d{1,15}) · scope \S+[ \t]*$/;
 const NAMED = /^# File: (\S+)[ \t]*$/;
-const FILE = /^(?:workspace\.yaml|(projects|tools|capacity)\/([a-z0-9][a-z0-9-]{0,62})\.ya?ml)$/;
+const FILE = /^(?:workspace\.yaml|(projects|tools)\/([a-z0-9][a-z0-9-]{0,62})\.ya?ml)$/;
 type Words = ReadonlyArray<string>;
 
 const invalid = () => usage(`use peer ${CONFIG_USAGE}`, "run peer help for the commands.");
@@ -73,21 +73,16 @@ function flagsOf(args: Words, valued: Words, bare: Words = []) {
 
 /**
  * The fields of a project's file and of `workspace.yaml` and their values, as the Hub reads them: a
- * file shows only what is set, and an agent asked for a setting no file has yet (a project's first
- * path rule) cannot see its shape. `show` says them once for each kind of file it prints.
+ * file shows only what is set, and an agent asked for a setting no file has yet cannot see its
+ * shape. `show` says them once for each kind of file it prints.
  */
 const FIELDS: Readonly<Record<string, ReadonlyArray<string>>> = {
   projects: [
     '# Fields: name, client, description, members (emails; "*" is everyone), leads (emails), areas, tools (catalog',
-    "#   ids), repositories [{id, url, branch}], capacity {personal: <any|commercial|none>, shared {pool, budget",
-    "#   {amount, period: <day|week|month>}, allocations {<email>: amount}, defaultAllocation}}, coordination",
-    '#   {policy: <notify|coordinate|ask|exclusive>, paths {"<glob>": <the same>}}; paths need the policy, which',
-    "#   decides every other path.",
+    "#   ids), repositories [{id, url, branch}], coordination {policy: <notify|coordinate|ask|exclusive>}.",
   ],
   workspace: [
-    "# Fields: currency, people {<email>: {name, personal [{harness: <claude|codex|cursor|grok|opencode|antigravity>,",
-    "#   plan: <pro|max|plus|team|business|enterprise|api|other>}]}}, gateway {kind: litellm, url, adminUrl,",
-    "#   usdPerUnit}; each person's own entry under people is theirs.",
+    "# Fields: currency, people {<email>: {name}}; each person's own entry under people is theirs.",
   ],
 };
 const kindOf = (path: string) => (path === "workspace.yaml" ? "workspace" : path.split("/")[0]!);

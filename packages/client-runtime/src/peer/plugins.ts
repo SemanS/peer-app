@@ -14,7 +14,6 @@ import {
 const PRE_PLUGIN_FEATURES: ReadonlySet<string> = new Set<PeerPluginId>([
   "herdr",
   "github",
-  "capacity",
   "observe",
 ]);
 

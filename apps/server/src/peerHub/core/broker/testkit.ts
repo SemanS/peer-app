@@ -94,7 +94,6 @@ export async function placesOfState(projects: ReadonlyArray<readonly [string, st
       members: [],
       repositories: [{ id: "app", url, branch: "main" }],
       tools: [],
-      capacity: { personal: "any", personalHarnesses: [] },
     })),
   };
   const workspace = { slug: "acme", name: "Acme", role: "member", allowedDomains: [], manifest };
@@ -107,7 +106,6 @@ export async function placesOfState(projects: ReadonlyArray<readonly [string, st
       workspaces: [{ ...workspace, lastSyncAt: null }],
       joinable: [],
       lastSyncAt: null,
-      sharedInstances: {},
     }),
   );
   const state = await Effect.runPromise(

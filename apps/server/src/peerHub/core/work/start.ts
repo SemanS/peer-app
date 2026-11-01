@@ -1,7 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - where a task's own checkout goes under the workspace root.
 /**
- * Starting an agent on a task (`peerHub.startAgent`). Core checks that the task is open, the
- * repository is the project's and the project lets people's own capacity in; creates the run and
+ * Starting an agent on a task (`peerHub.startAgent`). Core checks that the task is open and the
+ * repository is the project's; creates the run and
  * launches the agent in a checkout of its own through the active task launcher (herdr's), in that run
  * (`launchInRun`), so the run alone puts the agent on the task; then reports it. Without the plugin a
  * step needs, it fails before anything happens, saying that plugin is turned off or needs a newer Hub.
@@ -53,10 +53,6 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
     return yield* hubError("That repository does not belong to this project.");
   if (input.baseBranch !== undefined && !isSafeGitRef(input.baseBranch))
     return yield* hubError("That branch name is not a safe Git ref.");
-  if (project.capacity.personal !== "any")
-    return yield* hubError(
-      "This project needs an approved commercial or shared provider. Start a Peer thread with an allowed provider instead.",
-    );
   const launcher = yield* plugins.require("taskLauncher");
   const unavailable = yield* launcher.unavailable;
   if (unavailable !== null) return yield* hubError(unavailable);

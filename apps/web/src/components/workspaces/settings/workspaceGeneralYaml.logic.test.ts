@@ -26,7 +26,6 @@ const exported = {
   "projects/booking.yaml": "name: Booking\n",
   "projects/camp-bot.yaml": "name: Camp-bot\n",
   "tools/postgres-staging.yaml": "name: Postgres staging\nmcp:\n  command: npx\n",
-  "capacity/standard.yaml": "name: Standard\nmodels: []\n",
   ".peer-revision": "42 3f2a9c1e5b7d4e8a9c217d4e5f6a8b90c1d2e3f4\n",
 } as const;
 
@@ -44,7 +43,6 @@ describe("what Export saves", () => {
       .toSorted();
     expect(files).toEqual([
       "acme-settings/.peer-revision",
-      "acme-settings/capacity/standard.yaml",
       "acme-settings/projects/booking.yaml",
       "acme-settings/projects/camp-bot.yaml",
       "acme-settings/tools/postgres-staging.yaml",
@@ -71,7 +69,7 @@ describe("the files Import takes", () => {
       ok: true,
       base: 42,
       files: exported,
-      summary: "workspace.yaml, 2 projects, 1 tool, 1 pool",
+      summary: "workspace.yaml, 2 projects, 1 tool",
     });
   });
 
@@ -216,18 +214,16 @@ describe("the files Import takes", () => {
         "workspace.yaml": "currency: EUR\n",
         "booking.yaml": "name: Booking\nmembers: ['*']\n",
         "postgres.yaml": "name: Postgres\nmcp:\n  command: npx\nrequires: []\n",
-        "standard.yaml": "name: Standard\nmodels:\n  - id: claude-sonnet-5-5\n",
         ".peer-revision": "3 abc\n",
       });
       expect(read).toMatchObject({
         ok: true,
         base: 3,
-        summary: "workspace.yaml, 1 project, 1 tool, 1 pool",
+        summary: "workspace.yaml, 1 project, 1 tool",
       });
       if (!read.ok) return;
       expect(Object.keys(read.files)).toEqual([
         ".peer-revision",
-        "capacity/standard.yaml",
         "projects/booking.yaml",
         "tools/postgres.yaml",
         "workspace.yaml",
@@ -319,7 +315,6 @@ describe("small pieces", () => {
 
   it.each([
     ["name: Postgres\nmcp:\n  command: npx\n", "tools"],
-    ["name: Standard\nmodels: []\n", "capacity"],
     ["name: Booking\nmembers: ['*']\ntools: [mcp]\n", "projects"],
     ["", "projects"],
   ])("tells %j is in %s", (text, folder) => {

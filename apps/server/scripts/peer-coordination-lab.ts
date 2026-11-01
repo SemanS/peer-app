@@ -1282,15 +1282,14 @@ const settingsSurface = Effect.fn("lab.settingsSurface")(function* (ana: Compute
     "importing what was exported changes nothing",
   );
   const secrets = yield* ana.client[WS_METHODS.peerSettingsSecrets]({ workspace });
-  const gateway = yield* ana.client[WS_METHODS.peerSettingsGateway]({ workspace });
   const record = yield* ana.client[WS_METHODS.peerSettingsDomainRecord]({
     workspace,
     domain: "acme.test",
   });
   told("the domain's record", JSON.stringify(record));
   check(
-    Array.isArray(secrets.secrets) && !gateway.configured && record.domain === "acme.test",
-    "the admin reads the secrets, the gateway and the domain's record",
+    Array.isArray(secrets.secrets) && record.domain === "acme.test",
+    "the admin reads the secrets and the domain's record",
   );
 
   // Bob, a member: his part, a refused change, and a proposal instead.
@@ -5866,27 +5865,6 @@ const roomsProgram = Effect.gen(function* () {
       Effect.runPromise(
         restartComputer(bob, during).pipe(Effect.provideService(Scope.Scope, scope)),
       ),
-    restartAna: (during) =>
-      Effect.runPromise(
-        restartComputer(ana, during).pipe(Effect.provideService(Scope.Scope, scope)),
-      ),
-    endRunOnAnasDisk: (run) => {
-      const file = NodePath.join(
-        ana.home,
-        (NodeFS.readdirSync(ana.home, { recursive: true }) as string[]).find(
-          (entry) => NodePath.basename(entry) === "peer-hub.json",
-        ) ?? "peer-hub.json",
-      );
-      const persisted = JSON.parse(NodeFS.readFileSync(file, "utf8"));
-      const at = new Date().toISOString();
-      persisted.runs[run] = {
-        ...persisted.runs[run],
-        endedAt: at,
-        outcome: "stopped",
-        pending: true,
-      };
-      NodeFS.writeFileSync(file, JSON.stringify(persisted));
-    },
     say,
     told,
     until,

@@ -353,7 +353,6 @@ const TEAM_PROJECT: PeerProjectState = {
     members: [],
     repositories: [{ id: "app", url: "https://git.example.test/app.git", branch: "main" }],
     tools: [],
-    capacity: { personal: "any", personalHarnesses: [] },
   },
   repositories: [
     {
@@ -365,7 +364,6 @@ const TEAM_PROJECT: PeerProjectState = {
     },
   ],
   tools: [],
-  sharedCapacity: { enabled: false, instanceIds: [] },
   work: { areas: [], tasks: [], threads: [] },
   peers: [],
 };
@@ -380,7 +378,6 @@ const JOINED: PeerHubStatus = {
       name: "Acme",
       role: "member",
       allowedDomains: ["acme.test"],
-      currency: "EUR",
       memberName: "Ana",
       projects: [TEAM_PROJECT],
       lastSyncAt: null,

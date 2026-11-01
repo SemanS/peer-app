@@ -47,7 +47,6 @@ export interface PeerSettingsAtoms<ER> {
   readonly historyEntry: PeerSettingsQuery<Methods["peerSettingsHistoryEntry"], ER>;
   readonly proposals: PeerSettingsQuery<Methods["peerSettingsProposals"], ER>;
   readonly secrets: PeerSettingsQuery<Methods["peerSettingsSecrets"], ER>;
-  readonly gateway: PeerSettingsQuery<Methods["peerSettingsGateway"], ER>;
   readonly domainRecord: PeerSettingsQuery<Methods["peerSettingsDomainRecord"], ER>;
   readonly preview: PeerSettingsCommand<Methods["peerSettingsPreview"], ER>;
   readonly save: PeerSettingsCommand<Methods["peerSettingsSave"], ER>;
@@ -60,8 +59,6 @@ export interface PeerSettingsAtoms<ER> {
   readonly withdrawProposal: PeerSettingsCommand<Methods["peerSettingsWithdrawProposal"], ER>;
   readonly putSecret: PeerSettingsCommand<Methods["peerSettingsPutSecret"], ER>;
   readonly deleteSecret: PeerSettingsCommand<Methods["peerSettingsDeleteSecret"], ER>;
-  readonly gatewayTest: PeerSettingsCommand<Methods["peerSettingsGatewayTest"], ER>;
-  readonly gatewaySync: PeerSettingsCommand<Methods["peerSettingsGatewaySync"], ER>;
   readonly githubEnable: PeerSettingsCommand<Methods["peerSettingsGithubEnable"], ER>;
   readonly githubDisable: PeerSettingsCommand<Methods["peerSettingsGithubDisable"], ER>;
   readonly verifyDomain: PeerSettingsCommand<Methods["peerSettingsVerifyDomain"], ER>;
@@ -131,7 +128,6 @@ export function createPeerSettingsAtoms<R, ER>(
     historyEntry: query("history-entry", WS_METHODS.peerSettingsHistoryEntry),
     proposals: query("proposals", WS_METHODS.peerSettingsProposals),
     secrets: query("secrets", WS_METHODS.peerSettingsSecrets),
-    gateway: query("gateway", WS_METHODS.peerSettingsGateway),
     domainRecord: query("domain-record", WS_METHODS.peerSettingsDomainRecord),
     preview: command("preview", WS_METHODS.peerSettingsPreview),
     save: change("save", WS_METHODS.peerSettingsSave),
@@ -144,8 +140,6 @@ export function createPeerSettingsAtoms<R, ER>(
     withdrawProposal: command("withdraw-proposal", WS_METHODS.peerSettingsWithdrawProposal),
     putSecret: command("put-secret", WS_METHODS.peerSettingsPutSecret),
     deleteSecret: command("delete-secret", WS_METHODS.peerSettingsDeleteSecret),
-    gatewayTest: command("gateway-test", WS_METHODS.peerSettingsGatewayTest),
-    gatewaySync: command("gateway-sync", WS_METHODS.peerSettingsGatewaySync),
     githubEnable: command("github-enable", WS_METHODS.peerSettingsGithubEnable),
     githubDisable: change("github-disable", WS_METHODS.peerSettingsGithubDisable),
     verifyDomain: command("verify-domain", WS_METHODS.peerSettingsVerifyDomain),

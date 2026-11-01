@@ -525,10 +525,6 @@
       "types": "./src/peer/plugins.ts",
       "default": "./src/peer/plugins.ts"
     },
-    "./peer/capacity": {
-      "types": "./src/peer/capacity.ts",
-      "default": "./src/peer/capacity.ts"
-    },
     "./peer/github": {
       "types": "./src/peer/github.ts",
       "default": "./src/peer/github.ts"

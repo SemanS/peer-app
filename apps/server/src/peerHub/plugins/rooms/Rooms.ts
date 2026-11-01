@@ -11,7 +11,6 @@ import * as NodePath from "node:path";
 
 import {
   PeerHubError,
-  type PeerRoomCapacity,
   type PeerRoomDiff,
   type PeerRoomInbox,
   type PeerRoomInboxItem,
@@ -29,7 +28,6 @@ import {
   type PeerRoomsReadInput,
   type PeerRoomsFoldersInput,
   type PeerRoomsSeenInput,
-  type PeerRoomsSetReachInput,
   type PeerRoomsShareWorkInput,
   type PeerRoomsWithdrawInput,
   type PeerRoomTarget,
@@ -63,14 +61,7 @@ import { hearsWhileWaiting, runQueues, tellable } from "./client/queue.ts";
 import { withheld } from "./client/render.ts";
 import { statusOf } from "./client/status.ts";
 import { projectsText, roomReach, runRootsData } from "../../core/work/runRoots.ts";
-import {
-  capacityOf,
-  checkoutOf,
-  openRuns,
-  rootHere,
-  roomStarts,
-  taskRuns,
-} from "./client/start.ts";
+import { checkoutOf, openRuns, rootHere, roomStarts, taskRuns } from "./client/start.ts";
 import { actOn, type FollowDeps, type HereRun } from "./follow.ts";
 import { roomsHub, type Place, type PostBody } from "./client/hub.ts";
 import { overlapLine, refOf, type Heard, type HeardKind } from "./text.ts";
@@ -170,8 +161,6 @@ const make = Effect.gen(function* () {
       const launcher = yield* plugins
         .require("taskLauncher")
         .pipe(Effect.orElseSucceed(() => undefined));
-      // Before the first work report nothing says which thread carries a run.
-      const read = (yield* work.latestPass) !== null;
       // Reading a checkout costs git or jj, so only a delivery `decide` would use it on pays for one.
       const sentOn = delivery.state === "passed" && delivery.by !== undefined;
       const base = sentOn ? yield* baseHere(workspace, item.project) : undefined;
@@ -179,16 +168,12 @@ const make = Effect.gen(function* () {
         [...new Set([...open.map((run) => run.id), ...live])],
         (id): Effect.Effect<HereRun> =>
           Effect.gen(function* () {
-            const capacity = read
-              ? yield* capacityOf(state, work, workspace, item.project, id)
-              : undefined;
             const run = open.find((candidate) => candidate.id === id);
             const running = run?.sessions.some((session) => session.to === undefined) === true;
             const quiet = run !== undefined && !running && !live.has(id);
             return {
               id,
               live: live.has(id),
-              capacity,
               running,
               staysPut: run?.runtime === "terminal" || run?.runtime === "mcp",
               waiting: run !== undefined && launcher?.waiting?.(runKeys(run)) === true,
@@ -480,9 +465,6 @@ const make = Effect.gen(function* () {
         ...(limit === undefined ? {} : { limit }),
       });
       const { project } = yield* state.project(place.workspace, place.project);
-      const capacities: Record<string, PeerRoomCapacity> = {};
-      for (const run of yield* openRuns(state, place))
-        capacities[run.id] = yield* capacityOf(state, work, place.workspace, place.project, run.id);
       const { persisted } = yield* state.read;
       const roomRuns = Object.entries(persisted.runs ?? {}).flatMap(([id, run]) =>
         run.workspace === place.workspace &&
@@ -495,7 +477,6 @@ const make = Effect.gen(function* () {
       return {
         ...answer,
         hasCheckout: (yield* checkoutOf(state, place.workspace, project)) !== undefined,
-        capacities,
         ...roomReach(
           Option.getOrUndefined(yield* runRootsData(state).read),
           tasks.find((task) => task.id === place.task)?.group,
@@ -661,14 +642,6 @@ const make = Effect.gen(function* () {
       move(input, { move: "decline", reason: input.reason, expect: input.expect }),
     withdraw: ({ seq, ...place }: PeerRoomsWithdrawInput) =>
       hub.withdraw(place, seq).pipe(after(place.workspace)),
-    setReach: (input: PeerRoomsSetReachInput) =>
-      Effect.gen(function* () {
-        const capacity = yield* capacityOf(state, work, input.workspace, input.project, input.run);
-        return yield* hub.reach(input.workspace, input.project, input.run, {
-          reach: input.reach,
-          capacity,
-        });
-      }),
     thread: ({ run, until, ...place }: PeerRoomsThreadInput) =>
       Effect.gen(function* () {
         const { persisted } = yield* state.read;

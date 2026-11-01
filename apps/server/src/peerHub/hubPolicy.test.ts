@@ -3,11 +3,9 @@ import { afterEach, assert, describe, it } from "@effect/vitest";
 
 import {
   bindThreadProject,
-  capacityRejection,
   claudeHubMcpServers,
   codexHubMcpServers,
   hubInstructionsForThread,
-  projectAcceptsPersonal,
   resolveToolValue,
   setHubPolicyState,
   setWorkspaceToolGate,
@@ -18,13 +16,10 @@ import {
 
 const ACME = { slug: "acme", name: "Acme" };
 
-function project(
-  overrides: Partial<PeerProject["capacity"]> & { readonly id?: string } = {},
-): PeerProject {
-  const { id = "kirkwood", ...capacity } = overrides;
+function project(): PeerProject {
   return {
-    id,
-    name: id === "kirkwood" ? "Kirkwood" : "PitchPlace",
+    id: "kirkwood",
+    name: "Kirkwood",
     role: "member",
     members: [{ email: "ana@acme.test", name: "Ana" }],
     repositories: [{ id: "app", url: "git@example.test:app.git", branch: "main" }],
@@ -52,16 +47,10 @@ function project(
         requires: [],
       },
     ],
-    capacity: { personal: "any", personalHarnesses: ["claude"], ...capacity },
   };
 }
 
-function state(
-  projects: ReadonlyArray<readonly [string, PeerProject]>,
-  options: {
-    readonly shared?: ReadonlyArray<readonly [string, string]>;
-  } = {},
-): HubPolicyState {
+function state(projects: ReadonlyArray<readonly [string, PeerProject]>): HubPolicyState {
   const bound = new Map(
     projects.map(([projectId, p]) => [
       projectId,
@@ -71,12 +60,6 @@ function state(
   return {
     projects: bound,
     roots: new Map([...bound.values()].map((entry) => [entry.repositoryPath, entry])),
-    sharedInstances: new Map(
-      (options.shared ?? []).map(([instanceId, projectId]) => [
-        instanceId,
-        { workspace: ACME, projectId },
-      ]),
-    ),
   };
 }
 
@@ -84,150 +67,6 @@ afterEach(() => {
   setHubPolicyState(null);
   setPluginMcpProviders([]);
   setWorkspaceToolGate(null);
-});
-
-describe("projectAcceptsPersonal", () => {
-  it("accepts the member's own login only where the project does", () => {
-    const hub = state([
-      ["t3-kw", project()],
-      ["t3-cm", project({ id: "commercial", personal: "commercial" })],
-      ["t3-none", project({ id: "closed", personal: "none" })],
-    ]);
-    assert.isTrue(projectAcceptsPersonal(hub, "acme", "kirkwood"));
-    assert.isFalse(projectAcceptsPersonal(hub, "acme", "commercial"));
-    assert.isFalse(projectAcceptsPersonal(hub, "acme", "closed"));
-  });
-
-  it("does not, for a project it does not know or before the workspace is provisioned", () => {
-    assert.isFalse(projectAcceptsPersonal(null, "acme", "kirkwood"));
-    const hub = state([["t3-kw", project()]]);
-    assert.isFalse(projectAcceptsPersonal(hub, "acme", "elsewhere"));
-    assert.isFalse(projectAcceptsPersonal(hub, "other", "kirkwood"));
-  });
-});
-
-describe("capacityRejection", () => {
-  it("lets anything run outside workspace projects and before sign-in", () => {
-    assert.isUndefined(
-      capacityRejection(null, { projectId: "p", instanceId: "claudeAgent", driver: "claudeAgent" }),
-    );
-    const hub = state([["t3-kw", project()]]);
-    assert.isUndefined(
-      capacityRejection(hub, {
-        projectId: "other",
-        instanceId: "claudeAgent",
-        driver: "claudeAgent",
-      }),
-    );
-  });
-
-  it("keeps shared capacity on the project it is billed to", () => {
-    const hub = state(
-      [
-        ["t3-kw", project()],
-        ["t3-pp", project({ id: "pitchplace" })],
-      ],
-      { shared: [["peer-acme-kirkwood-claude", "kirkwood"]] },
-    );
-    const shared = { instanceId: "peer-acme-kirkwood-claude", driver: "claudeAgent" };
-    assert.isUndefined(capacityRejection(hub, { projectId: "t3-kw", ...shared }));
-    assert.match(
-      capacityRejection(hub, { projectId: "t3-pp", ...shared }) ?? "",
-      /billed to "kirkwood", not "PitchPlace"/,
-    );
-    assert.match(
-      capacityRejection(hub, { projectId: "unrelated", ...shared }) ?? "",
-      /only runs that project's threads/,
-    );
-  });
-
-  it("tells apart same-named projects of different workspaces", () => {
-    const hub: HubPolicyState = {
-      ...state([["t3-kw", project()]]),
-      sharedInstances: new Map([
-        [
-          "peer-globex-kirkwood-claude",
-          { workspace: { slug: "globex", name: "Globex" }, projectId: "kirkwood" },
-        ],
-      ]),
-    };
-    assert.match(
-      capacityRejection(hub, {
-        projectId: "t3-kw",
-        instanceId: "peer-globex-kirkwood-claude",
-        driver: "claudeAgent",
-      }) ?? "",
-      /Globex capacity billed to "kirkwood"/,
-    );
-  });
-
-  it("matches a hand-added project by its checkout path", () => {
-    const hub = state([["t3-kw", project({ personal: "none" })]]);
-    const rejection = capacityRejection(hub, {
-      projectId: "added-by-hand",
-      workspaceRoot: "/work/acme/kirkwood/app",
-      instanceId: "claudeAgent",
-      driver: "claudeAgent",
-    });
-    assert.match(rejection ?? "", /shared capacity only/);
-  });
-
-  it("refuses personal logins in a shared-capacity-only project", () => {
-    const hub = state([["t3-kw", project({ personal: "none" })]]);
-    assert.match(
-      capacityRejection(hub, {
-        projectId: "t3-kw",
-        instanceId: "claudeAgent",
-        driver: "claudeAgent",
-      }) ?? "",
-      /Kirkwood runs on Acme's shared capacity only/,
-    );
-  });
-
-  it("accepts only commercial logins in a commercial project", () => {
-    const hub = state([["t3-kw", project({ personal: "commercial", personalHarnesses: [] })]]);
-    const base = { projectId: "t3-kw", instanceId: "claudeAgent", driver: "claudeAgent" };
-    assert.match(
-      capacityRejection(hub, {
-        ...base,
-        auth: { type: "max", label: "Claude Max Subscription" },
-      }) ?? "",
-      /Claude Max Subscription is a personal plan/,
-    );
-    assert.isUndefined(
-      capacityRejection(hub, {
-        ...base,
-        auth: { type: "team", label: "Claude Team Subscription" },
-      }),
-    );
-    assert.isUndefined(
-      capacityRejection(hub, { ...base, auth: { type: "apiKey", label: "Claude API Key" } }),
-    );
-    assert.isUndefined(
-      capacityRejection(hub, {
-        ...base,
-        instanceId: "codex",
-        driver: "codex",
-        auth: { type: "chatgpt", label: "ChatGPT Business" },
-      }),
-    );
-  });
-
-  it("falls back to the member's declared seats when the login is unknown", () => {
-    const declared = state([
-      ["t3-kw", project({ personal: "commercial", personalHarnesses: ["claude"] })],
-    ]);
-    assert.isUndefined(
-      capacityRejection(declared, {
-        projectId: "t3-kw",
-        instanceId: "claudeAgent",
-        driver: "claudeAgent",
-      }),
-    );
-    assert.isDefined(
-      capacityRejection(declared, { projectId: "t3-kw", instanceId: "codex", driver: "codex" }),
-    );
-  });
 });
 
 describe("agent tools", () => {

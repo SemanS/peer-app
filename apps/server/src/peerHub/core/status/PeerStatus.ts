@@ -30,12 +30,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
 import * as ProjectService from "../../../project/ProjectService.ts";
-import {
-  setHubPolicyState,
-  setPluginMcpProviders,
-  type HubBoundProject,
-  type HubSharedInstance,
-} from "../../hubPolicy.ts";
+import { setHubPolicyState, setPluginMcpProviders, type HubBoundProject } from "../../hubPolicy.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import { commandAvailable } from "../local.ts";
 import { checkoutState, jjAvailability } from "../vcs.ts";
@@ -196,7 +191,6 @@ const make = Effect.gen(function* () {
                 ...(requirement.install === undefined ? {} : { install: requirement.install }),
               })),
           })),
-          sharedCapacity: { enabled: false, instanceIds: [] },
           work: {
             areas: work?.areas ?? project.areas ?? [],
             // A Hub that counts runs says so per task; until then this computer's own count.
@@ -262,7 +256,6 @@ const make = Effect.gen(function* () {
           allowedDomains: workspace.allowedDomains,
           ...(workspace.domainClaims === undefined ? {} : { domainClaims: workspace.domainClaims }),
           ...(workspace.limitedTo === undefined ? {} : { limitedTo: workspace.limitedTo }),
-          currency: manifest?.workspace.currency ?? "EUR",
           ...(manifest?.workspace.revision === undefined
             ? {}
             : { revision: manifest.workspace.revision }),
@@ -272,22 +265,9 @@ const make = Effect.gen(function* () {
           error: s.workspaceErrors.get(workspace.slug) ?? null,
         });
       }
-      const sharedInstances = new Map<string, HubSharedInstance>();
-      for (const [key, ids] of Object.entries(s.persisted.sharedInstances)) {
-        const [slug = "", projectId = ""] = key.split("/");
-        const workspace = s.persisted.workspaces.find((w) => w.slug === slug);
-        for (const id of ids) {
-          sharedInstances.set(id, {
-            workspace: { slug, name: workspace?.name ?? slug },
-            projectId,
-          });
-        }
-      }
       const jj = yield* Effect.promise(() => jjAvailability());
       const policy =
-        s.persisted.workspaces.length === 0 && sharedInstances.size === 0
-          ? null
-          : { projects: byProject, roots: byRoot, sharedInstances };
+        s.persisted.workspaces.length === 0 ? null : { projects: byProject, roots: byRoot };
 
       return {
         policy,

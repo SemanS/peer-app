@@ -10,7 +10,6 @@ export const PEER_PLUGIN_IDS = [
   "herdr",
   "jujutsu",
   "github",
-  "capacity",
   "observe",
   "card",
   "audit",

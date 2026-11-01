@@ -26,14 +26,12 @@ import {
 /** The To row's +: which of the person's agents and models Your agent starts on. */
 export const RoomAgentPicker = memo(function RoomAgentPicker({
   environmentId,
-  personalHarnesses,
   choice,
   disabled,
   onChoose,
   onClear,
 }: {
   readonly environmentId: EnvironmentId;
-  readonly personalHarnesses: ReadonlyArray<string>;
   readonly choice: RoomAgentChoice | undefined;
   readonly disabled: boolean;
   readonly onChoose: (agent: RoomAgentChoice) => void;
@@ -45,7 +43,6 @@ export const RoomAgentPicker = memo(function RoomAgentPicker({
     sortProviderInstanceEntries(
       applyProviderInstanceSettings(deriveProviderInstanceEntries(providers), settings, null),
     ),
-    personalHarnesses,
   );
   const active =
     entries.find((entry) => harnessOfDriver(entry.driverKind) === choice?.harness) ?? entries[0];

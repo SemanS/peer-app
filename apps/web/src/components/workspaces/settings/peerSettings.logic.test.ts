@@ -49,7 +49,7 @@ describe("the area's addresses", () => {
   it.each<[string, PeerSettingsLocation | null]>([
     ["/settings/peer", null],
     ["/settings/peer/w/acme/people", { kind: "workspace", workspace: "acme", section: "people" }],
-    ["/settings/peer/w/acme/keys/", { kind: "workspace", workspace: "acme", section: "keys" }],
+    ["/settings/peer/w/acme/tools/", { kind: "workspace", workspace: "acme", section: "tools" }],
     [
       "/settings/peer/w/acme/project/booking/repositories",
       { kind: "project", workspace: "acme", projectId: "booking", tab: "repositories" },
@@ -145,12 +145,10 @@ describe("which workspace the navigation shows", () => {
 });
 
 describe("the group a page is listed under", () => {
-  it("is Workspace, Projects, Me or This computer, as the navigation lists it", () => {
+  it("is Workspace, Projects or This computer, as the navigation lists it", () => {
     const workspace = (section: WorkspaceSection) =>
       peerSettingsGroupLabel({ kind: "workspace", workspace: "acme", section });
     expect(workspace("audit")).toBe("Workspace");
-    expect(workspace("plans")).toBe("Me");
-    expect(workspace("keys")).toBe("Me");
     expect(workspace("new-project")).toBe("Projects");
     expect(
       peerSettingsGroupLabel({ kind: "project", workspace: "acme", projectId: "b", tab: "basics" }),
@@ -165,11 +163,8 @@ describe("the breadcrumb's page", () => {
   it("is the section's label, or the project's name from the workspace", () => {
     const workspaces = [acme("member")];
     expect(
-      peerSettingsPageTitle(
-        { kind: "workspace", workspace: "acme", section: "capacity" },
-        workspaces,
-      ),
-    ).toBe("Shared capacity");
+      peerSettingsPageTitle({ kind: "workspace", workspace: "acme", section: "tools" }, workspaces),
+    ).toBe("Tools");
     expect(peerSettingsPageTitle({ kind: "computer", section: "tool-trust" }, workspaces)).toBe(
       "Tool trust",
     );
@@ -276,14 +271,9 @@ describe("whether an environment that is not connected is on its way", () => {
 
 describe("where plugin settings are hosted", () => {
   it("puts the plugins a page is about on that page", () => {
-    expect(slotHost("settings", "capacity")).toBe("capacity");
     expect(slotHost("settings", "tool-trust")).toBe("tool-trust");
     expect(slotHost("workspaceSettings", "audit")).toBe("audit");
     expect(slotHost("workspaceSettings", "github")).toBe("github");
-  });
-
-  it("leaves a project's capacity to the page that renders it with what it needs", () => {
-    expect(slotHost("projectSettings", "capacity")).toBe("own");
   });
 
   it("sends every other slot to its kind's home, so no plugin's settings go missing", () => {
@@ -291,6 +281,5 @@ describe("where plugin settings are hosted", () => {
     expect(slotHost("settings", "a-plugin-from-the-future")).toBe("coordination");
     expect(slotHost("alwaysSettings", "impact")).toBe("coordination");
     expect(slotHost("workspaceSettings", "a-plugin-from-the-future")).toBe("general");
-    expect(slotHost("projectSettings", "announcements")).toBe("basics");
   });
 });

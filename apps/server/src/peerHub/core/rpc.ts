@@ -120,18 +120,6 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
               workspaces.withdrawInvite(input),
               PEER_TRACE,
             ),
-          [PEER_CORE_METHODS.peerHubMemberKeys]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubMemberKeys,
-              workspaces.memberKeys(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubRevokeMemberKeys]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubRevokeMemberKeys,
-              workspaces.revokeMemberKeys(input),
-              PEER_TRACE,
-            ),
           [PEER_CORE_METHODS.peerHubSignOutEverywhere]: (_input) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubSignOutEverywhere,

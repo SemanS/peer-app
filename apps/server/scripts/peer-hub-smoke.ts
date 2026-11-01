@@ -1,11 +1,11 @@
 // @effect-diagnostics nodeBuiltinImport:off globalTimers:off globalDate:off globalDateInEffect:off globalFetch:off globalFetchInEffect:off globalConsole:off globalRandom:off preferSchemaOverJson:off anyUnknownInErrorContext:off - host-side smoke harness: drives real server processes and reads their raw output.
 // End-to-end check of Peer workspaces against a built server and a real Peer
-// Hub: starts `peerhub serve` (in-memory database, codes echoed, in-memory
-// gateway) and `apps/server/dist/bin.mjs` in throwaway homes, sets up a
+// Hub: starts `peerhub serve` (in-memory database, codes echoed) and
+// `apps/server/dist/bin.mjs` in throwaway homes, sets up a
 // workspace the way an admin would, then drives the app's own WebSocket RPC
-// client through email sign-in → join by domain → shared capacity → clone →
-// capacity policy → the work (tasks, colleagues' threads, a herdr agent placed
-// on a task, sharing a project) → create → leave → sign-out.
+// client through email sign-in → join by domain → clone → the work (tasks,
+// colleagues' threads, a herdr agent placed on a task, sharing a project) →
+// create → leave → sign-out.
 //
 //   PEERHUB_BIN=../server/target/debug/peerhub HERDR_BIN=herdr node apps/server/scripts/peer-hub-smoke.ts
 //
@@ -28,8 +28,6 @@ import {
   CommandId,
   ProjectId,
   ORCHESTRATION_PROTOCOL_VERSION,
-  ORCHESTRATION_V2_WS_METHODS,
-  ProviderInstanceId,
   runTaskOf,
   WS_METHODS,
   WsRpcGroup,
@@ -132,18 +130,10 @@ async function setUpWorkspace() {
     body: { slug: "acme", name: "Acme", allowedDomains: ["acme.test"] },
   });
   const repository = makeRepository();
-  const project = (name: string, personal: string) => ({
+  const project = (name: string) => ({
     name,
     repositories: [{ id: "app", url: repository, branch: "main" }],
     tools: ["kontext"],
-    capacity: {
-      personal,
-      shared: {
-        pool: "company-api",
-        budget: { amount: 300, period: "month" },
-        allocations: { "bob@acme.test": 120 },
-      },
-    },
   });
   const applied = await hubCall("/v1/workspaces/acme/config", {
     method: "PUT",
@@ -152,11 +142,10 @@ async function setUpWorkspace() {
       revision: "smoke",
       config: {
         currency: "EUR",
-        gateway: { kind: "litellm", url: "https://ai.acme.test", usdPerUnit: 1.2 },
         people: { "bob@acme.test": { name: "Bob" } },
         projects: {
-          demo: project("Demo", "any"),
-          locked: project("Locked", "none"),
+          demo: project("Demo"),
+          second: project("Second"),
           // A branch nobody pushed: opening it fails, and says why.
           unpushed: {
             name: "Unpushed",
@@ -168,15 +157,6 @@ async function setUpWorkspace() {
             name: "kontext",
             mcp: { command: "kontext", args: ["mcp"] },
             requires: [{ command: "kontext", install: "see kontext docs" }],
-          },
-        },
-        capacity: {
-          "company-api": {
-            name: "Company API",
-            models: [
-              { id: "claude-sonnet-5-5", provider: "anthropic", harness: ["claude"] },
-              { id: "claude-haiku-4-5", provider: "anthropic", harness: ["claude"] },
-            ],
           },
         },
       },
@@ -351,7 +331,7 @@ const program = Effect.gen(function* () {
     throw new Error("a second domain claim was not refused with its holder");
   log(
     "acme",
-    `revision=${acme.revision ?? "-"} member=${acme.memberName} projects=${acme.projects.map((p) => `${p.project.id}[personal=${p.project.capacity.personal}]`).join(",")}`,
+    `revision=${acme.revision ?? "-"} member=${acme.memberName} projects=${acme.projects.map((p) => p.project.id).join(",")}`,
   );
   const demo = acme.projects.find((p) => p.project.id === "demo");
   if (demo === undefined) throw new Error("the demo project is missing");
@@ -366,33 +346,11 @@ const program = Effect.gen(function* () {
       .join(", "),
   );
 
-  // Shared capacity: a gateway key for this environment, as a provider instance.
-  const shared = yield* client[WS_METHODS.peerHubSetSharedCapacity]({
-    workspace: "acme",
-    projectId: "demo",
-    enabled: true,
-  });
-  const sharedState = shared.workspaces
-    .find((w) => w.slug === "acme")!
-    .projects.find((p) => p.project.id === "demo")!.sharedCapacity;
-  log("shared capacity on", JSON.stringify(sharedState));
-  const { settings } = yield* client[WS_METHODS.serverGetConfig]({});
-  const instanceId = sharedState.instanceIds[0];
-  const instance =
-    instanceId === undefined
-      ? undefined
-      : settings.providerInstances[instanceId as keyof typeof settings.providerInstances];
-  if (instance === undefined) throw new Error("the shared capacity provider was not created");
-  log(
-    "provider instance",
-    `${instance.displayName} driver=${instance.driver} env=${(instance.environment ?? []).map((v) => `${v.name}${v.sensitive ? "(secret)" : ""}`).join(",")}`,
-  );
-
   // Clone and open both projects; each answer comes once its clone is done.
   const repositoriesOf = (s: PeerHubStatus, projectId: string) =>
     s.workspaces.find((w) => w.slug === "acme")?.projects.find((p) => p.project.id === projectId)
       ?.repositories ?? [];
-  for (const projectId of ["demo", "locked"]) {
+  for (const projectId of ["demo", "second"]) {
     const answer = yield* client[WS_METHODS.peerHubOpenProject]({ workspace: "acme", projectId });
     const repos = repositoriesOf(answer, projectId);
     if (repos.length === 0 || repos.some((r) => r.state !== "ready" || !r.projectId)) {
@@ -409,7 +367,7 @@ const program = Effect.gen(function* () {
   }
   const opened = yield* waitForStatus("both projects checked out and registered", (s) => {
     const projects = s.workspaces.find((w) => w.slug === "acme")?.projects ?? [];
-    return ["demo", "locked"].every((id) => {
+    return ["demo", "second"].every((id) => {
       const repos = projects.find((p) => p.project.id === id)?.repositories ?? [];
       return (
         repos.length > 0 &&
@@ -433,61 +391,6 @@ const program = Effect.gen(function* () {
   if (projectsAfter.some((p) => p.repositories.some((r) => r.state !== "ready"))) {
     throw new Error("a repository did not check out");
   }
-
-  // A project on shared capacity only refuses this machine's own Claude login before any agent starts.
-  const lockedProjectId = projectsAfter.find((p) => p.project.id === "locked")!.repositories[0]!
-    .projectId!;
-  const launch = yield* client[ORCHESTRATION_V2_WS_METHODS.launchThread]({
-    commandId: CommandId.make(`smoke-${Date.now()}`),
-    projectId: lockedProjectId,
-    title: "Policy check",
-    modelSelection: {
-      instanceId: ProviderInstanceId.make("claudeAgent"),
-      model: "claude-haiku-4-5",
-    },
-    runtimeMode: "approval-required",
-    interactionMode: "plan",
-    workspaceStrategy: { type: "root" },
-    initialMessage: { text: "Reply with OK.", attachments: [] },
-  }).pipe(Effect.result);
-  if (launch._tag === "Success") {
-    // The launch records the thread and fails its run before the provider starts; read why.
-    const readProjection = client[ORCHESTRATION_V2_WS_METHODS.getThreadProjection]({
-      threadId: launch.success.threadId,
-    });
-    let projection = yield* readProjection;
-    for (
-      let attempt = 0;
-      attempt < 60 &&
-      projection.runs.some((r) => r.status === "preparing" || r.status === "starting");
-      attempt += 1
-    ) {
-      yield* Effect.sleep("500 millis");
-      projection = yield* readProjection;
-    }
-    const reason =
-      JSON.stringify(projection.turnItems).match(/Workspace preparation failed during[^"]*/)?.[0] ??
-      "";
-    log(
-      "personal login in a shared-only project",
-      `runs=${projection.runs.map((r) => r.status).join(",")} provider turns=${projection.providerTurns.length}`,
-    );
-    log("reason shown", reason);
-    if (projection.providerTurns.length > 0)
-      throw new Error("an agent turn started despite the policy");
-    if (!/shared capacity only/.test(reason)) throw new Error("the refusal does not say why");
-  } else {
-    const message = String((launch.failure as { message?: string }).message ?? launch.failure);
-    log("personal login in a shared-only project", message);
-    if (!/shared capacity only/.test(message))
-      throw new Error(`unexpected launch failure: ${message}`);
-  }
-
-  const usage = yield* client[WS_METHODS.peerHubProjectUsage]({
-    workspace: "acme",
-    projectId: "demo",
-  });
-  log("usage", JSON.stringify(usage.shared));
 
   const demoOf = (s: PeerHubStatus) =>
     s.workspaces.find((w) => w.slug === "acme")?.projects.find((p) => p.project.id === "demo");
@@ -562,10 +465,6 @@ const program = Effect.gen(function* () {
     log("as Ana sees it", JSON.stringify(bobs));
     if (bobs?.task !== task.id || bobs.source !== "herdr" || bobs.status !== "blocked") {
       throw new Error("Ana does not see Bob's herdr agent on the task");
-    }
-    const lockedThreads = anaView.projects.locked?.threads ?? [];
-    if (!lockedThreads.some((t) => t.email === "bob@acme.test" && t.source === "peer")) {
-      throw new Error("Bob's Peer thread is not reported");
     }
   } else {
     log("herdr", "skipped (set HERDR_BIN to run a real herdr server)");
@@ -714,18 +613,10 @@ const program = Effect.gen(function* () {
   log("last owner leaves", lastOwner._tag === "Failure" ? lastOwner.failure.message : "LEFT");
   if (lastOwner._tag === "Success") throw new Error("the last owner left their workspace");
 
-  // Leaving drops the workspace and its shared capacity here.
+  // Leaving drops the workspace here.
   const left = yield* client[WS_METHODS.peerHubLeaveWorkspace]({ workspace: "acme" });
   log("left acme", summary(left));
-  const { settings: afterLeave } = yield* client[WS_METHODS.serverGetConfig]({});
   if (left.workspaces.some((w) => w.slug === "acme")) throw new Error("acme is still listed");
-  if (
-    instanceId !== undefined &&
-    afterLeave.providerInstances[instanceId as keyof typeof afterLeave.providerInstances] !==
-      undefined
-  ) {
-    throw new Error("the shared capacity provider outlived leaving");
-  }
   if (!left.joinable.some((j) => j.slug === "acme")) throw new Error("acme is not offered again");
 
   const signedOut = yield* client[WS_METHODS.peerHubSignOut]({});
@@ -755,16 +646,10 @@ const program = Effect.gen(function* () {
 
   // Offboarding survives a new session and a matching domain. Only an invite readmits Bob.
   yield* client[WS_METHODS.peerHubJoinWorkspace]({ workspace: "acme" });
-  yield* client[WS_METHODS.peerHubSetSharedCapacity]({
-    workspace: "acme",
-    projectId: "demo",
-    enabled: true,
-  });
   const plan = yield* Effect.promise(() =>
     hubCall("/v1/workspaces/acme/members/bob%40acme.test/offboarding", { session: anaSession }),
   );
-  if (plan.canRemove !== true || typeof plan.keys !== "number" || plan.keys < 1)
-    throw new Error("offboarding preview does not name the keys removal will revoke");
+  if (plan.canRemove !== true) throw new Error("offboarding preview refuses the removal");
   yield* Effect.promise(() =>
     hubCall("/v1/workspaces/acme/members/bob%40acme.test", {
       method: "DELETE",
@@ -803,13 +688,8 @@ const program = Effect.gen(function* () {
     readmitted.removedFrom?.some((w) => w.slug === "acme")
   )
     throw new Error("the invitation did not readmit the removed member");
-  yield* client[WS_METHODS.peerHubSetSharedCapacity]({
-    workspace: "acme",
-    projectId: "demo",
-    enabled: true,
-  });
 
-  // The global action ends another session too, and the worker confirms gateway deletion.
+  // The global action ends another session too.
   yield* Effect.sleep(`${Math.max(0, 31_000 - (Date.now() - removedCodeAt))} millis`);
   const otherSession = yield* Effect.promise(() => hubSignIn("bob@acme.test"));
   const endedEverywhere = yield* client[WS_METHODS.peerHubSignOutEverywhere]({});
@@ -821,24 +701,7 @@ const program = Effect.gen(function* () {
   );
   if (otherResponse.status !== 401)
     throw new Error("the other Hub session survived global sign-out");
-  yield* Effect.promise(() =>
-    waitFor(
-      "gateway key revocations",
-      async () => {
-        const keys = await hubCall("/v1/workspaces/acme/members/bob%40acme.test/keys", {
-          session: anaSession,
-        });
-        return (
-          Array.isArray(keys.keys) &&
-          keys.keys.length === 0 &&
-          Array.isArray(keys.pending) &&
-          keys.pending.length === 0
-        );
-      },
-      hub.output,
-    ),
-  );
-  log("offboarding", "durable removal, invite readmission, global sign-out and gateway revocation");
+  log("offboarding", "durable removal, invite readmission and global sign-out");
 }).pipe(Effect.scoped);
 
 async function stop(child: NodeChildProcess.ChildProcess) {

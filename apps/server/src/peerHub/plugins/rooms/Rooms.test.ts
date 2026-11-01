@@ -19,9 +19,8 @@ import {
   type PeerTaskLauncher,
 } from "../../core/plugin.ts";
 import { TEST_ENVIRONMENT, type HubCall } from "../../core/testkit.ts";
-import { harnessOf, runCapacity } from "./client/start.ts";
+import { harnessOf } from "./client/start.ts";
 import {
-  ACME,
   BOB,
   EVA,
   contributionsOf,
@@ -110,11 +109,9 @@ describe("what a person does in a room", () => {
         const read = (yield* rpc(peer, "peer.rooms.read", { ...place, after: 3, limit: 5 })) as {
           seq: number;
           hasCheckout: boolean;
-          capacities: unknown;
         };
         assert.strictEqual(read.seq, 12);
         assert.isFalse(read.hasCheckout);
-        assert.deepStrictEqual(read.capacities, {});
         assert.lengthOf(callsTo(peer, "GET", `${ROOM}?after=3&limit=5`), 1);
       }),
     ),
@@ -167,41 +164,9 @@ describe("what a person does in a room", () => {
       }),
     ),
   );
-
-  it.effect("sends reach with a run's capacity, personal when Peer cannot tell", () =>
-    run(
-      Effect.gen(function* () {
-        const peer = yield* roomPeer(roomHubOf());
-        const answer = yield* rpc(peer, "peer.rooms.setReach", {
-          workspace: "acme",
-          project: "app",
-          run: "run_x",
-          reach: "team",
-        });
-        assert.deepStrictEqual(answer, {
-          reach: { run: "run_x", reach: "team", email: BOB, capacity: "shared" },
-        });
-        assert.deepStrictEqual(
-          bodyOf(callsTo(peer, "PUT", `${ACME}/projects/app/runs/run_x/reach`)[0]),
-          { reach: "team", capacity: "personal" },
-        );
-      }),
-    ),
-  );
-
-  it("knows a run's capacity from the shared instance its Peer thread is on", () => {
-    const threads = [{ id: "t1", providerInstanceId: "peer-acme-app-claude" }];
-    const run = { runtime: "peer", thread: "peer:t1" };
-    assert.strictEqual(runCapacity(run, ["peer-acme-app-claude"], threads), "shared");
-    assert.strictEqual(runCapacity(run, [], threads), "personal");
-    assert.strictEqual(runCapacity(undefined, ["a"], threads), "personal");
-    assert.strictEqual(runCapacity({ runtime: "herdr" }, ["a"], threads), "personal");
-    assert.strictEqual(runCapacity({ ...run, thread: "peer:gone" }, ["a"], threads), "personal");
-  });
 });
 
 describe("which agent a start uses", () => {
-  const project = { capacity: { personal: "any", personalHarnesses: ["codex"] } } as never;
   const itemBy = (author: string) => ({
     project: "app",
     task: "vl-7",
@@ -212,11 +177,21 @@ describe("which agent a start uses", () => {
   });
 
   it("is the one a person names for their own turn", () => {
-    assert.strictEqual(harnessOf(itemBy(BOB), BOB, project), "claude");
+    assert.strictEqual(harnessOf(itemBy(BOB), BOB), "claude");
   });
 
-  it("is the owner's own, whatever a colleague's message names", () => {
-    assert.strictEqual(harnessOf(itemBy(EVA), BOB, project), "codex");
+  it("is Claude Code, whatever a colleague's message names", () => {
+    const item = { ...itemBy(EVA) };
+    assert.strictEqual(
+      harnessOf(
+        {
+          ...item,
+          message: { ...item.message, to: [{ ...item.message.to[0]!, harness: "codex" }] },
+        },
+        BOB,
+      ),
+      "claude",
+    );
   });
 });
 

@@ -5,7 +5,6 @@ import type { Atom } from "effect/reactivity";
 import type * as EnvironmentRegistry from "../connection/registry.ts";
 import { createPeerAuditAtoms } from "./audit.ts";
 import { createPeerToolTrustAtoms } from "../peerToolTrust.ts";
-import { createPeerCapacityAtoms } from "./capacity.ts";
 import { createPeerGitHubAtoms } from "./github.ts";
 import { createPeerHerdrAtoms } from "./herdr.ts";
 import { createPeerObserveAtoms } from "./observe.ts";
@@ -26,7 +25,6 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerJujutsuAtoms(runtime),
     ...createPeerChangesAtoms(runtime),
     ...createPeerGitHubAtoms(runtime),
-    ...createPeerCapacityAtoms(runtime),
     ...createPeerObserveAtoms(runtime),
     ...createPeerAuditAtoms(runtime),
     ...createPeerToolTrustAtoms(runtime),

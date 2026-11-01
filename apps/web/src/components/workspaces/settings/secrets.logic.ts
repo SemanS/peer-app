@@ -127,10 +127,7 @@ export const VALUE_DIALOG_NOTE = "Saved on the Hub and sealed. It is never shown
  * What stops when a secret something uses goes, in the words of the design: the sentence is
  * picked by what the Hub says uses it, and a use this build does not know of says the plain thing.
  */
-export function impactOf(use: string, workspaceName: string): string {
-  if (/^Shared capacity/i.test(use)) {
-    return `Shared capacity turns off for all of ${workspaceName} until a new key is set.`;
-  }
+export function impactOf(use: string): string {
   if (/^GitHub/i.test(use)) return "GitHub’s deliveries will fail, so PR checks stop.";
   return `${use} stops working until the secret is set again.`;
 }
@@ -145,14 +142,14 @@ export interface DeleteWords {
   readonly confirm: string;
 }
 
-export function deleteWords(
-  secret: { readonly name: string; readonly uses: ReadonlyArray<string> },
-  workspaceName: string,
-): DeleteWords {
+export function deleteWords(secret: {
+  readonly name: string;
+  readonly uses: ReadonlyArray<string>;
+}): DeleteWords {
   const used = secret.uses.length > 0;
   return {
     title: `Delete ${secret.name}?`,
-    impacts: secret.uses.map((use) => ({ use, impact: impactOf(use, workspaceName) })),
+    impacts: secret.uses.map((use) => ({ use, impact: impactOf(use) })),
     nothing: used ? null : "Nothing uses it, so nothing stops.",
     confirm: used ? "Delete anyway" : "Delete",
   };

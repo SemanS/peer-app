@@ -62,7 +62,6 @@ export function RoomComposer({
   place,
   targets,
   people,
-  personalHarnesses,
   line: asked,
   paths,
   onDrafting,
@@ -78,7 +77,6 @@ export function RoomComposer({
   readonly targets: ReadonlyArray<RoomTargetChoice>;
   readonly people: ReadonlyArray<RoomPerson>;
   /** The project's allowed harnesses for a personal agent; none limits nothing. */
-  readonly personalHarnesses: ReadonlyArray<string>;
   readonly line: DraftLine | null;
   readonly paths: DraftPaths | null;
   /** Whether the draft sits on a line, so the diff keeps it lit. */
@@ -237,7 +235,6 @@ export function RoomComposer({
         {ownAgent === undefined ? null : (
           <RoomAgentPicker
             environmentId={environmentId}
-            personalHarnesses={personalHarnesses}
             choice={draft.agent}
             disabled={busy || ownAgent.disabled !== undefined}
             onChoose={(agent) =>

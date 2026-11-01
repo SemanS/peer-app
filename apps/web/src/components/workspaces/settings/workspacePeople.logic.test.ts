@@ -102,7 +102,7 @@ describe("the words of the invite", () => {
   });
 });
 
-/** Mia as the design has her: a lead of Booking, an allocation in Peer Hub, a member of Camp-bot. */
+/** Mia as the design has her: a lead of Booking, a member of Peer Hub and Camp-bot. */
 const document = {
   projects: {
     booking: {
@@ -115,14 +115,6 @@ const document = {
       name: "Peer Hub",
       members: ["slavo@acme.dev", "mia@acme.dev"],
       leads: ["slavo@acme.dev"],
-      capacity: {
-        personal: "any",
-        shared: {
-          pool: "main",
-          budget: { amount: 500 },
-          allocations: { "slavo@acme.dev": 150, "mia@acme.dev": 80 },
-        },
-      },
     },
     "camp-bot": { name: "Camp-bot", members: ["mia@acme.dev"], leads: [] },
     everyone: { name: "Everyone", members: ["*"], leads: ["slavo@acme.dev"] },
@@ -137,7 +129,6 @@ describe("the projects that still name a person", () => {
       document,
       email: "mia@acme.dev",
       planned: [],
-      currency: "EUR",
       ...extra,
     });
 
@@ -145,13 +136,7 @@ describe("the projects that still name a person", () => {
     expect(naming()).toEqual([
       { id: "booking", name: "Booking", detail: "lead", onlyLead: false, editable: true },
       { id: "camp-bot", name: "Camp-bot", detail: "member", onlyLead: false, editable: true },
-      {
-        id: "peer-hub",
-        name: "Peer Hub",
-        detail: "allocation €80",
-        onlyLead: false,
-        editable: true,
-      },
+      { id: "peer-hub", name: "Peer Hub", detail: "member", onlyLead: false, editable: true },
       { id: "solo", name: "Solo", detail: "lead", onlyLead: true, editable: true },
     ]);
   });
@@ -162,7 +147,7 @@ describe("the projects that still name a person", () => {
     expect(ids).not.toContain("elsewhere");
   });
 
-  it("say lead and allocation together, and match an address in any case", () => {
+  it("match an address in any case", () => {
     const both = projectsNaming({
       document: {
         projects: {
@@ -170,22 +155,14 @@ describe("the projects that still name a person", () => {
             name: "Booking",
             members: ["Mia@Acme.dev"],
             leads: ["MIA@acme.dev", "slavo@acme.dev"],
-            capacity: { shared: { allocations: { "Mia@Acme.dev": 120.5 } } },
           },
         },
       },
       email: "mia@acme.dev",
       planned: [],
-      currency: "EUR",
     });
     expect(both).toEqual([
-      {
-        id: "booking",
-        name: "Booking",
-        detail: "lead · allocation €120.50",
-        onlyLead: false,
-        editable: true,
-      },
+      { id: "booking", name: "Booking", detail: "lead", onlyLead: false, editable: true },
     ]);
   });
 
@@ -210,7 +187,6 @@ describe("the projects that still name a person", () => {
         document: null,
         email: "mia@acme.dev",
         planned: ["kirkwood"],
-        currency: "EUR",
       }),
     ).toEqual([
       {
@@ -238,16 +214,6 @@ describe("the save that takes a person out of projects", () => {
     ]);
   });
 
-  it("drops their allocation with them, and leaves the others'", () => {
-    expect(sets(["peer-hub"])).toEqual([
-      { path: ["projects", "peer-hub", "members"], value: ["slavo@acme.dev"] },
-      {
-        path: ["projects", "peer-hub", "capacity", "shared", "allocations"],
-        value: { "slavo@acme.dev": 150 },
-      },
-    ]);
-  });
-
   it("leaves a project with no one on it without members, as the Hub allows", () => {
     expect(sets(["camp-bot"])).toEqual([{ path: ["projects", "camp-bot", "members"], value: [] }]);
   });
@@ -263,7 +229,6 @@ describe("the save that takes a person out of projects", () => {
   it("covers every project that is ticked, in the order given", () => {
     expect(sets(["peer-hub", "booking"]).map((set) => set.path.slice(0, 3).join("/"))).toEqual([
       "projects/peer-hub/members",
-      "projects/peer-hub/capacity",
       "projects/booking/members",
       "projects/booking/leads",
     ]);
@@ -330,27 +295,25 @@ describe("what removing a member does", () => {
   const plan = {
     email: "mia@acme.dev",
     role: "member" as const,
-    keys: 2,
     invites: 1,
     projects: ["booking"],
     canRemove: true,
   };
 
-  it("lists the access, keys, way back and invitations from the plan", () => {
+  it("lists the access, way back and invitations from the plan", () => {
     expect(removalConsequences({ name: "Mia", workspaceName: "Acme", plan })).toEqual([
       "Mia loses access to Acme.",
-      "Mia’s 2 shared-capacity keys are revoked.",
       "Mia cannot rejoin by domain until an admin invites Mia again.",
       "1 invitation Mia sent is withdrawn.",
       "Local clones and git host access must be reviewed separately.",
     ]);
   });
 
-  it("leaves out the keys and invitations there are none of", () => {
+  it("leaves out the invitations when there are none", () => {
     const lines = removalConsequences({
       name: "Mia",
       workspaceName: "Acme",
-      plan: { ...plan, keys: 0, invites: 0 },
+      plan: { ...plan, invites: 0 },
     });
     expect(lines).toEqual([
       "Mia loses access to Acme.",
@@ -359,13 +322,12 @@ describe("what removing a member does", () => {
     ]);
   });
 
-  it("says one key, and several invitations, in the right number", () => {
+  it("says several invitations in the right number", () => {
     const lines = removalConsequences({
       name: "Mia",
       workspaceName: "Acme",
-      plan: { ...plan, keys: 1, invites: 3 },
+      plan: { ...plan, invites: 3 },
     });
-    expect(lines).toContain("Mia’s 1 shared-capacity key is revoked.");
     expect(lines).toContain("3 invitations Mia sent are withdrawn.");
   });
 

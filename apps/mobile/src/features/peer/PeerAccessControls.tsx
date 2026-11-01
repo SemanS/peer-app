@@ -34,7 +34,7 @@ export function PeerAccessControls({
         onPress={() =>
           Alert.alert(
             "Sign out everywhere?",
-            "Every Peer Hub session ends and your shared-capacity keys in all workspaces are revoked. Local checkouts stay on your computers.",
+            "Every Peer Hub session ends. Local checkouts stay on your computers.",
             [
               { text: "Cancel", style: "cancel" },
               {

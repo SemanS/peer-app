@@ -33,7 +33,6 @@ import { failureMessage } from "../WorkspaceAccess";
 import { launchLine, launchNote, projectVcs, vcsWords } from "../vcsWords";
 import type { TaskLauncherProps } from "../slots.types";
 import {
-  capacityLine,
   launchGuidance,
   startFromBase,
   startFromExplanation,
@@ -242,7 +241,6 @@ function LaunchForm({
   const blocked =
     guidance.blocked ??
     (repository === undefined ? "The selected repository is not ready on this computer." : null);
-  const capacity = capacityLine(project, harness);
   const colorKey = `${workspace}/${project.project.id}`;
 
   const accept = () => {
@@ -549,17 +547,6 @@ function LaunchForm({
                   </div>
                 </PeerField>
               ) : null}
-              <PeerField label="Capacity">
-                <p
-                  className={
-                    capacity.allowed
-                      ? "pt-1.5 text-sm text-foreground"
-                      : "pt-1.5 text-sm text-warning-foreground"
-                  }
-                >
-                  {capacity.line}
-                </p>
-              </PeerField>
               <p className="text-xs text-muted-foreground">{launchNote(words)}</p>
               <PeerField label="Generated first prompt" htmlFor={`${formId}-prompt`}>
                 <Textarea

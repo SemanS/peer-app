@@ -246,7 +246,6 @@ export function NewSharedRoom({
           across: marked.map(({ name }) => name),
         })}
         people={peopleOf(state.project.members, me, nameOf)}
-        personalHarnesses={state.project.capacity.personalHarnesses}
         line={null}
         paths={null}
         toOwnAgent

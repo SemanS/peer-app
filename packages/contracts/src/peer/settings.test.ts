@@ -11,12 +11,9 @@ import {
   PeerSettingsChangeResult,
   PeerSettingsDeleteSecretResult,
   PeerSettingsExport,
-  PeerSettingsGatewayTest,
-  PeerSettingsGatewayView,
   PeerSettingsGitHubSetup,
   PeerSettingsHistoryPage,
   PeerSettingsPersonEntry,
-  PeerSettingsPool,
   PeerSettingsPreview,
   PeerSettingsProject,
   PeerSettingsProposal,
@@ -42,13 +39,11 @@ const history = Schema.decodeUnknownExit(PeerSettingsHistoryPage);
 const detail = Schema.decodeUnknownExit(PeerSettingsRevisionDetail);
 const proposal = Schema.decodeUnknownExit(PeerSettingsProposal);
 const secrets = Schema.decodeUnknownExit(PeerSettingsSecretsView);
-const gateway = Schema.decodeUnknownExit(PeerSettingsGatewayView);
 const changeInput = Schema.decodeUnknownExit(PeerSettingsChangeInput);
 const proposeInput = Schema.decodeUnknownExit(PeerSettingsProposeInput);
 const proposalsInput = Schema.decodeUnknownExit(PeerSettingsProposalsInput);
 const proposeResult = Schema.decodeUnknownExit(PeerSettingsProposeResult);
 const deleteResult = Schema.decodeUnknownExit(PeerSettingsDeleteSecretResult);
-const gatewayTest = Schema.decodeUnknownExit(PeerSettingsGatewayTest);
 const gitHubSetup = Schema.decodeUnknownExit(PeerSettingsGitHubSetup);
 const domainRecord = Schema.decodeUnknownExit(PeerDomainRecord);
 const exported = Schema.decodeUnknownExit(PeerSettingsExport);
@@ -57,7 +52,6 @@ const status = Schema.decodeUnknownExit(PeerSettingsStatus);
 const project = Schema.decodeUnknownSync(PeerSettingsProject);
 const personEntry = Schema.decodeUnknownSync(PeerSettingsPersonEntry);
 const tool = Schema.decodeUnknownSync(PeerSettingsTool);
-const pool = Schema.decodeUnknownSync(PeerSettingsPool);
 const putSecretInput = Schema.decodeUnknownExit(PeerSettingsPutSecretInput);
 const invite = Schema.decodeUnknownExit(PeerHubInviteInput);
 
@@ -158,19 +152,10 @@ describe("POST /settings/changes", () => {
     const done = saved({
       ...dryRun,
       revision: { seq: 43, commit: revision.commit, at: "2026-10-11T12:04:00Z" },
-      gateway: { ok: true },
       audit: "12:04 · Slavo · Booking · policy notify → coordinate, Eva → lead",
     });
-    expect(Exit.isSuccess(done) && done.value.gateway).toEqual({ ok: true });
-    const failedGateway = saved({
-      ...dryRun,
-      revision: { seq: 43, commit: revision.commit, at: "2026-10-11T12:04:00Z" },
-      gateway: { error: "the gateway answered 401" },
-    });
-    expect(Exit.isSuccess(failedGateway) && failedGateway.value.gateway).toEqual({
-      error: "the gateway answered 401",
-    });
-    // A save with nothing to save, and a gateway nothing touched, have neither.
+    expect(Exit.isSuccess(done)).toBe(true);
+    // A save with nothing to save has no revision.
     expect(Exit.isSuccess(saved({ ...dryRun, noop: true, lines: [] }))).toBe(true);
   });
 
@@ -274,7 +259,7 @@ describe("history, proposals and supporting routes", () => {
       to: "created",
       text: "Camp-bot · Project: created",
     };
-    const gateway = {
+    const secondLine = {
       path: ["gateway"],
       scope: { kind: "workspace", name: "Workspace" },
       label: "Gateway",
@@ -282,7 +267,7 @@ describe("history, proposals and supporting routes", () => {
       to: "set up",
       text: "Workspace · Gateway: none → set up",
     };
-    const page = history({ revisions: [{ ...entry, lines: [created, gateway] }], next: null });
+    const page = history({ revisions: [{ ...entry, lines: [created, secondLine] }], next: null });
     expect(Exit.isSuccess(page)).toBe(true);
     const [one, two] = Exit.isSuccess(page) ? (page.value.revisions[0]?.lines ?? []) : [];
     expect(one && settingsLineChange(one)).toBe("created");
@@ -409,45 +394,6 @@ describe("history, proposals and supporting routes", () => {
     );
   });
 
-  it("reads the gateway, configured or not, and its test", () => {
-    const configured = gateway({
-      configured: true,
-      url: "https://llm.acme.dev",
-      adminUrl: null,
-      usdPerUnit: 1.08,
-      currency: "EUR",
-      masterKey: { stored: true, at: "2026-10-11T08:00:00Z", by: eva },
-      sync: {
-        at: "2026-10-11T09:00:00Z",
-        ok: false,
-        error: "the gateway answered 401",
-        lastOkAt: "2026-10-10T09:00:00Z",
-      },
-    });
-    expect(Exit.isSuccess(configured) && configured.value.sync?.error).toBe(
-      "the gateway answered 401",
-    );
-    expect(
-      Exit.isSuccess(
-        gateway({
-          configured: false,
-          url: null,
-          adminUrl: null,
-          usdPerUnit: null,
-          currency: null,
-          masterKey: { stored: false },
-          sync: null,
-        }),
-      ),
-    ).toBe(true);
-    const listed = gatewayTest({ ok: true, models: ["claude-sonnet-5-5", "claude-haiku-5-5"] });
-    expect(Exit.isSuccess(listed) && listed.value.models).toEqual([
-      "claude-sonnet-5-5",
-      "claude-haiku-5-5",
-    ]);
-    expect(Exit.isSuccess(gatewayTest({ ok: false, error: "no key" }))).toBe(true);
-  });
-
   it("reads the GitHub setup, a secret only when new, the domain record and the export", () => {
     const setup = gitHubSetup;
     expect(
@@ -535,32 +481,17 @@ describe("the parts of the document the app reads", () => {
         },
       ],
       tools: ["postgres", { tool: "sentry", env: { DSN: "${secret:SENTRY_DSN}" } }],
-      capacity: {
-        personal: "commercial",
-        shared: {
-          pool: "default",
-          budget: { amount: 600, period: "month", future: true },
-          allocations: { "bob@acme.dev": 120 },
-          defaultAllocation: 40,
-          use: ["on-demand"],
-        },
-      },
-      coordination: { policy: "coordinate", paths: { "migrations/**": "exclusive" } },
+      coordination: { policy: "coordinate" },
       futureField: { deep: [1, 2] },
     });
     expect(read.futureField).toEqual({ deep: [1, 2] });
     expect(read.repositories[0]?.futureRepo).toBe(1);
-    expect(read.capacity.shared?.budget.future).toBe(true);
-    expect(read.coordination?.paths?.["migrations/**"]).toBe("exclusive");
+    expect(read.coordination?.policy).toBe("coordinate");
     expect(read.tools).toHaveLength(2);
   });
 
-  it("reads people, tools and pools", () => {
-    expect(
-      personEntry({ name: "Ana", personal: [{ harness: "codex", plan: "team", seat: "x" }] })
-        .personal?.[0]?.seat,
-    ).toBe("x");
-    expect(personEntry({}).personal).toBeUndefined();
+  it("reads people and tools", () => {
+    expect(personEntry({ name: "Ana", seat: "x" }).seat).toBe("x");
     expect(
       tool({
         name: "Postgres staging",
@@ -568,20 +499,6 @@ describe("the parts of the document the app reads", () => {
         requires: [{ command: "npx", install: "brew install node" }],
         future: 1,
       }).future,
-    ).toBe(1);
-    expect(
-      pool({
-        name: "Default",
-        models: [
-          {
-            id: "claude-sonnet-5-5",
-            provider: "anthropic",
-            harness: ["claude"],
-            upstream: "x",
-            extra: 1,
-          },
-        ],
-      }).models[0]?.extra,
     ).toBe(1);
   });
 });

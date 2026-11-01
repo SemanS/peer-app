@@ -19,7 +19,7 @@ import * as PeerState from "../state/PeerState.ts";
 import { coreLayer, meAnswer, seedState, signedInSeed, standInHub } from "../testkit.ts";
 import * as PeerStatus from "./PeerStatus.ts";
 
-/** Ana in acme, whose Payments project has shared capacity and one shared thread. */
+/** Ana in acme, whose Payments project has one shared thread. */
 const SEED = [
   '{"hubUrl":null,"email":"ana@acme.test","pendingSignIn":null,',
   '"workspaces":[{"slug":"acme","name":"Acme","role":"member","allowedDomains":[],',
@@ -74,10 +74,9 @@ const legacyFields = (status: PeerHubStatus) => ({
   agents: status.agents,
   github: status.github,
   sharedThreads: status.sharedThreads,
-  sharedCapacity: status.workspaces[0]?.projects[0]?.sharedCapacity,
 });
 
-const LEGACY_IDS: ReadonlyArray<PeerPluginId> = ["herdr", "github", "capacity", "observe"];
+const LEGACY_IDS: ReadonlyArray<PeerPluginId> = ["herdr", "github", "observe"];
 
 describe("the Peer status", () => {
   it.effect("keeps core's values for features that are no plugins yet", () =>
@@ -85,12 +84,11 @@ describe("the Peer status", () => {
       const { status } = yield* startedCore([]);
       const published = yield* status.publish;
       assert.deepStrictEqual(legacyFields(published), {
-        // herdr, GitHub, shared capacity and observe are plugins, which this registry leaves out:
+        // herdr, GitHub and observe are plugins, which this registry leaves out:
         // core knows none of them.
         agents: { herdr: "not-running", list: [] },
         github: { cli: false, account: null, signIn: null, error: null },
         sharedThreads: [],
-        sharedCapacity: { enabled: false, instanceIds: [] },
       });
       assert.deepStrictEqual(published.plugins, []);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
@@ -103,7 +101,6 @@ describe("the Peer status", () => {
         const { status, plugins } = yield* startedCore([
           slicePlugin("herdr", { herdr: "running", list: [], postHocSkipped: 1 }),
           slicePlugin("github", { cli: true, account: "bob", signIn: null, error: null }),
-          slicePlugin("capacity", { "acme/pay": { enabled: true, instanceIds: ["plugin-key"] } }),
           // A slice of another shape reads as the neutral value.
           slicePlugin("observe", ["peer:thread-2", 3]),
         ]);
@@ -111,7 +108,6 @@ describe("the Peer status", () => {
           agents: { herdr: "running", list: [], postHocSkipped: 1 },
           github: { cli: true, account: "bob", signIn: null, error: null },
           sharedThreads: [],
-          sharedCapacity: { enabled: true, instanceIds: ["plugin-key"] },
         });
 
         for (const id of LEGACY_IDS) yield* plugins.setPlugin({ id, enabled: false });
@@ -120,7 +116,6 @@ describe("the Peer status", () => {
           agents: { herdr: "not-running", list: [] },
           github: { cli: false, account: null, signIn: null, error: null },
           sharedThreads: [],
-          sharedCapacity: { enabled: false, instanceIds: [] },
         });
         assert.deepStrictEqual(
           off.plugins?.map((plugin) => [plugin.id, plugin.active, plugin.reason]),

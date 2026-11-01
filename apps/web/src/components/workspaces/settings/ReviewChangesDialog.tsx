@@ -1,6 +1,5 @@
 import type {
   PeerSettingsConflict,
-  PeerSettingsGatewayOutcome,
   PeerSettingsLine,
   PeerSettingsPreview,
   PeerSettingsSaved,
@@ -12,7 +11,6 @@ import { useNowMinute } from "../../../hooks/useNowMinute";
 import { useClientSettings } from "../../../hooks/useSettings";
 import { cn } from "../../../lib/utils";
 import { serverEnvironment } from "../../../state/server";
-import { useAtomCommand } from "../../../state/use-atom-command";
 import { useAtomQueryRunner } from "../../../state/use-atom-query-runner";
 import { formatShortTimestamp } from "../../../timestampFormat";
 import { Button } from "../../ui/button";
@@ -28,7 +26,6 @@ import {
 } from "../PeerDialog";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import { TONE_SURFACE, TONE_TEXT } from "../signals";
-import { failureMessage } from "../WorkspaceAccess";
 import { usePeerSettings } from "./PeerSettingsContext";
 import {
   NO_SETTLE,
@@ -44,7 +41,6 @@ import {
   defaultChoices,
   diagnosticAt,
   discardMine,
-  gatewayNote,
   isNoop,
   latestTheirs,
   lineKeys,
@@ -298,57 +294,12 @@ function ConflictBody({
   );
 }
 
-/** The gateway did not take a save: why, and a way to try again now. */
-function GatewayFailed({
-  error,
-  retrying,
-  onRetry,
-}: {
-  readonly error: string;
-  readonly retrying: boolean;
-  readonly onRetry: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex flex-col items-start gap-2 rounded-xl border px-3.5 py-3",
-        TONE_SURFACE.needs,
-      )}
-    >
-      <p className={cn("text-sm font-semibold", TONE_TEXT.needs)}>Gateway sync failed: {error}</p>
-      <p className="text-sm text-foreground">
-        Your changes are saved in Peer, but the gateway still has the old limits until a sync
-        succeeds.
-      </p>
-      <Button size="sm" variant="warning-outline" disabled={retrying} onClick={onRetry}>
-        {retrying ? "Retrying…" : "Retry now"}
-      </Button>
-    </div>
-  );
-}
-
-function SavedBody({
-  saved,
-  gateway,
-  retrying,
-  onRetry,
-}: {
-  readonly saved: PeerSettingsSaved;
-  readonly gateway: PeerSettingsGatewayOutcome | undefined;
-  readonly retrying: boolean;
-  readonly onRetry: () => void;
-}) {
+function SavedBody({ saved }: { readonly saved: PeerSettingsSaved }) {
   const applies = appliesText(saved.applies);
-  const note = gatewayNote(gateway);
   const timestampFormat = useClientSettings((settings) => settings.timestampFormat);
   return (
     <>
       {applies === "" ? null : <p className="text-sm text-foreground">{applies}</p>}
-      {note?.kind === "failed" ? (
-        <GatewayFailed error={note.error} retrying={retrying} onRetry={onRetry} />
-      ) : note?.kind === "ok" ? (
-        <p className="text-sm text-muted-foreground">The gateway is up to date.</p>
-      ) : null}
       {saved.audit === undefined ? null : (
         <section className="flex flex-col gap-1">
           <PeerSectionLabel>In the audit log</PeerSectionLabel>
@@ -390,12 +341,8 @@ export function ReviewChangesDialog({
   /** Back to editing, or Done once it is saved. */
   readonly onClose: () => void;
 }) {
-  const { environmentId } = usePeerSettings();
   const view = useSettingsView(operation.workspace);
   const run = useChangeRunner();
-  const sync = useAtomCommand(serverEnvironment.peerSettings.gatewaySync, {
-    reportFailure: false,
-  });
   const formId = useId();
   const [step, setStep] = useState<Step>({ kind: "previewing" });
   const [message, setMessage] = useState("");
@@ -405,8 +352,6 @@ export function ReviewChangesDialog({
   const [choices, setChoices] = useState<Readonly<Record<string, Choice>>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [gateway, setGateway] = useState<PeerSettingsGatewayOutcome | undefined>(undefined);
-  const [retrying, setRetrying] = useState(false);
   // The minute the review last looked at the clock, for "2 minutes ago" in the conflict view.
   const now = Date.parse(`${useNowMinute()}:00Z`);
 
@@ -421,10 +366,7 @@ export function ReviewChangesDialog({
     }
     const next = stepFor(outcome.result);
     if (next.kind === "conflict") setChoices(defaultChoices(next.preview.conflicts));
-    if (next.kind === "saved") {
-      setGateway(next.saved.gateway);
-      onSaved?.(next.saved, { dropped: used.drop.length > 0 });
-    }
+    if (next.kind === "saved") onSaved?.(next.saved, { dropped: used.drop.length > 0 });
     setStep(next);
   };
   const check = (nextSettle: Settle) => {
@@ -457,23 +399,6 @@ export function ReviewChangesDialog({
     // A review asks the Hub once, when it opens; every later ask is the person's own action.
     // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, []);
-
-  const retryGateway = () => {
-    setRetrying(true);
-    void sync({ environmentId, input: { workspace: operation.workspace } })
-      .then((result) => {
-        if (result._tag === "Success") {
-          setGateway(
-            result.value.ok
-              ? { ok: true }
-              : { error: result.value.error ?? "the gateway did not answer" },
-          );
-        } else {
-          setGateway({ error: failureMessage(result) ?? "the request was interrupted" });
-        }
-      })
-      .finally(() => setRetrying(false));
-  };
 
   const close = () => {
     if (!busy) onClose();
@@ -676,12 +601,7 @@ export function ReviewChangesDialog({
               </div>
             </DialogHeader>
             <PeerDialogBody>
-              <SavedBody
-                saved={step.saved}
-                gateway={gateway}
-                retrying={retrying}
-                onRetry={retryGateway}
-              />
+              <SavedBody saved={step.saved} />
             </PeerDialogBody>
             <PeerDialogFooter>
               <Button onClick={onClose}>Done</Button>

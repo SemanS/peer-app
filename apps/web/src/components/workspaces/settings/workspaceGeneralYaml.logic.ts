@@ -1,7 +1,6 @@
 /**
  * Settings as YAML (design artboard 14): what Export saves and what Import reads. The Hub's export
- * is a set of files (`workspace.yaml`, one file per project, tool, pool and webhook, and
- * `.peer-revision`), which `peerhub workspace apply` reads from a folder. Export saves them as one
+ * is a set of files (`workspace.yaml`, one file per project and tool, and `.peer-revision`), which `peerhub workspace apply` reads from a folder. Export saves them as one
  * .zip of that folder; Import takes the folder, the .zip or loose files back and arranges them as
  * the Hub reads them, keeping what is in `.peer-revision` as the revision the files started from.
  * Pure but for the archive, which JSZip (already in the web bundle) reads and writes.
@@ -14,7 +13,6 @@ const MAX_BYTES = 2 * 1024 * 1024;
 const FOLDERS = [
   ["projects", "project", "projects"],
   ["tools", "tool", "tools"],
-  ["capacity", "pool", "pools"],
 ] as const;
 
 type Folder = (typeof FOLDERS)[number][0];
@@ -99,18 +97,17 @@ const normalized = (path: string) =>
     .replace(/\/{2,}/g, "/");
 
 const WORKSPACE_FILE = /(^|\/)workspace\.ya?ml$/;
-const FOLDER_FILE = /^(projects|tools|capacity|webhooks)\/([^/]+)\.ya?ml$/;
+const FOLDER_FILE = /^(projects|tools)\/([^/]+)\.ya?ml$/;
 const LOOSE_YAML = /^([^/]+)\.ya?ml$/;
 /** What a file in a folder may be called for the Hub to read it: its name is the id. */
 const ID = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
  * A YAML file with no folder around it cannot say what it is, but its top-level keys do: a tool has
- * `mcp`, a pool `models`; anything else is a project.
+ * `mcp`; anything else is a project.
  */
 export function sniffFolder(text: string): Folder {
   if (/^mcp\s*:/m.test(text)) return "tools";
-  if (/^models\s*:/m.test(text)) return "capacity";
   return "projects";
 }
 

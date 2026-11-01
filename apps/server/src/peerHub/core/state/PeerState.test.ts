@@ -154,7 +154,7 @@ describe("PeerState", () => {
         ...persisted,
         plugins: { find: false, memory: true },
       }));
-      yield* first.pluginData("capacity", CapacityData).update((current) => {
+      yield* first.pluginData("observe", CapacityData).update((current) => {
         assert.isTrue(Option.isNone(current));
         return { revoked: ["acme/pay"] };
       });
@@ -163,13 +163,13 @@ describe("PeerState", () => {
       const persisted = (yield* restarted.read).persisted;
       assert.deepStrictEqual(persisted.plugins, { find: false, memory: true });
       assert.deepStrictEqual(
-        yield* restarted.pluginData("capacity", CapacityData).read,
+        yield* restarted.pluginData("observe", CapacityData).read,
         Option.some({ revoked: ["acme/pay"] }),
       );
       // A slice that no longer decodes reads as none, and nothing else is lost.
       assert.isTrue(
         Option.isNone(
-          yield* restarted.pluginData("capacity", Schema.Struct({ n: Schema.Number })).read,
+          yield* restarted.pluginData("observe", Schema.Struct({ n: Schema.Number })).read,
         ),
       );
       assert.deepStrictEqual(persisted.sharedThreads, ["peer:thread-1"]);

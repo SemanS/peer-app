@@ -11,7 +11,6 @@ import {
   PEER_ROOM_SESSION_ENDED,
   PEER_ROOM_START_GRACE_MS,
   PeerHubError,
-  type PeerRoomCapacity,
   type PeerRoomInboxItem,
   type PeerRoomMessage,
   type PeerRoomTarget,
@@ -29,8 +28,6 @@ export interface HereRun {
   readonly id: string;
   /** A session of it is live on this computer. */
   readonly live: boolean;
-  /** What carries it; undefined until this computer has read its threads since it started. */
-  readonly capacity?: PeerRoomCapacity | undefined;
   /** A session of it is open, though none is live here: it may be back, so nothing starts it. */
   readonly running?: boolean;
   /** Its person continues it where it ran (a terminal, an editor); Peer cannot. */
@@ -61,21 +58,13 @@ const WAITING_REREAD_MS = 15_000;
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
-/** A team-reach delivery: nobody's pass let it through, only the run's reach, so only that run may hear it. */
-const isTeamReach = (message: PeerRoomMessage, delivery: PeerRoomTarget, me: string) =>
-  !same(message.author.email, me) && delivery.by === undefined;
-
 /** How the message reaches the agent: words only, the Hub already decided that it may. */
-export function kindOf(message: PeerRoomMessage, delivery: PeerRoomTarget, me: string): HeardKind {
+export function kindOf(message: PeerRoomMessage, me: string): HeardKind {
   if (same(message.author.email, me)) return message.author.run === undefined ? "own" : "agent";
-  return delivery.by !== undefined && same(delivery.by, me) ? "passed" : "team";
+  return "passed";
 }
 
-/**
- * D6's order: a live session of the owner's run, a detached run here, else a new session or run. A
- * team-reach delivery has one run and nothing else: no other run, and never a start on its owner's
- * capacity, which only their yes pays for.
- */
+/** D6's order: a live session of the owner's run, a detached run here, else a new session or run. */
 export function decide(
   message: PeerRoomMessage,
   delivery: PeerRoomTarget,
@@ -86,14 +75,7 @@ export function decide(
 ): Decision {
   const named = delivery.run;
   const reached = runs.find((run) => run.id === named);
-  const team = isTeamReach(message, delivery, me);
   if (delivery.state !== "passed" && delivery.state !== "taken") return { do: "nothing" };
-  if (team && delivery.state === "passed" && reached === undefined)
-    return { do: "fail", reason: RUN_ENDED };
-  if (team && reached !== undefined) {
-    if (reached.capacity === undefined) return { do: "nothing" };
-    if (reached.capacity !== "shared") return { do: "fail", reason: RUN_NOW_PERSONAL };
-  }
   if (delivery.state === "taken") {
     if (named === undefined) return { do: "nothing" };
     if (reached?.live === true) return { do: "offer", run: named };
@@ -118,7 +100,7 @@ export function decide(
   // A model its author chose is a new session on it: an open run has its model already.
   if (same(message.author.email, me) && delivery.model !== undefined)
     return left === undefined ? { do: "take-start" } : { do: "take-continue", run: left.id };
-  const live = reached?.live === true ? reached : team ? undefined : runs.find((run) => run.live);
+  const live = reached?.live === true ? reached : runs.find((run) => run.live);
   if (live !== undefined) return { do: "take-offer", run: live.id };
   const own = same(message.author.email, me);
   const kept =
@@ -130,9 +112,6 @@ export function decide(
 
 export const SESSION_ENDED = PEER_ROOM_SESSION_ENDED;
 export const NOT_RUNNING = "The agent is no longer running.";
-export const RUN_ENDED = "The run this message was for has ended.";
-export const RUN_NOW_PERSONAL =
-  "This run is no longer on the project's shared capacity, so the team cannot reach it directly.";
 
 /** A failed start says this; the Hub keeps it and the room shows it. */
 export const NO_CHECKOUT = "This computer has no checkout of the project.";
@@ -197,7 +176,7 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
       deps.me,
       stood,
     );
-    const kind = kindOf(item.message, delivery, deps.me);
+    const kind = kindOf(item.message, deps.me);
     // The agent exists from here on: a failed prompt must not read as a failed start, or Try
     // again would start a second one. It hears the message as any session of the run does.
     const started = (start: Effect.Effect<Started, PeerHubError>) =>

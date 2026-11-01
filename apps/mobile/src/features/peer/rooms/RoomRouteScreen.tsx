@@ -108,7 +108,6 @@ function Room({
         ? []
         : targetsFor(project.project, task, runs.data?.runs ?? [], me, {
             ...(view?.hasCheckout === undefined ? {} : { hasCheckout: view.hasCheckout }),
-            reaches: view?.reaches ?? [],
             nameOf,
           }),
     [me, nameOf, project, runs.data, task, view],

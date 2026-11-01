@@ -215,14 +215,8 @@ describe("targetsFor", () => {
     expect(row[1]?.to).toEqual([{ kind: "agent", email: BOB }]);
   });
 
-  it("says who decides on personal capacity, and that team reach goes straight there", () => {
+  it("says who decides on a colleague's agent", () => {
     expect(targetsFor(project, task, runs, BOB)[3]?.note).toBe(
-      "Ana decides whether to pass this on.",
-    );
-    const reaches = [{ run: "run_1", reach: "team" }];
-    expect(targetsFor(project, task, runs, BOB, { reaches })[3]?.note).toContain("shared capacity");
-    const ended = [{ ...runs[0]!, state: "ended" as const }];
-    expect(targetsFor(project, task, ended, BOB, { reaches })[3]?.note).toBe(
       "Ana decides whether to pass this on.",
     );
   });

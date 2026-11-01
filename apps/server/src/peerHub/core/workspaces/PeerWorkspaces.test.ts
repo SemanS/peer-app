@@ -474,7 +474,7 @@ describe("Peer workspaces", () => {
       const { workspaces, state } = yield* started("https://git.example.test/acme/api.git", {
         plugins: [
           plugin(
-            "capacity",
+            "observe",
             Effect.succeed({
               lifecycle: (event) =>
                 Queue.offer(
@@ -502,7 +502,7 @@ describe("Peer workspaces", () => {
       const { workspaces, client, hub } = yield* started("https://git.example.test/acme/api.git", {
         plugins: [
           plugin(
-            "capacity",
+            "observe",
             Effect.gen(function* () {
               const client = yield* PeerHubClient.PeerHubClient;
               return {

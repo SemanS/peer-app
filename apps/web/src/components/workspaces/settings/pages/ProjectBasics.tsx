@@ -4,14 +4,11 @@ import { useState } from "react";
 
 import { serverEnvironment } from "../../../../state/server";
 import { useAtomCommand } from "../../../../state/use-atom-command";
-import { SettingsGroup } from "../../../settings/SettingsGroup";
 import { Button } from "../../../ui/button";
 import { toastManager } from "../../../ui/toast";
-import { usePeerPlugins } from "../../slots";
 import { DraftSaveBar } from "../DraftBar";
 import type { ProjectPageProps } from "../pageProps";
 import { useOpenPeerSettings } from "../peerSettingsLinks";
-import { HostedProjectSettings, hostsSlot } from "../PluginSlots";
 import {
   ClientField,
   DeleteProjectDialog,
@@ -26,27 +23,25 @@ import {
   deleteOperation,
 } from "../projectBasics.logic";
 import { leadNamesOf } from "../projectPeople.logic";
-import { gatewayNote, savedTitle } from "../reviewChanges.logic";
+import { savedTitle } from "../reviewChanges.logic";
 import { SettingsUnavailableNote } from "../SettingsUnavailable";
 import { useReviewChanges } from "../useReviewChanges";
 import { useSettingsDraft } from "../useSettingsDraft";
 import { useSettingsView } from "../useSettingsView";
 
 /**
- * A project's Basics tab (design artboard 05): its name, client and description, the rows plugins
- * add to a project, and deleting it. Leads and admins
- * change the form in a draft that is saved through the review; everyone else reads it, with who may
+ * A project's Basics tab (design artboard 05): its name, client and description, and deleting it.
+ * Leads and admins change the form in a draft that is saved through the review; everyone else reads it, with who may
  * change it named. Deleting asks for the project's id, then goes through the same review, and
  * leaves for the workspace's General page once it is saved.
  */
-export function ProjectBasics({ environmentId, status, workspace, state }: ProjectPageProps) {
+export function ProjectBasics({ environmentId, workspace, state }: ProjectPageProps) {
   const { project } = state;
   const path = ["projects", project.id] as const;
   const view = useSettingsView(workspace.slug);
   const draft = useSettingsDraft(view, { slice: path });
   const open = useOpenPeerSettings();
   const sync = useAtomCommand(serverEnvironment.peerHubSync, { reportFailure: false });
-  const plugins = usePeerPlugins(status);
   const [deleting, setDeleting] = useState(false);
 
   // The project no longer exists once its deletion is saved, and with it this page: the person
@@ -54,14 +49,10 @@ export function ProjectBasics({ environmentId, status, workspace, state }: Proje
   const review = useReviewChanges({
     scope: project.name,
     onSaved: (saved: PeerSettingsSaved) => {
-      const gateway = gatewayNote(saved.gateway);
       toastManager.add({
         type: "success",
         title: `Deleted ${project.name}`,
-        description:
-          gateway?.kind === "failed"
-            ? `${savedTitle(saved)}. The gateway did not sync: ${gateway.error}.`
-            : savedTitle(saved),
+        description: savedTitle(saved),
       });
       view.refresh();
       void sync({ environmentId, input: {} });
@@ -82,7 +73,6 @@ export function ProjectBasics({ environmentId, status, workspace, state }: Proje
           leadNamesOf(getAt(view.document, path), (person) => view.nameOf(person)),
         )
       : null;
-  const hostsRows = hostsSlot(plugins, "projectSettings", "basics");
 
   return (
     <>
@@ -120,19 +110,6 @@ export function ProjectBasics({ environmentId, status, workspace, state }: Proje
           />
         </section>
 
-        {hostsRows ? (
-          // The plugins' rows are theirs: the group shows only once one of them has drawn a row.
-          <SettingsGroup className="hidden has-data-[slot=settings-row]:block">
-            <HostedProjectSettings
-              host="basics"
-              environmentId={environmentId}
-              status={status}
-              workspace={workspace}
-              state={state}
-            />
-          </SettingsGroup>
-        ) : null}
-
         <section
           aria-labelledby="delete-heading"
           className="flex flex-col gap-2.5 border-t border-border pt-5"
@@ -162,7 +139,6 @@ export function ProjectBasics({ environmentId, status, workspace, state }: Proje
             tasks: state.work.tasks.length,
             areas: state.work.areas.length,
             people: project.members.length,
-            gatewayTeam: project.capacity.shared !== undefined,
           })}
           onClose={() => setDeleting(false)}
           onConfirm={() => {

@@ -8,15 +8,14 @@ const project = {
   name: "Booking",
   members: ["*"],
   leads: ["eva@acme.dev"],
-  coordination: { policy: "coordinate", paths: { "migrations/**": "exclusive" } },
+  coordination: { policy: "coordinate" },
 };
 const document = {
   currency: "EUR",
-  people: { "ana@acme.dev": { name: "Ana", personal: [{ harness: "codex", plan: "team" }] } },
+  people: { "ana@acme.dev": { name: "Ana" } },
   github: {},
   projects: { camp: { name: "Camp-bot" }, booking: project },
   tools: { postgres: { name: "Postgres", mcp: { command: "npx", args: ["pg"] } } },
-  capacity: { default: { name: "Default", models: [] } },
   futureSection: { ignored: true },
 };
 const isPeerHubError = Schema.is(PeerHubError);
@@ -33,13 +32,7 @@ describe("the settings as files", () => {
   it("lays a document out as the Hub's export does, ids in order", () => {
     assert.deepStrictEqual(
       settingsFiles(document).map(({ path }) => path),
-      [
-        "workspace.yaml",
-        "projects/booking.yaml",
-        "projects/camp.yaml",
-        "tools/postgres.yaml",
-        "capacity/default.yaml",
-      ],
+      ["workspace.yaml", "projects/booking.yaml", "projects/camp.yaml", "tools/postgres.yaml"],
     );
     // An empty section (`github: {}`, all a member is shown of it) is nothing to read or propose.
     assert.deepStrictEqual(settingsFiles(document)[0]?.value, {
@@ -48,9 +41,7 @@ describe("the settings as files", () => {
     });
     // Nothing of the workspace's own, no file; a section that is no map is no files.
     assert.deepStrictEqual(
-      settingsFiles({ projects: { booking: project }, tools: ["x"], capacity: null }).map(
-        ({ path }) => path,
-      ),
+      settingsFiles({ projects: { booking: project }, tools: ["x"] }).map(({ path }) => path),
       ["projects/booking.yaml"],
     );
   });
@@ -110,7 +101,6 @@ describe("the bundle the Hub imports", () => {
     "projects/booking.yaml": "name: Booking\nmembers: ['*']\n",
     "projects/camp.yml": "name: Camp-bot\n",
     "tools/postgres.yaml": "name: Postgres\n",
-    "capacity/default.yaml": "name: Default\n",
     ".peer-revision": "42 3f2a9c1e\n",
   };
 
@@ -123,7 +113,6 @@ describe("the bundle the Hub imports", () => {
           people: { "ana@acme.dev": { name: "Ana" } },
           projects: { booking: { name: "Booking", members: ["*"] }, camp: { name: "Camp-bot" } },
           tools: { postgres: { name: "Postgres" } },
-          capacity: { default: { name: "Default" } },
         },
       },
       base: 42,
@@ -143,7 +132,7 @@ describe("the bundle the Hub imports", () => {
     });
     assert.deepStrictEqual(bare.bundle, {
       settings: {},
-      config: { currency: "USD", projects: {}, tools: {}, capacity: {} },
+      config: { currency: "USD", projects: {}, tools: {} },
     });
   });
 
@@ -169,7 +158,6 @@ describe("the bundle the Hub imports", () => {
     const { bundle } = bundleOf(rendered);
     assert.deepStrictEqual(bundle.config.projects, document.projects);
     assert.deepStrictEqual(bundle.config.tools, document.tools);
-    assert.deepStrictEqual(bundle.config.capacity, document.capacity);
     assert.deepStrictEqual(bundle.config.people, document.people);
     assert.strictEqual(bundle.config.currency, "EUR");
   });

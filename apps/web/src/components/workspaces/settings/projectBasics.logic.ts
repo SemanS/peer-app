@@ -90,8 +90,6 @@ export interface DeleteFacts {
   readonly areas: number;
   /** The people the project goes away for. */
   readonly people: number;
-  /** The project has shared capacity, so a gateway team exists under its id. */
-  readonly gatewayTeam: boolean;
 }
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -99,7 +97,7 @@ const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : 
 /**
  * What goes away with the project, and what does not, one line each (design artboard 05): its
  * tasks with their context and coordination history, its settings, its place in Work for the
- * people on it, and what stays behind (their threads, the gateway team with its usage).
+ * people on it, and what stays behind (their threads).
  */
 export function deleteConsequences(
   project: { readonly id: string; readonly name: string },
@@ -113,11 +111,8 @@ export function deleteConsequences(
         }, with their task context and coordination history`;
   return [
     tasks,
-    `${project.name}’s settings: people, tools and allocations`,
+    `${project.name}’s settings: people and tools`,
     `${project.name} leaves Work for ${count(facts.people, "person", "people")}. Threads on their computers stay, without the project.`,
-    ...(facts.gatewayTeam
-      ? [`The gateway team “${project.id}” stays, with its usage. Remove it there if you want.`]
-      : []),
   ];
 }
 

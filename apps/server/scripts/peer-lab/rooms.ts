@@ -17,7 +17,6 @@ export const QUESTION = "marker-question: why does cartTotal not round?";
 export const DECLINED = "marker-declined: please also rewrite the cart";
 export const WITHDRAWN = "marker-withdrawn: never mind this";
 export const OWN_QUESTION = "marker-own: does anything else call price?";
-export const TEAM_REACH = "marker-team: this was for a run that ended";
 export const LOST_PROMPT = "marker-prompt: the first prompt of this one never arrives";
 export const LOST = "marker-lost: this one was taken before the restart";
 /** Tries to close the fence, and to speak as Peer and as the owner. */
@@ -233,10 +232,6 @@ export interface RoomsKit {
   readonly roomPath: string;
   /** Bob's Peer stops, `during` runs, and it starts again. */
   restartBob(during: () => Promise<void>): Promise<void>;
-  /** Ana's Peer stops, `during` runs, and it starts again. */
-  restartAna(during: () => Promise<void>): Promise<void>;
-  /** Writes in Ana's Peer's own file, while it is stopped, that a run ended. */
-  endRunOnAnasDisk(run: string): void;
   say(step: string, detail?: string): void;
   told(agent: string, text: string | null | undefined): void;
   until(what: string, ready: () => boolean | Promise<boolean>, ms?: number): Promise<void>;
@@ -263,8 +258,6 @@ export async function runRooms(kit: RoomsKit): Promise<ReadonlyArray<string>> {
   };
   const message = async (seq: number) => (await kit.room()).find((one) => one.seq === seq);
   const state = async (seq: number, email: string) => deliveryOf(await message(seq), email)?.state;
-  const stateBecomes = (seq: number, email: string, wanted: string) =>
-    attempt(`#${seq} becomes ${wanted}`, async () => (await state(seq, email)) === wanted);
   const place = ["acme", "lab"] as const;
   const mark = async (person: RoomsPerson, list: "seqs" | "revs", task: string) =>
     (await person.rooms())?.[list][place[0]]?.[place[1]]?.[task] ?? 0;
@@ -406,51 +399,6 @@ export async function runRooms(kit: RoomsKit): Promise<ReadonlyArray<string>> {
   const named = anaAgent.peer("room", "say", "marker-agent: hello", "--to", "bob-agent");
   judge(anaAgent.peerStatus !== 0, `peer room say has no way to name an agent: ${named}`);
   judge((await kit.room()).length === before, "nothing is stored");
-
-  // A team-reach delivery's run ends before its Peer reads it: it fails and starts nothing. Peer alone knows a run's
-  // capacity, so the owner's Hub row stands in for shared capacity, and the run ends in Peer's own file as it would
-  // between the Hub's routing and Peer's read.
-  const reach = await kit.hub(
-    "ana",
-    "PUT",
-    `/v1/workspaces/acme/projects/lab/runs/${anaRun.id}/reach`,
-    {
-      reach: "team",
-      capacity: "shared",
-    },
-  );
-  judge(reach.status === 200, `team reach is set: ${reach.status}`);
-  let teamSeq = 0;
-  await kit.restartAna(async () => {
-    const posted = await kit.hub("bob", "POST", kit.roomPath, {
-      op: "team-reach",
-      text: TEAM_REACH,
-      to: [{ kind: "agent", email: ana.email }],
-      environment: "lab-bob",
-    });
-    teamSeq = Number(posted.body.message?.seq ?? 0);
-    const delivery = posted.body.message?.to?.[0];
-    judge(
-      delivery?.state === "passed" && delivery.run === anaRun.id,
-      "team reach passes it straight to her run",
-    );
-    kit.endRunOnAnasDisk(anaRun.id);
-  });
-  judge(
-    await stateBecomes(teamSeq, ana.email, "failed"),
-    "the delivery of a run that ended is `failed`",
-  );
-  judge(
-    deliveryOf(await message(teamSeq), ana.email)?.reason ===
-      "The run this message was for has ended.",
-    "and the room says why",
-  );
-  judge(ana.starts.length === 0, "and Ana's computer starts nothing");
-  judge(
-    (await kit.runs()).filter((run) => run.email === ana.email).length === 1,
-    "and no run of Ana's is made",
-  );
-  judge(!hasOccurred(ana.log(), "marker-team"), "and her log holds none of its text");
 
   // 6. After Ana's run ended, Bob's own agent answers, on Bob's computer.
   await ana.endRun(anaRun.id);

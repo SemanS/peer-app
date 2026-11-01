@@ -268,7 +268,6 @@ describe("Settings through core", () => {
               currency: "EUR",
               projects: { booking: { name: "Booking" } },
               tools: {},
-              capacity: {},
             },
           },
           dryRun: true,
@@ -367,16 +366,6 @@ describe("Settings through core", () => {
       assert.deepStrictEqual(deleted, { kind: "deleted" });
       assert.strictEqual(last(), "DELETE /secrets/TEAMS_ALERTS_URL?force=true");
 
-      on({ configured: false, masterKey: { stored: false } });
-      assert.isFalse((yield* client["peer.settings.gateway"]({ workspace: "acme" })).configured);
-      assert.strictEqual(last(), "GET /settings/gateway");
-      on({ ok: true, models: ["claude-sonnet-5-5"] });
-      const tested = yield* client["peer.settings.gatewayTest"]({ workspace: "acme" });
-      assert.deepStrictEqual(tested.models, ["claude-sonnet-5-5"]);
-      assert.strictEqual(last(), "POST /settings/gateway/test {}");
-      on({ at: "2026-10-11T09:00:00Z", ok: true });
-      assert.isTrue((yield* client["peer.settings.gatewaySync"]({ workspace: "acme" })).ok);
-      assert.strictEqual(last(), "POST /settings/gateway/sync {}");
       on({
         payloadUrl: "https://hub.acme.dev/v1/github/acme",
         secret: "s",
@@ -481,12 +470,12 @@ describe("Settings through core", () => {
       assert.strictEqual(proposedForbidden.kind, "forbidden");
 
       // A secret that is in use, and a domain another workspace holds.
-      on(refusal("secret_in_use", { usedBy: ["Shared capacity · the gateway"] }), 409);
+      on(refusal("secret_in_use", { usedBy: ["Tool · Postgres"] }), 409);
       const inUse = yield* client["peer.settings.deleteSecret"]({
         workspace: "acme",
-        name: "litellm-master-key",
+        name: "POSTGRES_URL",
       });
-      assert.deepStrictEqual(inUse, { kind: "in-use", usedBy: ["Shared capacity · the gateway"] });
+      assert.deepStrictEqual(inUse, { kind: "in-use", usedBy: ["Tool · Postgres"] });
       const holder = { slug: "other", name: "Other", verified: true };
       on(
         refusal("domain_claimed", {

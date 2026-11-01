@@ -1,7 +1,7 @@
 /**
  * Peer's settings, as the pages of the settings area reason about them: a draft of the settings
  * document turned into the sets a save sends, where a value comes from, what a coordination
- * decision was, what a person's plans may do in a project.
+ * decision was.
  * Pure, and free of what Hermes lacks, so web and mobile share it.
  *
  * The Hub decides all of this too (the rules are its `coord/rules.rs` and the app's `hubPolicy.ts`);
@@ -11,7 +11,6 @@
  */
 import {
   PeerSettingsPersonEntry,
-  PeerSettingsPool,
   PeerSettingsProject,
   PeerSettingsTool,
   type PeerSettingsSet,
@@ -186,47 +185,6 @@ export function decisionText(
   return [policy, from, ...(pathRulesOff ? ["path rules were off"] : [])].join(" · ");
 }
 
-/** What a person may spend in a project: their own cap, else the project's default for everyone. */
-export function allocationOf(
-  project: {
-    readonly capacity?: {
-      readonly shared?: {
-        readonly allocations?: Readonly<Record<string, number>> | undefined;
-        readonly defaultAllocation?: number | undefined;
-      };
-    };
-  },
-  email: string,
-): { readonly value: number | undefined; readonly source: "custom" | "project default" } {
-  const shared = project.capacity?.shared;
-  const own =
-    shared?.allocations !== undefined && Object.hasOwn(shared.allocations, email)
-      ? shared.allocations[email]
-      : undefined;
-  return own === undefined
-    ? { value: shared?.defaultAllocation, source: "project default" }
-    : { value: own, source: "custom" };
-}
-
-export type PlanClass = "consumer" | "commercial" | "other";
-
-/** Pro, Max and Plus are consumer plans; Team, Business, Enterprise and an API key are commercial. */
-export function planClass(plan: string): PlanClass {
-  switch (plan.toLowerCase()) {
-    case "pro":
-    case "max":
-    case "plus":
-      return "consumer";
-    case "team":
-    case "business":
-    case "enterprise":
-    case "api":
-      return "commercial";
-    default:
-      return "other";
-  }
-}
-
 const HARNESSES: Readonly<Record<string, string>> = {
   claude: "Claude Code",
   codex: "Codex",
@@ -236,99 +194,10 @@ const HARNESSES: Readonly<Record<string, string>> = {
   antigravity: "Antigravity",
 };
 export const harnessLabel = (harness: string) => HARNESSES[harness] ?? harness;
-export const planLabel = (plan: string) =>
-  plan === "api" ? "API key" : `${plan.charAt(0).toUpperCase()}${plan.slice(1)}`;
-
-export interface PersonalPlan {
-  readonly harness: string;
-  readonly plan: string;
-}
-
-export interface ProjectUse {
-  readonly project: string;
-  readonly name: string;
-  /** What the project allows of personal plans: any, commercial ones only, or none (shared capacity only). */
-  readonly rule: "any" | "commercial" | "none";
-  readonly ruleText: string;
-  /** The project has shared capacity to use instead. */
-  readonly shared: boolean;
-  readonly plans: ReadonlyArray<{
-    readonly harness: string;
-    readonly plan: string;
-    readonly class: PlanClass;
-    readonly usable: boolean;
-    /** Why not, when it is not. */
-    readonly reason?: string;
-  }>;
-}
-
-const RULE_TEXTS = {
-  any: "Any plan",
-  commercial: "Commercial plans only",
-  none: "Shared capacity only",
-} as const;
-
-/**
- * Where each of a person's plans may be used: a project that allows `any` takes every plan, one
- * that allows `commercial` only the commercial ones (a consumer or unknown plan is blocked there),
- * one that allows `none` no personal plan. The rules are `hubPolicy.ts`'s, which keeps deciding.
- * With `email`, only the projects that person is on.
- */
-export function whereUsable(
-  projects: Readonly<
-    Record<
-      string,
-      {
-        readonly name: string;
-        readonly client?: string | undefined;
-        readonly members?: ReadonlyArray<string> | undefined;
-        readonly capacity?:
-          | { readonly personal?: string | undefined; readonly shared?: unknown }
-          | undefined;
-      }
-    >
-  >,
-  plans: ReadonlyArray<PersonalPlan>,
-  email?: string,
-): ReadonlyArray<ProjectUse> {
-  return Object.entries(projects)
-    .filter(
-      ([, project]) =>
-        email === undefined ||
-        project.members?.some(
-          (member) => member === "*" || member.toLowerCase() === email.toLowerCase(),
-        ) !== false,
-    )
-    .map(([id, project]) => {
-      const personal = project.capacity?.personal;
-      const rule = personal === "commercial" || personal === "none" ? personal : "any";
-      const work = project.client === undefined ? "" : `is client work for ${project.client} and `;
-      return {
-        project: id,
-        name: project.name,
-        rule,
-        ruleText: RULE_TEXTS[rule],
-        shared: project.capacity?.shared !== undefined && project.capacity.shared !== null,
-        plans: plans.map(({ harness, plan }) => {
-          const kind = planClass(plan);
-          const base = { harness, plan, class: kind };
-          if (rule === "any" || (rule === "commercial" && kind === "commercial")) {
-            return { ...base, usable: true };
-          }
-          const reason =
-            rule === "none"
-              ? `${project.name} runs on shared capacity only.`
-              : `${project.name} ${work}allows commercial plans only. ${planLabel(plan)} is ${kind === "consumer" ? "a consumer plan" : "not a commercial plan"}.`;
-          return { ...base, usable: false, reason };
-        }),
-      };
-    });
-}
 
 const decodePerson = Schema.decodeUnknownOption(PeerSettingsPersonEntry);
 const decodeProject = Schema.decodeUnknownOption(PeerSettingsProject);
 const decodeTool = Schema.decodeUnknownOption(PeerSettingsTool);
-const decodePool = Schema.decodeUnknownOption(PeerSettingsPool);
 
 const entriesOf = <A>(section: unknown, decode: (raw: unknown) => Option.Option<A>) =>
   Object.fromEntries(
@@ -347,10 +216,8 @@ const entriesOf = <A>(section: unknown, decode: (raw: unknown) => Option.Option<
  */
 export function readDocument(document: Readonly<Record<string, unknown>>) {
   return {
-    currency: typeof document.currency === "string" ? document.currency : undefined,
     people: entriesOf(document.people, decodePerson),
     projects: entriesOf(document.projects, decodeProject),
     tools: entriesOf(document.tools, decodeTool),
-    pools: entriesOf(document.capacity, decodePool),
   };
 }

@@ -125,7 +125,7 @@ export function PeerSettingsAccount({
               void (async () => {
                 if (
                   await ensureLocalApi().dialogs.confirm(
-                    "Sign out of Peer Hub everywhere? Every Hub session ends and your shared-capacity keys in all workspaces are revoked. Local checkouts stay on your computers.",
+                    "Sign out of Peer Hub everywhere? Every Hub session ends. Local checkouts stay on your computers.",
                   )
                 )
                   await run(

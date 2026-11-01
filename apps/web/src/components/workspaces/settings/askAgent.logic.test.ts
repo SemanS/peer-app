@@ -100,13 +100,13 @@ describe("which pages offer to ask an agent", () => {
   const at = (path: string) => askPageOf(parsePeerSettingsPath(path));
 
   it("are the workspace pages that hold settings an agent can propose changes to", () => {
-    for (const section of ["general", "people", "capacity", "tools"]) {
+    for (const section of ["general", "people", "tools"]) {
       expect(at(`/settings/peer/w/acme/${section}`)).toBe("acme");
     }
   });
 
-  it("are not the pages of what no agent proposes: secrets, records, a form of its own, the person's own", () => {
-    for (const section of ["secrets", "audit", "hub", "new-project", "plans", "keys", "slack"]) {
+  it("are not the pages of what no agent proposes: secrets, records, a form of its own", () => {
+    for (const section of ["secrets", "audit", "hub", "new-project", "slack"]) {
       expect(at(`/settings/peer/w/acme/${section}`)).toBeNull();
     }
   });

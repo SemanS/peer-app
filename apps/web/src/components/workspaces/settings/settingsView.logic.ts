@@ -27,21 +27,11 @@ export interface SettingsRightsInput {
 
 const sameAddress = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
-/** The shared capacity of a project that only admins change: its budget, pool, models and use, or all of it. */
-const ADMIN_SHARED_FIELDS: ReadonlySet<string> = new Set(["budget", "pool", "models", "use"]);
-
-/** A node under a project that belongs to admins alone: `capacity.shared` itself, or one of its fields. */
-function isAdminShared(below: Path): boolean {
-  if (below[0] !== "capacity" || below[1] !== "shared") return false;
-  const field = below[2];
-  return field === undefined || ADMIN_SHARED_FIELDS.has(field);
-}
-
 /**
  * Whether the caller may change the node at `path`, by the Hub's table: admins anything; a project's
- * leads the project's nodes but not its shared budget, pool, models or use; a project anyone may
- * create (whoever it names as lead is the Hub's concern) and only its leads delete; a person their
- * own entry; everything else (the tool catalog, pools, gateway, GitHub, currency) admins. For enabling controls only, since the Hub checks every change again.
+ * leads the project's nodes; a project anyone may create (whoever it names as lead is the Hub's
+ * concern) and only its leads delete; a person their own entry; everything else (the tool catalog,
+ * GitHub, currency) admins. For enabling controls only, since the Hub checks every change again.
  */
 export function canChangePath(who: SettingsRightsInput, path: Path): boolean {
   const { rights, email, document } = who;
@@ -51,7 +41,7 @@ export function canChangePath(who: SettingsRightsInput, path: Path): boolean {
     if (below.length === 0) {
       return getAt(document, ["projects", id]) === undefined || rights.leads.includes(id);
     }
-    return !isAdminShared(below) && rights.leads.includes(id);
+    return rights.leads.includes(id);
   }
   if (section === "people" && id !== undefined) {
     return email !== null && sameAddress(id, email);
@@ -67,7 +57,6 @@ export function ownersOfPath(document: SettingsDocument, path: Path): string {
   const [section, id, ...below] = path;
   if (section === "projects" && id !== undefined) {
     if (below.length === 0 && getAt(document, ["projects", id]) === undefined) return "any member";
-    if (isAdminShared(below)) return "admins";
     const name = getAt(document, ["projects", id, "name"]);
     return `${typeof name === "string" && name !== "" ? name : id}'s leads and admins`;
   }

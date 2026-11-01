@@ -170,18 +170,10 @@ export const PeerSettingsPreview = Schema.Struct({
 });
 export type PeerSettingsPreview = typeof PeerSettingsPreview.Type;
 
-/** The gateway's reconciliation after a save: it worked, or why not; absent when untouched. */
-export const PeerSettingsGatewayOutcome = Schema.Union([
-  Schema.Struct({ ok: Schema.Boolean }),
-  Schema.Struct({ error: Text }),
-]);
-export type PeerSettingsGatewayOutcome = typeof PeerSettingsGatewayOutcome.Type;
-
 /** A change after it was saved: the preview it made, then the revision it became. */
 export const PeerSettingsSaved = Schema.Struct({
   ...PeerSettingsPreview.fields,
   revision: Schema.optional(Schema.Struct({ seq: Seq, commit: Text, at: Text })),
-  gateway: Schema.optional(PeerSettingsGatewayOutcome),
   audit: Schema.optional(Text),
 });
 export type PeerSettingsSaved = typeof PeerSettingsSaved.Type;
@@ -277,38 +269,6 @@ export const PeerSettingsSecretsView = Schema.Struct({
 });
 export type PeerSettingsSecretsView = typeof PeerSettingsSecretsView.Type;
 
-/** The last reconciliation with the gateway. */
-export const PeerSettingsSync = Schema.Struct({
-  at: Text,
-  ok: Schema.Boolean,
-  error: Schema.optional(Text),
-  lastOkAt: NullableText,
-});
-export type PeerSettingsSync = typeof PeerSettingsSync.Type;
-
-export const PeerSettingsGatewayView = Schema.Struct({
-  configured: Schema.Boolean,
-  url: NullableText,
-  adminUrl: NullableText,
-  usdPerUnit: Schema.optional(Schema.NullOr(Schema.Number)),
-  currency: NullableText,
-  masterKey: Schema.Struct({
-    stored: Schema.Boolean,
-    at: NullableText,
-    by: Schema.optional(Schema.NullOr(PeerSettingsPerson)),
-  }),
-  sync: Schema.optional(Schema.NullOr(PeerSettingsSync)),
-});
-export type PeerSettingsGatewayView = typeof PeerSettingsGatewayView.Type;
-
-/** The gateway's models, listed with the master key. */
-export const PeerSettingsGatewayTest = Schema.Struct({
-  ok: Schema.Boolean,
-  models: Schema.optional(Schema.Array(Text)),
-  error: Schema.optional(Text),
-});
-export type PeerSettingsGatewayTest = typeof PeerSettingsGatewayTest.Type;
-
 /** What GitHub needs to send its signed webhooks; `secret` is in this answer only. */
 export const PeerSettingsGitHubSetup = Schema.Struct({
   payloadUrl: Text,
@@ -394,14 +354,11 @@ const keeping = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
   Schema.StructWithRest(Schema.Struct(fields), [Schema.Record(Schema.String, Schema.Unknown)]);
 const TextMap = Schema.Record(Schema.String, Schema.String);
 
-/** `people.<email>`: a name and the plans the person declared (information; never credentials). */
-export const PeerSettingsPersonEntry = keeping({
-  name: Schema.optional(Text),
-  personal: Schema.optional(Schema.Array(keeping({ harness: Text, plan: Text }))),
-});
+/** `people.<email>`: a name. */
+export const PeerSettingsPersonEntry = keeping({ name: Schema.optional(Text) });
 export type PeerSettingsPersonEntry = typeof PeerSettingsPersonEntry.Type;
 
-/** `projects.<id>`. `capacity.personal` is any, commercial or none; a policy is notify, coordinate, ask or exclusive. */
+/** `projects.<id>`. A policy is notify, coordinate, ask or exclusive. */
 export const PeerSettingsProject = keeping({
   name: Text,
   description: Schema.optional(Text),
@@ -413,22 +370,7 @@ export const PeerSettingsProject = keeping({
   repositories: Schema.Array(keeping({ id: Text, url: Text, branch: Text })),
   /** A tool's id, or the id with the project's own environment. */
   tools: Schema.Array(Schema.Union([Text, keeping({ tool: Text, env: Schema.optional(TextMap) })])),
-  capacity: keeping({
-    personal: Text,
-    shared: Schema.optional(
-      keeping({
-        pool: Text,
-        budget: keeping({ amount: Schema.Number, period: Schema.optional(Text) }),
-        allocations: Schema.optional(Schema.Record(Schema.String, Schema.Number)),
-        defaultAllocation: Schema.optional(Schema.Number),
-        models: Schema.optional(Schema.Array(Text)),
-        use: Schema.optional(Schema.Array(Text)),
-      }),
-    ),
-  }),
-  coordination: Schema.optional(
-    keeping({ policy: Text, paths: Schema.optional(Schema.Record(Schema.String, Text)) }),
-  ),
+  coordination: Schema.optional(keeping({ policy: Text })),
 });
 export type PeerSettingsProject = typeof PeerSettingsProject.Type;
 
@@ -451,23 +393,6 @@ export const PeerSettingsTool = keeping({
   ),
 });
 export type PeerSettingsTool = typeof PeerSettingsTool.Type;
-
-/** `capacity.<id>`: a pool of models behind the workspace's gateway. */
-export const PeerSettingsPool = keeping({
-  name: Text,
-  description: Schema.optional(Text),
-  models: Schema.Array(
-    keeping({
-      id: Text,
-      provider: Text,
-      upstream: Schema.optional(Text),
-      harness: Schema.Array(Text),
-      apiBase: Schema.optional(Text),
-      credentialEnv: Schema.optional(Text),
-    }),
-  ),
-});
-export type PeerSettingsPool = typeof PeerSettingsPool.Type;
 
 // Inputs. Every one names its workspace; a save names the revision it started from.
 const Workspace = TrimmedNonEmptyString;

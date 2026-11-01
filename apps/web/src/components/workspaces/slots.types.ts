@@ -276,8 +276,6 @@ export interface PeerWebPlugin {
   readonly alwaysSettings?: ComponentType<PeerSlotProps>;
   /** Rows of Settings → Peer for a workspace, on the page `slotHost` names. */
   readonly workspaceSettings?: ComponentType<WorkspaceSettingsSlotProps>;
-  /** Rows of Settings → Peer for a project, on the page `slotHost` names. */
-  readonly projectSettings?: ComponentType<ProjectSettingsSlotProps>;
   /** Actions in the command palette. */
   readonly palette?: (status: PeerHubStatus) => ReadonlyArray<PaletteAction>;
   /** Capability: starts an agent on a task. At most one plugin fills it. */

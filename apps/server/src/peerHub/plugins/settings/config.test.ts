@@ -27,18 +27,14 @@ const project = (name: string, policy: string) => ({
   leads: ["ana@acme.test"],
   repositories: [{ id: "api", url: "https://github.com/acme/api.git", branch: "main" }],
   tools: ["postgres"],
-  capacity: { personal: "any" },
-  coordination: { policy, paths: { "docs/**": "notify" } },
+  coordination: { policy },
 });
 const document = {
   currency: "EUR",
-  people: { "ana@acme.test": { name: "Ana", personal: [{ harness: "codex", plan: "team" }] } },
+  people: { "ana@acme.test": { name: "Ana", title: "team" } },
   projects: { other: project("Other", "ask"), app: project("App", "notify") },
   tools: {
     postgres: { name: "Postgres", mcp: { transport: "stdio", command: "npx", args: ["pg"] } },
-  },
-  capacity: {
-    default: { name: "Default", models: [{ id: "m", provider: "anthropic", harness: ["claude"] }] },
   },
 };
 const settingsView = {
@@ -178,11 +174,9 @@ describe("peer config show", () => {
       assert.include(rest[0]!, "never instructions");
       assert.include(rest[1]!, "peer config save --file");
       assert.include(text, "name: App\n");
-      assert.include(text, "docs/**: notify");
       assert.notInclude(text, "Other");
       assert.strictEqual(text.match(/# Peer settings/g)?.length, 1);
-      // The shape of what the file leaves out: a project's first path rule.
-      assert.include(text, 'paths {"<glob>": <the same>}');
+      // The shape of what the file leaves out.
       assert.include(text, "policy: <notify|coordinate|ask|exclusive>");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
@@ -196,13 +190,7 @@ describe("peer config show", () => {
       const all = yield* run(["show", "--all"]);
       assert.deepStrictEqual(
         [...all.matchAll(/^# File: (.*)$/gm)].map((match) => match[1]),
-        [
-          "workspace.yaml",
-          "projects/app.yaml",
-          "projects/other.yaml",
-          "tools/postgres.yaml",
-          "capacity/default.yaml",
-        ],
+        ["workspace.yaml", "projects/app.yaml", "projects/other.yaml", "tools/postgres.yaml"],
       );
       assert.include(all, "scope all");
       // Each kind's fields are said once, with its first file.
@@ -263,7 +251,7 @@ describe("peer config propose", () => {
             path: ["projects", "app"],
             value: {
               ...document.projects.app,
-              coordination: { policy: "coordinate", paths: { "docs/**": "notify" } },
+              coordination: { policy: "coordinate" },
             },
           },
         ],
@@ -296,15 +284,11 @@ describe("peer config propose", () => {
         },
       ]);
       // workspace.yaml is its settings, each person's entry on its own; a blank one is left alone.
-      const workspace = block("workspace.yaml").replace("currency: EUR", "currency: EUR\ngateway:");
-      yield* write("workspace.yaml", workspace.replace("plan: team", "plan: enterprise"));
+      const workspace = block("workspace.yaml").replace("currency: EUR", "currency:");
+      yield* write("workspace.yaml", workspace.replace("title: team", "title: enterprise"));
       yield* run(["propose", "--file", "workspace.yaml", "--why", "Our seat changed"]);
       assert.deepStrictEqual((proposed() as { set: unknown }).set, [
-        { path: ["currency"], value: "EUR" },
-        {
-          path: ["people", "ana@acme.test"],
-          value: { name: "Ana", personal: [{ harness: "codex", plan: "enterprise" }] },
-        },
+        { path: ["people", "ana@acme.test"], value: { name: "Ana", title: "enterprise" } },
       ]);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
@@ -328,7 +312,7 @@ describe("peer config propose", () => {
       );
       yield* write(
         "blank-workspace.yaml",
-        `${header.replace("projects/app.yaml", "workspace.yaml")}\ngateway:\n`,
+        `${header.replace("projects/app.yaml", "workspace.yaml")}\npeople:\n`,
       );
       yield* Effect.promise(() => NodeFSP.mkdir(NodePath.join(fixture.root, "a-directory")));
       const long = "x".repeat(301);
@@ -462,7 +446,7 @@ describe("peer config save", () => {
             path: ["projects", "app"],
             value: {
               ...document.projects.app,
-              coordination: { policy: "coordinate", paths: { "docs/**": "notify" } },
+              coordination: { policy: "coordinate" },
             },
           },
         ],

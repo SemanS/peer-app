@@ -1,28 +1,18 @@
 /**
  * The facts Settings › Overview and the navigation's "to finish" badge are told from, read from the
- * queries the settings pages already use (no request of its own): the Hub's status, GitHub's
- * checks, the gateway and the person's plans for the workspace the area has open, and source control, the providers, the browser and device settings of
+ * queries the settings pages already use (no request of its own): the Hub's status and GitHub's
+ * checks for the workspace the area has open, and source control, the providers, the browser and device settings of
  * this computer. Queries are only asked for what the person may see: an admin's for admins.
  */
-import { getAt, planLabel } from "@t3tools/client-runtime/peer-settings";
 import { verificationReadKey } from "@t3tools/client-runtime/peer/github";
 import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
 import { useLocation } from "@tanstack/react-router";
-import * as Schema from "effect/Schema";
 import { useEffect, useRef } from "react";
 
 import { deviceEnvironment } from "../../state/device";
 import { useEnvironmentProviders, useEnvironments } from "../../state/environments";
 import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
 import { sourceControlEnvironment } from "../../state/sourceControl";
-import {
-  harnessShort,
-  notMineKey,
-  personKey,
-  readPlans,
-} from "../workspaces/settings/aiSubscriptions.logic";
-import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { useGitHubChecksStatus } from "../workspaces/settings/IntegrationsGitHub";
 import {
   useLastPeerWorkspace,
@@ -34,10 +24,7 @@ import {
   isWorkspaceAdmin,
   parsePeerSettingsPath,
 } from "../workspaces/settings/peerSettings.logic";
-import { readCatalogPools } from "../workspaces/settings/sharedCapacity.logic";
-import { knownRevision } from "../workspaces/settings/settingsView.logic";
-import { LOADING, factOfQuery, failedFact, readyFact } from "./connectionFacts";
-import { detectedPlanCount } from "./overviewComputer.logic";
+import { factOfQuery } from "./connectionFacts";
 import {
   overviewRows,
   overviewSummary,
@@ -45,13 +32,9 @@ import {
   type OverviewGroup,
   type OverviewSummary,
   type PeerAccess,
-  type PlansFact,
   type WorkspaceFacts,
 } from "./overview.logic";
 import { settingsScopeEnvironmentLabel } from "./settingsScopeAxis";
-
-const NotMine = Schema.Array(Schema.String);
-const NOTHING_NOT_MINE: ReadonlyArray<string> = [];
 
 function useOverviewFacts(): OverviewFacts {
   const { environment, connected, status } = usePeerSettingsEnvironment();
@@ -66,12 +49,10 @@ function useOverviewFacts(): OverviewFacts {
       ? null
       : currentNavWorkspace(signedIn.workspaces, parsePeerSettingsPath(pathname), lastWorkspace);
   const slug = workspace?.slug ?? null;
-  const email = signedIn?.email ?? null;
   const admin = workspace !== null && isWorkspaceAdmin(workspace.role);
   const active = (plugin: string) =>
     signedIn !== null && inactivePluginReason(signedIn, plugin) === null;
   const asking = environmentId !== null && slug !== null ? { environmentId, slug } : null;
-  const input = slug === null ? null : { workspace: slug };
 
   const github = useGitHubChecksStatus(
     asking !== null && admin && active("github") && signedIn !== null && workspace !== null
@@ -92,27 +73,6 @@ function useOverviewFacts(): OverviewFacts {
     reloadGitHub();
   }, [pathname, reloadGitHub]);
 
-  const settingsOn = asking !== null && email !== null && active("settings");
-  const revision = signedIn === null || slug === null ? undefined : knownRevision(signedIn, slug);
-  const settings = useEnvironmentQuery(
-    settingsOn && input !== null
-      ? serverEnvironment.peerSettings.view({
-          environmentId: asking.environmentId,
-          person: email,
-          input: revision === undefined ? input : { ...input, revision },
-        })
-      : null,
-  );
-  const gateway = useEnvironmentQuery(
-    settingsOn && admin && active("capacity") && input !== null
-      ? serverEnvironment.peerSettings.gateway({
-          environmentId: asking.environmentId,
-          person: email,
-          input,
-        })
-      : null,
-  );
-
   const discovery = useEnvironmentQuery(
     environmentId === null
       ? null
@@ -126,39 +86,10 @@ function useOverviewFacts(): OverviewFacts {
       : null,
   );
 
-  // The plans the person said are not theirs, as AI subscriptions remembers them on this computer.
-  const [notMine] = useLocalStorage(notMineKey(environmentId ?? "none"), NOTHING_NOT_MINE, NotMine);
-  const document = settings.data?.document ?? null;
   // Provider statuses live apart from the server config since upstream's presentation split.
   const providersByEnvironment = useEnvironmentProviders();
   const providers =
     environmentId === null ? null : (providersByEnvironment.get(environmentId) ?? null);
-  const planRows =
-    document === null || email === null
-      ? []
-      : readPlans(getAt(document, ["people", personKey(document, email)]));
-  const plans: PlansFact = !settingsOn
-    ? { kind: "unavailable" }
-    : document === null
-      ? settings.error === null
-        ? { kind: "loading" }
-        : { kind: "unavailable" }
-      : {
-          kind: "ready",
-          added: planRows.map((row) => `${harnessShort(row.harness)} ${planLabel(row.plan)}`),
-          detected: detectedPlanCount(providers ?? [], planRows, notMine),
-        };
-  const gatewayFact: WorkspaceFacts["gateway"] =
-    !settingsOn || !admin
-      ? null
-      : gateway.error !== null
-        ? failedFact(gateway.error)
-        : gateway.data === null
-          ? LOADING
-          : readyFact({
-              view: gateway.data,
-              pools: document === null ? null : readCatalogPools(document).length,
-            });
   const workspaceFacts: WorkspaceFacts | null =
     workspace === null
       ? null
@@ -167,8 +98,6 @@ function useOverviewFacts(): OverviewFacts {
           name: workspace.name,
           role: workspace.role,
           github: admin ? github.fact : null,
-          gateway: gatewayFact,
-          plans,
         };
   const peer: PeerAccess =
     environment === null || !connected

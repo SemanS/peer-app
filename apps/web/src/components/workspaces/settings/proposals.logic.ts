@@ -16,31 +16,20 @@ export const DECLINE_MAX = 300;
 /** What a page shows proposals for: a workspace, and the scope of the Hub's vocabulary within it. */
 export interface ProposalPage {
   readonly workspace: string;
-  /** `workspace`, `project:<id>` or `person:<email>`. */
+  /** `workspace` or `project:<id>`. */
   readonly scope: string;
 }
 
 /**
  * The proposals a page shows: a project's pages those that touch the project, a workspace's own
- * pages those that touch the workspace, AI subscriptions those that touch the person. Keys and the
- * computer's pages have no settings to propose changes to.
+ * pages those that touch the workspace. The computer's pages have no settings to propose changes to.
  */
-export function proposalPageOf(
-  location: PeerSettingsLocation | null,
-  email: string | null,
-): ProposalPage | null {
+export function proposalPageOf(location: PeerSettingsLocation | null): ProposalPage | null {
   if (location === null || location.kind === "computer") return null;
   if (location.kind === "project") {
     return { workspace: location.workspace, scope: `project:${location.projectId}` };
   }
-  switch (location.section) {
-    case "keys":
-      return null;
-    case "plans":
-      return email === null ? null : { workspace: location.workspace, scope: `person:${email}` };
-    default:
-      return { workspace: location.workspace, scope: "workspace" };
-  }
+  return { workspace: location.workspace, scope: "workspace" };
 }
 
 const sameScope = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();

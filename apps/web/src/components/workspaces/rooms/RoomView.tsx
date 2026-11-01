@@ -36,14 +36,7 @@ import { runThreadWorking, runsRevision } from "../task/runs.logic";
 import { useTaskRuns } from "../task/useTaskRuns";
 import { useWorkData } from "../useWorkData";
 import type { WorkOpen, WorkTaskNode } from "../workTree.logic";
-import {
-  chatIsYours,
-  findTask,
-  lastAgentReply,
-  peopleOf,
-  reachRows,
-  ROOM_PAGE,
-} from "./room.logic";
+import { chatIsYours, findTask, lastAgentReply, peopleOf, ROOM_PAGE } from "./room.logic";
 import { RoomAgentDiff, type RoomAgentChangesProps } from "./RoomAgentDiff";
 import { RoomComposer, type DraftLine, type DraftPaths } from "./RoomComposer";
 import { roomMessageId, RoomConversation } from "./RoomConversation";
@@ -52,7 +45,6 @@ import { RoomAgents } from "./RoomAgents";
 import { RoomFiles } from "./RoomFiles";
 import { RoomJujutsu } from "./RoomJujutsu";
 import { RoomProjects } from "./RoomProjects";
-import { RoomReach } from "./RoomReach";
 import { watchable } from "./roomDiff.logic";
 import {
   roomChips,
@@ -292,7 +284,6 @@ export function RoomBody({
   const people = peopleOf(projectState.project.members, me, nameOf);
   const targets = targetsFor(projectState.project, hubTask, runs.runs, me, {
     ...(read.room?.hasCheckout === undefined ? {} : { hasCheckout: read.room.hasCheckout }),
-    reaches: read.room?.reaches ?? [],
     nameOf,
     chat: hubTask.chat === true,
     ...(across === undefined ? {} : { across: names }),
@@ -435,12 +426,6 @@ export function RoomBody({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <RoomReach
-        environmentId={environmentId}
-        place={place}
-        rows={reachRows(runs.runs, me, read.room)}
-        onChanged={read.refresh}
-      />
       <div className="shrink-0 border-b border-border/60 px-4 py-2 lg:hidden">
         <ToggleGroup
           aria-label="Show"
@@ -555,7 +540,6 @@ export function RoomBody({
               place={place}
               targets={targets}
               people={people}
-              personalHarnesses={projectState.project.capacity.personalHarnesses}
               line={line}
               paths={paths}
               onDrafting={setDrafting}

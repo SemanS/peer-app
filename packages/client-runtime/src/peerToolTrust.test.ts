@@ -13,7 +13,6 @@ const local: PeerProject = {
   role: "member",
   members: [],
   repositories: [],
-  capacity: { personal: "any", personalHarnesses: [] },
   tools: [
     {
       id: "stdio",

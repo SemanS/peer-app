@@ -233,12 +233,6 @@ export const settingsHub = (client: PeerHubClient.PeerHubClient["Service"]) => {
               : { kind: "deleted" },
           ),
         ),
-    gateway: ({ workspace }: C.PeerSettingsWorkspaceInput) =>
-      read(C.PeerSettingsGatewayView, workspace, "/settings/gateway"),
-    gatewayTest: ({ workspace }: C.PeerSettingsWorkspaceInput) =>
-      send(C.PeerSettingsGatewayTest, workspace, "POST", "/settings/gateway/test"),
-    gatewaySync: ({ workspace }: C.PeerSettingsWorkspaceInput) =>
-      send(C.PeerSettingsSync, workspace, "POST", "/settings/gateway/sync"),
     githubEnable: (input: C.PeerSettingsGitHubEnableInput) =>
       send(
         C.PeerSettingsGitHubSetup,

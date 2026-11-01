@@ -2,20 +2,16 @@
 import { describe, expect, it } from "@effect/vitest";
 
 import {
-  allocationOf,
   decisionParts,
   decisionText,
   effectivePolicy,
   getAt,
   harnessLabel,
   jsonEqual,
-  planClass,
-  planLabel,
   policiesOf,
   readDocument,
   setAt,
   setsFor,
-  whereUsable,
 } from "./peerSettings.ts";
 
 describe("the draft", () => {
@@ -239,129 +235,10 @@ describe("where a value comes from", () => {
   });
 });
 
-describe("shared capacity and plans", () => {
-  const booking = {
-    name: "Booking",
-    client: "Northwind Hotels",
-    members: ["ana@acme.dev", "bob@acme.dev"],
-    capacity: {
-      personal: "commercial",
-      shared: {
-        pool: "default",
-        budget: { amount: 150 },
-        allocations: { "bob@acme.dev": 170 },
-        defaultAllocation: 40,
-      },
-    },
-  };
-
-  it("gives a person their own cap, else the project's default", () => {
-    expect(allocationOf(booking, "bob@acme.dev")).toEqual({ value: 170, source: "custom" });
-    expect(allocationOf(booking, "ana@acme.dev")).toEqual({ value: 40, source: "project default" });
-    expect(allocationOf({ capacity: { shared: { allocations: {} } } }, "ana@acme.dev")).toEqual({
-      value: undefined,
-      source: "project default",
-    });
-    expect(allocationOf({}, "ana@acme.dev")).toEqual({
-      value: undefined,
-      source: "project default",
-    });
-    expect(allocationOf({ capacity: { shared: { allocations: { x: 0 } } } }, "x")).toEqual({
-      value: 0,
-      source: "custom",
-    });
-    expect(allocationOf({ capacity: { shared: { allocations: {} } } }, "constructor").source).toBe(
-      "project default",
-    );
-  });
-
-  it("sorts plans the way the Hub counts them", () => {
-    for (const plan of ["pro", "max", "plus", "Max"])
-      expect(planClass(plan), plan).toBe("consumer");
-    for (const plan of ["team", "business", "enterprise", "api", "Team"]) {
-      expect(planClass(plan), plan).toBe("commercial");
-    }
-    for (const plan of ["other", "edu", ""]) expect(planClass(plan), plan).toBe("other");
-    expect(planLabel("max")).toBe("Max");
-    expect(planLabel("api")).toBe("API key");
+describe("names", () => {
+  it("says a harness by its product's name, and an unknown one as it is", () => {
     expect(harnessLabel("claude")).toBe("Claude Code");
     expect(harnessLabel("future")).toBe("future");
-  });
-
-  it("says where each plan may be used and why not, as the design's Me page does", () => {
-    const plans = [
-      { harness: "claude", plan: "max" },
-      { harness: "codex", plan: "team" },
-    ];
-    const used = whereUsable(
-      {
-        booking,
-        "peer-hub": { name: "Peer Hub", members: ["*"], capacity: { personal: "any" } },
-        "camp-bot": {
-          name: "Camp-bot",
-          members: ["ana@acme.dev"],
-          capacity: { personal: "none", shared: { pool: "default" } },
-        },
-      },
-      plans,
-    );
-    expect(used.map((use) => [use.name, use.rule, use.ruleText, use.shared])).toEqual([
-      ["Booking", "commercial", "Commercial plans only", true],
-      ["Peer Hub", "any", "Any plan", false],
-      ["Camp-bot", "none", "Shared capacity only", true],
-    ]);
-    expect(used[0]!.plans.map((plan) => [plan.plan, plan.usable])).toEqual([
-      ["max", false],
-      ["team", true],
-    ]);
-    expect(used[0]!.plans[0]!.reason).toBe(
-      "Booking is client work for Northwind Hotels and allows commercial plans only. Max is a consumer plan.",
-    );
-    expect(used[0]!.plans[1]!.reason).toBeUndefined();
-    expect(used[1]!.plans.every((plan) => plan.usable)).toBe(true);
-    expect(used[2]!.plans.map((plan) => plan.reason)).toEqual([
-      "Camp-bot runs on shared capacity only.",
-      "Camp-bot runs on shared capacity only.",
-    ]);
-  });
-
-  it("blocks a plan that is neither, where only commercial ones are allowed, and reads a missing rule as any", () => {
-    const [use] = whereUsable({ x: { name: "X", capacity: { personal: "commercial" } } }, [
-      { harness: "cursor", plan: "edu" },
-    ]);
-    expect(use!.plans[0]).toMatchObject({ class: "other", usable: false });
-    expect(use!.plans[0]!.reason).toBe(
-      "X allows commercial plans only. Edu is not a commercial plan.",
-    );
-    expect(whereUsable({ x: { name: "X" } }, [{ harness: "codex", plan: "pro" }])[0]).toMatchObject(
-      {
-        rule: "any",
-        shared: false,
-      },
-    );
-    expect(whereUsable({ x: { name: "X", capacity: { personal: "future" } } }, [])[0]!.rule).toBe(
-      "any",
-    );
-  });
-
-  it("lists only the projects a person is on, when asked for one", () => {
-    const projects = {
-      all: { name: "All", members: ["*"] },
-      mine: { name: "Mine", members: ["Ana@acme.dev"] },
-      theirs: { name: "Theirs", members: ["bob@acme.dev"] },
-      unlisted: { name: "Unlisted" },
-    };
-    expect(whereUsable(projects, [], "ana@acme.dev").map((use) => use.project)).toEqual([
-      "all",
-      "mine",
-      "unlisted",
-    ]);
-    expect(whereUsable(projects, []).map((use) => use.project)).toEqual([
-      "all",
-      "mine",
-      "theirs",
-      "unlisted",
-    ]);
   });
 });
 
@@ -369,7 +246,7 @@ describe("the document", () => {
   it("reads the parts the pages read, leaving out an entry that does not read", () => {
     const parts = readDocument({
       currency: "EUR",
-      people: { "ana@acme.dev": { name: "Ana", personal: [{ harness: "codex", plan: "team" }] } },
+      people: { "ana@acme.dev": { name: "Ana" } },
       projects: {
         booking: {
           name: "Booking",
@@ -377,27 +254,20 @@ describe("the document", () => {
           leads: [],
           repositories: [],
           tools: ["postgres"],
-          capacity: { personal: "any" },
           future: { kept: true },
         },
         broken: { members: "everyone" },
       },
       tools: { postgres: { name: "Postgres", mcp: { command: "npx" } } },
-      capacity: { default: { name: "Default", models: [] } },
-      gateway: { url: "https://llm.acme.dev" },
     });
-    expect(parts.currency).toBe("EUR");
     expect(Object.keys(parts.projects)).toEqual(["booking"]);
     expect(parts.projects.booking!.future).toEqual({ kept: true });
-    expect(parts.people["ana@acme.dev"]!.personal?.[0]?.plan).toBe("team");
+    expect(parts.people["ana@acme.dev"]!.name).toBe("Ana");
     expect(Object.keys(parts.tools)).toEqual(["postgres"]);
-    expect(Object.keys(parts.pools)).toEqual(["default"]);
     expect(readDocument({})).toEqual({
-      currency: undefined,
       people: {},
       projects: {},
       tools: {},
-      pools: {},
     });
     expect(readDocument({ projects: ["no", "mapping"], tools: null }).projects).toEqual({});
   });

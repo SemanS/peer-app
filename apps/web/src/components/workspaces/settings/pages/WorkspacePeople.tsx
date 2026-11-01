@@ -102,7 +102,6 @@ export function WorkspacePeople({ environmentId, status, workspace }: WorkspaceP
       document: view.hubHasSettings ? view.document : null,
       email: member.email,
       planned: "unsupported" in plan ? [] : plan.projects,
-      currency: workspace.currency,
       fallbackName: projectName,
     });
 

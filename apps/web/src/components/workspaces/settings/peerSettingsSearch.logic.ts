@@ -82,36 +82,6 @@ const WORKSPACE_ENTRIES: ReadonlyArray<Entry> = [
     place: w("people"),
     terms: "invite member admin owner role people remove",
   },
-  // Shared capacity
-  {
-    id: "capacity",
-    title: "Shared capacity",
-    place: w("capacity"),
-    terms: "capacity gateway api keys budget litellm",
-    plugin: "capacity",
-    row: "workspace:capacity",
-  },
-  {
-    id: "gateway",
-    title: "Gateway",
-    place: w("capacity"),
-    terms: "gateway url address currency rate usd eur litellm sync",
-    plugin: "capacity",
-  },
-  {
-    id: "master-key",
-    title: "Gateway master key",
-    place: w("capacity"),
-    terms: "gateway master key token api key secret litellm",
-    plugin: "capacity",
-  },
-  {
-    id: "pools",
-    title: "Model pools",
-    place: w("capacity"),
-    terms: "pool pools model models capacity budget api",
-    plugin: "capacity",
-  },
   // Tools, secrets
   {
     id: "tools-catalog",
@@ -156,20 +126,6 @@ const WORKSPACE_ENTRIES: ReadonlyArray<Entry> = [
     title: "New project",
     place: w("new-project"),
     terms: "create project add project clone repository",
-  },
-  // Me
-  {
-    id: "ai-subscriptions",
-    title: "AI subscriptions",
-    place: w("plans"),
-    terms: "plan plans claude max chatgpt pro subscription personal detected",
-    row: "me:plans",
-  },
-  {
-    id: "keys",
-    title: "Keys",
-    place: w("keys"),
-    terms: "keys key api key shared capacity personal computer",
   },
 ];
 
@@ -240,12 +196,6 @@ const PROJECT_ENTRIES: ReadonlyArray<Entry> = [
     title: "Project tools",
     place: p("tools"),
     terms: "tools mcp add from catalog project",
-  },
-  {
-    id: "project-capacity",
-    title: "Project capacity",
-    place: p("capacity"),
-    terms: "capacity budget shared pool allocations models personal plans",
   },
   {
     id: "coordination-policy",

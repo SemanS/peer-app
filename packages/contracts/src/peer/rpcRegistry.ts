@@ -53,12 +53,10 @@ import {
   PeerHubWorkspaceInput,
   PeerWorkspaceMembers,
   PeerRemovalPlan,
-  PeerMemberKeys,
   PeerHubInvitePreviewInput,
   PeerHubMemberInput,
   PeerHubMemberProjectsInput,
   PeerHubMemberRoleInput,
-  PeerHubMemberKeysInput,
   PeerHubJoinWorkspaceInput,
   PeerHubContextInput,
   PeerHubContextVersionInput,
@@ -77,7 +75,6 @@ import {
   PeerInvitePreview,
 } from "../peerHub.ts";
 import { AuditRpcGroup, AuditRpcScopes, PEER_AUDIT_METHODS } from "./audit.rpc.ts";
-import { CapacityRpcGroup, CapacityRpcScopes, PEER_CAPACITY_METHODS } from "./capacity.rpc.ts";
 import { GitHubRpcGroup, GitHubRpcScopes, PEER_GITHUB_METHODS } from "./github.rpc.ts";
 import { ChangesRpcGroup, ChangesRpcScopes, PEER_CHANGES_METHODS } from "./changes.rpc.ts";
 import { JujutsuRpcGroup, JujutsuRpcScopes, PEER_JUJUTSU_METHODS } from "./jujutsu.rpc.ts";
@@ -105,8 +102,6 @@ export const PEER_CORE_METHODS = {
   peerHubSetMemberRole: "peerHub.setMemberRole",
   peerHubSetMemberProjects: "peerHub.setMemberProjects",
   peerHubWithdrawInvite: "peerHub.withdrawInvite",
-  peerHubMemberKeys: "peerHub.memberKeys",
-  peerHubRevokeMemberKeys: "peerHub.revokeMemberKeys",
   peerHubSignOutEverywhere: "peerHub.signOutEverywhere",
   peerHubSignOut: "peerHub.signOut",
   peerHubSync: "peerHub.sync",
@@ -381,18 +376,6 @@ const WsPeerHubWithdrawInviteRpc = Rpc.make(PEER_CORE_METHODS.peerHubWithdrawInv
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-const WsPeerHubMemberKeysRpc = Rpc.make(PEER_CORE_METHODS.peerHubMemberKeys, {
-  payload: PeerHubMemberInput,
-  success: PeerMemberKeys,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-const WsPeerHubRevokeMemberKeysRpc = Rpc.make(PEER_CORE_METHODS.peerHubRevokeMemberKeys, {
-  payload: PeerHubMemberKeysInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
 const WsPeerHubSignOutEverywhereRpc = Rpc.make(PEER_CORE_METHODS.peerHubSignOutEverywhere, {
   payload: Schema.Struct({}),
   success: PeerHubStatus,
@@ -443,8 +426,6 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubSetMemberRoleRpc,
   WsPeerHubSetMemberProjectsRpc,
   WsPeerHubWithdrawInviteRpc,
-  WsPeerHubMemberKeysRpc,
-  WsPeerHubRevokeMemberKeysRpc,
   WsPeerHubSignOutEverywhereRpc,
   WsPeerHubSignOutRpc,
   WsPeerHubSyncRpc,
@@ -524,8 +505,6 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubSetMemberRole]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubSetMemberProjects]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubWithdrawInvite]: AuthAccessWriteScope,
-  [PEER_CORE_METHODS.peerHubMemberKeys]: AuthAccessReadScope,
-  [PEER_CORE_METHODS.peerHubRevokeMemberKeys]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubSignOutEverywhere]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubSignOut]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubCreateWorkspace]: AuthAccessWriteScope,
@@ -547,7 +526,6 @@ export const PEER_WS_METHODS = {
   ...PEER_HERDR_METHODS,
   ...PEER_JUJUTSU_METHODS,
   ...PEER_GITHUB_METHODS,
-  ...PEER_CAPACITY_METHODS,
   ...PEER_OBSERVE_METHODS,
   ...PEER_MCP_METHODS,
 
@@ -564,7 +542,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   HerdrRpcGroup,
   JujutsuRpcGroup,
   GitHubRpcGroup,
-  CapacityRpcGroup,
   ObserveRpcGroup,
   McpRpcGroup,
 
@@ -583,7 +560,6 @@ export const PEER_RPC_SCOPES = {
   ...HerdrRpcScopes,
   ...JujutsuRpcScopes,
   ...GitHubRpcScopes,
-  ...CapacityRpcScopes,
   ...ObserveRpcScopes,
   ...McpRpcScopes,
 

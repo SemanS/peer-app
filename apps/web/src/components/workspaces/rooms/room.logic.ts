@@ -13,9 +13,7 @@ import {
 import type { PeerRoomSnapshot } from "@t3tools/contracts";
 import {
   PeerRoomAnchor,
-  type PeerRoomCapacity,
   type PeerRoomMessage,
-  type PeerRoomReach,
   type PeerRoomTarget,
   type PeerRoomTargetInput,
   type PeerRoomStep,
@@ -239,18 +237,15 @@ export function roomAgentEntries<
     readonly isAvailable: boolean;
     readonly isDefault: boolean;
   },
->(entries: ReadonlyArray<Entry>, personalHarnesses: ReadonlyArray<string>): ReadonlyArray<Entry> {
-  return entries.filter((entry) => {
-    const harness = harnessOfDriver(entry.driverKind);
-    return (
-      harness !== null &&
+>(entries: ReadonlyArray<Entry>): ReadonlyArray<Entry> {
+  return entries.filter(
+    (entry) =>
+      harnessOfDriver(entry.driverKind) !== null &&
       // Another instance's account would not reach the herdr session, which runs the plain CLI.
       entry.isDefault &&
       entry.enabled &&
-      entry.isAvailable &&
-      (personalHarnesses.length === 0 || personalHarnesses.includes(harness))
-    );
-  });
+      entry.isAvailable,
+  );
 }
 
 const EFFORT_OPTIONS = new Set(["effort", "reasoningEffort"]);
@@ -531,48 +526,6 @@ export function deliveryTone(delivery: PeerRoomTarget, now: number): SignalTone 
     return "working";
   }
   return "neutral";
-}
-
-/** One of the person's open runs on the task, with what the reach switch says of it. */
-export interface ReachRow {
-  readonly run: string;
-  readonly agent: string;
-  readonly team: boolean;
-  readonly capacity: PeerRoomCapacity | undefined;
-  /** Why Team cannot be chosen; undefined when it can. */
-  readonly unavailable: string | undefined;
-}
-
-/**
- * A person sees the switch of each of their open runs. Team stays off until this computer says the
- * run is on shared capacity, and a switch that is on can always be turned off.
- */
-export function reachRows(
-  runs: ReadonlyArray<Pick<PeerRun, "id" | "email" | "state" | "agent">>,
-  me: string,
-  room: {
-    readonly reaches: ReadonlyArray<PeerRoomReach>;
-    readonly capacities?: Readonly<Record<string, PeerRoomCapacity>> | undefined;
-  } | null,
-): ReadonlyArray<ReachRow> {
-  return runs
-    .filter((run) => same(run.email, me) && openRun(run))
-    .map((run) => {
-      const capacity = room?.capacities?.[run.id];
-      const team = room?.reaches.some((row) => row.run === run.id && row.reach === "team") === true;
-      return {
-        run: run.id,
-        agent: run.agent,
-        team,
-        capacity,
-        unavailable:
-          room === null || team || capacity === "shared"
-            ? undefined
-            : capacity === "personal"
-              ? "This run is on your own capacity, so only you can pass messages to it."
-              : "This computer cannot tell what carries this run, so Team stays off.",
-      };
-    });
 }
 
 export interface RoomAgentRow {

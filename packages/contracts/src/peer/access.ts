@@ -7,14 +7,6 @@ export const PeerRemovedWorkspace = Schema.Struct({
   name: Schema.String,
   removedAt: Schema.String,
 });
-export const PeerSharedKey = Schema.Struct({
-  project: Schema.String,
-  environment: Schema.String,
-  keyRef: Schema.String,
-  issuedAt: Schema.String,
-  expiresAt: Schema.optional(Schema.NullOr(Schema.String)),
-});
-export type PeerSharedKey = typeof PeerSharedKey.Type;
 /**
  * What became of an invitation's email. `state` is `sent`, `failed` or `skipped` (the Hub only logs
  * mail, or the invite predates delivery); an open string so a newer Hub's state still decodes.
@@ -108,8 +100,6 @@ export const PeerWorkspaceMembers = Schema.Struct({
        * null or absent for a member without a limit (and from a Hub from before limits).
        */
       projects: Schema.optional(Schema.NullOr(Schema.Array(Schema.String))),
-      keys: Schema.optional(Schema.Number),
-      pendingRevocations: Schema.optional(Schema.Number),
     }),
   ),
   /** The pending invitations; a newer Hub adds their status, expiry and delivery. */
@@ -122,16 +112,8 @@ export const PeerWorkspaceMembers = Schema.Struct({
         name: Schema.optional(Schema.NullOr(Schema.String)),
         removedAt: Schema.String,
         invited: Schema.optional(Schema.Boolean),
-        keys: Schema.optional(Schema.Number),
-        pendingRevocations: Schema.optional(Schema.Number),
       }),
     ),
-  ),
-  pendingRevocations: Schema.optional(
-    Schema.Struct({
-      count: Schema.Number,
-      lastError: Schema.optional(Schema.NullOr(Schema.String)),
-    }),
   ),
 });
 export type PeerWorkspaceMembers = typeof PeerWorkspaceMembers.Type;
@@ -140,7 +122,6 @@ export const PeerRemovalPlan = Schema.Union([
   Schema.Struct({
     email: Schema.String,
     role: Role,
-    keys: Schema.Number,
     invites: Schema.optional(Schema.Number),
     projects: Schema.Array(Schema.String),
     canRemove: Schema.Boolean,
@@ -148,24 +129,6 @@ export const PeerRemovalPlan = Schema.Union([
   }),
 ]);
 export type PeerRemovalPlan = typeof PeerRemovalPlan.Type;
-export const PeerMemberKeys = Schema.Struct({
-  email: Schema.String,
-  keys: Schema.Array(
-    Schema.Struct({ ...PeerSharedKey.fields, replaced: Schema.optional(Schema.Boolean) }),
-  ),
-  pending: Schema.Array(
-    Schema.Struct({
-      keyRef: Schema.String,
-      project: Schema.String,
-      environment: Schema.String,
-      reason: Schema.String,
-      queuedAt: Schema.String,
-      attempts: Schema.Number,
-      lastError: Schema.optional(Schema.NullOr(Schema.String)),
-    }),
-  ),
-});
-export type PeerMemberKeys = typeof PeerMemberKeys.Type;
 export const PeerHubMemberInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
   email: TrimmedNonEmptyString,
@@ -191,9 +154,3 @@ export const PeerHubMemberProjectsInput = Schema.Struct({
   projects: Schema.NullOr(Schema.Array(TrimmedNonEmptyString)),
 });
 export type PeerHubMemberProjectsInput = typeof PeerHubMemberProjectsInput.Type;
-export const PeerHubMemberKeysInput = Schema.Struct({
-  ...PeerHubMemberInput.fields,
-  project: Schema.optional(TrimmedNonEmptyString),
-  environment: Schema.optional(TrimmedNonEmptyString),
-});
-export type PeerHubMemberKeysInput = typeof PeerHubMemberKeysInput.Type;

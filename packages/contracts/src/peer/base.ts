@@ -22,10 +22,6 @@ export type PeerHarness = typeof PeerHarness.Type;
 export const PeerCurrency = Schema.Literals(["EUR", "USD"]);
 export type PeerCurrency = typeof PeerCurrency.Type;
 
-/** The period a shared-capacity budget is counted over. */
-export const PeerBudgetPeriod = Schema.Literals(["day", "week", "month"]);
-export type PeerBudgetPeriod = typeof PeerBudgetPeriod.Type;
-
 /** What an agent thread is doing: ● working, ◐ blocked (needs an answer), ✓ done, ○ idle. */
 export const PeerWorkStatus = Schema.Literals(["working", "blocked", "done", "idle", "unknown"]);
 export type PeerWorkStatus = typeof PeerWorkStatus.Type;

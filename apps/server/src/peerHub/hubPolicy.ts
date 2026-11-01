@@ -1,20 +1,9 @@
 /**
- * hubPolicy — what a Peer workspace decides for one thread: which agent tools
- * it gets and which provider instances may run it.
+ * hubPolicy — which agent tools a Peer workspace gives one thread.
  *
- * The PeerHub service publishes the provisioned state here; adapters and the
- * runtime policy read it synchronously, the way they read
- * `McpProviderSession`. Everything below is pure apart from that one slot,
- * so the rules are testable without a server.
- *
- * Capacity rules:
- * - Personal capacity (any instance the hub did not provision: the owner's
- *   own Claude/Codex login) runs only in its owner's environment, and only in
- *   projects whose policy accepts it. "commercial" accepts seats under
- *   commercial terms (Team, Enterprise, API keys); "none" accepts none.
- * - Shared capacity (an instance the hub provisioned with a gateway key) is
- *   billed to one workspace project, so it runs that project's threads and
- *   nothing else.
+ * The PeerHub service publishes the provisioned state here; adapters read it synchronously, the
+ * way they read `McpProviderSession`. Everything below is pure apart from that one slot, so the
+ * rules are testable without a server.
  *
  * @module peerHub/hubPolicy
  */
@@ -39,18 +28,11 @@ export interface HubBoundProject {
   readonly repositoryPath: string;
 }
 
-export interface HubSharedInstance {
-  readonly workspace: HubWorkspaceRef;
-  readonly projectId: string;
-}
-
 export interface HubPolicyState {
   /** T3 project id → the workspace project and repository it was provisioned for. */
   readonly projects: ReadonlyMap<string, HubBoundProject>;
   /** Realpath of a checkout → the same, for projects added by hand. */
   readonly roots: ReadonlyMap<string, HubBoundProject>;
-  /** Provider instance id → the workspace project it is billed to. */
-  readonly sharedInstances: ReadonlyMap<string, HubSharedInstance>;
 }
 
 /** Workspace tools reach providers only through this fail-closed gate. */
@@ -117,100 +99,6 @@ const HARNESS_BY_DRIVER: Readonly<Record<string, PeerHarness>> = {
 
 export function harnessForDriver(driver: string): PeerHarness | undefined {
   return HARNESS_BY_DRIVER[driver];
-}
-
-/**
- * Auth types providers report for logins under commercial terms. Claude
- * reports its raw subscription type ("team", "enterprise") or "apiKey";
- * Codex reports "apiKey" or "chatgpt" with the plan in the label.
- */
-const COMMERCIAL_AUTH_TYPES = new Set([
-  "apikey",
-  "team",
-  "enterprise",
-  "business",
-  "bedrock",
-  "amazonbedrock",
-  "vertex",
-]);
-
-function isCommercialAuth(auth: {
-  readonly type?: string | undefined;
-  readonly label?: string | undefined;
-}): boolean {
-  if (auth.type !== undefined && COMMERCIAL_AUTH_TYPES.has(auth.type.toLowerCase())) return true;
-  return auth.label !== undefined && /\b(team|enterprise|business|edu)\b/i.test(auth.label);
-}
-
-export interface CapacityCheckInput {
-  readonly projectId: string;
-  readonly workspaceRoot?: string | null | undefined;
-  readonly instanceId: string;
-  readonly driver: string;
-  /** The instance's reported login, when known. */
-  readonly auth?:
-    | { readonly type?: string | undefined; readonly label?: string | undefined }
-    | undefined;
-}
-
-/** Undefined when the instance may run this project's thread, else why not. */
-export function capacityRejection(
-  state: HubPolicyState | null,
-  input: CapacityCheckInput,
-): string | undefined {
-  if (state === null) return undefined;
-  const bound = hubProjectFor(state, input);
-  const sharedFor = state.sharedInstances.get(input.instanceId);
-
-  if (sharedFor !== undefined) {
-    if (bound === undefined) {
-      return `This provider is ${sharedFor.workspace.name} capacity billed to project "${sharedFor.projectId}". It only runs that project's threads.`;
-    }
-    if (
-      bound.workspace.slug !== sharedFor.workspace.slug ||
-      bound.project.id !== sharedFor.projectId
-    ) {
-      return `This provider is ${sharedFor.workspace.name} capacity billed to "${sharedFor.projectId}", not "${bound.project.name}". Pick ${bound.project.name}'s shared capacity or your own subscription.`;
-    }
-    return undefined;
-  }
-
-  if (bound === undefined) return undefined;
-  const { project } = bound;
-  const harness = harnessForDriver(input.driver);
-  switch (project.capacity.personal) {
-    case "any":
-      return undefined;
-    case "none":
-      return `${project.name} runs on ${bound.workspace.name}'s shared capacity only. Turn it on in Settings → Peer → ${bound.workspace.name} → ${project.name} → Capacity and pick that provider.`;
-    case "commercial": {
-      const commercial =
-        input.auth !== undefined &&
-        (input.auth.type !== undefined || input.auth.label !== undefined)
-          ? isCommercialAuth(input.auth)
-          : harness !== undefined && project.capacity.personalHarnesses.includes(harness);
-      if (commercial) return undefined;
-      const login = input.auth?.label ?? "this login";
-      return `${project.name} is client work under commercial terms: use a Team, Enterprise or API login, or the project's shared capacity. ${login} is a personal plan.`;
-    }
-  }
-}
-
-/**
- * Whether a workspace project accepts the member's own login for what is not an agent's thread:
- * a model that reads the project's text on it (`findModel`). Only `personal: any` does; a
- * project that wants commercial seats or shared capacity only, or one this does not know, does not.
- */
-export function projectAcceptsPersonal(
-  state: HubPolicyState | null,
-  workspace: string,
-  project: string,
-): boolean {
-  if (state === null) return false;
-  const bound = [...state.projects.values(), ...state.roots.values()].find(
-    (candidate) => candidate.workspace.slug === workspace && candidate.project.id === project,
-  );
-  return bound?.project.capacity.personal === "any";
 }
 
 /** Resolves ${project.root} and ${secret:NAME} in a tool value. */

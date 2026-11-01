@@ -15,7 +15,6 @@ import {
 } from "../ProjectPeopleParts";
 import {
   addPeople,
-  customAllocation,
   leadNamesOf,
   leadsOf,
   membersForMode,
@@ -38,7 +37,6 @@ import { useSettingsView } from "../useSettingsView";
  * A project's People tab (design artboard 04): whether the whole workspace or named people are on
  * the project, who they are with their allocation, and who leads. Leads and admins change it in a
  * draft that is saved through the review; everyone else reads it, with who may change it named.
- * Allocations are not edited here: their amounts open the Capacity tab.
  */
 export function ProjectPeople({ workspace, state }: ProjectPageProps) {
   const { project } = state;
@@ -54,7 +52,6 @@ export function ProjectPeople({ workspace, state }: ProjectPageProps) {
     entry,
     people: view.people,
     me: view.me,
-    currency: workspace.currency,
     manifest: { members: project.members, role: project.role },
   });
   const editable =
@@ -72,19 +69,9 @@ export function ProjectPeople({ workspace, state }: ProjectPageProps) {
     const removal = removePerson(entry, row.email);
     draft.set(["members"], removal.members);
     draft.set(["leads"], removal.leads);
-    if (removal.allocations !== undefined) {
-      draft.set(["capacity", "shared", "allocations"], removal.allocations);
-    }
   };
   const openPeople = () =>
     void open({ kind: "workspace", workspace: workspace.slug, section: "people" });
-  const openCapacity = () =>
-    void open({
-      kind: "project",
-      workspace: workspace.slug,
-      projectId: project.id,
-      tab: "capacity",
-    });
 
   return (
     <>
@@ -153,7 +140,6 @@ export function ProjectPeople({ workspace, state }: ProjectPageProps) {
           removable={model.mode === "selected"}
           onToggleLead={(row) => draft.set(["leads"], toggleLead(leadsOf(entry), row.email))}
           onAskRemove={setRemoving}
-          onOpenCapacity={openCapacity}
         />
         {view.document !== null && view.hubHasSettings && !editable ? (
           <p className="text-sm text-muted-foreground">
@@ -172,8 +158,6 @@ export function ProjectPeople({ workspace, state }: ProjectPageProps) {
             projectName: project.name,
             workspaceName: workspace.name,
             person: { name: removing.name, you: removing.you },
-            sharedCapacity: project.capacity.shared !== undefined,
-            allocation: customAllocation(entry, removing.email, workspace.currency),
           })}
           onConfirm={() => {
             remove(removing);

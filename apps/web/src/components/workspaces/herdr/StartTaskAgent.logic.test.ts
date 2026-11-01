@@ -1,7 +1,6 @@
 import type { PeerHerdrStatus } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 import {
-  capacityLine,
   launchGuidance,
   presetStartFrom,
   startFromBase,
@@ -76,24 +75,6 @@ describe("the launch guidance per herdr state", () => {
   it("keeps today's behavior with a server that predates the runtime", () => {
     expect(guidance(null).installLink).toBe(true);
     expect(guidance(null, true)).toEqual({ blocked: null, installLink: false });
-  });
-});
-
-describe("the capacity an agent runs on", () => {
-  it("is the person's own login of the chosen agent when the project allows it", () => {
-    const any = { project: { capacity: { personal: "any" } } };
-    expect(capacityLine(any, "claude")).toEqual({
-      allowed: true,
-      line: "Your own Claude Code login · runs only your work",
-    });
-    expect(capacityLine(any, "codex").line).toBe("Your own Codex login · runs only your work");
-  });
-
-  it("says the policy forbids it otherwise", () => {
-    expect(capacityLine({ project: { capacity: { personal: "commercial" } } }, "claude")).toEqual({
-      allowed: false,
-      line: "This project's capacity policy does not let herdr agents run on your own login.",
-    });
   });
 });
 

@@ -175,9 +175,8 @@ function RoleCell({ lead }: { readonly lead: boolean | null }) {
 }
 
 /**
- * The people on the project, leads first: who they are, whether they lead it, what they may spend
- * (the amount opens the Capacity tab, where it is changed) and, for those who change the project, a
- * menu to make or unmake a lead and to take someone off. Taking off is only for named people: with
+ * The people on the project, leads first: who they are, whether they lead it and, for those who
+ * change the project, a menu to make or unmake a lead and to take someone off. Taking off is only for named people: with
  * the whole workspace on the project the menu says to switch first.
  */
 export function PeopleTable({
@@ -189,7 +188,6 @@ export function PeopleTable({
   removable,
   onToggleLead,
   onAskRemove,
-  onOpenCapacity,
 }: {
   readonly rows: ReadonlyArray<PeopleRow>;
   readonly projectName: string;
@@ -202,7 +200,6 @@ export function PeopleTable({
   readonly removable: boolean;
   readonly onToggleLead: (row: PeopleRow) => void;
   readonly onAskRemove: (row: PeopleRow) => void;
-  readonly onOpenCapacity: () => void;
 }) {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -214,9 +211,6 @@ export function PeopleTable({
             </TableHead>
             <TableHead scope="col">
               <HeadLabel>{`In ${projectName}`}</HeadLabel>
-            </TableHead>
-            <TableHead scope="col">
-              <HeadLabel>Allocation</HeadLabel>
             </TableHead>
             <TableHead scope="col">
               <span className="sr-only">Actions</span>
@@ -242,19 +236,6 @@ export function PeopleTable({
               </TableCell>
               <TableCell>
                 <RoleCell lead={row.lead} />
-              </TableCell>
-              <TableCell>
-                {row.allocation === null ? (
-                  <span className="text-muted-foreground">—</span>
-                ) : (
-                  <InlineButton onClick={onOpenCapacity}>
-                    <span>{row.allocation.text}</span>
-                    <span className="font-normal text-muted-foreground">
-                      {" "}
-                      · {row.allocation.source}
-                    </span>
-                  </InlineButton>
-                )}
               </TableCell>
               <TableCell>
                 {editable ? (
@@ -375,10 +356,8 @@ export function LeadDisclosure({
         </CollapsibleTrigger>
         <CollapsiblePanel>
           <p className="pt-2 text-sm text-muted-foreground">
-            Change {projectName}’s settings: people, repositories, tools, allocations and
-            coordination. Delete other people’s tasks and release their locks. Create CI credentials
-            for notifications. Approve Memory for {projectName}. Admins of {workspaceName} can
-            always do the same.
+            Change {projectName}’s settings: people, repositories, tools and coordination. Delete
+            other people’s tasks. Admins of {workspaceName} can always do the same.
           </p>
         </CollapsiblePanel>
       </Collapsible>

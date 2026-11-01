@@ -128,21 +128,7 @@ export const PersistedState = Schema.Struct({
   /** Organizations founded for the signed-in address, as the Hub last listed them. */
   foundings: Schema.optional(Schema.Array(PeerFounding)),
   hubAdmin: Schema.optional(Schema.Boolean),
-  sharedKeys: Schema.optional(
-    Schema.Record(
-      Schema.String,
-      Schema.Struct({
-        keyRef: Schema.String,
-        expiresAt: Schema.optional(Schema.NullOr(Schema.String)),
-      }),
-    ),
-  ),
   lastSyncAt: Schema.NullOr(Schema.String),
-  /**
-   * "workspace/project" → provider instances this environment provisioned for its shared capacity:
-   * shared capacity's, and what the runtime capacity policy (`hubPolicy.ts`) binds to projects.
-   */
-  sharedInstances: Schema.Record(Schema.String, Schema.Array(Schema.String)),
   /** Address → workspaces that person left on this computer; signing in does not rejoin them. */
   leftWorkspaces: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
   /**
@@ -185,7 +171,6 @@ export const EMPTY_PERSISTED: PersistedState = {
   workspaces: [],
   joinable: [],
   lastSyncAt: null,
-  sharedInstances: {},
 };
 
 export interface Transient {
@@ -325,8 +310,6 @@ export class PeerState extends Context.Service<
     readonly environmentId: EnvironmentId;
     /** Where workspace projects are checked out. */
     readonly workspaceRoot: string;
-    /** Peer's own files under the T3 home: shared capacity homes. */
-    readonly hubHome: string;
     readonly read: Effect.Effect<RuntimeState>;
     /** The state now, for callbacks that run outside Effect (the coordination broker's). */
     readonly current: () => RuntimeState;
@@ -398,7 +381,6 @@ const make = Effect.gen(function* () {
   const environmentId = yield* (yield* ServerEnvironment.ServerEnvironment).getEnvironmentId;
 
   const statePath = NodePath.join(config.stateDir, "peer-hub.json");
-  const hubHome = NodePath.join(config.baseDir, "hub");
   const workspaceRoot = resolveWorkspaceRoot();
 
   const text = yield* Effect.tryPromise(() => NodeFSP.readFile(statePath, "utf8")).pipe(
@@ -656,7 +638,6 @@ const make = Effect.gen(function* () {
   return PeerState.of({
     environmentId,
     workspaceRoot,
-    hubHome,
     read: Ref.get(ref),
     current: () => Ref.getUnsafe(ref),
     updatePersisted,

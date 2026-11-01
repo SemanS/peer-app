@@ -12,7 +12,6 @@ import {
   PeerHarness,
   PeerHubError,
   type PeerProject,
-  type PeerRoomCapacity,
   type PeerRoomInboxItem,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -21,7 +20,7 @@ import * as Schema from "effect/Schema";
 
 import type * as PeerPlugins from "../../../core/plugins/PeerPlugins.ts";
 import type * as PeerState from "../../../core/state/PeerState.ts";
-import { projectKey, type PersistedRun } from "../../../core/state/PeerState.ts";
+import type { PersistedRun } from "../../../core/state/PeerState.ts";
 import { holdsWork } from "../../../core/vcs.ts";
 import type * as PeerWork from "../../../core/work/PeerWork.ts";
 import { foldersBeyond, runRootsData, type RunRoot } from "../../../core/work/runRoots.ts";
@@ -33,20 +32,16 @@ const isHarness = Schema.is(PeerHarness);
 const refusal = (detail: string) => new PeerHubError({ detail, refused: true });
 
 /**
- * The harness of a start: the one its author named when the turn is theirs, else the first the
- * person declared, else Claude Code. A colleague's message starts a turn on the owner's capacity,
- * so it does not get to choose which of the owner's subscriptions pays for it.
+ * The harness of a start: the one its author named when the turn is theirs, else Claude Code. A
+ * colleague's message starts a turn on the owner's capacity, so it does not get to choose which of
+ * the owner's subscriptions pays for it.
  */
-export const harnessOf = (
-  item: PeerRoomInboxItem,
-  me: string,
-  project: Pick<PeerProject, "capacity">,
-) => {
+export const harnessOf = (item: PeerRoomInboxItem, me: string) => {
   const mine = (email: string) => email.toLowerCase() === me.toLowerCase();
   const named = mine(item.message.author.email)
     ? item.message.to.find((target) => target.kind === "agent" && mine(target.email))?.harness
     : undefined;
-  return named ?? project.capacity.personalHarnesses[0] ?? "claude";
+  return named ?? "claude";
 };
 
 /** What its author chose, and only theirs: it ends up on the agent's command line. */
@@ -57,9 +52,6 @@ export const choiceOf = (item: PeerRoomInboxItem, me: string) => {
   );
   return { model: target?.model, effort: target?.effort };
 };
-
-const needsApproval = (project: Pick<PeerProject, "capacity">) =>
-  project.capacity.personal !== "any";
 
 const isModelName = (model: string) => /^[A-Za-z0-9][A-Za-z0-9._:/[\]-]*$/.test(model);
 const isEffort = (effort: string) => /^[a-z]+$/.test(effort);
@@ -83,36 +75,6 @@ export const checkoutOf = (
       if (here) return { repository, path };
     }
     return undefined;
-  });
-
-/** What carries a run: shared only where its Peer thread is on one of the project's shared instances. */
-export function runCapacity(
-  run: { readonly runtime: string; readonly thread?: string | undefined } | undefined,
-  instances: ReadonlyArray<string>,
-  threads: ReadonlyArray<{ readonly id: string; readonly providerInstanceId: string }>,
-): PeerRoomCapacity {
-  if (run?.runtime !== "peer" || run.thread === undefined) return "personal";
-  const thread = threads.find((candidate) => `peer:${candidate.id}` === run.thread);
-  return thread !== undefined && instances.includes(thread.providerInstanceId)
-    ? "shared"
-    : "personal";
-}
-
-/** What carries a run of this computer. */
-export const capacityOf = (
-  state: PeerState.PeerState["Service"],
-  work: PeerWork.PeerWork["Service"],
-  workspace: string,
-  project: string,
-  run: string,
-) =>
-  Effect.gen(function* () {
-    const { persisted } = yield* state.read;
-    return runCapacity(
-      persisted.runs?.[run],
-      persisted.sharedInstances[projectKey(workspace, project)] ?? [],
-      (yield* work.latestPass)?.threads ?? [],
-    );
   });
 
 /** The person's runs on the task kept on this computer, newest first. */
@@ -259,12 +221,9 @@ export const roomStarts = (
     work: (workspace: string, item: PeerRoomInboxItem, me: string, heard: Heard) =>
       Effect.gen(function* () {
         const { project, task, checkout } = yield* placeOf(workspace, item);
-        const harness = harnessOf(item, me, project);
+        const harness = harnessOf(item, me);
         if (!isHarness(harness)) return yield* refusal(`Peer cannot start ${harness} here.`);
         const others = yield* sharedRooms(state, work, workspace, project.id, task.group);
-        // One agent carries them all, so the strictest project decides what may run it.
-        if ([project, ...others.map((other) => other.project)].some(needsApproval))
-          return yield* refusal("This project needs an approved commercial or shared provider.");
         const { model, effort } = choiceOf(item, me);
         if (
           (model !== undefined && !isModelName(model)) ||

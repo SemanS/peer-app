@@ -203,7 +203,7 @@ export function useRoomDraft(place: RoomPlace, empty: RoomDraft = EMPTY_DRAFT) {
 }
 
 /** What failed, in a line beside the button; a moved delivery is said as what happened. */
-export function moveNote(result: AtomCommandResult<unknown, unknown>): string | null {
+function moveNote(result: AtomCommandResult<unknown, unknown>): string | null {
   if (result._tag === "Success") return null;
   if (isAtomCommandInterrupted(result))
     return "That could not be confirmed. Look again in a moment.";

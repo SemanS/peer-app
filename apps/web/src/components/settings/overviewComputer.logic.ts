@@ -14,7 +14,6 @@ import type {
 import { CHECKING, type ConnectionView, type Fact } from "./connectionFacts";
 import { actionFor, overviewRow, type OverviewRow, type OverviewTarget } from "./overviewRow.logic";
 import type { PeerFacts } from "./overviewWorkspace.logic";
-import { detectedPlans } from "../workspaces/settings/aiSubscriptions.logic";
 import {
   getProviderVersionLabel,
   providerConnection as providerStatusConnection,
@@ -271,17 +270,4 @@ export function computerRows(
     browserRow(computer.agentBrowser),
     deviceHubRow(computer.deviceHub),
   ].filter((row): row is OverviewRow => row !== null);
-}
-
-/**
- * How many plans the providers on this computer report that the person neither added nor said are
- * not theirs: what AI subscriptions offers to add, counted by the same helper so the two agree.
- * Peer never reads the sign-in itself, only what the provider says of it.
- */
-export function detectedPlanCount(
-  providers: ReadonlyArray<ServerProvider>,
-  plans: ReadonlyArray<{ readonly harness: string; readonly plan: string }>,
-  dismissed: ReadonlyArray<string> = [],
-): number {
-  return detectedPlans(providers, plans, dismissed).offered.length;
 }

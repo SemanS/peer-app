@@ -37,11 +37,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Ref from "effect/Ref";
-import {
-  readHubPolicyState,
-  type HubBoundProject,
-  type HubSharedInstance,
-} from "../../hubPolicy.ts";
+import { readHubPolicyState, type HubBoundProject } from "../../hubPolicy.ts";
 import * as Option from "effect/Option";
 
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
@@ -81,7 +77,6 @@ export interface PeerWorkPass {
   readonly threads: ReadonlyArray<OrchestrationV2ThreadShell>;
   readonly assignment: (thread: string, workspace: string, project: string) => string | undefined;
   readonly projectOf: ReadonlyMap<string, HubBoundProject>;
-  readonly sharedInstance: ReadonlyMap<string, HubSharedInstance>;
   readonly turnsOf: (
     thread: string,
   ) => Effect.Effect<
@@ -419,7 +414,6 @@ const make = Effect.gen(function* () {
         assignment: (thread, workspace, project) =>
           assignedTask(before.persisted, thread, workspace, project),
         projectOf: new Map(policy?.projects),
-        sharedInstance: new Map(policy?.sharedInstances),
         turnsOf: (thread) =>
           projections.getThreadRecords(ThreadId.make(thread), ["providerThreads", "providerTurns"]),
       });

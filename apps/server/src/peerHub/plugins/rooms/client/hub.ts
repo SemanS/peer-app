@@ -8,12 +8,9 @@ import {
   PeerRoomMessage,
   PeerRoomRead,
   PeerRoomsSeenResult,
-  PeerRoomsSetReachResult,
   type PeerRoomAnchor,
-  type PeerRoomCapacity,
   type PeerRoomMark,
   type PeerRoomMove,
-  type PeerRoomReachValue,
   type PeerRoomTargetInput,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -103,18 +100,6 @@ export const roomsHub = (client: PeerHubClient.PeerHubClient["Service"]) => ({
         method: "DELETE",
       })
       .pipe(Effect.map(({ message }) => message)),
-  reach: (
-    workspace: string,
-    project: string,
-    run: string,
-    body: { readonly reach: PeerRoomReachValue; readonly capacity: PeerRoomCapacity },
-  ) =>
-    client.request(PeerRoomsSetReachResult, {
-      workspace,
-      path: `/projects/${segment(project)}/runs/${segment(run)}/reach`,
-      method: "PUT",
-      body,
-    }),
   /** What waits on the person and what this environment acts on; nothing from a Hub without rooms. */
   inbox: (workspace: string, environment: string) =>
     client.request(PeerRoomInbox, {

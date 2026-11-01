@@ -3,21 +3,13 @@ import * as Schema from "effect/Schema";
 
 import { ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import {
-  PeerBudgetPeriod,
-  PeerCurrency,
-  PeerHarness,
   PeerTask,
   PeerTaskKind,
   PeerTaskSource,
   PeerWorkStatus,
   PeerWorkThread,
 } from "./peer/base.ts";
-import {
-  PeerFounding,
-  PeerInvitationDelivery,
-  PeerRemovedWorkspace,
-  PeerSharedKey,
-} from "./peer/access.ts";
+import { PeerFounding, PeerInvitationDelivery, PeerRemovedWorkspace } from "./peer/access.ts";
 import { PeerDomainClaim, PeerDomainOffer } from "./peer/domains.ts";
 import { PeerGitHubState } from "./peer/github.ts";
 import { PeerLocalAgent } from "./peer/herdr.ts";
@@ -31,7 +23,6 @@ export * from "./peer/base.ts";
 export * from "./peer/access.ts";
 export * from "./peer/audit.ts";
 export * from "./peer/domains.ts";
-export * from "./peer/capacity.ts";
 export * from "./peer/github.ts";
 export * from "./peer/herdr.ts";
 export * from "./peer/observe.ts";
@@ -79,9 +70,6 @@ export const PeerTool = Schema.Struct({
 });
 export type PeerTool = typeof PeerTool.Type;
 
-export const PeerPersonalCapacityPolicy = Schema.Literals(["any", "commercial", "none"]);
-export type PeerPersonalCapacityPolicy = typeof PeerPersonalCapacityPolicy.Type;
-
 export const PeerWorkspaceRole = Schema.Literals(["owner", "admin", "member"]);
 export type PeerWorkspaceRole = typeof PeerWorkspaceRole.Type;
 
@@ -100,27 +88,6 @@ export const PeerProject = Schema.Struct({
     Schema.Struct({ id: Schema.String, url: Schema.String, branch: Schema.String }),
   ),
   tools: Schema.Array(PeerTool),
-  capacity: Schema.Struct({
-    personal: PeerPersonalCapacityPolicy,
-    /** Harnesses the member declared a qualifying seat for (informational for "commercial"). */
-    personalHarnesses: Schema.Array(PeerHarness),
-    shared: Schema.optional(
-      Schema.Struct({
-        pool: Schema.String,
-        gatewayUrl: Schema.String,
-        models: Schema.Array(
-          Schema.Struct({ id: Schema.String, harness: Schema.Array(PeerHarness) }),
-        ),
-        budget: Schema.Struct({
-          amount: Schema.Number,
-          period: PeerBudgetPeriod,
-          currency: PeerCurrency,
-        }),
-        allocation: Schema.optional(Schema.Number),
-        use: Schema.Array(Schema.Literals(["on-demand", "overflow", "automation"])),
-      }),
-    ),
-  }),
 });
 export type PeerProject = typeof PeerProject.Type;
 
@@ -129,7 +96,6 @@ export const PeerManifest = Schema.Struct({
   workspace: Schema.Struct({
     slug: Schema.String,
     name: Schema.String,
-    currency: PeerCurrency,
     revision: Schema.optional(Schema.String),
     appliedBy: Schema.optional(Schema.String),
     appliedAt: Schema.optional(Schema.String),
@@ -140,7 +106,6 @@ export const PeerManifest = Schema.Struct({
     role: PeerWorkspaceRole,
   }),
   projects: Schema.Array(PeerProject),
-  sharedKeys: Schema.optional(Schema.Array(PeerSharedKey)),
 });
 export type PeerManifest = typeof PeerManifest.Type;
 
@@ -152,7 +117,6 @@ export const PeerPresenceThread = Schema.Struct({
   status: Schema.String,
   branch: Schema.optional(Schema.String),
   harness: Schema.optional(Schema.String),
-  capacity: Schema.optional(Schema.Literals(["personal", "shared"])),
 });
 export type PeerPresenceThread = typeof PeerPresenceThread.Type;
 
@@ -190,11 +154,6 @@ export const PeerProjectState = Schema.Struct({
       ),
     }),
   ),
-  sharedCapacity: Schema.Struct({
-    enabled: Schema.Boolean,
-    instanceIds: Schema.Array(Schema.String),
-    error: Schema.optional(Schema.String),
-  }),
   /**
    * The project's work: areas in order, tasks, and the threads other people and computers
    * report. This computer's own threads come live from its thread list.
@@ -241,7 +200,6 @@ export const PeerWorkspaceState = Schema.Struct({
    * absent without a limit.
    */
   limitedTo: Schema.optional(Schema.Array(Schema.String)),
-  currency: PeerCurrency,
   /** Where the applied configuration came from, e.g. a registry commit. */
   revision: Schema.optional(Schema.String),
   memberName: Schema.String,

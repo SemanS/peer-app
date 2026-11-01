@@ -67,7 +67,6 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerRoomsPass]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRoomsDecline]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRoomsWithdraw]: AuthOrchestrationOperateScope,
-  [WS_METHODS.peerRoomsSetReach]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRoomsShareWork]: AuthAccessWriteScope,
   // A card says what agents read and whether a colleague's words may wake them.
   [WS_METHODS.peerCardSave]: AuthOrchestrationOperateScope,

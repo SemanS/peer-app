@@ -2,8 +2,7 @@
  * Where Peer's settings area has pages, and who sees what in its navigation. The area lives under
  * `/settings/peer`:
  *
- * - `w/<workspace>/<section>`: a workspace's own pages, and the "Me" pages that are per workspace
- *   (`plans`, `keys`), since a person's keys belong to one workspace.
+ * - `w/<workspace>/<section>`: a workspace's own pages.
  * - `w/<workspace>/project/<id>/<tab>`: one project's pages.
  * - `computer/<section>`: this computer's pages.
  */
@@ -23,14 +22,11 @@ export function isPeerSettingsPath(pathname: string): boolean {
 export const WORKSPACE_SECTIONS = [
   "general",
   "people",
-  "capacity",
   "tools",
   "secrets",
   "audit",
   "hub",
   "new-project",
-  "plans",
-  "keys",
 ] as const;
 export type WorkspaceSection = (typeof WORKSPACE_SECTIONS)[number];
 
@@ -40,7 +36,6 @@ export const PROJECT_TABS = [
   "tasks",
   "repositories",
   "tools",
-  "capacity",
   "coordination",
   "history",
 ] as const;
@@ -56,14 +51,11 @@ export const DEFAULT_COMPUTER_SECTION: ComputerSection = "coordination";
 export const WORKSPACE_SECTION_LABELS: Readonly<Record<WorkspaceSection, string>> = {
   general: "General",
   people: "People",
-  capacity: "Shared capacity",
   tools: "Tools",
   secrets: "Secrets",
   audit: "Audit log",
   hub: "Hub",
   "new-project": "New project",
-  plans: "AI subscriptions",
-  keys: "Keys",
 };
 
 export const PROJECT_TAB_LABELS: Readonly<Record<ProjectTab, string>> = {
@@ -72,7 +64,6 @@ export const PROJECT_TAB_LABELS: Readonly<Record<ProjectTab, string>> = {
   tasks: "Tasks",
   repositories: "Repositories",
   tools: "Tools",
-  capacity: "Capacity",
   coordination: "Coordination",
   history: "History",
 };
@@ -154,11 +145,7 @@ export const isWorkspaceAdmin = (role: PeerWorkspaceRole): boolean =>
  * The workspace pages only admins (and owners) have a use for. Members get no link to them, and
  * the page itself says who to ask when a member opens one anyway.
  */
-const ADMIN_ONLY_SECTIONS: ReadonlySet<WorkspaceSection> = new Set([
-  "capacity",
-  "secrets",
-  "audit",
-]);
+const ADMIN_ONLY_SECTIONS: ReadonlySet<WorkspaceSection> = new Set(["secrets", "audit"]);
 
 const isAdminOnlySection = (section: WorkspaceSection): boolean => ADMIN_ONLY_SECTIONS.has(section);
 
@@ -166,15 +153,11 @@ const isAdminOnlySection = (section: WorkspaceSection): boolean => ADMIN_ONLY_SE
 export const WORKSPACE_NAV_SECTIONS = [
   "general",
   "people",
-  "capacity",
   "tools",
   "secrets",
   "audit",
   "hub",
 ] as const satisfies ReadonlyArray<WorkspaceSection>;
-
-/** The Me group: the person's own, whatever their role. */
-export const ME_NAV_SECTIONS = ["plans", "keys"] as const satisfies ReadonlyArray<WorkspaceSection>;
 
 /** Whether a role gets a link to a workspace section in the navigation. */
 export const sectionInNav = (section: WorkspaceSection, role: PeerWorkspaceRole): boolean =>
@@ -209,7 +192,7 @@ export interface PeerNavWorkspace {
   }>;
 }
 
-/** The heading a page is listed under in the settings navigation: Workspace, Projects, Me or This computer. */
+/** The heading a page is listed under in the settings navigation: Workspace, Projects or This computer. */
 export function peerSettingsGroupLabel(location: PeerSettingsLocation): string {
   switch (location.kind) {
     case "project":
@@ -217,9 +200,6 @@ export function peerSettingsGroupLabel(location: PeerSettingsLocation): string {
     case "computer":
       return "This computer";
     case "workspace":
-      if ((ME_NAV_SECTIONS as ReadonlyArray<WorkspaceSection>).includes(location.section)) {
-        return "Me";
-      }
       return location.section === "new-project" ? "Projects" : "Workspace";
   }
 }
@@ -363,36 +343,23 @@ export function environmentIsComing(
 }
 
 /**
- * Where a plugin's settings slot component renders in the area. Plugins fill four generic slots
- * (`settings`, `alwaysSettings`, `workspaceSettings`, `projectSettings`); each page lists the
- * slots hosted on it. A slot without a placement goes to the generic home of its kind.
+ * Where a plugin's settings slot component renders in the area. Plugins fill three generic slots
+ * (`settings`, `alwaysSettings`, `workspaceSettings`); each page lists the slots hosted on it. A slot without a placement goes to the generic home of its kind.
  */
-export type SlotKind = "settings" | "alwaysSettings" | "workspaceSettings" | "projectSettings";
+type SlotKind = "settings" | "alwaysSettings" | "workspaceSettings";
 
-export type SlotHost =
-  | "coordination"
-  | "general"
-  | "people"
-  | "capacity"
-  | "github"
-  | "audit"
-  | "tool-trust"
-  | "basics"
-  /** The page renders the plugin's component itself, with what it needs of it. */
-  | "own";
+export type SlotHost = "coordination" | "general" | "people" | "github" | "audit" | "tool-trust";
 
 const SLOT_HOMES: Readonly<Record<SlotKind, SlotHost>> = {
   settings: "coordination",
   alwaysSettings: "coordination",
   workspaceSettings: "general",
-  projectSettings: "basics",
 };
 
 const SLOT_PLACEMENTS: Readonly<Record<SlotKind, Readonly<Record<string, SlotHost>>>> = {
-  settings: { capacity: "capacity", "tool-trust": "tool-trust" },
+  settings: { "tool-trust": "tool-trust" },
   alwaysSettings: {},
   workspaceSettings: { audit: "audit", github: "github" },
-  projectSettings: { capacity: "own" },
 };
 
 export const slotHost = (kind: SlotKind, plugin: string): SlotHost =>

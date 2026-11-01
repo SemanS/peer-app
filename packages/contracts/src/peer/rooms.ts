@@ -50,14 +50,6 @@ export type PeerRoomMove = (typeof PEER_ROOM_MOVES)[number];
 export const PEER_ROOM_MARKS = ["ready", "blocked", "overlap"] as const;
 export type PeerRoomMark = (typeof PEER_ROOM_MARKS)[number];
 
-/** A run's reach: `own`, or `team` on the project's shared capacity. */
-export const PeerRoomReachValue = Schema.Literals(["own", "team"]);
-export type PeerRoomReachValue = typeof PeerRoomReachValue.Type;
-
-/** What carries a run. A run whose capacity Peer cannot tell is `personal`. */
-export const PeerRoomCapacity = Schema.Literals(["personal", "shared"]);
-export type PeerRoomCapacity = typeof PeerRoomCapacity.Type;
-
 /** Where a message sits on the change. The Hub stores no code with it. */
 export const PeerRoomAnchor = Schema.Struct({
   path: Schema.String,
@@ -130,27 +122,13 @@ export const PeerRoomMessage = Schema.Struct({
 });
 export type PeerRoomMessage = typeof PeerRoomMessage.Type;
 
-/** A run's reach as a room shows it. */
-export const PeerRoomReach = Schema.Struct({
-  run: Schema.String,
-  /** `own` or `team`. */
-  reach: Schema.String,
-  email: Schema.optional(Schema.String),
-  /** `personal` or `shared`. */
-  capacity: Schema.optional(Schema.String),
-});
-export type PeerRoomReach = typeof PeerRoomReach.Type;
-
 /** A room as a reader sees it: the newest sequence, what they have seen, messages after `after`. */
 export const PeerRoomRead = Schema.Struct({
   seq: Schema.Number,
   seen: Schema.Number,
   messages: Schema.Array(PeerRoomMessage),
-  reaches: Schema.Array(PeerRoomReach),
   /** This computer's word, never the Hub's: it has a checkout of the project. */
   hasCheckout: Schema.optional(Schema.Boolean),
-  /** This computer's word too: what carries its person's runs on the task, by run. */
-  capacities: Schema.optional(Schema.Record(Schema.String, PeerRoomCapacity)),
   /** This computer's word too: where a run across projects works besides this one, by run. */
   runProjects: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
   /** This computer's word too: projects no Hub workspace shares that the room's agent works in. */
@@ -361,19 +339,6 @@ export type PeerRoomsDeclineInput = typeof PeerRoomsDeclineInput.Type;
 
 export const PeerRoomsWithdrawInput = Schema.Struct({ ...RoomPlace, seq: Schema.Number });
 export type PeerRoomsWithdrawInput = typeof PeerRoomsWithdrawInput.Type;
-
-/** A run's person sets its reach. The capacity comes from this computer, never from a client. */
-export const PeerRoomsSetReachInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  project: TrimmedNonEmptyString,
-  run: TrimmedNonEmptyString,
-  reach: PeerRoomReachValue,
-});
-export type PeerRoomsSetReachInput = typeof PeerRoomsSetReachInput.Type;
-
-/** The Hub answers with the row it stored, as a room shows it. */
-export const PeerRoomsSetReachResult = Schema.Struct({ reach: PeerRoomReach });
-export type PeerRoomsSetReachResult = typeof PeerRoomsSetReachResult.Type;
 
 /** At most this much unified diff; `truncated` says it was cut. */
 export const PEER_ROOM_DIFF_MAX_BYTES = 512 * 1024;

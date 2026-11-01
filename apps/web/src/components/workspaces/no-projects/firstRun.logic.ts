@@ -1,16 +1,15 @@
 /**
  * The first steps of a new organization, as its owners and admins see them in Work's empty state:
- * a project, colleagues, tools and the company's AI capacity. Each opens the settings page that
+ * a project, colleagues and tools. Each opens the settings page that
  * does it and is ticked from what the workspace's settings and invitations already say.
  */
 import { getAt } from "@t3tools/client-runtime/peer-settings";
 
 import type { WorkspaceSection } from "../settings/peerSettings.logic";
-import { readCatalogPools } from "../settings/sharedCapacity.logic";
 import { readCatalog } from "../settings/toolCatalog.logic";
 
 export interface FirstRunStep {
-  readonly id: "project" | "people" | "tools" | "capacity";
+  readonly id: "project" | "people" | "tools";
   readonly title: string;
   readonly text: string;
   readonly section: WorkspaceSection;
@@ -22,7 +21,7 @@ const isMapping = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * The four steps. `document` is the workspace's settings (null while unread), `people` its members
+ * The three steps. `document` is the workspace's settings (null while unread), `people` its members
  * as the settings list them, `invitations` how many invitations are pending or were accepted (null
  * where the Hub does not list them).
  */
@@ -63,13 +62,6 @@ export function firstRunSteps(input: {
       text: "The MCP servers and commands your agents may use.",
       section: "tools",
       done: read ? readCatalog(document).length > 0 : null,
-    },
-    {
-      id: "capacity",
-      title: "Company AI capacity",
-      text: "The company's own API keys behind its gateway, shared by its projects.",
-      section: "capacity",
-      done: read ? readCatalogPools(document).length > 0 : null,
     },
   ];
 }

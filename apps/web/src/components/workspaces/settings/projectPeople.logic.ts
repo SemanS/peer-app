@@ -1,17 +1,15 @@
 /**
  * What a project's People tab shows and changes, apart from how it draws (design artboard 04): the
  * people table read from the project's entry of the settings document and the workspace's people,
- * the edits that become the draft's members, leads and allocations, and the sentences around them.
+ * the edits that become the draft's members and leads, and the sentences around them.
  *
  * A project's `members` is `["*"]` for the whole workspace or the addresses it names; `leads` are
  * addresses that must be among the members unless the whole workspace is on it, which the Hub's
- * check enforces. An allocation belongs to a member too, so taking a person off the project takes
- * their custom allocation with them.
+ * check enforces.
  */
-import { allocationOf, getAt } from "@t3tools/client-runtime/peer-settings";
+import { getAt } from "@t3tools/client-runtime/peer-settings";
 
 import { personName } from "./settingsView.logic";
-import { formatMoney } from "./shared.logic";
 
 /** A person of the workspace, as the settings view lists them. */
 export interface WorkspacePerson {
@@ -62,38 +60,12 @@ export const leadsOf = (entry: unknown): string[] => textsOf(getAt(entry, ["lead
 export const modeOf = (members: ReadonlyArray<string>): WhoMode =>
   members.includes("*") ? "all" : "selected";
 
-interface Shared {
-  readonly allocations: Readonly<Record<string, number>>;
-  readonly defaultAllocation?: number;
-}
-
-/** The project's shared capacity as far as allocations go; undefined where it has none. */
-function sharedOf(entry: unknown): Shared | undefined {
-  const shared = getAt(entry, ["capacity", "shared"]);
-  if (!isMapping(shared)) return undefined;
-  const raw = shared.allocations;
-  const allocations = isMapping(raw)
-    ? Object.fromEntries(
-        Object.entries(raw).filter((pair): pair is [string, number] => typeof pair[1] === "number"),
-      )
-    : {};
-  const fallback = shared.defaultAllocation;
-  return typeof fallback === "number"
-    ? { allocations, defaultAllocation: fallback }
-    : { allocations };
-}
-
 export interface PeopleRow {
   readonly email: string;
   readonly name: string;
   readonly you: boolean;
   /** Null where nothing says who leads (the manifest names only the person's own part). */
   readonly lead: boolean | null;
-  /** What the person may spend, and whose rule that is; null where the project has no shared capacity. */
-  readonly allocation: {
-    readonly text: string;
-    readonly source: "custom" | "project default";
-  } | null;
 }
 
 export interface PeopleModel {
@@ -106,35 +78,23 @@ export interface PeopleModel {
   readonly more: number;
 }
 
-function allocationOfRow(
-  shared: Shared | undefined,
-  email: string,
-  currency: string,
-): PeopleRow["allocation"] {
-  if (shared === undefined) return null;
-  const { value, source } = allocationOf({ capacity: { shared } }, email);
-  return { text: value === undefined ? "No cap" : formatMoney(value, currency), source };
-}
-
 /**
  * The people table. With the project's entry of the document it lists, leads first, the people the
- * project names (all of its members, or for the whole workspace its leads and those with a custom
- * allocation, the rest being counted in `more`), each with their allocation and where it comes
- * from. Without it only the manifest's members are listed, and nothing of their roles.
+ * project names (all of its members, or for the whole workspace its leads, the rest being counted
+ * in `more`). Without it only the manifest's members are listed, and nothing of their roles.
  */
 export function peopleModel(input: {
   readonly entry: unknown;
   /** The workspace's people, who names and the whole workspace's size come from. */
   readonly people: ReadonlyArray<WorkspacePerson>;
   readonly me: string | null;
-  readonly currency: string;
   /** What the manifest says, for a Hub or a moment without the document. */
   readonly manifest: {
     readonly members: ReadonlyArray<{ readonly email: string; readonly name: string }>;
     readonly role: "lead" | "member";
   };
 }): PeopleModel {
-  const { entry, people, me, currency } = input;
+  const { entry, people, me } = input;
   const isMe = (email: string) => me !== null && sameAddress(email, me);
   if (!isMapping(entry)) {
     const rows = input.manifest.members.map((person) => ({
@@ -142,18 +102,13 @@ export function peopleModel(input: {
       name: personName(people, person),
       you: isMe(person.email),
       lead: isMe(person.email) ? input.manifest.role === "lead" : null,
-      allocation: null,
     }));
     return { mode: null, rows, count: rows.length, more: 0 };
   }
   const members = membersOf(entry);
   const mode = modeOf(members);
   const leads = leadsOf(entry);
-  const shared = sharedOf(entry);
-  const named =
-    mode === "selected"
-      ? members
-      : uniqueAddresses([...leads, ...Object.keys(shared?.allocations ?? {})]);
+  const named = mode === "selected" ? members : leads;
   // The configuration may still name someone an admin removed from the workspace.
   const present = uniqueAddresses(named).filter(
     (email) => people.length === 0 || people.some((person) => sameAddress(person.email, email)),
@@ -166,7 +121,6 @@ export function peopleModel(input: {
     name: personName(people, { email }),
     you: isMe(email),
     lead: includesAddress(leads, email),
-    allocation: allocationOfRow(shared, email, currency),
   }));
   const count = mode === "all" ? Math.max(people.length, rows.length) : rows.length;
   return { mode, rows, count, more: count - rows.length };
@@ -175,8 +129,7 @@ export function peopleModel(input: {
 /**
  * The members to set when the person picks a mode. The whole workspace is `["*"]`. Named people
  * start from who the saved project named (or, if it had the whole workspace, from the person
- * editing), and always include the leads and everyone with a custom allocation, since the Hub
- * refuses a lead or an allocation for someone the project does not name.
+ * editing), and always include the leads, since the Hub refuses a lead the project does not name.
  */
 export function membersForMode(
   mode: WhoMode,
@@ -191,11 +144,7 @@ export function membersForMode(
   if (mode === "all") return ["*"];
   const before = membersOf(input.saved);
   const start = before.includes("*") ? (input.me === null ? [] : [input.me]) : before;
-  return uniqueAddresses([
-    ...start,
-    ...leadsOf(input.entry),
-    ...Object.keys(sharedOf(input.entry)?.allocations ?? {}),
-  ]);
+  return uniqueAddresses([...start, ...leadsOf(input.entry)]);
 }
 
 export const addPeople = (
@@ -209,35 +158,14 @@ export const toggleLead = (leads: ReadonlyArray<string>, email: string): string[
 export interface Removal {
   readonly members: string[];
   readonly leads: string[];
-  /** The allocations without the person's, only when they had a custom one. */
-  readonly allocations?: Record<string, number>;
 }
 
-/** What taking a person off the project sets: their place among the members, as lead and their allocation. */
+/** What taking a person off the project sets: their place among the members and as lead. */
 export function removePerson(entry: unknown, email: string): Removal {
-  const shared = sharedOf(entry);
-  const custom =
-    shared !== undefined && Object.keys(shared.allocations).some((key) => sameAddress(key, email));
   return {
     members: withoutAddress(membersOf(entry), email),
     leads: withoutAddress(leadsOf(entry), email),
-    ...(custom && shared !== undefined
-      ? {
-          allocations: Object.fromEntries(
-            Object.entries(shared.allocations).filter(([key]) => !sameAddress(key, email)),
-          ),
-        }
-      : {}),
   };
-}
-
-/** The custom allocation a person has in the project, as text; null where they have none. */
-export function customAllocation(entry: unknown, email: string, currency: string): string | null {
-  const shared = sharedOf(entry);
-  if (shared === undefined) return null;
-  const key = Object.keys(shared.allocations).find((candidate) => sameAddress(candidate, email));
-  const amount = key === undefined ? undefined : shared.allocations[key];
-  return amount === undefined ? null : formatMoney(amount, currency);
 }
 
 /**
@@ -334,13 +262,8 @@ export function removalWords(input: {
   readonly projectName: string;
   readonly workspaceName: string;
   readonly person: { readonly name: string; readonly you: boolean };
-  /** The project has shared capacity, so the person has a key for it. */
-  readonly sharedCapacity: boolean;
-  /** Their custom allocation, as text, when they have one. */
-  readonly allocation: string | null;
 }): RemovalWords {
   const { projectName, workspaceName, person } = input;
-  const their = person.you ? "Your" : "Their";
   return {
     title: person.you
       ? `Remove yourself from ${projectName}?`
@@ -350,12 +273,6 @@ export function removalWords(input: {
       person.you
         ? `You stop seeing ${projectName}’s tasks, threads and events, and stop getting its notifications.`
         : `Stops seeing ${projectName}’s tasks, threads and events, and stops getting its notifications.`,
-      ...(input.sharedCapacity
-        ? [`${their} key for ${projectName}’s shared capacity is revoked.`]
-        : []),
-      ...(input.allocation === null
-        ? []
-        : [`${their} allocation of ${input.allocation} is dropped.`]),
       person.you
         ? `You stay in ${workspaceName} and in other projects.`
         : `${person.name} stays in ${workspaceName} and in other projects.`,

@@ -6,15 +6,8 @@
  *
  * @module peerHub/core/status/legacy
  */
-import {
-  PeerGitHubState,
-  PeerHubStatus,
-  PeerProjectState,
-  type PeerPluginId,
-} from "@t3tools/contracts";
+import { PeerGitHubState, PeerHubStatus, type PeerPluginId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
-
-import { projectKey } from "../state/PeerState.ts";
 
 /** One plugin's place in the status. */
 export interface LegacyPlace {
@@ -39,8 +32,6 @@ const legacyPlace = <A, I>(
   };
 };
 
-const NO_SHARED_CAPACITY = { enabled: false, instanceIds: [] };
-
 export const LEGACY_PLACES: ReadonlyArray<LegacyPlace> = [
   legacyPlace(
     "herdr",
@@ -53,23 +44,6 @@ export const LEGACY_PLACES: ReadonlyArray<LegacyPlace> = [
     PeerGitHubState,
     { cli: false, account: null, signIn: null, error: null },
     (status, github) => ({ ...status, github }),
-  ),
-  // Keyed "workspace/project"; a project the slice does not name has shared capacity off.
-  legacyPlace(
-    "capacity",
-    Schema.Record(Schema.String, PeerProjectState.fields.sharedCapacity),
-    {},
-    (status, capacity) => ({
-      ...status,
-      workspaces: status.workspaces.map((workspace) => ({
-        ...workspace,
-        projects: workspace.projects.map((project) => ({
-          ...project,
-          sharedCapacity:
-            capacity[projectKey(workspace.slug, project.project.id)] ?? NO_SHARED_CAPACITY,
-        })),
-      })),
-    }),
   ),
   legacyPlace("observe", Schema.Array(Schema.String), [], (status, sharedThreads) => ({
     ...status,

@@ -11,7 +11,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
-import { capacityRejection, readHubPolicyState } from "../peerHub/hubPolicy.ts";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import * as ProjectStore from "./ProjectStore.ts";
@@ -86,28 +85,6 @@ export const layerFromProjectStore: Layer.Layer<
         const instance = yield* providerInstances.getInstance(input.modelSelection.instanceId);
         const snapshot = instance === undefined ? undefined : yield* instance.snapshot.getSnapshot;
         const supportedRuntimeModes = snapshot?.supportedRuntimeModes;
-        // Peer workspace capacity policy: a project's own rules on personal logins,
-        // and shared capacity only for the project it is billed to.
-        const hubPolicy = readHubPolicyState();
-        if (hubPolicy !== null) {
-          const project = yield* projects.get(input.thread.projectId).pipe(Effect.option);
-          const rejection = capacityRejection(hubPolicy, {
-            projectId: input.thread.projectId,
-            workspaceRoot: Option.isSome(project)
-              ? Option.getOrUndefined(project.value)?.workspaceRoot
-              : undefined,
-            instanceId: input.modelSelection.instanceId,
-            driver: snapshot?.driver ?? input.modelSelection.instanceId,
-            auth: snapshot?.auth,
-          });
-          if (rejection !== undefined) {
-            return yield* new RuntimePolicyResolveError({
-              projectId: input.thread.projectId,
-              providerInstanceId: input.modelSelection.instanceId,
-              cause: rejection,
-            });
-          }
-        }
         const cwd =
           input.thread.worktreePath ??
           (yield* projects.get(input.thread.projectId).pipe(

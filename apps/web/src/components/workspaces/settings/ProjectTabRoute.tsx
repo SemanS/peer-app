@@ -7,7 +7,6 @@ import { PeerSettingsRedirect } from "./peerSettingsLinks";
 import { DEFAULT_PROJECT_TAB, isProjectTab, type ProjectTab } from "./peerSettings.logic";
 import type { ProjectPageProps } from "./pageProps";
 import { ProjectBasics } from "./pages/ProjectBasics";
-import { ProjectCapacity } from "./pages/ProjectCapacity";
 import { ProjectCoordination } from "./pages/ProjectCoordination";
 import { ProjectHistory } from "./pages/ProjectHistory";
 import { ProjectPeople } from "./pages/ProjectPeople";
@@ -23,7 +22,6 @@ const PAGES: Readonly<Record<ProjectTab, ComponentType<ProjectPageProps>>> = {
   tasks: ProjectTasks,
   repositories: ProjectRepositories,
   tools: ProjectTools,
-  capacity: ProjectCapacity,
   coordination: ProjectCoordination,
   history: ProjectHistory,
 };

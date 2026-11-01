@@ -258,14 +258,12 @@ export function SecretValueDialog({
 export function DeleteSecretDialog({
   environmentId,
   workspace,
-  workspaceName,
   row,
   onDeleted,
   onClose,
 }: {
   readonly environmentId: EnvironmentId;
   readonly workspace: string;
-  readonly workspaceName: string;
   readonly row: SecretRow;
   readonly onDeleted: () => void;
   readonly onClose: () => void;
@@ -276,7 +274,7 @@ export function DeleteSecretDialog({
   const [uses, setUses] = useState(row.uses);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const words = deleteWords({ name: row.name, uses }, workspaceName);
+  const words = deleteWords({ name: row.name, uses });
 
   const confirm = () => {
     if (busy) return;

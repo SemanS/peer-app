@@ -44,42 +44,7 @@ describe("who may change a node (the Hub's table, for gating controls)", () => {
     ["the project node itself (delete)", ["projects", "booking"], true, false, true],
     ["another project they do not lead", ["projects", "camp-bot", "leads"], false, false, true],
     ["a new project (create)", ["projects", "new-one"], true, true, true],
-    ["shared capacity itself", ["projects", "booking", "capacity", "shared"], false, false, true],
-    ["its budget", ["projects", "booking", "capacity", "shared", "budget"], false, false, true],
-    [
-      "below its budget",
-      ["projects", "booking", "capacity", "shared", "budget", "amount"],
-      false,
-      false,
-      true,
-    ],
-    ["its pool", ["projects", "booking", "capacity", "shared", "pool"], false, false, true],
-    ["its models", ["projects", "booking", "capacity", "shared", "models"], false, false, true],
-    ["its use", ["projects", "booking", "capacity", "shared", "use"], false, false, true],
-    [
-      "an allocation",
-      ["projects", "booking", "capacity", "shared", "allocations", "ana@acme.dev"],
-      true,
-      false,
-      true,
-    ],
-    [
-      "the default allocation",
-      ["projects", "booking", "capacity", "shared", "defaultAllocation"],
-      true,
-      false,
-      true,
-    ],
-    [
-      "the rule for personal plans",
-      ["projects", "booking", "capacity", "personal"],
-      true,
-      false,
-      true,
-    ],
     ["a tool of the catalog", ["tools", "jira", "name"], false, false, true],
-    ["the gateway", ["gateway", "url"], false, false, true],
-    ["a webhook", ["webhooks", "ops"], false, false, true],
     ["the currency", ["currency"], false, false, true],
   ])("%s", (_what, path, asLead, asMember, asAdmin) => {
     expect(canChangePath(lead, path)).toBe(asLead);
@@ -88,11 +53,11 @@ describe("who may change a node (the Hub's table, for gating controls)", () => {
   });
 
   it("lets a person change their own entry, whatever the case of their address, and no one else's", () => {
-    expect(canChangePath(member, ["people", "ana@acme.dev", "personal"])).toBe(true);
-    expect(
-      canChangePath(rightsOf({}, "Ana@Acme.dev"), ["people", "ana@acme.dev", "personal"]),
-    ).toBe(true);
-    expect(canChangePath(member, ["people", "bob@acme.dev", "personal"])).toBe(false);
+    expect(canChangePath(member, ["people", "ana@acme.dev", "name"])).toBe(true);
+    expect(canChangePath(rightsOf({}, "Ana@Acme.dev"), ["people", "ana@acme.dev", "name"])).toBe(
+      true,
+    );
+    expect(canChangePath(member, ["people", "bob@acme.dev", "name"])).toBe(false);
     expect(canChangePath(rightsOf({}, null), ["people", "ana@acme.dev"])).toBe(false);
   });
 
@@ -107,10 +72,9 @@ describe("who may change a node (the Hub's table, for gating controls)", () => {
 describe("who to name where a control is off", () => {
   it.each<[ReadonlyArray<string>, string]>([
     [["projects", "booking", "coordination", "policy"], "Booking's leads and admins"],
-    [["projects", "booking", "capacity", "shared", "budget"], "admins"],
     [["projects", "no-name-yet", "leads"], "no-name-yet's leads and admins"],
     [["projects", "brand-new"], "any member"],
-    [["people", "ana@acme.dev", "personal"], "ana@acme.dev and admins"],
+    [["people", "ana@acme.dev", "name"], "ana@acme.dev and admins"],
     [["tools", "jira"], "admins"],
   ])("%j: %s", (path, owners) => {
     expect(ownersOfPath(document, path)).toBe(owners);

@@ -1424,14 +1424,6 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:WithdrawInvite",
       tag: WS_METHODS.peerHubWithdrawInvite,
     }),
-    peerHubMemberKeys: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:MemberKeys",
-      tag: WS_METHODS.peerHubMemberKeys,
-    }),
-    peerHubRevokeMemberKeys: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:RevokeMemberKeys",
-      tag: WS_METHODS.peerHubRevokeMemberKeys,
-    }),
     peerHubSignOutEverywhere: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:SignOutEverywhere",
       tag: WS_METHODS.peerHubSignOutEverywhere,

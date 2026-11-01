@@ -5,37 +5,14 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 // runs: the hook, the wake-up wait and `peer`. It checks the protocol end to end:
 //
 //   1. Ana's agent changes src/pricing.ts; nobody else is there, so it hears nothing.
-//   2. Bob's agent is about to change the same file: it is stopped once, told who changed it and
-//      how to answer, writes Ana's agent a note, and may then edit.
-//   3. Ana's agent, idle, wakes up with Bob's note, answers and resolves the overlap.
-//   4. Bob's agent hears the answer at its next step; neither ever reads the other's conversation.
-//   5. Under the `ask` policy, Bob himself is asked instead, once.
-//   6. Working contexts (after arXiv:2609.37725): the first agent on a work keeps its shared
-//      context; the other reads it, may not edit it, hears when it changes, and sends what it
-//      finds to the keeper. The keeper is asked to compact as it grows, the hub keeps its
-//      versions, a person can bring one back, and a compaction gives each agent back its context.
-//   7. After Peer restarts, a session it meets again keeps what it shared, and is neither woken
-//      for nor told again what it heard; its people are not shown its overlap again.
-//   8. When the keeper's session ends, the other agent keeps the shared context.
-//  11. Codex agents take part as Claude Code's do.
-//  12. Two related tasks: an agent hears of the other task's work and context, reads it as a file
-//      or with `peer context`, and asks its agents with `peer ask` before any file is shared.
-//  13. Resolve in Peer asks the agents to settle an overlap, and the agent named to close it does;
-//      an overlap both agents wrote on that went quiet is closed the same way, unasked.
-//  14. The team index: an agent is given the index of the project's other work (at its start,
-//      and a line with each ask) and chooses what to read; Peer tells it when a context it read
-//      changes. Nothing is ranked.
-//  15. A slow hub at a session's start: Peer's hook answers before its script gives up, and what
+//   2. Bob's agent is about to change the same file: it hears who changed it and how to tell them,
+//      and goes on. Nothing refuses an edit.
+//   3. Codex agents take part as Claude Code's do.
+//   4. A slow hub at a session's start: Peer's hook answers before its script gives up, and what
 //      was not ready reaches the agent at its next step instead of being lost.
-//  19. Settings are files an agent edits: Bob's agent reads the project's settings with `peer config
-//      show`, makes schema/ exclusive in its copy and proposes it; nothing changes until Ana, an
-//      admin, saves it as hers (the commit names the agent), the rule then holds schema/ for the
-//      first agent there, and a revert takes it back.
-//  17. Two computers edit one file at the same moment: the hub decides each first edit in one step,
-//      so exactly one of the two runs and the other is stopped before it edits; the one let through
-//      is stopped on its next edit of the file until it writes a note. Repeated with a new file each
-//      time. It needs a hub that has `/intent`, and says so when PEERHUB_BIN has none.
-//  23. Jujutsu (LAB_VCS=jj only; peer-lab/jujutsu.ts): six simulated steps, each in task checkouts of its own and
+//   5. Two computers edit one file at the same moment: the hub registers each claim in one step, so
+//      both go on and at least one hears of the other. Repeated with a new file each time.
+//   6. Jujutsu (LAB_VCS=jj only; peer-lab/jujutsu.ts): six simulated steps, each in task checkouts of its own and
 //      read from the logs and the repositories. follow-local: an amend of the change an agent builds on moves its
 //      change, and it hears so once. overtaken: an edit not yet snapshotted when a rewrite arrives ends in one
 //      version, with the agent told once. follow-remote: a force-push is fetched at the next step after 30 s.
@@ -47,13 +24,13 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //
 //   PEERHUB_BIN=../server/target/debug/peerhub node apps/server/scripts/peer-coordination-lab.ts
 //   KEEP_LAB=1 keeps the throwaway homes and logs.
-//   LAB_RACE_RUNS=100 repeats step 17's race that many times (20 by default).
+//   LAB_RACE_RUNS=100 repeats step 5's race that many times (20 by default).
 //   LAB_VCS=jj makes each computer's clone a colocated Jujutsu repository (`jj git init --colocate`; the
 //   origin stays a bare Git repository). A task's branch is a bookmark on the working copy and the
 //   landing cases run `jj commit` and `jj git push`. A last step makes a task's checkout as herdr's
 //   launcher does, a jj workspace with its bookmark and checks `jj status` stays clean. The contract
 //   scenario is Git only.
-//   LAB_JJ_STEPS=2,4,6 (with LAB_VCS=jj) runs only those of step 23's seven; LAB_JJ_ONLY=1 runs them without the
+//   LAB_JJ_STEPS=2,4,6 (with LAB_VCS=jj) runs only those of step 6's seven; LAB_JJ_ONLY=1 runs them without the
 //   rest of the program. Every jj the lab runs gets XDG_CONFIG_HOME (and, without real agents, HOME) inside the
 //   lab's directory, where jj 0.46 keeps repository and workspace configuration.
 //   REAL_SCENARIO=follow (LAB_VCS=jj; peer-lab/follow.ts) is the paid measure of building on a teammate's change:
@@ -103,28 +80,9 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 // node_modules and copy the web build to <dir>/client. Never pack into a directory that already
 // contains links: the bundle cleaner may follow them. The private build leaves dist alone.
 //
-// REAL_AGENTS=1 HERDR_BIN=… runs real Claude Code sessions instead (Sonnet, one herdr server per
-// computer, Peer's hooks and context permissions passed with --settings, the user's own settings
-// and MCP servers left out). Both agents work on task KRK-1 (their branch names it), on
-// overlapping changes to a project whose prices are integer cents, and it checks what Peer did:
-//
-//   A. one agent keeps KRK-1's shared context, the other reads it and sends it what it finds;
-//   B. the keeper idles while the other works (the idle threshold shortened to 45 s): the other
-//      takes the context over;
-//   C. what the agents marked [project] reaches the hub as findings;
-//   D. the keeper's session ends: the other agent keeps the context.
-//
-// It spends the person's Claude subscription (Sonnet for the agents), and prints what the agents
-// did and told each other.
-//
-// REAL_SCENARIO=settings: Bob asks his real agent (REAL_KINDS=codex for Codex) to make migrations
-// exclusive in the project's Peer settings. It has to find `peer config` itself, and may only propose;
-// Ana saves the proposal as in step 19.
-//
-// REAL_SCENARIO=tasks REAL_RESTART=1: once both agents idle after Bob's turn, Peer quits on Bob's
-// computer and starts again, as an update does. Neither agent is woken, and at Bob's next prompt his
-// agent is told nothing again that it was told before (the plugins' notices and that it keeps its
-// task's context included); his people are not shown an overlap again.
+// REAL_AGENTS=1 HERDR_BIN=… runs real agents instead (Sonnet, one herdr server per computer, Peer's
+// hooks passed with --settings, the user's own settings and MCP servers left out) in the scenarios
+// below that ask for them. It spends the person's subscription.
 //
 // REAL_SCENARIO=contract (peer-lab/contract.ts): a contract migration. Ana's agent renames
 // Invoice.amount (dollars) to amountCents (integer cents); Bob's adds an invoice total in a new file.
@@ -181,15 +139,6 @@ import {
   type RoomsRun,
 } from "./peer-lab/rooms.ts";
 import { peerAdded, toldTexts, type LabEvent } from "./peer-lab/told.ts";
-import {
-  headOf,
-  makesExclusive,
-  proposalsOf,
-  saveProposal,
-  settingsLab,
-  type AdminHub,
-  type SettingsProposal,
-} from "./peer-lab/settings.ts";
 import { dropOperatorPeerPath, dropOperatorSession } from "./peer-lab/operatorEnv.ts";
 import {
   ADAPTER_ANA_TASK,
@@ -234,7 +183,6 @@ import {
   writeSeed,
   type Work,
 } from "./peer-lab/contract.ts";
-import { indexBlocks } from "./peer-lab/teamIndex.ts";
 import {
   FOLLOW_AMEND_TASK,
   FOLLOW_ANA_TASK,
@@ -295,10 +243,6 @@ if (process.env.LAB_VCS === "jj") {
   NodeFS.mkdirSync(jjHome, { recursive: true });
   Object.assign(process.env, jjHomeEnv(jjHome, REAL));
 }
-/** REAL_SCENARIO=tasks: two related tasks on two computers instead of one task (A–D). */
-const TASKS = REAL && process.env.REAL_SCENARIO === "tasks";
-/** REAL_SCENARIO=settings: a real agent proposes a settings change, which an admin saves. */
-const SETTINGS_SCENARIO = REAL && process.env.REAL_SCENARIO === "settings";
 /**
  * REAL_SCENARIO=follow (LAB_VCS=jj, `peer-lab/follow.ts`): Bob's agent is started from Ana's change and Ana amends it
  * while he works. Real agents with REAL_AGENTS=1 (paid, only after the maintainer agrees), scripted stand-ins without.
@@ -319,8 +263,6 @@ if (FOLLOW && !JJ) throw new Error("REAL_SCENARIO=follow needs LAB_VCS=jj");
 if (JJ && process.env.REAL_SCENARIO === "contract") {
   throw new Error("LAB_VCS=jj runs the default program and follow; this scenario is Git only");
 }
-/** REAL_RESTART=1 (with REAL_SCENARIO=tasks): Peer restarts on Bob's computer after Bob's turn. */
-const RESTART = TASKS && process.env.REAL_RESTART === "1";
 /** REAL_SCENARIO=contract: a contract migration, with real agents or, without REAL_AGENTS=1, scripted stand-ins. */
 const CONTRACT = process.env.REAL_SCENARIO === "contract";
 /** REAL_SCENARIO=memory (`peer-lab/ownMemory.ts`): an agent, kontext and OpenViking, with nothing of them in Peer. */
@@ -382,8 +324,6 @@ const ARM = CONTRACT
   : MEMORY || READY
     ? ("kernel" as const)
     : ("peer" as const);
-/** With real agents, a keeper idle this long gives way (production waits ten minutes). */
-const REAL_IDLE_SECS = 45;
 /** The server the computers run: the bundle in apps/server/dist, or `LAB_SERVER_BIN` (a private build, `vp pack -d <dir>`). */
 const bin = process.env.LAB_SERVER_BIN ?? NodePath.join(repoRoot, "apps/server/dist/bin.mjs");
 /** A stand-in for the Claude Code that judges related work in the background, and what it was asked. */
@@ -427,7 +367,6 @@ const hub = spawnLogged(peerhubBin, ["serve"], {
   PEERHUB_PUBLIC_URL: hubUrl,
   PEERHUB_MAIL: "echo",
   PEERHUB_SECRET_KEY: NodeCrypto.randomBytes(32).toString("hex"),
-  ...(REAL ? { PEERHUB_KEEPER_IDLE_SECS: String(REAL_IDLE_SECS) } : {}),
   ...(ARM === "kernel" ? { PEERHUB_FEATURES_OFF: KERNEL_FEATURES_OFF.join(",") } : {}),
 });
 
@@ -612,16 +551,9 @@ async function setUpWorkspace() {
     const krk1 = await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
       method: "POST",
       session: admin,
-      body: { title: TASKS ? "Discount codes" : "Pricing", key: "KRK-1" },
+      body: { title: "Pricing", key: "KRK-1" },
     });
     krk1Id = String(krk1.id);
-  }
-  if (TASKS) {
-    await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
-      method: "POST",
-      session: admin,
-      body: { title: "Receipts show the discount", key: "KRK-2" },
-    });
   }
 }
 
@@ -645,17 +577,8 @@ const startComputer = Effect.fn("lab.startComputer")(function* (
     CLAUDE_CONFIG_DIR: NodePath.join(home, "claude"),
     T3CODE_TELEMETRY_ENABLED: "false",
     ...(REAL
-      ? {
-          PEER_KEEPER_IDLE_MS: String(REAL_IDLE_SECS * 1000),
-          PEER_SETTLE_QUIET_MS: "60000",
-        }
+      ? {}
       : {
-          // An overlap both agents wrote on is the closing agent's to close after 4 s, not 2 min.
-          PEER_SETTLE_QUIET_MS: "4000",
-          // An agent hears that a context it read was written again after a second, not two minutes.
-          PEER_FOLLOW_GAP_MS: "1000",
-          // A pause after which an ask with nothing new in it is reminded of the others' work.
-          PEER_ASK_REMIND_MS: "4000",
           // Peer adds its hooks to this computer's own Codex, never this machine's, and hands
           // nothing to Codex threads: the lab's Codex sessions are made up.
           CODEX_HOME: NodePath.join(home, "codex"),
@@ -682,10 +605,7 @@ const startComputer = Effect.fn("lab.startComputer")(function* (
     ?.repositories[0];
   if (checkout?.state !== "ready") throw new Error(`${name} could not check the project out`);
   if (JJ) colocate(checkout.path);
-  const coordinated = yield* client[WS_METHODS.peerHubSetCoordination]({
-    enabled: true,
-    policy: "coordinate",
-  });
+  const coordinated = yield* client[WS_METHODS.peerHubSetCoordination]({ enabled: true });
   say(`${name}'s computer`, `checkout ${checkout.path}, log ${coordinated.coordination.logPath}`);
   // LAB_CAPTURE_DIR: where each computer's Peer listens, so a film can show its app beside its agent.
   if (process.env.LAB_CAPTURE_DIR) {
@@ -1057,7 +977,6 @@ function codexAgent(
 
 const context = (out: HookOut) => out?.hookSpecificOutput?.additionalContext;
 const decision = (out: HookOut) => out?.hookSpecificOutput?.permissionDecision;
-const reason = (out: HookOut) => out?.hookSpecificOutput?.permissionDecisionReason;
 
 /** A computer's status as its Peer last had it: the lab's observation, never a request of its own. */
 const cachedStatus = (computer: Computer) =>
@@ -1071,7 +990,7 @@ const cachedStatus = (computer: Computer) =>
     ),
   );
 
-/** How many times step 17 races the two computers for a new file. */
+/** How many times step 5 races the two computers for a new file. */
 const RACE_RUNS = Math.max(1, Number(process.env.LAB_RACE_RUNS) || 20);
 
 /** Whether the hub decides edits (`/intent`): a hub from before it answers 404, or 405. */
@@ -1099,9 +1018,8 @@ function hubVerdicts(computer: Computer, sessions: ReadonlyArray<string>): Map<s
 
 /**
  * Ana's and Bob's agents run the PreToolUse hook for the same file nobody touched, started in the
- * same moment on two computers. The hub decides each first edit in one step, so exactly one runs and
- * the other is stopped before it edits; the one let through is stopped on its next edit of the file
- * until it writes a note, and then passes. A new file each time.
+ * same moment on two computers. The hub registers each claim in one step: both go on, and at least
+ * one hears that the other is there. A new file each time.
  */
 async function sameMomentEdits(ana: Computer, bob: Computer, runs: number) {
   const agents = [
@@ -1129,13 +1047,6 @@ async function sameMomentEdits(ana: Computer, bob: Computer, runs: number) {
   for (let run = 0; run < runs; run += 1) {
     const file = `lab-race/run-${run}.ts`;
     files.push(file);
-    const expectRun = (ok: boolean, what: string, got: unknown) => {
-      if (!ok) {
-        throw new Error(
-          `run ${run + 1} of ${runs} (${file}): expected ${what}, got ${JSON.stringify(got)}`,
-        );
-      }
-    };
     // Both hooks are started and wait for their event, which they get in the same tick.
     const hooks = agents.map((one) =>
       one.prepare("PreToolUse", {
@@ -1147,55 +1058,27 @@ async function sameMomentEdits(ana: Computer, bob: Computer, runs: number) {
     const began = Date.now();
     const outs = await Promise.all(hooks.map((hook) => hook.go()));
     walls.push(Date.now() - began);
-    const stopped = outs.flatMap((out, at) => (decision(out) === "deny" ? [at] : []));
-    expectRun(
-      stopped.length === 1,
-      "exactly one of the two first edits stopped before it edits, the other let through",
-      outs,
-    );
-    const stoppedAt = stopped[0] ?? 0;
-    const stoppedAgent = agents[stoppedAt]!;
-    const passed = agents[1 - stoppedAt]!;
-    const why = reason(outs[stoppedAt] ?? null);
-    expectRun(why?.includes("note") === true, "the stopped agent told how to answer", why);
-    if (run === 0) told(`${stoppedAgent.name} (stopped at the same moment)`, why);
-
-    // The agent that was let through changes the file; the other's claim is on it too.
-    passed.edit("PostToolUse", file);
-    const again = passed.edit("PreToolUse", file);
-    expectRun(
-      decision(again) === "deny",
-      `${passed.name}'s next edit of the file stopped until it writes a note`,
-      again,
-    );
-    const noted = passed.peer("note", `I change ${file} first, the other agent leaves it to me`);
-    expectRun(noted.startsWith("Noted on overlap"), "its note to reach the overlap", noted);
-    const after = passed.edit("PreToolUse", file);
-    expectRun(decision(after) === undefined, "its edit to pass after its note", after);
-    // The stopped agent is not shut out for good: its own note lets it pass as well, and the next
-    // race starts with nothing unsettled between the two.
-    const answered = stoppedAgent.peer("note", `I leave ${file} to the other agent`);
-    expectRun(
-      answered.startsWith("Noted on overlap"),
-      "the stopped agent's note to reach the overlap",
-      answered,
-    );
-    const late = stoppedAgent.edit("PreToolUse", file);
-    expectRun(decision(late) === undefined, "the stopped agent to pass after its own note", late);
+    const stopped = outs.filter((out) => decision(out) !== undefined);
+    if (stopped.length > 0) {
+      throw new Error(
+        `run ${run + 1} of ${runs} (${file}): nothing refuses an edit, got ${JSON.stringify(outs)}`,
+      );
+    }
+    if (run === 0) told("the agents at the same moment", outs.map(context).join(" / "));
   }
   await sleep(300);
   check(
     files.every((file) => {
       const firsts = [ana, bob].map((one) => hubVerdicts(one, sessions).get(file)?.[0] ?? "(none)");
-      return firsts.toSorted().join() === "clear,deny";
+      return firsts.toSorted().join() === "clear,notify";
     }),
-    `in each of ${runs} races the hub cleared one first edit and denied the other: it decided, not the computers' own views`,
+    `in each of ${runs} races the hub cleared one first edit and told the other of it: it decided, not the computers' own views`,
   );
   const fellBack = [ana, bob].flatMap((one) =>
     events(one).filter(
       (entry) =>
-        /^intent\.(failed|legacy|unverified)$/.test(entry.event) &&
-        (entry.event === "intent.legacy" || sessions.includes(String(entry.session))),
+        /^intent\.(failed|unverified)$/.test(entry.event) &&
+        sessions.includes(String(entry.session)),
     ),
   );
   check(fellBack.length === 0, "the hub answered every one of them: no fallback was needed");
@@ -1208,9 +1091,9 @@ async function sameMomentEdits(ana: Computer, bob: Computer, runs: number) {
 }
 
 /**
- * Step 19's app half: the settings calls Peer's Settings make, through each computer's own Peer
- * against the real Hub, so a Hub answer the app's contracts cannot read fails here and not in a
- * person's Settings. Ana is the admin, Bob a member.
+ * The settings calls Peer's Settings make, through each computer's own Peer against the real Hub, so
+ * a Hub answer the app's contracts cannot read fails here and not in a person's Settings. Ana is the
+ * admin, Bob a member.
  */
 const settingsSurface = Effect.fn("lab.settingsSurface")(function* (ana: Computer, bob: Computer) {
   const workspace = "acme";
@@ -1236,49 +1119,9 @@ const settingsSurface = Effect.fn("lab.settingsSurface")(function* (ana: Compute
     set,
     message: "A second project, priced in dollars",
   });
-  const seq = base + 1;
   check(
-    saved.kind === "saved" && saved.revision?.seq === seq,
+    saved.kind === "saved" && saved.revision?.seq === base + 1,
     "the admin saves both as one revision",
-  );
-  const page = yield* ana.client[WS_METHODS.peerSettingsHistory]({ workspace, limit: 50 });
-  check(
-    page.revisions[0]?.seq === seq && page.revisions.at(-1)?.seq === 1,
-    "the history reads every revision, from the first",
-  );
-  const scoped = yield* ana.client[WS_METHODS.peerSettingsHistory]({
-    workspace,
-    scope: "project:lab-two",
-  });
-  check(
-    scoped.revisions.length === 1 && scoped.revisions[0]?.seq === seq,
-    "a project's history holds the revisions that touched it",
-  );
-  const entry = yield* ana.client[WS_METHODS.peerSettingsHistoryEntry]({ workspace, seq });
-  check(
-    (entry.files ?? []).some((file) => file.path === "projects/lab-two.yaml"),
-    "a revision shows the admin its files' diffs",
-  );
-  const revert = yield* ana.client[WS_METHODS.peerSettingsRevert]({
-    workspace,
-    seq,
-    dryRun: true,
-  });
-  check(revert.kind === "preview" && revert.lines.length === 2, "a revert previews what it undoes");
-  const exported = yield* ana.client[WS_METHODS.peerSettingsExportYaml]({ workspace });
-  check(
-    exported.revision.seq === seq && "projects/lab-two.yaml" in exported.files,
-    "the export gives the YAML files at their revision",
-  );
-  const imported = yield* ana.client[WS_METHODS.peerSettingsImportYaml]({
-    workspace,
-    files: exported.files,
-    dryRun: true,
-  });
-  told("importing the export", JSON.stringify(imported).slice(0, 400));
-  check(
-    imported.kind === "preview" && imported.lines.length === 0,
-    "importing what was exported changes nothing",
   );
   const secrets = yield* ana.client[WS_METHODS.peerSettingsSecrets]({ workspace });
   const record = yield* ana.client[WS_METHODS.peerSettingsDomainRecord]({
@@ -1291,89 +1134,22 @@ const settingsSurface = Effect.fn("lab.settingsSurface")(function* (ana: Compute
     "the admin reads the secrets and the domain's record",
   );
 
-  // Bob, a member: his part, a refused change, and a proposal instead.
+  // Bob, a member: his part, and a change that is not his to make.
   const his = yield* bob.client[WS_METHODS.peerSettingsGet]({ workspace });
   check(
     !his.rights.admin &&
       Object.keys((his.document.people as object | undefined) ?? {}).join() === "bob@acme.test",
     "a member reads his own part of the people",
   );
-  const change = [{ path: ["currency"], value: "EUR" }];
   const refused = yield* bob.client[WS_METHODS.peerSettingsPreview]({
     workspace,
     base: his.revision.seq,
-    set: change,
+    set: [{ path: ["currency"], value: "EUR" }],
   });
   told("Bob's change to the currency", JSON.stringify(refused));
   check(
     refused.kind === "forbidden" && refused.refused.some((r) => r.owners.includes("admins")),
     "a member's change to a workspace setting is refused, saying who makes it",
-  );
-  const proposed = yield* bob.client[WS_METHODS.peerSettingsPropose]({
-    workspace,
-    base: his.revision.seq,
-    set: change,
-    message: "Our clients pay in euros",
-  });
-  if (proposed.kind !== "proposed") throw new Error(`expected a proposal: ${proposed.kind}`);
-  check(
-    proposed.proposal.mine && !proposed.proposal.canDecide,
-    "a member proposes it instead, and cannot decide it",
-  );
-  const id = proposed.proposal.id;
-  const waiting = yield* ana.client[WS_METHODS.peerSettingsProposals]({
-    workspace,
-    state: "pending",
-  });
-  check(
-    waiting.proposals.some((p) => p.id === id && p.canDecide),
-    "the admin may decide it",
-  );
-  yield* ana.client[WS_METHODS.peerSettingsDeclineProposal]({
-    workspace,
-    id,
-    reason: "We bill in dollars now",
-  });
-  const own = yield* bob.client[WS_METHODS.peerSettingsProposals]({ workspace });
-  const declined = own.proposals.find((p) => p.id === id);
-  check(
-    declined?.state === "declined" && declined.reason === "We bill in dollars now",
-    "Bob reads it declined, with the reason",
-  );
-  const again = yield* bob.client[WS_METHODS.peerSettingsPropose]({
-    workspace,
-    base: his.revision.seq,
-    set: [],
-    message: "Could Lab two get a budget?",
-  });
-  if (again.kind !== "proposed") throw new Error(`expected an ask: ${again.kind}`);
-  yield* bob.client[WS_METHODS.peerSettingsWithdrawProposal]({
-    workspace,
-    id: again.proposal.id,
-  });
-  const after = yield* bob.client[WS_METHODS.peerSettingsProposals]({ workspace });
-  check(
-    after.proposals.find((p) => p.id === again.proposal.id)?.state === "withdrawn",
-    "a member takes back an ask of his own",
-  );
-  // His own AI plans are his to save, and a save may give no reason.
-  const current = yield* bob.client[WS_METHODS.peerSettingsGet]({ workspace });
-  const plans = yield* bob.client[WS_METHODS.peerSettingsSave]({
-    workspace,
-    base: current.revision.seq,
-    set: [
-      {
-        path: ["people", "bob@acme.test", "personal"],
-        value: [{ harness: "claude", plan: "team" }],
-      },
-    ],
-  });
-  check(plans.kind === "saved", "a member saves his own AI plans");
-  const unexplained = yield* ana.client[WS_METHODS.peerSettingsGet]({ workspace });
-  const latest = yield* ana.client[WS_METHODS.peerSettingsHistory]({ workspace, limit: 1 });
-  check(
-    unexplained.revision.message === null && latest.revisions[0]?.message === null,
-    "a revision saved without a reason reads as one without a message",
   );
 });
 
@@ -1576,29 +1352,19 @@ const program = Effect.gen(function* () {
   yield* Effect.promise(() => sleep(1200));
 
   // 2. Bob's agent is about to change the same file.
-  const { envFile: bobsEnv, told: bobStart } = bobs.start();
+  const { envFile: bobsEnv } = bobs.start();
   told(
     bobs.name,
     context(bobs.hook("UserPromptSubmit", { prompt: "Rename price() to totalPrice() everywhere" })),
   );
-  const stopped = bobs.edit("PreToolUse", "src/pricing.ts");
-  told(bobs.name, reason(stopped));
+  const heard = bobs.edit("PreToolUse", "src/pricing.ts");
+  told(bobs.name, context(heard));
+  check(decision(heard) === undefined, "nothing stops the second agent");
   check(
-    decision(stopped) === "deny",
-    "the second agent is stopped before touching the first one's file",
+    context(heard)?.includes("Ana's agent") === true && context(heard)?.includes("note") === true,
+    "it hears who changed the file and how to tell them",
   );
-  check(
-    reason(stopped)?.includes("Ana's agent") && reason(stopped)?.includes("note"),
-    "it hears who and how to answer",
-  );
-  const noted = bobs.peer(
-    "note",
-    "I rename price() to totalPrice() in src/pricing.ts and src/cart.ts; please add VAT on totalPrice().",
-  );
-  told(`${bobs.name} (peer note)`, noted);
-  check(noted.startsWith("Noted on overlap"), "its note reaches the overlap");
-  const allowed = bobs.edit("PreToolUse", "src/pricing.ts");
-  check(decision(allowed) === undefined, "after its note, it may edit");
+  check(context(bobs.edit("PreToolUse", "src/pricing.ts")) === undefined, "and hears it once");
   // As agents like to run it: through a pipe, found on the session's PATH.
   const piped = bobs.shell(bobsEnv, "peer status 2>&1 | head -3");
   told(`${bobs.name} (peer status 2>&1 | head -3)`, piped);
@@ -1606,16 +1372,9 @@ const program = Effect.gen(function* () {
     piped.includes("Peer · project lab · you: Bob's agent"),
     "peer works in any command, and knows which session calls",
   );
-  const firstChange = bobs.edit("PostToolUse", "src/pricing.ts");
-  check(
-    context(firstChange)?.includes("your working context") === true,
-    "at its first change it is reminded, once, that its working context is still empty",
-  );
+  bobs.edit("PostToolUse", "src/pricing.ts");
   bobs.edit("PreToolUse", "src/cart.ts");
-  check(
-    !(context(bobs.edit("PostToolUse", "src/cart.ts")) ?? "").includes("working context"),
-    "and not again",
-  );
+  bobs.edit("PostToolUse", "src/cart.ts");
 
   const terminalEnv = {
     ...process.env,
@@ -1643,320 +1402,8 @@ const program = Effect.gen(function* () {
     "matching an agent's pane and checkout does not authorize a terminal to write",
   );
 
-  // 3. Ana's agent went idle; Bob's note wakes it up.
-  const woke = yield* Effect.promise(() =>
-    Promise.race([anas.idle(), sleep(15_000).then(() => "(timed out)")]),
-  );
-  told(`${anas.name} (woken up)`, woke);
-  check(
-    woke?.includes("totalPrice"),
-    "the idle agent still hears the note after a public status read and a refused terminal write",
-  );
-  told(
-    `${anas.name} (peer note)`,
-    anas.peer("note", "Agreed: I will add VAT on totalPrice() after your rename."),
-  );
-  told(
-    `${anas.name} (peer resolve)`,
-    anas.peer("resolve", "Bob renames price() to totalPrice() first; Ana adds VAT on top."),
-  );
-  yield* Effect.promise(() => sleep(3500));
-
-  // 4. Bob's agent hears the answer at its next step.
-  const heard = bobs.edit("PostToolUse", "src/cart.ts");
-  told(bobs.name, context(heard));
-  check(context(heard)?.includes("Agreed"), "the other agent hears the answer at its next step");
-  told(`${anas.name} (peer status)`, anas.peer("status"));
-
-  // 5. Under `ask`, Bob decides himself, once.
-  yield* bob.client[WS_METHODS.peerHubSetCoordination]({ policy: "ask" });
-  const roster = context(
-    anas.hook("UserPromptSubmit", { prompt: "Also format prices in src/format.ts" }),
-  );
-  told(`${anas.name} (next prompt)`, roster);
-  check(
-    roster?.includes("Peer · on the work whose context you keep: Bob's agent") === true &&
-      roster.includes("joined"),
-    "the agent keeping the work's context hears who joined the work",
-  );
-  anas.edit("PreToolUse", "src/format.ts");
-  anas.edit("PostToolUse", "src/format.ts");
-  yield* Effect.promise(() => sleep(3500));
-  const asked = bobs.edit("PreToolUse", "src/format.ts");
-  told(`Bob (asked by Claude Code's permission prompt)`, reason(asked));
-  check(decision(asked) === "ask", "under the ask policy the person is asked");
-  bobs.edit("PostToolUse", "src/format.ts");
-  check(
-    decision(bobs.edit("PreToolUse", "src/format.ts")) === undefined,
-    "once approved, not asked again",
-  );
-
-  // 6. Working contexts (experimental, after arXiv:2609.37725): one writer per shared context.
-  check(
-    anaStart?.includes("You keep the shared context of lab (work outside tasks)") === true,
-    "the first agent on a work keeps its shared context",
-  );
-  const sharedPath = /You keep the shared context of .+? in (\S+\.md)[.,:]/.exec(
-    anaStart ?? "",
-  )?.[1];
-  check(
-    sharedPath !== undefined && NodeFS.existsSync(sharedPath),
-    "Peer started it from a template",
-  );
-  const editShared = (who: ReturnType<typeof agent>, path: string) =>
-    who.hook("PreToolUse", {
-      tool_name: "Edit",
-      tool_input: { file_path: path, old_string: "a", new_string: "b" },
-    });
-  check(decision(editShared(anas, sharedPath)) === "allow", "its keeper edits it unasked");
-  NodeFS.writeFileSync(
-    sharedPath,
-    [
-      "# lab (work outside tasks)",
-      "## State",
-      "- Bob's agent renames price() to totalPrice(); Ana's adds VAT on top",
-      "## Decisions",
-      "- VAT is added in one place, applyVat()",
-      "## Next",
-      "- VAT once the rename lands",
-    ].join("\n"),
-  );
-  anas.hook("PostToolUse", {
-    tool_name: "Write",
-    tool_input: { file_path: sharedPath, content: "(the context above)" },
-  });
-  const stored = yield* Effect.promise(() =>
-    hubCall("/v1/workspaces/acme/contexts/lab/project", { session: hubSession }),
-  );
-  check(
-    stored.version === 1 && String(stored.text).includes("applyVat()"),
-    "the hub has its new version",
-  );
-  yield* Effect.promise(() => sleep(3500));
-  const bobShared = NodePath.join(bob.home, "userdata/coord/contexts/acme/lab/shared/project.md");
-  check(
-    NodeFS.readFileSync(bobShared, "utf8").includes("applyVat()"),
-    "the other computer has it too",
-  );
-  const refused = editShared(bobs, bobShared);
-  told(`${bobs.name} (editing the shared context)`, reason(refused));
-  check(
-    decision(refused) === "deny" && reason(refused)?.includes("Ana's agent keeps") === true,
-    "the other agent reads it and may not edit it",
-  );
-  const changed = context(bobs.edit("PostToolUse", "src/cart.ts"));
-  told(`${bobs.name} (next step)`, changed);
-  check(
-    changed?.includes("changed (version 1, by Ana's agent") === true &&
-      !changed.includes("applyVat()") &&
-      changed.includes("Read the current version: peer context") &&
-      changed.length < 1800,
-    "it hears a bounded version pointer at its next step without the full shared body",
-  );
-  const requestedShared = bobs.peer("context");
-  check(
-    requestedShared.includes("applyVat()") && requestedShared.includes("<shared-context>"),
-    "an explicit peer context request retrieves the full shared version as team reference",
-  );
-  const anaOwn = /Your private notes: (\S+\.md),/.exec(anaStart ?? "")?.[1];
-  check(
-    anaOwn !== undefined && anaOwn !== sharedPath && NodeFS.existsSync(anaOwn),
-    "the keeper's private notes live apart from the shared context",
-  );
-  const bobOwn = /Your private notes: (\S+\.md),/.exec(bobStart ?? "")?.[1];
-  check(
-    bobOwn !== undefined && NodeFS.existsSync(bobOwn),
-    "the other agent keeps a working context of its own",
-  );
-  NodeFS.writeFileSync(
-    bobOwn,
-    [
-      "# Working context",
-      "Goal: rename price() to totalPrice()",
-      "## Now",
-      "- renaming the callers in src/cart.ts",
-      "## For the team",
-      "- price() is now totalPrice() everywhere; nothing else called it",
-    ].join("\n"),
-  );
-  bobs.hook("PostToolUse", {
-    tool_name: "Write",
-    tool_input: { file_path: bobOwn, content: "(the context above)" },
-  });
-  yield* Effect.promise(() => sleep(3500));
-  const toKeeper = context(anas.edit("PostToolUse", "src/pricing.ts"));
-  told(`${anas.name} (next step)`, toKeeper);
-  const findingNotice = toKeeper
-    ?.split("\n\n")
-    .find((part) => part.startsWith("Peer · for the shared context"));
-  check(
-    toKeeper?.includes("team findings await review") === true &&
-      findingNotice !== undefined &&
-      !findingNotice.includes("totalPrice() everywhere") &&
-      findingNotice.includes("peer context") &&
-      findingNotice.length < 600,
-    "the keeper hears a short notice of new team findings",
-  );
-  const requestedFindings = anas.peer("context");
-  check(
-    requestedFindings.includes("totalPrice() everywhere") && requestedFindings.includes("Bob ("),
-    "the keeper explicitly retrieves the original team finding with its author",
-  );
-  check(
-    !(context(anas.edit("PostToolUse", "src/pricing.ts")) ?? "").includes(
-      "team findings await review",
-    ),
-    "and reaches it once",
-  );
-  // The keeper compacts as its context grows, and may: Peer keeps its versions.
-  const kept = NodeFS.readFileSync(sharedPath, "utf8");
-  const writeShared = (text: string) => {
-    NodeFS.writeFileSync(sharedPath, text);
-    return context(
-      anas.hook("PostToolUse", {
-        tool_name: "Write",
-        tool_input: { file_path: sharedPath, content: "(the context above)" },
-      }),
-    );
-  };
-  const big = writeShared(`${kept}\n${"- an endless log line\n".repeat(1150)}`);
-  told(`${anas.name} (its context grew)`, big);
-  check(
-    big?.includes("Compact it now") === true,
-    "a keeper whose context passes about 6K tokens is asked to compact it",
-  );
-  check(
-    writeShared(`${kept}\n${"- an endless log line\n".repeat(2000)}`)?.includes("over 32 KiB") ===
-      true,
-    "a keeper whose context outgrows what the hub keeps is told to shorten it",
-  );
-  writeShared(kept);
-  writeShared(`${kept}\n- retry once on an empty answer`);
-  const history = anas.peer("context", "history");
-  told(`${anas.name} (peer context history)`, history);
-  check(
-    /^ {2}4 .*\n {2}3 .*\n {2}2 .*\n {2}1 /m.test(history),
-    "the hub keeps every version the keeper wrote",
-  );
-  const older = bobs.peer("context", "2");
-  check(older.includes("an endless log line"), "and any agent on the work reads an older one back");
-
-  // Bob brings version 1 back from Peer: Ana's agent hears it and goes on from it.
-  yield* bob.client[WS_METHODS.peerHubRestoreContext]({
-    workspace: "acme",
-    project: "lab",
-    scope: "project",
-    version: 1,
-  });
-  yield* Effect.promise(() => sleep(3500));
-  const replaced = context(anas.edit("PostToolUse", "src/pricing.ts"));
-  told(`${anas.name} (next step)`, replaced);
-  check(
-    replaced?.includes(
-      "Bob brought version 1 of the shared context you keep back (now version 5)",
-    ) === true,
-    "a keeper hears when a person brings an older version back",
-  );
-  check(
-    !NodeFS.readFileSync(sharedPath, "utf8").includes("retry once"),
-    "and the file it keeps has that version",
-  );
-  const keeperBack = context(anas.hook("SessionStart", { source: "compact" }));
-  told(`${anas.name} (after a compaction)`, keeperBack);
-  check(
-    keeperBack?.includes("version 5;") === true &&
-      keeperBack.includes("Read: peer context") &&
-      !keeperBack.includes("applyVat()"),
-    "after compaction the keeper gets a current shared version pointer",
-  );
-  const readerBack = context(bobs.hook("SessionStart", { source: "compact" }));
-  told(`${bobs.name} (after a compaction)`, readerBack);
-  check(
-    readerBack?.includes("renaming the callers in src/cart.ts") === true &&
-      readerBack.includes("version 5;") &&
-      readerBack.includes("Read: peer context"),
-    "and the other agent its own context, with the shared one to read",
-  );
-
-  // 7. Peer restarts (here: Bob's coordination stops and starts): a session it meets again keeps
-  //    what it shares, and what it heard stays heard: an idle agent is not woken for it nor told it
-  //    again, and its people are not shown its open overlap again.
-  // What a step tells it: the answers of the hooks before and after its tool runs.
-  const step = () =>
-    [bobs.edit("PreToolUse", "src/cart.ts"), bobs.edit("PostToolUse", "src/cart.ts")]
-      .map(context)
-      .filter((said) => said !== undefined)
-      .join("\n\n");
-  const beforeRestart = step();
-  told(`${bobs.name} (first step after its compaction)`, beforeRestart || null);
-  check(
-    beforeRestart.includes("what the project's other agents build"),
-    "an agent's first step after a compaction tells it again what the others build",
-  );
-  yield* bob.client[WS_METHODS.peerHubSetCoordination]({ enabled: false });
-  yield* bob.client[WS_METHODS.peerHubSetCoordination]({ enabled: true });
-  const rewoken = yield* Effect.promise(() =>
-    Promise.race([bobs.idle(), sleep(4000).then(() => "(still waiting)")]),
-  );
-  told(`${bobs.name} (idle while Peer restarted)`, rewoken);
-  check(
-    rewoken === "(still waiting)",
-    "after Peer restarts, an idle agent is not woken for what it heard before",
-  );
-  const afterRestart = step();
-  told(`${bobs.name} (next step after Peer restarted)`, afterRestart || null);
-  check(!afterRestart.includes("Agreed"), "nor told again at its next step what it heard");
-  check(
-    !afterRestart.includes("other agents build") && !afterRestart.includes("changed (version"),
-    "nor what the others build, nor a change to the shared context it reads that did not happen",
-  );
-  yield* Effect.promise(() => sleep(3500));
-  const view = yield* Effect.promise(() =>
-    hubCall("/v1/workspaces/acme/coord", { session: hubSession }),
-  );
-  check(
-    (view.findings as ReadonlyArray<{ text: string }>).some((f) =>
-      f.text.includes("totalPrice() everywhere"),
-    ),
-    "after Peer restarts, what an agent shared stays with the team",
-  );
-  const logged = events(bob).map((entry) => entry.event);
-  check(
-    (view.overlaps as ReadonlyArray<{ state: string; sessions: ReadonlyArray<string> }>).some(
-      (overlap) => overlap.state === "open" && overlap.sessions.includes("claude:lab-bob"),
-    ) && !logged.slice(logged.lastIndexOf("broker.started")).includes("overlap.opened"),
-    "and its people are not shown its open overlap again",
-  );
-
-  // 8. Ana's agent ends: Bob's keeps the shared context from where it stands.
-  anas.hook("SessionEnd", { reason: "exit" });
-  let keeper: unknown;
-  for (let attempt = 0; attempt < 60 && keeper !== "claude:lab-bob"; attempt += 1) {
-    yield* Effect.promise(() => sleep(500));
-    const now = yield* Effect.promise(() =>
-      hubCall("/v1/workspaces/acme/contexts/lab/project", { session: hubSession }),
-    );
-    keeper = (now.keeper as { session?: string } | undefined)?.session;
-  }
-  check(keeper === "claude:lab-bob", "the other agent keeps it once the keeper's session ended");
-  const handed = context(bobs.edit("PostToolUse", "src/cart.ts"));
-  told(`${bobs.name} (next step)`, handed);
-  check(
-    handed?.includes(
-      "you (Bob's agent) keep the shared context of lab (work outside tasks) now",
-    ) === true &&
-      !handed.includes("applyVat()") &&
-      handed.includes("peer context"),
-    "it hears the takeover with a short pointer instead of an automatic full context",
-  );
-  check(decision(editShared(bobs, bobShared)) === "allow", "and may edit it now");
-  check(
-    bobs.peer("context").includes("applyVat()"),
-    "the new keeper explicitly reads the inherited shared version",
-  );
-
-  // 11. Codex agents take part as Claude Code's do. Peer adds its hooks to Codex as a plugin, beside
-  //     its person's own, and a Codex session on Ana's computer meets Bob's Claude Code session.
+  // 3. Codex agents take part as Claude Code's do. Peer adds its hooks to Codex as a plugin, beside
+  //    its person's own, and a Codex session on Ana's computer meets Bob's Claude Code session.
   const codexHome = NodePath.join(ana.home, "codex");
   const codexHooksFile = NodePath.join(codexHome, "hooks.json");
   const codexConfig = NodePath.join(codexHome, "config.toml");
@@ -2012,34 +1459,15 @@ const program = Effect.gen(function* () {
   told(codexs.name, codexStart);
   check(
     codexStart?.includes("You are Ana's agent here.") === true &&
-      codexStart.includes(ana.scripts.peer) &&
-      codexStart.includes("Your private notes:"),
-    "a Codex session starts with who it is, its private notes and where Peer's command is",
+      codexStart.includes(ana.scripts.peer),
+    "a Codex session starts with who it is and where Peer's command is",
   );
   codexs.hook("UserPromptSubmit", { prompt: "Show the VAT of each cart line in src/cart.ts" });
-  const codexStopped = codexs.patch("PreToolUse", ["src/lines.ts", "src/cart.ts"]);
-  told(`${codexs.name} (a patch on two files)`, reason(codexStopped));
+  const codexHeard = codexs.patch("PreToolUse", ["src/lines.ts", "src/cart.ts"]);
+  told(`${codexs.name} (a patch on two files)`, context(codexHeard));
   check(
-    decision(codexStopped) === "deny" &&
-      reason(codexStopped)?.includes("Bob's agent") === true &&
-      reason(codexStopped)?.includes("note") === true,
-    "a Codex patch stops at a file Bob's agent changed, whichever file of the patch it is",
-  );
-  const codexNote = codexs.peer(
-    "note",
-    "I add a VAT column to the cart lines in src/cart.ts; totalPrice() stays as it is.",
-  );
-  told(`${codexs.name} (peer note, run as ${codexNote.ran})`, codexNote.out);
-  check(
-    codexNote.ran.startsWith(ana.scripts.peer) &&
-      !codexNote.ran.includes("head") &&
-      codexNote.status === 0 &&
-      codexNote.out.startsWith("Noted on overlap"),
-    "Codex runs Peer's command as Peer's rule names it, and the note reaches the overlap",
-  );
-  check(
-    decision(codexs.patch("PreToolUse", ["src/lines.ts", "src/cart.ts"])) === undefined,
-    "after its note, it may patch",
+    decision(codexHeard) === undefined && context(codexHeard)?.includes("Bob's agent") === true,
+    "a Codex patch hears of a file Bob's agent changed, whichever file of the patch it is",
   );
   codexs.patch("PostToolUse", ["src/lines.ts", "src/cart.ts"]);
   yield* Effect.promise(() => sleep(3500));
@@ -2054,22 +1482,6 @@ const program = Effect.gen(function* () {
       codexSession.files.includes("src/lines.ts"),
     "the team sees every file its patch changed",
   );
-  const ownContext = NodePath.join(
-    ana.home,
-    "userdata",
-    "coord",
-    "contexts",
-    "acme",
-    "lab",
-    "lab-ana-codex.md",
-  );
-  const ownPatch = codexs.permission("apply_patch", {
-    command: `*** Begin Patch\n*** Update File: ${ownContext}\n@@\n-a\n+b\n*** End Patch`,
-  });
-  check(
-    ownPatch?.hookSpecificOutput?.decision?.behavior === "allow",
-    "Peer lets Codex write the agent's own working context without asking its person",
-  );
   const asks = codexs.permission("Bash", { command: "rm -rf build" });
   check(asks === null, "anything else waits for its person");
   // The log is written after the hook answered: wait for its line to land.
@@ -2081,25 +1493,6 @@ const program = Effect.gen(function* () {
     if (!blocked) yield* Effect.promise(() => sleep(500));
   }
   check(blocked, "and the agent counts as waiting, not working");
-  codexs.hook("Stop", { stop_hook_active: false, last_assistant_message: "Done." });
-  bobs.peer("note", "Fine by me: keep the VAT column out of totalPrice().");
-  let codexWake: Record<string, unknown> | undefined;
-  for (let attempt = 0; attempt < 30 && codexWake === undefined; attempt += 1) {
-    yield* Effect.promise(() => sleep(500));
-    codexWake = events(ana).find(
-      (entry) => entry.event === "wake" && entry.session === "codex:lab-ana-codex",
-    );
-  }
-  check(
-    codexWake?.via === "codex queue" && String(codexWake.text).includes("VAT column"),
-    "an idle Codex agent is woken with the note through Codex itself",
-  );
-  const codexHeard = context(codexs.hook("UserPromptSubmit", { prompt: "go on" }));
-  told(`${codexs.name} (next step)`, codexHeard);
-  check(
-    codexHeard?.includes("keep the VAT column out of totalPrice()") === true,
-    "and when Codex does not take it, the agent hears the note at its next step",
-  );
   codexs.hook("SessionEnd", { reason: "other" });
   const withoutCodex = yield* ana.client[WS_METHODS.peerHubSetCoordination]({ codexHooks: false });
   check(
@@ -2111,510 +1504,8 @@ const program = Effect.gen(function* () {
     "taking Peer's plugin out of Codex leaves its person's own hooks",
   );
 
-  // 12. Two related tasks on two computers (after the paper's coexisting contexts): an agent
-  //     hears of the other task's work and its shared context, reads it as a file or with
-  //     `peer context`, and asks its agents with `peer ask` before they share any file.
-  const createTask = (title: string, key: string) =>
-    hubCall("/v1/workspaces/acme/projects/lab/tasks", {
-      method: "POST",
-      session: hubSession,
-      body: { title, key },
-    });
-  const names = yield* Effect.promise(() => createTask("Speaker names", "KRK-7"));
-  yield* Effect.promise(() => createTask("Names in exports", "KRK-8"));
-  for (const computer of [ana, bob]) {
-    // Peer reads the work in the background after a sync.
-    let known = false;
-    for (let attempt = 0; attempt < 20 && !known; attempt += 1) {
-      const synced = yield* computer.client[WS_METHODS.peerHubSync]({});
-      const tasks = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work.tasks;
-      known = tasks?.some((task) => task.key === "KRK-8") === true;
-      if (!known) yield* Effect.promise(() => sleep(500));
-    }
-    check(known, `${computer.name}'s Peer knows both tasks`);
-  }
-  branchOff(ana.checkout, "krk-7-speaker-names");
-  branchOff(bob.checkout, "krk-8-exports");
-  const namer = agent(ana, "lab-ana-names", "w2:p1");
-  const namerStart = namer.start().told;
-  told(`${namer.name} (on KRK-7)`, namerStart);
-  check(
-    namerStart?.includes("run `peer` as is, with no names or IDs") === true &&
-      namerStart.includes(`peer ask <task> "<question>"`),
-    "an agent starts knowing what Peer's command offers",
-  );
-  check(
-    namerStart?.includes("You keep the shared context of KRK-7 · Speaker names") === true,
-    "the first agent on a task keeps its shared context",
-  );
-  yield* Effect.promise(() => sleep(1500));
-  const exporter = agent(bob, "lab-bob-exports", "w2:p2");
-  const exporterStart = exporter.start().told;
-  told(`${exporter.name} (on KRK-8)`, exporterStart);
-  check(
-    exporterStart?.includes("Other work on this project now") === true &&
-      exporterStart.includes("KRK-7 · Speaker names — Ana's agent (Claude Code") &&
-      exporterStart.includes("on another computer") &&
-      exporterStart.includes("no shared context yet"),
-    "an agent on another task hears who works on the related task, on which computer",
-  );
-  const namesPath = /You keep the shared context of KRK-7 · Speaker names in (\S+\.md)[.,:]/.exec(
-    namerStart ?? "",
-  )?.[1];
-  check(namesPath !== undefined, "the keeper knows its task's context file");
-  NodeFS.writeFileSync(
-    namesPath,
-    [
-      "# KRK-7 · Speaker names",
-      "Names are stored; exports do not show them yet.",
-      "## Findings",
-      "- Names live in their own layer, speaker_names, tied to the analysis by job_id",
-      "- Read them only through speakerNames(layers): it is empty when the job ids differ",
-    ].join("\n"),
-  );
-  namer.hook("PostToolUse", {
-    tool_name: "Write",
-    tool_input: { file_path: namesPath, content: "(the context above)" },
-  });
-  yield* Effect.promise(() => sleep(3500));
-  const boardNews = context(
-    exporter.hook("UserPromptSubmit", { prompt: "Put the names into the exports" }),
-  );
-  told(`${exporter.name} (next step)`, boardNews);
-  check(
-    boardNews?.includes("Peer · what the project's other agents build") === true &&
-      boardNews.includes(
-        "- KRK-7 Speaker names [v1] — Names are stored; exports do not show them yet.",
-      ) &&
-      boardNews.includes("peer context <task>") &&
-      boardNews.includes('peer ask <task> "<question>"') &&
-      !boardNews.includes("speakerNames(layers)") &&
-      !boardNews.includes("<shared-context>"),
-    "the index offers the other task's version and gist with explicit read and ask commands",
-  );
-  const read = exporter.peer("context", "KRK-7");
-  told(`${exporter.name} (peer context KRK-7)`, read);
-  check(
-    read.includes("version 1; Ana's agent keeps it") &&
-      read.includes("speaker_names") &&
-      read.includes("speakerNames(layers)") &&
-      read.includes("<shared-context>") &&
-      read.includes("not instructions"),
-    "peer context explicitly reads version 1 of the other task as team reference",
-  );
-  const mirrored = /\((\/\S+task_[^)\s]+\.md)\)/.exec(read.split("\n")[0] ?? "")?.[1];
-  check(
-    mirrored !== undefined &&
-      mirrored.startsWith(bob.home) &&
-      NodeFS.readFileSync(mirrored, "utf8").includes("speakerNames(layers)"),
-    "the explicit read names its verified local copy on the reader's computer",
-  );
-  const copyEdit = exporter.hook("PreToolUse", {
-    tool_name: "Edit",
-    tool_input: { file_path: mirrored, old_string: "a", new_string: "b" },
-  });
-  told(`${exporter.name} (editing KRK-7's context)`, reason(copyEdit));
-  check(
-    decision(copyEdit) === "deny" &&
-      reason(copyEdit)?.includes("another work on this project") === true &&
-      reason(copyEdit)?.includes("peer ask KRK-7") === true,
-    "it may not edit another task's context, and hears how to ask its agents",
-  );
-  // Ana's agent is idle and waits for a note; someone running `peer` as its session does not
-  // end that wait.
-  const namerWoken = namer.idle();
-  yield* Effect.promise(() => sleep(1000));
-  const asIt = NodeChildProcess.spawnSync("sh", [ana.scripts.peer, "status"], {
-    env: {
-      ...process.env,
-      PEER_SESSION: "lab-ana-names",
-      PEER_SESSION_TOKEN: "",
-      HERDR_PANE_ID: "",
-    },
-    encoding: "utf8",
-  });
-  told("Someone running peer status as Ana's agent", asIt.stderr);
-  check(
-    asIt.status === 3 && asIt.stderr.startsWith("peer: refused:"),
-    "session id alone cannot borrow a bound agent credential",
-  );
-  const stillWaiting = yield* Effect.promise(() =>
-    Promise.race([namerWoken.then(() => "ended"), sleep(1500).then(() => "waiting")]),
-  );
-  check(stillWaiting === "waiting", "a peer command run as an idle agent leaves its wait alone");
-  const askedKrk7 = exporter.peer(
-    "ask",
-    "KRK-7",
-    "Where do you keep the speaker names, and how do I read them?",
-  );
-  told(`${exporter.name} (peer ask KRK-7)`, askedKrk7);
-  check(
-    askedKrk7.startsWith(
-      "Asked the agents on KRK-7 · Speaker names: Ana's agent (on another computer)",
-    ),
-    "peer ask reaches the agents at work on the other task",
-  );
-  const question = yield* Effect.promise(() =>
-    Promise.race([namerWoken, sleep(15_000).then(() => "(timed out)")]),
-  );
-  told(`${namer.name} (woken up)`, question);
-  check(
-    question?.includes("asks the agents on your task KRK-7 · Speaker names") === true &&
-      question.includes("how do I read them?"),
-    "the idle agent on that task wakes up with the question",
-  );
-  told(
-    `${namer.name} (peer note)`,
-    namer.peer(
-      "note",
-      "Names are the speaker_names layer; read them with speakerNames(layers), never by label.",
-    ),
-  );
-  yield* Effect.promise(() => sleep(3500));
-  const answer = context(exporter.hook("UserPromptSubmit", { prompt: "go on" }));
-  told(`${exporter.name} (next step)`, answer);
-  check(
-    answer?.includes("your question about KRK-7 · Speaker names") === true &&
-      answer.includes("speakerNames(layers), never by label"),
-    "the asking agent hears the answer at its next step",
-  );
-  told(
-    `${exporter.name} (peer resolve)`,
-    exporter.peer("resolve", "Exports read names with speakerNames(layers); KRK-7 owns the layer."),
-  );
-  yield* Effect.promise(() => sleep(3500));
-  const afterAsk = yield* Effect.promise(() =>
-    hubCall("/v1/workspaces/acme/coord", { session: hubSession }),
-  );
-  const exporterNow = (
-    afterAsk.sessions as ReadonlyArray<{ id: string; claims: ReadonlyArray<string> }>
-  ).find((session) => session.id === "claude:lab-bob-exports");
-  check(
-    exporterNow !== undefined && !exporterNow.claims.some((claim) => claim.startsWith("task:")),
-    "once settled, the question no longer claims the task",
-  );
-  check(
-    (afterAsk.overlaps as ReadonlyArray<{ files: ReadonlyArray<string>; state: string }>).some(
-      (o) => o.files.includes(`task:${String(names.id)}`) && o.state === "resolved",
-    ),
-    "and people see the question and its agreement among the overlaps",
-  );
-  // Peer's own runs of an agent are no agents at work.
-  const toolRun = NodeChildProcess.execFileSync("sh", [bob.scripts.hook], {
-    env: { ...process.env, PEER_COORDINATION: "off" },
-    input: JSON.stringify({
-      session_id: "lab-tool-run",
-      cwd: bob.checkout,
-      transcript_path: "/dev/null",
-      hook_event_name: "SessionStart",
-      source: "startup",
-    }),
-    encoding: "utf8",
-  }).trim();
-  check(
-    toolRun === "" &&
-      !events(bob).some(
-        (entry) => entry.event === "session.started" && entry.session === "claude:lab-tool-run",
-      ),
-    "Peer's own runs of an agent stay out of coordination",
-  );
-  namer.hook("SessionEnd", { reason: "exit" });
-  exporter.hook("SessionEnd", { reason: "exit" });
-
-  // 13. People do not write agreements: Resolve in Peer asks the agents to settle it, both hear
-  //     it, and the agent named to close it closes it. An overlap both agents wrote on that went
-  //     quiet is closed the same way, without anyone asking.
-  yield* bob.client[WS_METHODS.peerHubSetCoordination]({ policy: "coordinate" });
-  const settlerA = agent(ana, "lab-ana-settle", "w3:p1");
-  const settlerB = agent(bob, "lab-bob-settle", "w3:p2");
-  settlerA.start();
-  settlerB.start();
-  settlerA.edit("PreToolUse", "src/receipt.ts");
-  settlerA.edit("PostToolUse", "src/receipt.ts");
-  yield* Effect.promise(() => sleep(2000));
-  check(
-    decision(settlerB.edit("PreToolUse", "src/receipt.ts")) === "deny",
-    "a second agent on the same file is stopped",
-  );
-  told(
-    `${settlerB.name} (peer note)`,
-    settlerB.peer("note", "I add the discount line to receiptLine(); formatPrice stays as it is."),
-  );
-  // Ana's agent reads Bob's note at its next step, then idles.
-  yield* Effect.promise(() => sleep(2000));
-  settlerA.hook("UserPromptSubmit", { prompt: "go on" });
-  const settleWake = settlerA.idle();
-  yield* Effect.promise(() => sleep(1500));
-  const pairView = yield* Effect.promise(() =>
-    hubCall("/v1/workspaces/acme/coord", { session: hubSession }),
-  );
-  const pair = (
-    pairView.overlaps as ReadonlyArray<{ id: string; sessions: ReadonlyArray<string> }>
-  ).find(
-    (o) =>
-      o.sessions.includes("claude:lab-ana-settle") && o.sessions.includes("claude:lab-bob-settle"),
-  );
-  check(pair !== undefined, "the hub opened their overlap");
-  const settleAsked = yield* ana.client[WS_METHODS.peerHubSettleOverlap]({
-    workspace: "acme",
-    project: "lab",
-    overlap: pair.id,
-    message: "Bob's line goes in first.",
-  });
-  const shown = settleAsked.coordination.overlaps.find((o) => o.id === pair.id);
-  check(
-    shown?.askedAt !== undefined && shown.closer === "claude:lab-ana-settle",
-    "Peer shows it asked the agents, and which agent closes it",
-  );
-  const request = yield* Effect.promise(() =>
-    Promise.race([settleWake, sleep(15_000).then(() => "(timed out)")]),
-  );
-  told(`${settlerA.name} (woken by Resolve)`, request);
-  check(
-    request?.includes("Settle this between you now") === true &&
-      request.includes("Ana's agent on KRK-7 · Speaker names closes it") &&
-      request.includes("Bob's line goes in first."),
-    "Resolve wakes the agent that closes it, with what its person added",
-  );
-  told(
-    `${settlerA.name} (peer resolve)`,
-    settlerA.peer("resolve", "Bob adds the discount line first; formatPrice stays."),
-  );
-  yield* Effect.promise(() => sleep(3500));
-  const afterResolve = context(settlerB.hook("UserPromptSubmit", { prompt: "go on" }));
-  told(`${settlerB.name} (next step)`, afterResolve);
-  check(
-    afterResolve?.includes("Resolved: Bob adds the discount line first") === true,
-    "the other agent hears what was agreed",
-  );
-  // Another shared file opens it again; both write, then go quiet: the closing agent is told.
-  settlerA.edit("PreToolUse", "src/format.ts");
-  settlerA.edit("PostToolUse", "src/format.ts");
-  yield* Effect.promise(() => sleep(2000));
-  settlerB.edit("PreToolUse", "src/format.ts");
-  settlerB.peer("note", "I only add a formatSaved() helper to src/format.ts.");
-  yield* Effect.promise(() => sleep(1500));
-  settlerA.hook("UserPromptSubmit", { prompt: "go on" });
-  told(
-    `${settlerA.name} (peer note)`,
-    settlerA.peer("note", "Fine, I do not touch format.ts again."),
-  );
-  const quietWake = settlerA.idle();
-  const nudged = yield* Effect.promise(() =>
-    Promise.race([quietWake, sleep(20_000).then(() => "(timed out)")]),
-  );
-  told(`${settlerA.name} (woken once it went quiet)`, nudged);
-  check(
-    nudged?.includes("has been quiet for") === true && nudged.includes("close it now"),
-    "an overlap both agents wrote on that went quiet wakes the agent that closes it",
-  );
-  settlerA.peer("resolve", "Bob adds formatSaved(); Ana leaves format.ts alone.");
-  yield* Effect.promise(() => sleep(3500));
-  const closed = yield* bob.client[WS_METHODS.peerHubSync]({});
-  check(
-    closed.coordination.overlaps.find((o) => o.id === pair.id)?.state === "resolved",
-    "and it is closed for everyone, with nobody writing the agreement but the agents",
-  );
-  settlerA.hook("SessionEnd", { reason: "exit" });
-  settlerB.hook("SessionEnd", { reason: "exit" });
-
-  // 14. The team index: Ana's agent builds an endpoint for each speaker's talk time on KRK-11;
-  //     Bob's is asked for a bar of the same numbers on KRK-12, in words that do not name KRK-11.
-  //     Peer ranks nothing: it gives Bob's agent the index and tells it of changes, and the agent
-  //     reads what it chooses.
-  yield* Effect.promise(() =>
-    createTask("Speaker talk time: endpoint returns seconds and share per speaker", "KRK-11"),
-  );
-  yield* Effect.promise(() => createTask("Console: a bar for each speaker's talk time", "KRK-12"));
-  for (const computer of [ana, bob]) {
-    let known = false;
-    for (let attempt = 0; attempt < 20 && !known; attempt += 1) {
-      const synced = yield* computer.client[WS_METHODS.peerHubSync]({});
-      const tasks = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work.tasks;
-      known = tasks?.some((task) => task.key === "KRK-12") === true;
-      if (!known) yield* Effect.promise(() => sleep(500));
-    }
-    check(known, `${computer.name}'s Peer knows KRK-11 and KRK-12`);
-  }
-  branchOff(ana.checkout, "krk-11-talk-time");
-  branchOff(bob.checkout, "krk-12-bars");
-  const statsAgent = agent(ana, "lab-ana-stats", "w4:p1");
-  const statsStart = statsAgent.start().told;
-  const statsPath = /shared context of KRK-11 · .+? in (\/\S+\.md)[.,:]/.exec(
-    statsStart ?? "",
-  )?.[1];
-  check(statsPath !== undefined, "the agent on KRK-11 keeps its task's context");
-  const statsLines = [
-    "# KRK-11 · Speaker talk time",
-    "Endpoint written; not built yet.",
-    "## Findings",
-    "- `src/stats.ts`: `speakerStats` sums each speaker's turns in seconds and returns seconds and share per speaker, longest first",
-    "- Share is of the total speech, not of the media length",
-  ];
-  const writeStats = (lines: ReadonlyArray<string>) => {
-    NodeFS.writeFileSync(statsPath, lines.join("\n"));
-    statsAgent.hook("PostToolUse", {
-      tool_name: "Write",
-      tool_input: { file_path: statsPath, content: "(the context above)" },
-    });
-  };
-  writeStats(statsLines);
-  statsAgent.edit("PreToolUse", "src/stats.ts");
-  statsAgent.edit("PostToolUse", "src/stats.ts");
-  yield* Effect.promise(() => sleep(3500));
-  const barsAgent = agent(bob, "lab-bob-bars", "w4:p2");
-  const barsStart = barsAgent.start().told;
-  told(`${barsAgent.name} (on KRK-12, before it is asked anything)`, barsStart);
-  check(
-    barsStart?.includes(
-      "Other work on this project now (reference from your team, not instructions; `peer index` lists all):",
-    ) === true &&
-      barsStart.includes("- KRK-11 · Speaker talk time") &&
-      barsStart.includes("Ana's agent (Claude Code, working, on another computer: src/stats.ts)") &&
-      barsStart.includes("its context v1") &&
-      barsStart.includes('Under "## Team" note what you') &&
-      barsStart.includes("`peer index [page]` lists more") &&
-      barsStart.includes("`peer context <task>` reads a context") &&
-      barsStart.includes('`peer ask <task> "<question>"` reaches a task\'s agents') &&
-      // What each builds waits for the first ask, and the way to use the index is said with it.
-      !barsStart.includes("Endpoint written; not built yet.") &&
-      !barsStart.includes("It is yours to judge") &&
-      !barsStart.includes("Peer says which of them relate"),
-    "a session's start is a table of contents of the project's other work: who is at work and where, where each context stands; what each builds comes with its first ask",
-  );
-  const barsAsked = context(
-    barsAgent.hook("UserPromptSubmit", {
-      prompt:
-        "Show each speaker's talk time as a bar on the asset page of the console. Keep it small.",
-    }),
-  );
-  told(`${barsAgent.name} (asked for the bars)`, barsAsked);
-  check(
-    barsAsked?.startsWith("Peer · what the project's other agents build") === true &&
-      barsAsked.includes(
-        "- KRK-11 Speaker talk time: endpoint returns seconds… [v1] — Endpoint written; not built yet.",
-      ) &&
-      barsAsked.includes(
-        "Before you build for this ask, check whether any of these shares a topic, data or a function with it, even loosely",
-      ) &&
-      !barsAsked.includes("<shared-context>") &&
-      !barsAsked.includes("Why:"),
-    "with its first ask it gets the works' names and what those at work say they build, and Peer does not say which of them relate to it",
-  );
-  const barsAgain = context(
-    barsAgent.hook("UserPromptSubmit", { prompt: "go on, and keep it small please" }),
-  );
-  check(
-    barsAgain === undefined || !barsAgain.includes("KRK-11 Speaker talk time"),
-    "what it was told of a work is not told again with the next ask",
-  );
-  // After a pause, an ask with nothing new in it is reminded where to look, in one line.
-  yield* Effect.promise(() => sleep(4500));
-  const barsPause = context(
-    barsAgent.hook("UserPromptSubmit", { prompt: "and make it look like the other bars please" }),
-  );
-  told(`${barsAgent.name} (asked again after a pause)`, barsPause);
-  check(
-    barsPause !== undefined &&
-      barsPause.includes("Peer · the others' work is named above") &&
-      !barsPause.includes("KRK-11 Speaker talk time") &&
-      barsPause.length < 220,
-    "after a pause an ask with nothing new gets one line that points back, not the index again",
-  );
-  // What a work says it builds changes: that is told, as what changed.
-  const statsBuilt = [statsLines[0]!, "Endpoint built and tested.", ...statsLines.slice(2)];
-  writeStats(statsBuilt);
-  yield* Effect.promise(() => sleep(3500));
-  const barsChanged = context(
-    barsAgent.hook("UserPromptSubmit", { prompt: "now show it in the console too please" }),
-  );
-  told(`${barsAgent.name} (KRK-11 says it builds something else now)`, barsChanged);
-  check(
-    barsChanged?.includes("Peer · new or changed in the others' work since you were told:") ===
-      true &&
-      barsChanged.includes(
-        "- KRK-11 Speaker talk time: endpoint returns seconds… [v2] — Endpoint built and tested.",
-      ) &&
-      !barsChanged.includes("Endpoint written; not built yet."),
-    "when a work's gist changes the next ask says so, with the new gist and a shorter word on what to do",
-  );
-  // The agent chooses: it reads KRK-11's context, and from then on hears when that changes.
-  const readIt = barsAgent.peer("context", "KRK-11");
-  check(
-    readIt.includes("version 2; Ana's agent keeps it") &&
-      readIt.includes("speakerStats") &&
-      readIt.includes("<shared-context>"),
-    "the agent explicitly reads the version 2 context it chose, as data from the team",
-  );
-  const afterRead = (yield* bob.client[WS_METHODS.peerHubSetCoordination]({
-    policy: "coordinate",
-  })).coordination.advice?.filter(
-    (row) => row.session === "claude:lab-bob-bars" && row.scope === "task:krk-11",
-  );
-  check(
-    afterRead?.length === 1 &&
-      afterRead[0]?.how === "read" &&
-      afterRead[0].about === "work" &&
-      afterRead[0].why?.includes("version 2") === true,
-    "Peer shows people which context version the agent actually read",
-  );
-  yield* Effect.promise(() => sleep(1200));
-  writeStats([
-    ...statsBuilt.slice(0, 2),
-    "## Findings",
-    "- `src/stats.ts`: `speakerStats` sums each speaker's turns in seconds and returns seconds and share per speaker, longest first",
-    "- The talk time share is a percentage of the total speech, rounded to a whole number",
-    "- Docs for the new route are regenerated with the usual script",
-  ]);
-  yield* Effect.promise(() => sleep(3500));
-  const barsHeard = context(
-    barsAgent.hook("UserPromptSubmit", { prompt: "show the talk time share in the bars" }),
-  );
-  told(`${barsAgent.name} (KRK-11's context written again)`, barsHeard);
-  check(
-    barsHeard?.includes("KRK-11 · Speaker talk time") === true &&
-      barsHeard.includes("a context you read, was written again (version 3, by Ana's agent)") &&
-      !barsHeard.includes("+ - The talk time share is a percentage") &&
-      !barsHeard.includes("+ - Docs for the new route") &&
-      barsHeard.includes("peer context KRK-11"),
-    "a context the agent read is reported by version and retrieval pointer when it changes",
-  );
-  const refreshedRead = barsAgent.peer("context", "KRK-11");
-  check(
-    refreshedRead.includes("version 3; Ana's agent keeps it") &&
-      refreshedRead.includes("rounded to a whole number") &&
-      refreshedRead.includes("Docs for the new route"),
-    "explicit reading of the updated shared version retrieves the actual changed data",
-  );
-  check(
-    !context(
-      barsAgent.hook("PreToolUse", {
-        tool_name: "Read",
-        tool_input: { file_path: barsAgent.file("src/stats.ts") },
-      }),
-    )?.includes("was written again"),
-    "and said once",
-  );
-  // The log is written after the hook answered: give its last lines a moment to land.
-  yield* Effect.promise(() => sleep(500));
-  const seen = new Set(
-    events(bob)
-      .filter((entry) => entry.session === "claude:lab-bob-bars")
-      .map((entry) => entry.event),
-  );
-  check(
-    ["index.asked", "follow.told"].every((event) => seen.has(event)),
-    "and logs what it showed and what changed, for tuning from real runs",
-  );
-  check(
-    !events(bob).some((entry) => entry.event.startsWith("related.")),
-    "nothing is ranked or scored: no related-work events at all",
-  );
-  statsAgent.hook("SessionEnd", { reason: "exit" });
-  barsAgent.hook("SessionEnd", { reason: "exit" });
-
-  // 15. A slow hub at a session's start: its hook answers before its script gives up (4 s), and
-  //     what Peer had not got ready by then reaches the agent at its next step.
+  // 4. A slow hub at a session's start: its hook answers before its script gives up (4 s), and
+  //    what Peer had not got ready by then reaches the agent at its next step.
   const slowAgent = agent(bob, "lab-bob-slow", "w5:p1");
   const hubPid = hub.child.pid;
   check(hubPid !== undefined, "the lab knows its hub's process");
@@ -2634,9 +1525,8 @@ const program = Effect.gen(function* () {
   check(tookMs < 4400, "its hook answers before its script gives up on it");
   check(
     slowStart?.includes("still connecting") === true &&
-      slowStart.includes(`${bob.scripts.peer} status`) &&
-      slowStart.includes(`${bob.scripts.peer} context`),
-    "the bounded fallback provides local status and context entrypoints",
+      slowStart.includes(`${bob.scripts.peer} status`),
+    "the bounded fallback says where to look meanwhile",
   );
   yield* Effect.promise(() => sleep(5000));
   const slowNext = context(
@@ -2644,9 +1534,8 @@ const program = Effect.gen(function* () {
   );
   told(`${slowAgent.name} (its next step)`, slowNext);
   check(
-    slowNext?.includes("run `peer` as is, with no names or IDs") === true &&
-      slowNext.includes("Your private notes:"),
-    "the complete startup guidance and context arrive at its next step",
+    slowNext?.includes("run `peer` as is, with no names or IDs") === true,
+    "the complete startup guidance arrives at its next step",
   );
   check(
     events(bob).some(
@@ -2659,40 +1548,16 @@ const program = Effect.gen(function* () {
   );
   slowAgent.hook("SessionEnd", { reason: "exit" });
 
-  // 17. Two computers edit one file at the same moment: the hub decides each first edit in one
-  //     step, so exactly one runs and the other is stopped before it edits.
+  // 5. Two computers edit one file at the same moment: the hub registers each claim in one step.
   if (yield* Effect.promise(hubDecidesEdits)) {
     yield* Effect.promise(() => sameMomentEdits(ana, bob, RACE_RUNS));
   } else {
     observe(
       false,
-      "step 17 (two computers edit one file at the same moment) was not run: this hub has no /intent (PEERHUB_BIN is from before the hub decides edits)",
+      "step 5 (two computers edit one file at the same moment) was not run: this hub has no /intent",
     );
   }
 
-  // 19. Settings are files an agent edits (after arXiv:2609.37725): Bob's agent proposes making
-  // schema/ exclusive (step 17 made migrations/ so); Ana, an admin, saves it as hers, and the rule
-  // decides the next edits.
-  const adminHub: AdminHub = (path, init = {}) => hubCall(path, { ...init, session: hubSession });
-  yield* Effect.promise(() =>
-    settingsLab({
-      hub: adminHub,
-      pattern: "schema/**",
-      proposer: agent(bob, "lab-bob-settings", "w11:p1"),
-      holders: [
-        agent(ana, "lab-ana-migrations", "w11:p2"),
-        agent(bob, "lab-bob-migrations", "w11:p3"),
-      ],
-      scratch: NodePath.join(bob.home, "lab-settings.yaml"),
-      check,
-      told,
-      pause: sleep,
-      sync: async () => {
-        for (const computer of [ana, bob])
-          await Effect.runPromise(computer.client[WS_METHODS.peerHubSync]({}));
-      },
-    }),
-  );
   yield* settingsSurface(ana, bob);
 
   // J. LAB_VCS=jj: a task's own checkout is a jj workspace with its bookmark, and its index stays out of jj.
@@ -3183,24 +2048,6 @@ function events(computer: Computer): Array<{ event: string; t: string; [field: s
     .map((line) => JSON.parse(line) as { event: string; t: string; [field: string]: unknown });
 }
 
-/**
- * What Peer put into an agent's context, from the log: the characters its hooks answered with, by
- * the hook that carried them. A token is about four characters. This is what Peer costs the agent.
- */
-function footprint(computer: Computer, session?: string) {
-  const byHook = new Map<string, number>();
-  for (const entry of events(computer)) {
-    if (entry.event !== "hook" || typeof entry.chars !== "number") continue;
-    if (session !== undefined && entry.session !== session) continue;
-    const hook = String(entry.hookEvent);
-    byHook.set(hook, (byHook.get(hook) ?? 0) + entry.chars);
-  }
-  const chars = [...byHook.values()].reduce((a, b) => a + b, 0);
-  const tokens = Math.round(chars / 4);
-  const parts = [...byHook].map(([hook, n]) => `${hook} ${n} chars`).join(", ");
-  return { chars, tokens, text: `about ${tokens} tokens (${chars} chars: ${parts || "nothing"})` };
-}
-
 /** The Claude Code sessions a computer's Peer met. */
 const sessionsOf = (computer: Computer) =>
   new Set(
@@ -3208,759 +2055,6 @@ const sessionsOf = (computer: Computer) =>
       .filter((entry) => entry.event === "session.started")
       .map((entry) => String(entry.session)),
   );
-
-const realProgram = Effect.gen(function* () {
-  yield* Effect.promise(() =>
-    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
-  );
-  yield* Effect.promise(setUpWorkspace);
-  const anaHerdr = startHerdr("Ana");
-  const bobHerdr = startHerdr("Bob");
-  const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr.socket);
-  const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socket);
-  // Both work on KRK-1: their branch names it.
-  for (const computer of [ana, bob]) {
-    branchOff(computer.checkout, "krk-1-pricing");
-  }
-  yield* Effect.promise(() => sleep(3000));
-  // Ana's and Bob's agents: Claude Code and Codex unless REAL_KINDS says otherwise ("claude,claude").
-  const [anaKind, bobKind] = (process.env.REAL_KINDS ?? "claude,codex").split(",");
-  const start = (kind: string | undefined, h: HerdrServer, computer: Computer, name: string) =>
-    kind === "codex" ? startCodex(h, computer, name) : startClaude(h, computer, name);
-  const anaPane = yield* Effect.promise(() => start(anaKind, anaHerdr, ana, "ana"));
-  const bobPane = yield* Effect.promise(() => start(bobKind, bobHerdr, bob, "bob"));
-  const agents = [
-    { computer: ana, h: anaHerdr, pane: anaPane },
-    { computer: bob, h: bobHerdr, pane: bobPane },
-  ];
-  // What the agents did, printed however the run ends.
-  const report = () => {
-    for (const { computer, h, pane } of agents) {
-      console.log(`\n===== ${computer.name}'s agent, last screen =====`);
-      console.log(
-        herdrText(h, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "160"),
-      );
-      console.log(`===== ${computer.name}'s checkout: git diff =====`);
-      console.log(git(computer.checkout, "diff"));
-      console.log(`===== ${computer.name}'s coordination log =====`);
-      for (const entry of events(computer)) {
-        if (
-          /^(shared|context|finding|files|session)\.|^(decision|note\.agent|resolve\.agent|news|wake|overlap\.opened|cli)$/.test(
-            entry.event,
-          )
-        ) {
-          console.log(JSON.stringify(entry).slice(0, 900));
-        }
-      }
-      // Two agents on one task have no other work to be told of: Peer names none, not at a start,
-      // with an ask or between steps.
-      const index = indexBlocks(events(computer));
-      say(
-        `Peer added to ${computer.name}'s agent's context`,
-        `${footprint(computer).text}; ${index.blocks.length} index blocks${index.blocks.length === 0 ? "" : ` (${index.summary})`}`,
-      );
-      observe(
-        index.blocks.length === 0,
-        `${computer.name}'s agent got no index block, at its start, an ask or a step: there was no other work to name`,
-      );
-    }
-    herdrText(anaHerdr, "server", "stop");
-    herdrText(bobHerdr, "server", "stop");
-  };
-  try {
-    const contextPath = "/v1/workspaces/acme/contexts/lab/task:krk-1";
-    const readContext = () =>
-      hubCall(contextPath, { session: hubSession }).catch(() => null) as Promise<Record<
-        string,
-        any
-      > | null>;
-    // The lab's checkouts are throwaway: a permission an agent still asks for is granted, as a
-    // person at the keyboard would, so no run stalls on a dialog nobody answers.
-    const approve = () => {
-      for (const { computer, h, pane } of agents) {
-        if (statusOf(h, pane) !== "blocked") continue;
-        const screen = herdrText(h, "pane", "read", pane, "--source", "visible");
-        if (/Do you want to proceed\?|❯\s*1\. Yes/.test(screen)) {
-          herdrText(h, "pane", "send-keys", pane, "enter");
-          say("approved", `${computer.name}'s agent's permission prompt`);
-        }
-      }
-    };
-    const untilQuiet = async (limitMs: number) => {
-      let quiet = 0;
-      for (let elapsed = 0; elapsed < limitMs && quiet < 40_000; elapsed += 5000) {
-        await sleep(5000);
-        approve();
-        const statuses = agents.map(({ h, pane }) => statusOf(h, pane));
-        quiet = statuses.every((s) => s === "idle" || s === "done") ? quiet + 5000 : 0;
-        say(
-          "agents",
-          agents.map(({ computer }, at) => `${computer.name}'s ${statuses[at]}`).join(", "),
-        );
-      }
-    };
-
-    // A. Two agents on one task, changing the same files.
-    const anaTask =
-      "In src/pricing.ts give price() a VAT rate: price(items, vatRate = 0.2) returns the total with VAT added. Check how the result is used and formatted elsewhere so it stays right. Keep the change small; do not run tests or builds.";
-    const bobTask =
-      "Rename price() to totalPrice() in src/pricing.ts and update every caller. Keep the change small; do not run tests or builds.";
-    herdrJson(anaHerdr, "agent", "prompt", anaPane, anaTask);
-    say("Ana's agent prompted", anaTask);
-    for (let waited = 0; waited < 120_000; waited += 2000) {
-      yield* Effect.promise(() => sleep(2000));
-      approve();
-      if (events(ana).some((e) => e.event === "hook" && e.hookEvent === "PostToolUse")) break;
-    }
-    herdrJson(bobHerdr, "agent", "prompt", bobPane, bobTask);
-    say("Bob's agent prompted", bobTask);
-    yield* Effect.promise(() => untilQuiet(10 * 60_000));
-
-    const afterA = yield* Effect.promise(readContext);
-    told(
-      "KRK-1's shared context after A",
-      afterA === null ? null : JSON.stringify(afterA, null, 2),
-    );
-    check(
-      afterA !== null && afterA.keeper !== undefined,
-      "one agent session keeps KRK-1's context",
-    );
-    observe(Number(afterA.version) >= 1, "the agent keeping it wrote it");
-    const keeperAt = agents.find(({ computer }) => sessionsOf(computer).has(afterA.keeper.session));
-    const otherAt = agents.find((agent) => agent !== keeperAt);
-    check(keeperAt !== undefined && otherAt !== undefined, "the keeper is one of the two agents");
-    observe(
-      events(otherAt.computer).some((e) => /^shared\.(read|told|lost)$/.test(e.event)),
-      `${otherAt.computer.name}'s agent reads it (it was given it, or kept it before)`,
-    );
-    observe(
-      [...events(ana), ...events(bob)].some((e) => e.event === "shared.handed"),
-      "the keeper changed hands during A, while one agent idled",
-    );
-    const shellEdits = agents.flatMap(({ computer }) =>
-      events(computer)
-        .filter((e) => e.event === "files.shell")
-        .flatMap((e) => (e.files as ReadonlyArray<string>).map((file) => ({ computer, file }))),
-    );
-    observe(shellEdits.length > 0, "an agent edited through the shell and Peer saw which files");
-    check(
-      shellEdits.every(({ computer, file }) =>
-        NodeFS.existsSync(NodePath.join(computer.checkout, file)),
-      ),
-      "the files Peer saw changed through the shell are paths in the repository",
-    );
-    observe(
-      events(otherAt.computer).some((e) => e.event === "shared.denied"),
-      `${otherAt.computer.name}'s agent tried to edit it and was told it only reads it`,
-    );
-    observe(
-      [...events(ana), ...events(bob)].some((e) => e.event === "finding.delivered"),
-      "a finding reached another agent",
-    );
-
-    // A2. What the agents left open: closed by the agents themselves once they went quiet, or,
-    // once Ana presses Resolve in Peer, by the agent Peer names to close it.
-    const openNow = async () =>
-      (
-        (await hubCall("/v1/workspaces/acme/coord", { session: hubSession }))
-          .overlaps as ReadonlyArray<{
-          id: string;
-          state: string;
-          notes: ReadonlyArray<{ text: string }>;
-        }>
-      ).filter((o) => o.state === "open");
-    const leftOpen = yield* Effect.promise(openNow);
-    say("overlaps", `${leftOpen.length} still open after A`);
-    observe(
-      [...events(ana), ...events(bob)].some((e) => e.event === "settle.nudged"),
-      "an agent was told to close a quiet overlap on its own",
-    );
-    for (const overlap of leftOpen) {
-      yield* ana.client[WS_METHODS.peerHubSettleOverlap]({
-        workspace: "acme",
-        project: "lab",
-        overlap: overlap.id,
-      });
-      say("Resolve pressed", `overlap ${overlap.id.slice(0, 6)}`);
-    }
-    if (leftOpen.length > 0) {
-      let still = leftOpen.length;
-      for (let waited = 0; waited < 4 * 60_000 && still > 0; waited += 5000) {
-        yield* Effect.promise(() => sleep(5000));
-        approve();
-        still = (yield* Effect.promise(openNow)).length;
-      }
-      check(still === 0, "after Resolve, the agents closed what was open");
-    }
-
-    // B. The keeper idles, the other agent works: it takes the context over. The other agent is
-    // prompted once the hub has seen the keeper idle past the threshold: its turn may be short.
-    for (let waited = 0; waited < 3 * 60_000; waited += 3000) {
-      const coord = yield* Effect.promise(() =>
-        hubCall("/v1/workspaces/acme/coord", { session: hubSession }),
-      );
-      const keeperNow = (
-        coord.sessions as ReadonlyArray<{
-          id: string;
-          status: string;
-          activeAt?: string;
-          seenAt: string;
-        }>
-      ).find((s) => s.id === afterA.keeper.session);
-      const idleMs =
-        keeperNow === undefined || keeperNow.status === "working"
-          ? 0
-          : Date.now() - Date.parse(keeperNow.activeAt ?? keeperNow.seenAt);
-      if (idleMs > (REAL_IDLE_SECS + 5) * 1000) break;
-      yield* Effect.promise(() => sleep(3000));
-      approve();
-    }
-    const follow =
-      "Add a one-line comment above the pricing function saying what it returns and in which unit. Keep it small; do not run tests or builds.";
-    herdrJson(otherAt.h, "agent", "prompt", otherAt.pane, follow);
-    say(`${otherAt.computer.name}'s agent prompted`, follow);
-    let keeperB: string | undefined;
-    for (let waited = 0; waited < 4 * 60_000; waited += 3000) {
-      yield* Effect.promise(() => sleep(3000));
-      approve();
-      keeperB = (yield* Effect.promise(readContext))?.keeper?.session;
-      if (keeperB !== afterA.keeper.session) break;
-    }
-    check(
-      keeperB !== undefined && sessionsOf(otherAt.computer).has(keeperB),
-      `a keeper idle over ${REAL_IDLE_SECS} s gives way to the agent that works`,
-    );
-    observe(
-      events(otherAt.computer).some((e) => e.event === "shared.handed"),
-      `${otherAt.computer.name}'s agent is told it keeps the context now`,
-    );
-    yield* Effect.promise(() => untilQuiet(4 * 60_000));
-
-    // C. What the agents marked for the project reaches the hub as findings.
-    const view = yield* Effect.promise(() =>
-      hubCall("/v1/workspaces/acme/coord", { session: hubSession }),
-    );
-    const findings = view.findings as ReadonlyArray<{
-      text: string;
-      scope?: string;
-      email: string;
-    }>;
-    told(
-      "findings on the hub",
-      findings.map((f) => `${f.scope ?? "task"} · ${f.email}: ${f.text}`).join("\n"),
-    );
-    observe(
-      findings.some((f) => f.scope === "project"),
-      "a real agent marked a line [project]",
-    );
-    // D. The keeper's session ends: the other agent keeps the context.
-    const keeperD = agents.find(
-      ({ computer }) => keeperB !== undefined && sessionsOf(computer).has(keeperB),
-    );
-    const remaining = agents.find((agent) => agent !== keeperD);
-    if (keeperD !== undefined && remaining !== undefined) {
-      herdrJson(keeperD.h, "agent", "prompt", keeperD.pane, "/exit");
-      say(`${keeperD.computer.name}'s agent exits`);
-      let keeperAfter: string | undefined;
-      for (let waited = 0; waited < 90_000; waited += 3000) {
-        yield* Effect.promise(() => sleep(3000));
-        keeperAfter = (yield* Effect.promise(readContext))?.keeper?.session;
-        if (keeperAfter !== keeperB) break;
-      }
-      check(
-        keeperAfter !== undefined && sessionsOf(remaining.computer).has(keeperAfter),
-        "when the keeper's session ends, the other agent keeps the context",
-      );
-    }
-
-    const final = yield* Effect.promise(readContext);
-    told("KRK-1's shared context at the end", final === null ? null : String(final.text));
-  } finally {
-    report();
-  }
-}).pipe(Effect.scoped);
-
-/**
- * REAL_RESTART=1 (with REAL_SCENARIO=tasks): Peer restarts on Bob's computer while both agents idle.
- * Neither is woken, and Bob's next prompt repeats nothing told before. Prints what Peer said after it.
- */
-const realRestart = Effect.fn("lab.realRestart")(function* (
-  bob: Computer,
-  agents: ReadonlyArray<{
-    readonly computer: Computer;
-    readonly h: HerdrServer;
-    readonly pane: string;
-  }>,
-  approve: () => void,
-) {
-  const bobs = agents.find((agent) => agent.computer === bob);
-  check(bobs !== undefined, "Bob's agent runs");
-  // What Bob's agent and his people were told before Peer quit, as his computer logged it.
-  const before = events(bob);
-  const sessions = sessionsOf(bob);
-  const mine = (entry: (typeof before)[number]) => sessions.has(String(entry.session));
-  const ids = (value: unknown) => (Array.isArray(value) ? value.map(String) : []);
-  const works = (entry: (typeof before)[number]) =>
-    (Array.isArray(entry.versions) ? entry.versions : []).map(
-      (told: { scope: string; version: number }) => `${told.scope}@${told.version}`,
-    );
-  // What Peer told it on its own; what it asked for (`peer context`) it may ask for again.
-  const toldOf = (log: typeof before) => ({
-    works: log.filter((e) => e.event === "index.asked" && mine(e)).flatMap(works),
-    announced: log.filter((e) => e.event === "news" && mine(e)).flatMap((e) => ids(e.announced)),
-    notes: log.filter((e) => e.event === "news" && mine(e)).flatMap((e) => ids(e.seen)),
-    findings: log
-      .filter((e) => mine(e) && /^(finding\.prepared|context\.injected)$/.test(e.event))
-      .flatMap((e) => ids(e.findings)),
-    versions: log
-      .filter((e) => /^(follow|shared)\.told$/.test(e.event) && mine(e))
-      .map((e) => `${String(e.scope)}@${String(e.version)}`),
-    shown: log.filter((e) => e.event === "overlap.opened").map((e) => String(e.overlap)),
-  });
-  const toldBefore = toldOf(before);
-  toldBefore.findings.push(
-    ...before
-      .filter((e) => e.event === "finding.requested" && mine(e))
-      .flatMap((e) => ids(e.findings)),
-  );
-  const coord = yield* Effect.promise(() =>
-    hubCall("/v1/workspaces/acme/coord", { session: hubSession }),
-  );
-  const open = (
-    coord.overlaps as ReadonlyArray<{ state: string; sessions: ReadonlyArray<string> }>
-  ).filter((o) => o.state === "open" && o.sessions.some((id) => sessions.has(id)));
-  say(
-    "before Peer restarts on Bob's computer",
-    `Bob's agent was told of ${new Set(toldBefore.works).size} works, ${new Set(toldBefore.announced).size} overlaps, ${new Set(toldBefore.findings).size} findings; ${open.length} of its overlaps are open`,
-  );
-
-  yield* restartComputer(bob);
-  const sinceRestart = () => events(bob).slice(before.length);
-  for (let waited = 0; waited < 60_000; waited += 1000) {
-    if (sinceRestart().some((e) => e.event === "broker.started")) break;
-    yield* Effect.promise(() => sleep(1000));
-  }
-  check(
-    sinceRestart().some((e) => e.event === "broker.started"),
-    "Peer on Bob's computer starts again and resumes coordination by itself",
-  );
-  // A minute in which both agents idle: Peer wakes neither.
-  const busy = new Set<string>();
-  for (let waited = 0; waited < 60_000; waited += 5000) {
-    yield* Effect.promise(() => sleep(5000));
-    approve();
-    for (const { computer, h, pane } of agents) {
-      if (!["idle", "done"].includes(statusOf(h, pane))) busy.add(computer.name);
-    }
-  }
-  check(
-    busy.size === 0 && !sinceRestart().some((e) => /^(runtime\.)?wake$/.test(e.event)),
-    "after Peer restarts, neither idle agent is woken",
-  );
-
-  const prompt =
-    "Add a one-line comment at the top of src/receipt.ts saying what the file formats. Keep it small; do not run tests or builds.";
-  herdrJson(bobs.h, "agent", "prompt", bobs.pane, prompt);
-  say("Bob's agent prompted after the restart", prompt);
-  let quiet = 0;
-  for (let elapsed = 0; elapsed < 6 * 60_000 && quiet < 30_000; elapsed += 5000) {
-    yield* Effect.promise(() => sleep(5000));
-    approve();
-    quiet = ["idle", "done"].includes(statusOf(bobs.h, bobs.pane)) ? quiet + 5000 : 0;
-  }
-  const after = sinceRestart();
-  const saidAfter = after
-    .filter((e) => e.event === "hook" && mine(e))
-    .flatMap((e) => {
-      const said = (e.answer as HookOut)?.hookSpecificOutput?.additionalContext;
-      return said === undefined ? [] : [`[${String(e.hookEvent)}] ${said}`];
-    })
-    .join("\n\n");
-  told("what Peer told Bob's agent after the restart", saidAfter || null);
-  check(
-    after.some((e) => e.event === "session.started" && mine(e) && Number(e.remembered) > 0),
-    "Peer meets Bob's agent again with what it had told it",
-  );
-  const toldAfter = toldOf(after);
-  const again = (kind: keyof typeof toldBefore) =>
-    toldAfter[kind].filter((one) => toldBefore[kind].includes(one));
-  check(again("works").length === 0, "Bob's agent is not told again of a work it was told of");
-  check(
-    again("announced").length === 0 && again("notes").length === 0,
-    "nor an overlap or a note it had heard",
-  );
-  check(again("findings").length === 0, "nor a finding it had heard");
-  check(again("versions").length === 0, "nor a context's version it had been told of");
-  check(
-    !after.some((e) => e.event === "shared.handed" && mine(e)) &&
-      !saidAfter.includes("keep the shared context of"),
-    "nor that it keeps the context it kept: its Peer gave it up as it quit, and gives it back",
-  );
-  const keeps = yield* Effect.promise(() =>
-    hubCall("/v1/workspaces/acme/contexts/lab/task:krk-2", { session: hubSession }).catch(
-      () => null,
-    ),
-  );
-  check(
-    !/the shared context you keep \([^)]*\) is still empty/.test(saidAfter) ||
-      Number(keeps?.version ?? 0) === 0,
-    "nor that the context it keeps is empty when it is written",
-  );
-  check(again("shown").length === 0, "and its people are not shown an overlap again");
-  observe(toldBefore.works.length > 0, "Bob's agent had been told of the other task's work");
-  observe(open.length > 0, "an overlap of Bob's agent was open as Peer restarted");
-  observe(
-    after.some((e) => e.event === "shared.resumed" && mine(e)),
-    "Bob's agent took back KRK-2's context, which its Peer gave up as it quit",
-  );
-});
-
-/**
- * REAL_SCENARIO=tasks: Bob's agent on KRK-2 needs what Ana's builds on KRK-1, on another computer and
- * uncommitted. Checks it hears of that work; reports whether it read the context, asked and got an answer.
- */
-const realTasksProgram = Effect.gen(function* () {
-  yield* Effect.promise(() =>
-    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
-  );
-  yield* Effect.promise(setUpWorkspace);
-  const anaHerdr = startHerdr("Ana");
-  const bobHerdr = startHerdr("Bob");
-  const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr.socket);
-  const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socket);
-  branchOff(ana.checkout, "krk-1-discounts");
-  // REAL_NOTASK=1: Bob's agent is on no task (its branch names none), so Peer has only the index
-  // to give it, and what it was asked names neither a file nor KRK-1.
-  git(
-    bob.checkout,
-    "checkout",
-    "--quiet",
-    "-b",
-    process.env.REAL_NOTASK === "1" ? "bob-slip" : "krk-2-receipts",
-  );
-  for (const computer of [ana, bob]) {
-    let known = false;
-    for (let attempt = 0; attempt < 20 && !known; attempt += 1) {
-      const synced = yield* computer.client[WS_METHODS.peerHubSync]({});
-      const tasks = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work.tasks;
-      known = tasks?.some((task) => task.key === "KRK-2") === true;
-      if (!known) yield* Effect.promise(() => sleep(500));
-    }
-    check(known, `${computer.name}'s Peer knows both tasks`);
-  }
-  const [anaKind, bobKind] = (process.env.REAL_KINDS ?? "claude,claude").split(",");
-  const start = (kind: string | undefined, h: HerdrServer, computer: Computer, name: string) =>
-    kind === "codex" ? startCodex(h, computer, name) : startClaude(h, computer, name);
-  const anaPane = yield* Effect.promise(() => start(anaKind, anaHerdr, ana, "ana"));
-  const agents: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [
-    { computer: ana, h: anaHerdr, pane: anaPane },
-  ];
-  const report = () => {
-    for (const { computer, h, pane } of agents) {
-      console.log(`\n===== ${computer.name}'s agent, last screen =====`);
-      console.log(
-        herdrText(h, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "220"),
-      );
-      console.log(`===== ${computer.name}'s checkout: git diff and new files =====`);
-      console.log(git(computer.checkout, "diff"));
-      console.log(git(computer.checkout, "status", "--short"));
-      console.log(`===== ${computer.name}'s coordination log =====`);
-      for (const entry of events(computer)) {
-        if (
-          /^(shared|context|finding|files|session|board|ask|index|follow|hook)\.|^(decision|note\.agent|resolve\.agent|news|wake|overlap\.opened|cli|ask)$/.test(
-            entry.event,
-          )
-        ) {
-          console.log(JSON.stringify(entry).slice(0, 1200));
-        }
-      }
-      say(`Peer added to ${computer.name}'s agent's context`, footprint(computer).text);
-    }
-    herdrText(anaHerdr, "server", "stop");
-    herdrText(bobHerdr, "server", "stop");
-  };
-  const approve = () => {
-    for (const { computer, h, pane } of agents) {
-      if (statusOf(h, pane) !== "blocked") continue;
-      const screen = herdrText(h, "pane", "read", pane, "--source", "visible");
-      if (/Do you want to proceed\?|❯\s*1\. Yes/.test(screen)) {
-        herdrText(h, "pane", "send-keys", pane, "enter");
-        say("approved", `${computer.name}'s agent's permission prompt`);
-      }
-    }
-  };
-  const readContext = (scope: string) =>
-    hubCall(`/v1/workspaces/acme/contexts/lab/${scope}`, { session: hubSession }).catch(
-      () => null,
-    ) as Promise<Record<string, any> | null>;
-  try {
-    const anaTask =
-      "Add discount codes: create src/discounts.ts with a map of two codes of your choice to percentages, and applyDiscount(cents, code) that returns the discounted price and the amount saved. Prices are integer cents. Keep it small; do not run tests or builds.";
-    herdrJson(anaHerdr, "agent", "prompt", anaPane, anaTask);
-    say("Ana's agent prompted (KRK-1)", anaTask);
-    // Bob's agent starts once KRK-1's context says where that work stands, and Ana's agent is done.
-    for (let waited = 0; waited < 8 * 60_000; waited += 3000) {
-      yield* Effect.promise(() => sleep(3000));
-      approve();
-      const krk1 = yield* Effect.promise(() => readContext("task:krk-1"));
-      const idle = ["idle", "done"].includes(statusOf(anaHerdr, anaPane));
-      if (krk1 !== null && Number(krk1.version) >= 1 && idle) break;
-    }
-    const krk1 = yield* Effect.promise(() => readContext("task:krk-1"));
-    told(
-      "KRK-1's shared context when Bob's agent starts",
-      krk1 === null ? null : String(krk1.text),
-    );
-    check(krk1 !== null && Number(krk1.version) >= 1, "KRK-1's agent wrote its task's context");
-    const bobPane = yield* Effect.promise(() => start(bobKind, bobHerdr, bob, "bob"));
-    agents.push({ computer: bob, h: bobHerdr, pane: bobPane });
-    // REAL_HINT=0: Bob's person does not say where the discount codes come from, so his agent
-    // has only what Peer tells it to find KRK-1's work.
-    const hint =
-      process.env.REAL_HINT === "0"
-        ? ""
-        : " Another agent builds the discount codes on task KRK-1, and its code is not in your checkout yet: use what it builds, do not write discount logic of your own.";
-    // REAL_ASK=1: Bob's person also tells it to agree with KRK-1's agent, as the demo's did.
-    const agree =
-      process.env.REAL_ASK === "1" && hint !== ""
-        ? " Before you change anything, agree with that agent how a receipt line looks when a code is unknown."
-        : "";
-    // REAL_ALONE=1: Bob's agent could do its task alone: only the index it is given, and its own
-    // choice to look at it, stand between it and doing the same work twice.
-    // REAL_NOTASK=1: Bob's person names no file nor KRK-1 and his agent is on no task. Peer ranks
-    // nothing; the agent reads the ask and the index.
-    const noTask = process.env.REAL_NOTASK === "1";
-    const bobTask = noTask
-      ? "The slip should show which voucher was used and how much it saved the customer. Keep it small; do not run tests or builds."
-      : process.env.REAL_ALONE === "1"
-        ? `Receipts should show how much a discount saves the customer: in src/receipt.ts add savedLine(cents, percent), which says "you save <amount>" with the amount that percent of the price takes off, in integer cents, and use it in receiptLine. Keep it small; do not run tests or builds.`
-        : `Receipts should show which discount code was applied and how much it saved: change src/receipt.ts.${hint}${agree} Keep it small; do not run tests or builds.`;
-    // REAL_LATE=1: Bob's person first asks a question that builds nothing, and only then the task:
-    // what Peer said with the first ask is not said again, so the agent has to remember it.
-    if (process.env.REAL_LATE === "1") {
-      const question =
-        "What does src/receipt.ts export, and what does it do with the price? Answer in two lines; change nothing.";
-      herdrJson(bobHerdr, "agent", "prompt", bobPane, question);
-      say("Bob's agent prompted first (a question)", question);
-      let still = 0;
-      for (let waited = 0; waited < 4 * 60_000 && still < 2; waited += 3000) {
-        yield* Effect.promise(() => sleep(3000));
-        approve();
-        const idle = ["idle", "done"].includes(statusOf(bobHerdr, bobPane));
-        still = idle && waited >= 6000 ? still + 1 : 0;
-      }
-    }
-    herdrJson(bobHerdr, "agent", "prompt", bobPane, bobTask);
-    say("Bob's agent prompted (KRK-2)", bobTask);
-    let quiet = 0;
-    for (let elapsed = 0; elapsed < 12 * 60_000 && quiet < 45_000; elapsed += 5000) {
-      yield* Effect.promise(() => sleep(5000));
-      approve();
-      const statuses = agents.map(({ h, pane }) => statusOf(h, pane));
-      quiet = statuses.every((s) => s === "idle" || s === "done") ? quiet + 5000 : 0;
-      say("agents", `Ana's ${statuses[0]}, Bob's ${statuses[1]}`);
-    }
-    if (RESTART) {
-      yield* realRestart(bob, agents, approve);
-      return;
-    }
-
-    const bobEvents = events(bob);
-    const cli = bobEvents.filter((e) => e.event === "cli");
-    check(
-      bobEvents.some(
-        (e) =>
-          e.event === "context.injected" &&
-          ((e.index as ReadonlyArray<string> | undefined) ?? []).includes("task:krk-1"),
-      ),
-      "Bob's agent starts with KRK-1's work in its index",
-    );
-    check(
-      bobEvents.some(
-        (e) =>
-          e.event === "index.asked" &&
-          ((e.works as ReadonlyArray<string> | undefined) ?? []).includes("task:krk-1"),
-      ),
-      "and what its person asked came with the line that names KRK-1: Peer ranks nothing",
-    );
-    check(
-      !bobEvents.some((e) => e.event.startsWith("related.")),
-      "nothing was scored or told as related work",
-    );
-    const bobScreen = herdrText(
-      bobHerdr,
-      "pane",
-      "read",
-      bobPane,
-      "--source",
-      "recent-unwrapped",
-      "--lines",
-      "400",
-    );
-    // What its harness ran: Claude Code's transcript has every tool call (Codex's is elsewhere).
-    const transcripts = bobEvents
-      .filter((e) => e.event === "session.started" && typeof e.transcript === "string")
-      .map((e) => String(e.transcript))
-      .filter((path) => NodeFS.existsSync(path))
-      .map((path) => NodeFS.readFileSync(path, "utf8"));
-    const readIt =
-      cli.some((e) => e.command === "context" && /krk-1/i.test(String((e.args as string[])[0]))) ||
-      transcripts.some((text) => /"tool_use"[^\n]*task_krk-1\.md/.test(text)) ||
-      /task_krk-1\.md/.test(bobScreen);
-    const asked = cli.some((e) => e.command === "ask");
-    const bobDiff = git(bob.checkout, "diff");
-    const krk2 = yield* Effect.promise(() => readContext(noTask ? "project" : "task:krk-2"));
-    told(
-      noTask
-        ? "The project's shared context (Bob's agent) at the end"
-        : "KRK-2's shared context at the end",
-      krk2 === null ? null : String(krk2.text),
-    );
-    // What Peer said of KRK-1's work with the first ask (what it builds, its signature) may be all
-    // the agent needs: it need not read the context or ask, and spends no tokens on it if it does
-    // not. Its own context, its diff and its last words say whether KRK-1's work shaped its own.
-    const aware = /KRK-1|applyDiscount|discounts/.test(
-      `${krk2 === null ? "" : String(krk2.text)}\n${bobDiff}\n${bobScreen}`,
-    );
-    // What the design stands on: given an index and nothing ranked, the agent chooses, and it
-    // chooses with KRK-1's work in mind: it reads or asks, or what it wrote names it.
-    check(
-      readIt || asked || aware,
-      "Bob's agent took KRK-1's work into account on its own: it read its context or asked its agents, or its own context, change or last words name it",
-    );
-    observe(readIt, "Bob's agent read KRK-1's context (peer context KRK-1, or its file)");
-    observe(asked, "Bob's agent asked KRK-1's agent (peer ask)");
-    observe(
-      aware,
-      "Bob's agent took KRK-1's work into account (its context, its change or its last words name it)",
-    );
-    if (asked) {
-      observe(
-        events(ana).some((e) => e.event === "wake" || e.event === "news"),
-        "Ana's agent heard the question",
-      );
-      observe(
-        events(ana).some((e) => e.event === "note.agent"),
-        "Ana's agent answered it",
-      );
-    }
-    observe(/applyDiscount|discounts/.test(bobDiff), "Bob's change builds on what KRK-1 built");
-    observe(
-      !NodeFS.existsSync(NodePath.join(bob.checkout, "src/discounts.ts")),
-      "Bob's agent wrote no discount logic of its own",
-    );
-  } finally {
-    report();
-  }
-}).pipe(Effect.scoped);
-
-/**
- * REAL_SCENARIO=settings: Bob, a member, asks his agent to make the project's migrations exclusive in
- * Peer's settings, naming no command. The agent finds how (`peer help`, `peer config`), edits its copy
- * and proposes it with a reason; it cannot save. Ana, an admin, then saves the proposal as in step 19.
- */
-const realSettingsProgram = Effect.gen(function* () {
-  yield* Effect.promise(() =>
-    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
-  );
-  yield* Effect.promise(setUpWorkspace);
-  const bobHerdr = startHerdr("Bob");
-  const ana = yield* startComputer("Ana", "ana@acme.test");
-  const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socket);
-  const kind = (process.env.REAL_KINDS ?? "claude").split(",")[0] === "codex" ? "codex" : "claude";
-  const pane = yield* Effect.promise(() =>
-    kind === "codex" ? startCodex(bobHerdr, bob, "bob") : startClaude(bobHerdr, bob, "bob"),
-  );
-  const adminHub: AdminHub = (path, init = {}) => hubCall(path, { ...init, session: hubSession });
-  const approve = () => {
-    if (statusOf(bobHerdr, pane) !== "blocked") return;
-    const screen = herdrText(bobHerdr, "pane", "read", pane, "--source", "visible");
-    if (/Do you want to proceed\?|❯\s*1\. Yes/.test(screen)) {
-      herdrText(bobHerdr, "pane", "send-keys", pane, "enter");
-      say("approved", "Bob's agent's permission prompt");
-    }
-  };
-  try {
-    const before = yield* Effect.promise(() => headOf(adminHub));
-    const ask =
-      "Database migrations in this project must never be changed by two agents at the same time. Make migrations/** exclusive in this project's Peer settings.";
-    herdrJson(bobHerdr, "agent", "prompt", pane, ask);
-    say("Bob's agent prompted", ask);
-    let proposal: SettingsProposal | undefined;
-    for (let waited = 0; waited < 6 * 60_000 && proposal === undefined; waited += 3000) {
-      yield* Effect.promise(() => sleep(3000));
-      approve();
-      const pending = yield* Effect.promise(() => proposalsOf(adminHub));
-      proposal = pending.find((one) => one.state === "pending");
-    }
-    // What it says after proposing is part of what it did: let it end its turn.
-    for (let waited = 0; waited < 2 * 60_000; waited += 3000) {
-      yield* Effect.promise(() => sleep(3000));
-      approve();
-      if (["idle", "done"].includes(statusOf(bobHerdr, pane))) break;
-    }
-    if (proposal === undefined) throw new Error("expected: Bob's agent proposed the change");
-    told("the proposal", JSON.stringify(proposal, null, 2));
-    check(
-      proposal.by.email === "bob@acme.test" && proposal.via?.agent === kind,
-      `the proposal is Bob's ${kind} agent's, for Bob`,
-    );
-    check(proposal.lines.some(makesExclusive("migrations/**")), "it makes migrations/** exclusive");
-    observe(
-      proposal.lines.every(
-        (line) => makesExclusive("migrations/**")(line) || line.path.at(-1) === "policy",
-      ),
-      "it changes nothing else (at most the project's policy that comes with a first rule)",
-    );
-    check(
-      (yield* Effect.promise(() => headOf(adminHub))) === before,
-      "the agent saved nothing: the settings are as they were",
-    );
-    const commands = events(bob)
-      .filter((entry) => entry.event === "cli")
-      .map((entry) =>
-        [entry.command, ...(Array.isArray(entry.args) ? entry.args : []), `(${entry.outcome})`]
-          .map(String)
-          .join(" ")
-          .slice(0, 300),
-      );
-    say("Bob's agent ran", commands.join(" | ") || "(no peer command logged)");
-    yield* Effect.promise(() =>
-      saveProposal({
-        hub: adminHub,
-        pattern: "migrations/**",
-        proposal,
-        before,
-        proposedBy: `${kind === "codex" ? "Codex" : "Claude"} for bob@acme.test`,
-        holders: [
-          agent(ana, "real-ana-migrations", "w9:p1"),
-          agent(bob, "real-bob-migrations", "w9:p2"),
-        ],
-        check,
-        told,
-        pause: sleep,
-        sync: async () => {
-          for (const computer of [ana, bob])
-            await Effect.runPromise(computer.client[WS_METHODS.peerHubSync]({}));
-        },
-      }),
-    );
-  } finally {
-    console.log("\n===== Bob's agent, last screen =====");
-    console.log(
-      herdrText(bobHerdr, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "200"),
-    );
-    console.log("===== Bob's checkout: git status =====");
-    console.log(git(bob.checkout, "status", "--short"));
-    console.log("===== Bob's coordination log =====");
-    for (const entry of events(bob)) {
-      if (/^(cli|cli\.unplain|decision)$/.test(entry.event))
-        console.log(JSON.stringify(entry).slice(0, 900));
-    }
-    say("Peer added to Bob's agent's context", footprint(bob).text);
-    herdrText(bobHerdr, "server", "stop");
-  }
-}).pipe(Effect.scoped);
 
 /** Real agents' permission prompts, answered as a person at the keyboard would in a throwaway checkout. */
 function approveAll(
@@ -5902,13 +3996,7 @@ try {
                   : REAL
                     ? roomsRealProgram
                     : roomsProgram
-              : TASKS
-                ? realTasksProgram
-                : SETTINGS_SCENARIO
-                  ? realSettingsProgram
-                  : process.env.REAL_AGENTS === "1"
-                    ? realProgram
-                    : program,
+              : program,
   );
   say("PASS");
   process.exitCode = 0;
@@ -5916,8 +4004,8 @@ try {
   say("FAIL", error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 } finally {
-  // The computers first: as their Peers stop, their brokers hand back the contexts their agents
-  // kept, which needs the hub still up. Then the hub.
+  // The computers first: as their Peers stop, their brokers tell the hub their agents are gone,
+  // which needs the hub still up. Then the hub.
   const running = (child: NodeChildProcess.ChildProcess) =>
     child.exitCode === null && child.signalCode === null;
   const peers = children.filter((child) => child !== hub.child && running(child));

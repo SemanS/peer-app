@@ -1,4 +1,3 @@
-import { createOpenSpecEnvironmentAtoms } from "./openspec.ts";
 import { createPeerMetricsAtoms } from "./metrics.ts";
 import { createPeerUsageAtoms } from "./usage.ts";
 import { createPeerImpactAtoms } from "./impact.ts";
@@ -63,7 +62,6 @@ export function createPeerPluginAtoms<R, ER>(
     peerRooms: createPeerRoomsAtoms(runtime),
     ...createPeerRunsAtoms(runtime),
     peerSettings: createPeerSettingsAtoms(runtime),
-    peerOpenSpec: createOpenSpecEnvironmentAtoms(runtime),
     ...createPeerTestReportsAtoms(runtime),
     ...createPeerAcceptanceAtoms(runtime),
   };

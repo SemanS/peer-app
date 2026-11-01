@@ -43,8 +43,7 @@ import { ProjectMark } from "../signals";
 import { failureMessage } from "../WorkspaceAccess";
 import { launchLine, launchNote, projectVcs, vcsWords } from "../vcsWords";
 import { personName } from "../workTree.logic";
-import type { TaskLauncherProps, TaskPreparationState } from "../slots.types";
-import { usePeerPlugins } from "../slots";
+import type { TaskLauncherProps } from "../slots.types";
 import {
   capacityLine,
   launchGuidance,
@@ -89,11 +88,7 @@ function TaskAgentSession({
   inline = false,
   initialPrompt,
   repositoryId,
-  preparation,
 }: TaskLauncherProps) {
-  const plugins = usePeerPlugins(status);
-  const Preparation =
-    preparation ?? plugins.find((plugin) => plugin.taskPreparation !== undefined)?.taskPreparation;
   const [open, setOpen] = useState(initialOpen);
   const [busy, setBusy] = useState(false);
   const [selectedRepository, setSelectedRepository] = useState(
@@ -103,7 +98,7 @@ function TaskAgentSession({
     setOpen(false);
     onClose?.();
   };
-  const form = (prepared?: TaskPreparationState) => (
+  const form = (
     <LaunchForm
       key={`${environmentId}:${workspace}:${project.project.id}:${taskId}:${selectedRepository}`}
       environmentId={environmentId}
@@ -123,26 +118,9 @@ function TaskAgentSession({
       initialPrompt={initialPrompt}
       initialRepositoryId={selectedRepository}
       onRepositoryChange={setSelectedRepository}
-      preparation={prepared}
     />
   );
-  const preparedForm = () =>
-    Preparation !== undefined && request === undefined ? (
-      <Preparation
-        key={`${environmentId}:${workspace}:${project.project.id}:${taskId}:${selectedRepository}`}
-        environmentId={environmentId}
-        status={status}
-        workspace={workspace}
-        project={project}
-        taskId={taskId}
-        repositoryId={selectedRepository}
-      >
-        {form}
-      </Preparation>
-    ) : (
-      form()
-    );
-  if (inline) return <section className="flex min-w-0 flex-col gap-6">{preparedForm()}</section>;
+  if (inline) return <section className="flex min-w-0 flex-col gap-6">{form}</section>;
   return (
     <>
       {initialOpen ? null : (
@@ -171,7 +149,7 @@ function TaskAgentSession({
           onClick={(event) => event.stopPropagation()}
           onDoubleClick={(event) => event.stopPropagation()}
         >
-          {open ? preparedForm() : null}
+          {open ? form : null}
         </DialogPopup>
       </Dialog>
     </>
@@ -195,7 +173,6 @@ function LaunchForm({
   inline,
   initialPrompt,
   initialRepositoryId,
-  preparation,
   onRepositoryChange,
 }: {
   readonly environmentId: EnvironmentId;
@@ -214,7 +191,6 @@ function LaunchForm({
   readonly inline: boolean;
   readonly initialPrompt: string | undefined;
   readonly initialRepositoryId: string | undefined;
-  readonly preparation: TaskPreparationState | undefined;
   readonly onRepositoryChange: (repositoryId: string) => void;
 }) {
   const formId = useId();
@@ -257,12 +233,10 @@ function LaunchForm({
   const navigate = useNavigate();
   const launchLock = useRef(false);
   const repositories = project.repositories.filter((repo) => repo.state === "ready");
-  const selectedId =
-    initialRepositoryId ?? (preparation?.state === "ready" ? preparation.repositoryId : undefined);
   const repository =
-    selectedId === undefined
+    initialRepositoryId === undefined
       ? repositories[0]
-      : repositories.find((repo) => repo.id === selectedId);
+      : repositories.find((repo) => repo.id === initialRepositoryId);
   // The chosen checkout decides where the agent starts; with none ready, the project's kind here.
   const words = vcsWords(repository?.vcs ?? projectVcs(project.repositories));
   const task = project.work.tasks.find((candidate) => candidate.id === taskId);
@@ -275,14 +249,7 @@ function LaunchForm({
   const [additional, setAdditional] = useLocalStorage(`${draftKey}:additional`, "", Schema.String);
   const prompt =
     editedPrompt ??
-    (request !== undefined
-      ? `${instructionLabel}.`.slice(0, 2_000)
-      : (initialPrompt ??
-        (preparation === undefined
-          ? taskLabel
-          : preparation.state === "ready"
-            ? preparation.prompt
-            : "")));
+    (request !== undefined ? `${instructionLabel}.`.slice(0, 2_000) : (initialPrompt ?? taskLabel));
   const launchPrompt =
     request !== undefined || additional.trim() === ""
       ? prompt
@@ -290,7 +257,6 @@ function LaunchForm({
         ? additional.trim()
         : `${prompt}\n\nAdditional instructions:\n${additional.trim()}`;
   const promptTooLong = launchPrompt.length > (request === undefined ? 20_000 : 2_000);
-  const prepared = preparation === undefined || preparation.state === "ready";
   const [reason, setReason] = useState("");
   const [choice, setChoice] = useState<StartFromChoice>(presetStartFrom(presetBase));
   const threadShells = useThreadShells();
@@ -322,7 +288,6 @@ function LaunchForm({
       launchLock.current ||
       busy ||
       started ||
-      !prepared ||
       blocked !== null ||
       providerBlocked ||
       promptTooLong ||
@@ -508,7 +473,6 @@ function LaunchForm({
             accept();
           }}
         >
-          {preparation?.content}
           {request === undefined || sender === undefined ? null : (
             <PeerFenced who={sender}>
               <span className="font-medium">{request.title}</span>
@@ -543,7 +507,7 @@ function LaunchForm({
               <ToggleGroup
                 aria-label="Agent"
                 value={[harness]}
-                disabled={busy || started || !prepared}
+                disabled={busy || started}
                 onValueChange={(next) => {
                   const value = next[0];
                   if (value === "claude" || value === "codex") setHarness(value);
@@ -755,7 +719,7 @@ function LaunchForm({
                   id={`${formId}-prompt`}
                   rows={8}
                   value={prompt}
-                  disabled={busy || started || !prepared}
+                  disabled={busy || started}
                   maxLength={request === undefined ? 20_000 : 2_000}
                   onChange={(event) => setPrompt(event.target.value)}
                 />
@@ -795,7 +759,6 @@ function LaunchForm({
             disabled={
               busy ||
               started ||
-              !prepared ||
               blocked !== null ||
               providerBlocked ||
               promptTooLong ||

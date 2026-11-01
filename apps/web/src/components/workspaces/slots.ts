@@ -2,7 +2,6 @@ import { impactWebPlugin } from "./impact";
 import { plansWebPlugin } from "./plans";
 import { agreementsWebPlugin } from "./agreements";
 import { changesWebPlugin } from "./changes";
-import { openspecWebPlugin } from "./openspec";
 
 import { metricsWebPlugin } from "./metrics";
 import { usageWebPlugin } from "./usage";
@@ -74,7 +73,6 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   plansWebPlugin,
   agreementsWebPlugin,
   changesWebPlugin,
-  openspecWebPlugin,
   testReportsWebPlugin,
   rolesWebPlugin,
   roomsWebPlugin,

@@ -17,7 +17,7 @@ export interface ParsedItem {
   readonly text: string;
   /** As typed after `@`: a short name or an address; the Hub completes and checks it. */
   readonly owner?: string;
-  /** As typed after `@task:`: a key, or an item number of the same OpenSpec change; the Hub resolves it. */
+  /** As typed after `@task:`: a key, or an item number of the same change; the Hub resolves it. */
   readonly task?: string;
 }
 

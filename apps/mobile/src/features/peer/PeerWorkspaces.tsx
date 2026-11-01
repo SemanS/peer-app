@@ -102,8 +102,6 @@ function PeerEnvironment({
       status === null ? [] : buildWorkTree({ status, localThreads: [], now: 0, watch: false }),
     [status],
   );
-  const Preparation = plugins.find((plugin) => plugin.taskPreparation)?.taskPreparation;
-  const hasLauncher = plugins.some((plugin) => plugin.taskLauncher !== undefined);
   const project = status?.workspaces
     .find((workspace) => workspace.slug === selection?.workspace)
     ?.projects.find((project) => project.project.id === selection?.projectId);
@@ -247,21 +245,6 @@ function PeerEnvironment({
               plugins={plugins}
             />
           ))}
-          {task !== undefined &&
-          project !== undefined &&
-          selection !== null &&
-          Preparation !== undefined &&
-          !hasLauncher ? (
-            <Preparation
-              key={`preparation:${selection.workspace}/${project.project.id}/${task.id}`}
-              environmentId={environmentId}
-              label={label}
-              workspace={selection.workspace}
-              project={project}
-              task={task}
-              status={status}
-            />
-          ) : null}
           {task === undefined || project === undefined || selection === null
             ? null
             : plugins.map(({ id, taskSections: Section }) =>
@@ -276,7 +259,6 @@ function PeerEnvironment({
                     status={status}
                     onBusyChange={setBusy}
                     disabled={busy}
-                    taskPreparation={Preparation}
                     workProject={workTree.find(
                       (row) =>
                         row.workspace === selection.workspace &&

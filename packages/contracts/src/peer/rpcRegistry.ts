@@ -4,7 +4,6 @@ import {
   PeerContextArchive,
   PeerContextArchiveInput,
 } from "./contextView.ts";
-import { PEER_OPENSPEC_METHODS, OpenSpecRpcGroup, OpenSpecRpcScopes } from "./openspec.rpc.ts";
 import { PEER_USAGE_METHODS, UsageRpcGroup, UsageRpcScopes } from "./usage.rpc.ts";
 import { PEER_IMPACT_METHODS, PeerImpactRpcs, ImpactRpcScopes } from "./impact.ts";
 import { PEER_PLANS_METHODS, PlansRpcGroup, PlansRpcScopes } from "./plans.rpc.ts";
@@ -608,7 +607,6 @@ export const PEER_WS_METHODS = {
   ...PEER_SETTLE_METHODS,
   ...PEER_OWNERSHIP_METHODS,
   ...PEER_SETTINGS_METHODS,
-  ...PEER_OPENSPEC_METHODS,
   ...PEER_TEST_REPORTS_METHODS,
   ...PEER_ROLES_METHODS,
   ...PEER_ROOMS_METHODS,
@@ -643,7 +641,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   SettleRpcGroup,
   OwnershipRpcGroup,
   SettingsRpcGroup,
-  OpenSpecRpcGroup,
   TestReportsRpcGroup,
   RolesRpcGroup,
   RoomsRpcGroup,
@@ -680,7 +677,6 @@ export const PEER_RPC_SCOPES = {
   ...SettleRpcScopes,
   ...OwnershipRpcScopes,
   ...SettingsRpcScopes,
-  ...OpenSpecRpcScopes,
   ...TestReportsRpcScopes,
   ...RolesRpcScopes,
   ...RoomsRpcScopes,

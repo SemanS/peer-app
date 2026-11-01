@@ -11,7 +11,7 @@ import { SegmentedControl } from "../../../components/ui/SegmentedControl";
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
 import { SettingsSection } from "../../settings/components/SettingsSection";
-import type { TaskLauncherProps, TaskPreparationState } from "../slotTypes";
+import type { TaskLauncherProps } from "../slotTypes";
 import { settleTaskInput, taskLaunchPrompt, type TaskSettlement } from "../work/taskTree.logic";
 import { herdrLaunchCheckoutText, herdrLaunchVcs } from "./herdrRuntime.logic";
 
@@ -39,7 +39,6 @@ function ScopedPeerTaskLaunch({
   disabled,
   request,
   onRequestOutcome,
-  taskPreparation: Preparation,
   workProject,
 }: TaskLauncherProps) {
   const start = useAtomCommand(serverEnvironment.peerHubStartAgent, { reportFailure: false });
@@ -65,21 +64,13 @@ function ScopedPeerTaskLaunch({
   const repository =
     repositories.find((repository) => repository.id === repositoryId) ?? repositories[0];
   const blocked = peerLaunchBlocker(status, project);
-  const render = (preparation: TaskPreparationState | undefined) => {
+  const render = () => {
     const prompt =
       (editedPrompt?.repositoryId === repository?.id ? editedPrompt?.text : undefined) ??
-      (preparation === undefined
-        ? defaultPrompt
-        : preparation.state === "ready"
-          ? preparation.prompt
-          : "");
-    const preparing =
-      preparation !== undefined &&
-      (preparation.state !== "ready" || preparation.repositoryId !== repository?.id);
+      defaultPrompt;
     const launch = async () => {
       if (
         pending ||
-        preparing ||
         started ||
         blocked !== null ||
         repository === undefined ||
@@ -259,7 +250,6 @@ function ScopedPeerTaskLaunch({
               accessibilityState={{
                 disabled:
                   pending ||
-                  preparing ||
                   started ||
                   blocked !== null ||
                   repository === undefined ||
@@ -267,7 +257,6 @@ function ScopedPeerTaskLaunch({
               }}
               disabled={
                 pending ||
-                preparing ||
                 started ||
                 blocked !== null ||
                 repository === undefined ||
@@ -291,19 +280,5 @@ function ScopedPeerTaskLaunch({
       </SettingsSection>
     );
   };
-  return Preparation === undefined || request !== undefined ? (
-    render(undefined)
-  ) : (
-    <Preparation
-      environmentId={environmentId}
-      label={label}
-      workspace={workspace}
-      project={project}
-      task={task}
-      status={status}
-      repositoryId={repository?.id}
-    >
-      {render}
-    </Preparation>
-  );
+  return render();
 }

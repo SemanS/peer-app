@@ -123,7 +123,7 @@ export function WorkChecklist({
   if (groups.length === 0)
     return (
       <p className="text-sm text-muted-foreground">
-        No open tasks here. Import OpenSpec changes or add tasks in Work, then assign them.
+        No open tasks here. Add tasks in Work, then assign them.
       </p>
     );
   const all = pickAll(groups);

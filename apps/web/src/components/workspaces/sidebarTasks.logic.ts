@@ -23,7 +23,7 @@ export interface SidebarTasks {
 
 /**
  * The project as the Work tab shows it, Area → Task, in the tree's order. A root group with groups
- * under it is a change (an OpenSpec change imports as one) and those groups are its areas; any
+ * under it is a change and those groups are its areas; any
  * other root group is an area itself; tasks in no group keep the area the project gave them.
  */
 export function sidebarTasks(project: WorkProjectNode): SidebarTasks {

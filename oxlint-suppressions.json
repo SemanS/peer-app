@@ -60,11 +60,6 @@
       "count": 1
     }
   },
-  "apps/mobile/src/features/peer/openspec/OpenSpecTaskPreparation.test.tsx": {
-    "t3code/no-dom-test-environment": {
-      "count": 1
-    }
-  },
   "apps/mobile/src/features/peer/ownership/OwnerCallSheet.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1465,19 +1460,6 @@
       "count": 2
     }
   },
-  "apps/server/src/peerHub/plugins/openspec/brief.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/openspec/hub.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/plugins/ownership/Ownership.test.ts": {
     "t3code/no-real-time-wait-in-tests": {
       "count": 2
@@ -2157,16 +2139,6 @@
   "apps/web/src/components/workspaces/memory/MemoryChangesNotice.tsx": {
     "t3code/no-unreasoned-state-sync": {
       "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/openspec/BriefPanel.browser.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 7
-    }
-  },
-  "apps/web/src/components/workspaces/openspec/checklistMarkdown.browser.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
     }
   },
   "apps/web/src/components/workspaces/ownership/AreasBoard.tsx": {

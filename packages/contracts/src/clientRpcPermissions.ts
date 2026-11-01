@@ -64,9 +64,6 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerKnowledgePreview]: AuthOrchestrationOperateScope,
   // Running an entry's check runs a shell command in the project's checkout here.
   [WS_METHODS.peerKnowledgeVerifyEntry]: AuthOrchestrationOperateScope,
-  [WS_METHODS.peerOpenSpecLink]: AuthOrchestrationOperateScope,
-  [WS_METHODS.peerOpenSpecUnlink]: AuthOrchestrationOperateScope,
-  [WS_METHODS.peerOpenSpecSaveBrief]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerTestsFile]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerTestsRemove]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerTestsSetOwner]: AuthOrchestrationOperateScope,

@@ -25,7 +25,7 @@ function wordsOfCode(code: string): string {
  * The short name a task goes by in navigation, worked out from its title alone: the first clause,
  * without what names files, without a creating verb ("Create the shared concurrency contract
  * `a/b.ts`" → "Shared concurrency contract"), and code as words. It renames nothing: the title,
- * as a tracker or an OpenSpec change wrote it, stays what the task's page shows.
+ * as a tracker wrote it, stays what the task's page shows.
  */
 export function taskShortTitle(title: string): string {
   const sentence = title

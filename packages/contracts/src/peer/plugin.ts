@@ -34,7 +34,6 @@ export const PEER_PLUGIN_IDS = [
   "plans",
   "agreements",
   "changes",
-  "openspec",
   "test-reports",
   "roles",
   "rooms",

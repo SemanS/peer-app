@@ -1,4 +1,4 @@
-/** What a task's description says it is: an OpenSpec import folds its bullets into `- ` lines. */
+/** What a task's description says it is: its bullets are `- ` lines. */
 export interface TaskBrief {
   /** The text before the lines: the whole task where the title had to be cut. */
   readonly summary: string | undefined;

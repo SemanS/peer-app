@@ -122,8 +122,6 @@ export * from "./peer/metrics.rpc.ts";
 export * from "./peer/usage.ts";
 export * from "./peer/usage.rpc.ts";
 
-export * from "./peer/openspec.ts";
-export * from "./peer/openspec.rpc.ts";
 export * from "./peer/test-reports.ts";
 export * from "./peer/test-reports.rpc.ts";
 export * from "./peer/acceptance.ts";

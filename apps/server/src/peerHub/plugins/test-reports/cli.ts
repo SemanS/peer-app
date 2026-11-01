@@ -40,7 +40,7 @@ function failure(error: PeerHubError, filing: boolean): CliError {
   if (error.code === "unknown_task")
     return refused(
       error.detail,
-      'name a task of this project by its key after @task: (as --unverified "<text> @task:SEC-3-1"), or an item of the same OpenSpec change by its number (@task:3.1); the report\'s own task does not count.',
+      'name a task of this project by its key after @task: (as --unverified "<text> @task:SEC-3-1"), or an item of the same change by its number (@task:3.1); the report\'s own task does not count.',
     );
   if (error.code === "not_a_dependent")
     return refused(

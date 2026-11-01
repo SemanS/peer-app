@@ -29,7 +29,6 @@ import { toolTrustMobilePlugin } from "./tool-trust";
 import { mcpMobilePlugin } from "./mcp";
 import { ownershipMobilePlugin } from "./ownership";
 import { requestsMobilePlugin } from "./requests";
-import { openSpecMobilePlugin } from "./openspec";
 import { rolesMobilePlugin } from "./roles";
 import { roomsMobilePlugin } from "./rooms";
 import { testReportsMobilePlugin } from "./test-reports";
@@ -62,7 +61,6 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   plansMobilePlugin,
   agreementsMobilePlugin,
   changesMobilePlugin,
-  openSpecMobilePlugin,
   testReportsMobilePlugin,
   rolesMobilePlugin,
   roomsMobilePlugin,

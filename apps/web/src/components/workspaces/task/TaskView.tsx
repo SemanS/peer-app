@@ -178,9 +178,6 @@ function TaskBody({
   const slot = { environmentId, status, workspace, project: projectState, task: taskNode };
   const label = taskLabel(taskNode);
   const primary = model.primary;
-  const Preparation = plugins.find(
-    (plugin) => plugin.taskPreparation !== undefined,
-  )?.taskPreparation;
   const Launcher = plugins.find((plugin) => plugin.taskLauncher !== undefined)?.taskLauncher;
   const tree = servesTree(found.project);
   const unsettled = tree && taskNode.unsettled === true && !taskNode.done;
@@ -420,20 +417,10 @@ function TaskBody({
           project={projectState}
           taskId={taskId}
           taskLabel={label}
-          preparation={Preparation}
           {...withPrompt(initialPrompt)}
           inline
         />
-      ) : Preparation === undefined ? null : (
-        <Preparation
-          key={`${environmentId}:${status.email}:${workspace}:${project}:${taskId}`}
-          environmentId={environmentId}
-          status={status}
-          workspace={workspace}
-          project={projectState}
-          taskId={taskId}
-        />
-      )}
+      ) : null}
 
       <WaitsOnYou
         waits={model.waits}

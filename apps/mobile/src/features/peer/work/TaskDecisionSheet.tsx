@@ -22,7 +22,6 @@ import { CurrentContextReport } from "../CurrentContextReport";
 import { taskStateWords } from "./work.logic";
 import { GitHubTaskPullRequests } from "../github/GitHubTaskPullRequests";
 import { PeerHandoff } from "../handoff/PeerHandoff";
-import { OpenSpecTaskPreparation } from "../openspec/OpenSpecTaskPreparation";
 import { RoomTaskRow } from "../rooms/RoomTaskRow";
 import { TaskRuns } from "./TaskRuns";
 
@@ -195,16 +194,6 @@ export function TaskDecisionSheet({
         )}
         {status && project && task ? (
           <>
-            <OpenSpecTaskPreparation
-              environmentId={environmentId}
-              label={connection?.environmentLabel ?? "Computer"}
-              status={status}
-              workspace={workspace}
-              project={project}
-              task={task}
-            >
-              {() => null}
-            </OpenSpecTaskPreparation>
             <PeerHandoff
               environmentId={environmentId}
               label={connection?.environmentLabel ?? "Computer"}

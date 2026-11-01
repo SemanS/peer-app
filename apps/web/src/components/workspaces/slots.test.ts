@@ -45,7 +45,6 @@ describe("the web plugin registry", () => {
       "plans",
       "agreements",
       "changes",
-      "openspec",
       "test-reports",
       "roles",
       "rooms",

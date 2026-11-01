@@ -1,5 +1,4 @@
 import { PeerBackground } from "./features/peer/PeerBackground";
-import { rewritePeerAlertPath } from "./features/peer/needs-you/needsYouLinking";
 import { installPermissionUpdateNotice } from "./features/connection/permissionUpdateNotice";
 import { installComposerAttachmentUploads } from "./state/composer-attachment-uploads";
 import { installThreadOutboxDelivery } from "./state/threadOutboxDelivery";
@@ -112,7 +111,7 @@ const linkingConfig = {
 
 function getAppStateFromPath(path: string, options: Parameters<typeof getStateFromPath>[1]) {
   return pipe(
-    getStateFromPath(rewritePeerAlertPath(path), options),
+    getStateFromPath(path, options),
     (state) => restoreDraftLinkState(state, path),
     (state) => restoreSettingsLinkState(state, settingsLinkPage()),
     takeThreadPromptLink,

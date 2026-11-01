@@ -1,5 +1,4 @@
 import { LocalWork } from "./LocalWork";
-import { NeedsYouAlertsRow } from "./needs-you/NeedsYouAlertsRow";
 import {
   editionLabel,
   type EnvironmentId,
@@ -10,10 +9,9 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { domainStateLabel } from "@t3tools/client-runtime/peer-domain-offers";
-import { buildWorkTree } from "@t3tools/client-runtime/peer/work";
 import { useNavigation } from "@react-navigation/native";
-import { useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
+import { useState } from "react";
+import { View } from "react-native";
 
 import { AppText as Text } from "../../components/ui/AppText";
 import { useEnvironmentQuery } from "../../state/query";
@@ -28,16 +26,13 @@ import { PeerFoundings } from "./PeerFoundings";
 import { PeerSignIn } from "./PeerSignIn";
 import { organizationLine } from "./organizationLine.logic";
 import { PeerAdapters } from "./PeerAdapters";
-import { PeerCoordTimeline } from "./PeerCoordTimeline";
 import { PeerPluginsSection } from "./PeerPluginsSection";
 import { usePeerMobilePlugins, PEER_MOBILE_PLUGINS } from "./slots";
 import { alwaysWorkspaceSectionsAt, workspaceSectionsAt } from "./slots.logic";
-import { rowInset, taskListRows } from "./work/taskTree.logic";
 
 /**
- * Peer workspaces: the way to Work, then for each environment selected in Settings the team's open
- * tasks, what the active plugins add (team requests, starting an agent on the selected task, the
- * agents herdr runs), the coordination of the selected task, how agents coordinate, and the
+ * Peer workspaces: the way to the rooms, then for each environment selected in Settings signing in,
+ * what the active plugins add (the agents herdr runs, the audit log), how agents coordinate, and the
  * plugins themselves.
  */
 export function PeerWorkspaces() {
@@ -49,7 +44,7 @@ export function PeerWorkspaces() {
   }
   return (
     <>
-      <WorkRow />
+      <RoomsRow />
       {selectedTargets.map((target) => (
         <PeerEnvironment
           key={target.environmentId}
@@ -61,22 +56,21 @@ export function PeerWorkspaces() {
   );
 }
 
-/** Opens Work: the team's projects and their threads, over every computer the phone knows. */
-function WorkRow() {
+/** Opens the rooms of every computer the phone knows. */
+function RoomsRow() {
   const navigation = useNavigation();
   return (
     <SettingsSection>
       <SettingsRow
-        icon="square.split.2x1"
-        label="Work"
-        value="Projects and threads"
-        onPress={() => navigation.navigate("Work")}
+        icon="bubble.left.and.bubble.right"
+        label="Rooms"
+        value="Your tasks' conversations"
+        onPress={() => navigation.navigate("Rooms")}
       />
     </SettingsSection>
   );
 }
 
-/** Remote launch uses the selected environment's runtime and filesystem. */
 function PeerEnvironment({
   environmentId,
   label,
@@ -88,24 +82,10 @@ function PeerEnvironment({
   const coordinate = useAtomCommand(serverEnvironment.peerHubSetCoordination, {
     reportFailure: false,
   });
-  const [selection, setSelection] = useState<{
-    workspace: string;
-    projectId: string;
-    taskId: string;
-  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const status = query.data;
   const plugins = usePeerMobilePlugins(status);
-  const workTree = useMemo(
-    () =>
-      status === null ? [] : buildWorkTree({ status, localThreads: [], now: 0, watch: false }),
-    [status],
-  );
-  const project = status?.workspaces
-    .find((workspace) => workspace.slug === selection?.workspace)
-    ?.projects.find((project) => project.project.id === selection?.projectId);
-  const task = project?.work.tasks.find((task) => task.id === selection?.taskId);
   const runCoordination = (input: PeerHubSetCoordinationInput) => {
     setBusy(true);
     setMessage(null);
@@ -139,10 +119,6 @@ function PeerEnvironment({
           {status.signedIn ? (
             <PeerAccessControls environmentId={environmentId} status={status} />
           ) : null}
-          {status.needsYou === undefined &&
-          !status.plugins?.some((plugin) => plugin.id === "needs-you") ? (
-            <NeedsYouAlertsRow environmentId={environmentId} label={label} status={status} />
-          ) : null}
           <PeerFoundings environmentId={environmentId} status={status} />
           <PeerDomainOffers environmentId={environmentId} status={status} />
           {status.workspaces.map((workspace) => (
@@ -160,77 +136,6 @@ function PeerEnvironment({
                     .join(" · ")}
                 </Text>
               ) : null}
-              {workspace.projects.flatMap((project) => {
-                const node = workTree.find(
-                  (row) => row.workspace === workspace.slug && row.projectId === project.project.id,
-                );
-                const rows =
-                  node === undefined
-                    ? project.work.tasks
-                        .filter((task) => task.status !== "done")
-                        .map((task) => ({ task, depth: 0, progress: null, unsettled: false }))
-                    : taskListRows(node);
-                return rows.map(({ task, depth, progress, unsettled }) => (
-                  <Pressable
-                    key={`${project.project.id}/${task.id}`}
-                    accessibilityRole="button"
-                    accessibilityState={{
-                      selected:
-                        selection?.taskId === task.id &&
-                        selection?.projectId === project.project.id,
-                      disabled: busy,
-                    }}
-                    disabled={busy}
-                    className="gap-1 py-4 pr-4"
-                    style={{ paddingLeft: rowInset(depth) }}
-                    onPress={() => {
-                      setSelection({
-                        workspace: workspace.slug,
-                        projectId: project.project.id,
-                        taskId: task.id,
-                      });
-                      setMessage(null);
-                    }}
-                  >
-                    <Text className="font-t3-medium text-foreground">
-                      {unsettled ? "? " : ""}
-                      {[task.key, task.title].filter(Boolean).join(" · ")}
-                      {progress === null ? null : (
-                        <Text className="text-foreground-muted"> {progress}</Text>
-                      )}
-                    </Text>
-                    <Text className="text-sm text-foreground-muted">
-                      {project.project.name} · {task.status}
-                      {unsettled ? " · Decide: one task or its parts" : ""}
-                      {selection?.taskId === task.id && selection?.projectId === project.project.id
-                        ? " · Selected"
-                        : ""}
-                    </Text>
-                    {plugins.map(({ id, taskBadges: Badge }) =>
-                      Badge ? (
-                        <Badge
-                          key={id}
-                          environmentId={environmentId}
-                          label={label}
-                          workspace={workspace.slug}
-                          project={project}
-                          task={task}
-                          status={status}
-                          disabled={busy}
-                          onBusyChange={setBusy}
-                        />
-                      ) : null,
-                    )}
-                  </Pressable>
-                ));
-              })}
-              {workspace.projects.every((project) =>
-                project.work.tasks.every((task) => task.status === "done"),
-              ) ? (
-                <Text className="p-4 text-foreground-muted">
-                  No open tasks. Create a task in Peer on web or desktop.
-                </Text>
-              ) : null}
             </SettingsSection>
           ))}
           {[
@@ -245,44 +150,6 @@ function PeerEnvironment({
               plugins={plugins}
             />
           ))}
-          {task === undefined || project === undefined || selection === null
-            ? null
-            : plugins.map(({ id, taskSections: Section }) =>
-                Section === undefined ? null : (
-                  <Section
-                    key={`${id}:${selection.workspace}/${task.id}`}
-                    environmentId={environmentId}
-                    label={label}
-                    workspace={selection.workspace}
-                    project={project}
-                    task={task}
-                    status={status}
-                    onBusyChange={setBusy}
-                    disabled={busy}
-                    workProject={workTree.find(
-                      (row) =>
-                        row.workspace === selection.workspace &&
-                        row.projectId === project.project.id,
-                    )}
-                  />
-                ),
-              )}
-          {selection === null ? null : (
-            <PeerCoordTimeline
-              environmentId={environmentId}
-              workspace={selection.workspace}
-              project={selection.projectId}
-              task={selection.taskId}
-              revision={status.lastSyncAt ?? undefined}
-              sessions={status.coordination.sessions.filter(
-                (session) =>
-                  session.workspace === selection.workspace &&
-                  session.project === selection.projectId &&
-                  session.task === selection.taskId,
-              )}
-              tasks={project?.work.tasks ?? []}
-            />
-          )}
           <PeerAdapters
             label={label}
             status={status}

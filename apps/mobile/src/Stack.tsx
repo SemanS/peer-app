@@ -4,14 +4,8 @@ import { PullRequestGuideStopScreen } from "./features/pull-requests/guide/PullR
 import { PullRequestInlineCommentScreen } from "./features/pull-requests/PullRequestInlineCommentScreen";
 import { PullRequestDiscussionScreen } from "./features/pull-requests/PullRequestDiscussionScreen";
 import { createWorkspaceStackNavigator } from "./features/layout/createWorkspaceStackNavigator";
-import {
-  NEEDS_YOU_ROUTE_PATH,
-  NEEDS_YOU_AGENT_PATH,
-} from "./features/peer/needs-you/needsYouLinking";
-import { NeedsYouRouteScreen } from "./features/peer/needs-you/NeedsYouRouteScreen";
-import { NeedsYouAgentRouteScreen } from "./features/peer/needs-you/NeedsYouAgentRouteScreen";
 import { RoomRouteScreen } from "./features/peer/rooms/RoomRouteScreen";
-import { WorkRouteScreen } from "./features/peer/work/WorkRouteScreen";
+import { RoomsRouteScreen } from "./features/peer/rooms/RoomsRouteScreen";
 import {
   createPathConfigForStaticNavigation,
   getPathFromState,
@@ -735,25 +729,15 @@ const RootStackConfig = createWorkspaceStackNavigator({
         sheetGrabberVisible: true,
       },
     }),
-    NeedsYou: createNativeStackScreen({
-      screen: NeedsYouRouteScreen,
-      linking: NEEDS_YOU_ROUTE_PATH,
-      options: { ...GLASS_HEADER_OPTIONS, title: "Needs you" },
-    }),
-    NeedsYouAgent: createNativeStackScreen({
-      screen: NeedsYouAgentRouteScreen,
-      linking: NEEDS_YOU_AGENT_PATH,
-      options: { ...GLASS_HEADER_OPTIONS, title: "Agent" },
-    }),
     Room: createNativeStackScreen({
       screen: RoomRouteScreen,
       linking: "room/:environmentId/:workspace/:project/:task",
       options: { ...GLASS_HEADER_OPTIONS, title: "Room" },
     }),
-    Work: createNativeStackScreen({
-      screen: WorkRouteScreen,
-      linking: "work",
-      options: { ...GLASS_HEADER_OPTIONS, title: "Work" },
+    Rooms: createNativeStackScreen({
+      screen: RoomsRouteScreen,
+      linking: "rooms",
+      options: { ...GLASS_HEADER_OPTIONS, title: "Rooms" },
     }),
     Thread: createNativeStackScreen({
       screen: ThreadRouteScreen,

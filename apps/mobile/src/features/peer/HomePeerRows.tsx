@@ -1,12 +1,6 @@
-import { HomeNeedsYouRow } from "./needs-you/HomeNeedsYouRow";
-import { HomeWorkRow } from "./work/HomeWorkRow";
+import { HomeRoomsRow } from "./rooms/HomeRoomsRow";
 
-/** Peer's rows at the top of Home and of the thread sidebar: what needs you, then the team's work. */
+/** Peer's row at the top of Home and of the thread sidebar: the person's rooms. */
 export function HomePeerRows() {
-  return (
-    <>
-      <HomeNeedsYouRow />
-      <HomeWorkRow />
-    </>
-  );
+  return <HomeRoomsRow />;
 }

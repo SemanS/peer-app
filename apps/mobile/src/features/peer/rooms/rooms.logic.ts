@@ -3,11 +3,7 @@
  * composer's two targets, a draft that lives until its delivery is confirmed, a message as one row,
  * and Needs you across computers. Delivery words and who may do what stay in the runtime.
  */
-import {
-  personName,
-  taskLabel,
-  type NeedsYouEnvironment,
-} from "@t3tools/client-runtime/peer/needs-you";
+import { personName, taskLabel } from "@t3tools/client-runtime/peer/needs-you";
 import { activePlugin } from "@t3tools/client-runtime/peer/plugins";
 import {
   anchorText,
@@ -15,9 +11,11 @@ import {
   deliveryWords,
   needsYouByTask,
   roomBadgeCount,
+  roomFeed,
   roomNeedsYou,
   type NameOf,
   type RoomAction,
+  type RoomFeedRow,
   type RoomNeedsYouItem,
   type RoomPlace,
   type RoomTargetChoice,
@@ -30,6 +28,7 @@ import {
 } from "@t3tools/client-runtime/state/runtime";
 import type {
   EnvironmentId,
+  PeerHubStatus,
   PeerRoomMessage,
   PeerRoomRead,
   PeerRoomsDeclineInput,
@@ -286,15 +285,21 @@ export interface RoomNeed extends RoomNeedsYouItem {
   readonly projectName: string;
 }
 
+/** A computer the phone knows, with the status it last gave. */
+export interface RoomEnvironment {
+  readonly environmentId: EnvironmentId;
+  readonly label: string;
+  readonly connected: boolean;
+  readonly status: PeerHubStatus | null;
+}
+
 /**
  * Needs you's room items over every computer, newest first. Two computers of one person report the
  * same message, so it counts once and a connected computer answers for it. A computer where the
  * plugin is off adds nothing, whatever its status still carries.
  */
 export function roomNeedsAcross(
-  environments: ReadonlyArray<
-    Pick<NeedsYouEnvironment, "environmentId" | "label" | "connected" | "status">
-  >,
+  environments: ReadonlyArray<RoomEnvironment>,
 ): ReadonlyArray<RoomNeed> {
   const seen = new Set<string>();
   const needs: RoomNeed[] = [];
@@ -325,6 +330,59 @@ export function roomNeedsAcross(
   }
   return needs.sort((a, b) => b.at.localeCompare(a.at) || b.seq - a.seq);
 }
+
+/** One room of the list, with the computer that reports it and what it is called. */
+export interface RoomRow extends RoomFeedRow {
+  readonly environmentId: EnvironmentId;
+  readonly title: string;
+  readonly projectName: string;
+  /** Who wrote last: a person, or a person's agent. */
+  readonly lastWriter: string | undefined;
+}
+
+/**
+ * Every room over every computer, in the Feed's order. Two computers of one person report the same
+ * room, so it counts once and a connected computer answers for it.
+ */
+export function roomRowsAcross(
+  environments: ReadonlyArray<RoomEnvironment>,
+): ReadonlyArray<RoomRow> {
+  const seen = new Set<string>();
+  const rows: RoomRow[] = [];
+  const connectedFirst = [...environments].sort(
+    (a, b) => Number(b.connected) - Number(a.connected),
+  );
+  for (const { environmentId, status } of connectedFirst) {
+    if (status === null || !status.signedIn || !activePlugin(status, "rooms")) continue;
+    for (const row of roomFeed(status.rooms)) {
+      if (seen.has(row.key)) continue;
+      seen.add(row.key);
+      const project = status.workspaces
+        .find((workspace) => workspace.slug === row.workspace)
+        ?.projects.find((candidate) => candidate.project.id === row.project);
+      const task = project?.work.tasks.find((candidate) => candidate.id === row.task);
+      rows.push({
+        ...row,
+        environmentId,
+        title: task === undefined ? row.task : taskLabel(task),
+        projectName: project?.project.name ?? row.project,
+        lastWriter:
+          row.author === undefined
+            ? undefined
+            : `${personName(status, row.workspace, row.author.email)}${row.author.run === undefined ? "" : "'s agent"}`,
+      });
+    }
+  }
+  return rows;
+}
+
+/** What a row says under its title. */
+export const roomRowLine = (row: Pick<RoomRow, "projectName" | "lastWriter" | "unread">) =>
+  [
+    row.projectName,
+    ...(row.lastWriter === undefined ? [] : [row.lastWriter]),
+    ...(row.unread === 0 ? [] : [`${row.unread} unread`]),
+  ].join(" · ");
 
 /** One card per task, so an owner asked ten times on a task sees one card. */
 export const roomNeedGroups = (needs: ReadonlyArray<RoomNeed>) => needsYouByTask(needs);

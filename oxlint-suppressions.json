@@ -20,64 +20,6 @@
       "count": 2
     }
   },
-  "apps/mobile/src/features/peer/agreements/PeerTaskAgreements.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/agreements/agreements.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/announcements/AnnouncementReceiptsList.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 2
-    }
-  },
-  "apps/mobile/src/features/peer/needs-you/NeedsYouCards.tsx": {
-    "t3code/no-ambiguous-detail-navigation": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/needs-you/useNeedsYou.ts": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/ownership/OwnerCallSheet.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/ownership/TeamSection.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/ownership/ownerCall.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/ownership/team.logic.ts": {
-    "t3code/no-em-dash-copy": {
-      "count": 1
-    },
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/ownership/useMinuteClock.ts": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/resources/PeerHeldResources.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
   "apps/mobile/src/features/peer/rooms/useRoom.ts": {
     "t3code/no-unreasoned-state-sync": {
       "count": 3
@@ -87,41 +29,6 @@
     "t3code/no-hookless-use-function": {
       "count": 1
     },
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/test-reports/testReports.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/work/TaskDecisionSheet.tsx": {
-    "t3code/no-ambiguous-detail-navigation": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/work/TaskRuns.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/work/WorkRouteScreen.tsx": {
-    "t3code/no-ambiguous-detail-navigation": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/work/signals.ts": {
-    "t3code/no-mobile-pull-request-glyph-literals": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/work/useWork.ts": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/work/work.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }

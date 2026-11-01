@@ -44,7 +44,7 @@ export function inputReadiness(reads: PeerStaleReads): "stale" | "current" | "em
   return reads.reads.length === 0 ? "empty" : "current";
 }
 
-export const inputReadinessLabels = {
+const inputReadinessLabels = {
   stale: "Update required",
   current: "Up to date",
   empty: "No recorded reads",

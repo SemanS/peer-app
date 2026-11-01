@@ -32,12 +32,27 @@
         "prepare-server-compile-cache.cjs",
         "smoke-desktop-app.ts",
         "verify-windows-desktop-artifact.ts",
+        // Run by hand: `fetch-herdr.ts` caches the herdr binary for development and
+        // `build-npm-peer.ts` builds the @webinson/peer-core package.
+        "build-npm-peer.ts",
+        "fetch-herdr.ts",
+        // docs/operations/release.md names these. Only upstream's release workflow runs
+        // them, and this fork has no workflows, but they stay runnable and merge cleanly.
+        "build-cli-archive.ts",
+        "smoke-cli-archive.ts",
       ],
       "ignoreDependencies": ["agent-device", "esbuild"],
       // The `t3` npm package's files: copied into the package, never imported.
       // knip-schemas.test.ts writes a throwaway project to .knip-test-*, which a
       // knip run beside it in check:changed must not report.
-      "ignore": ["npm-launcher/**", ".knip-test-*/**"],
+      // Upstream's `icons:*` scripts run the two export-*-icons.ts files. Peer's run
+      // export-peer-icons.mjs instead, so nothing here runs them; kept for upstream merges.
+      "ignore": [
+        "npm-launcher/**",
+        ".knip-test-*/**",
+        "export-android-icons.ts",
+        "export-brand-icons.ts",
+      ],
     },
     "apps/server": {
       // Vite+ pack entries and the launcher used by installed background services.
@@ -46,15 +61,49 @@
         "src/claude-history-worker.ts!",
         "scripts/cli.ts",
         "scripts/fetch-expo-schema.ts",
+        // Peer's lab, its report and the Hub smoke test run by hand: the Hub's
+        // docs/operations.md gives the commands.
+        "scripts/peer-coordination-lab.ts",
+        "scripts/peer-coordination-report.ts",
+        "scripts/peer-hub-smoke.ts",
         "scripts/probe-claude-fork-local-rollback-replay.ts",
         "scripts/update-test-shard-weights.ts",
         "scripts/verify-background-live.ts",
+        // Opt-in checks of the Peer Mod, run directly with node against a real `claude`.
+        "src/peerHub/claudeMod/smokeCli.ts",
+        "src/peerHub/claudeMod/testCli.ts",
         "src/provider/testFixtures/*.mjs",
         // graphqlgen reads its config.
         "graphql.config.ts",
       ],
-      // The generated operations export every selection's class.
-      "ignoreIssues": { "**/*.graphql.ts": ["exports", "types", "namespaceMembers"] },
+      "ignoreIssues": {
+        // The generated operations export every selection's class.
+        "**/*.graphql.ts": ["exports", "types", "namespaceMembers"],
+        // Baseline for Peer's own code, taken when this check first ran on it. Upstream
+        // has no files in these directories, so ordinary upstream code stays checked.
+        "scripts/peer-lab/**": ["exports"],
+        "src/peerHub/**": ["exports"],
+        // The same baseline for Peer files outside those directories.
+        "src/cli/joinLink.ts": ["exports"],
+        "src/cli/openspecItems.ts": ["exports"],
+        "src/cli/peerCoreEditor.ts": ["exports"],
+        "src/cli/peerCoreJoin.ts": ["exports"],
+        "src/cli/peerCoreOpenSpec.ts": ["exports"],
+        "src/cli/peerCoreRuns.ts": ["exports"],
+        "src/cli/peerCoreTasks.ts": ["exports"],
+        "src/cli/peerCoreTree.ts": ["exports"],
+        "src/jj/JjStatus.ts": ["exports"],
+        "src/storageCleanup.testkit.ts": ["exports"],
+        "src/vcs/JjAvailability.ts": ["exports"],
+        "src/vcs/JjVcsDriver.ts": ["exports"],
+        "src/vcs/testing/JjTestSupport.ts": ["exports"],
+        // Upstream files where Peer added or kept exports that nothing reads yet. Removing
+        // the keyword would conflict on the next upstream merge.
+        "src/binCli.ts": ["exports"],
+        "src/git/GitManager.ts": ["exports"],
+        "src/usage/usageScanCache.ts": ["exports"],
+        "src/vcs/GitVcsDriverCore.ts": ["exports"],
+      },
       // Keep the transitive Effect runtime pinned for standalone npm installs.
       // The Vite+ web build prerequisite.
       // Native and disk-loaded provider packages stay external to the bundle; the
@@ -85,12 +134,77 @@
     },
     "apps/web": {
       // Worktree setup (scripts/setup-worktree.ts) runs this directly, and evidence
-      // fixtures run under node.
-      "entry": ["scripts/warm-dep-cache.ts", "test/fixtures/**/*.mjs"],
+      // fixtures run under node. Upstream's CI runs verify-built-boot.ts on the built
+      // client; this fork has no CI, so it is run by hand.
+      "entry": [
+        "scripts/verify-built-boot.ts",
+        "scripts/warm-dep-cache.ts",
+        "test/fixtures/**/*.mjs",
+      ],
       // UI component modules are copied and adapted as cohesive sets. Keep their
       // named subcomponents even before they have callers; the file audit still
       // reports an entire component module when nothing imports it.
-      "ignoreIssues": { "src/components/ui/*.tsx": ["exports", "nsExports", "duplicates"] },
+      "ignoreIssues": {
+        "src/components/ui/*.tsx": ["exports", "nsExports", "duplicates"],
+        // Baseline for Peer's own web code, taken when this check first ran on it. Named
+        // file by file so a new unused export in any other Peer file still fails.
+        "src/components/workspaces/Coordination.tsx": ["exports"],
+        "src/components/workspaces/ProjectSignals.tsx": ["exports"],
+        "src/components/workspaces/WorkScopePicker.tsx": ["exports"],
+        "src/components/workspaces/WorkspaceAccess.tsx": ["exports"],
+        "src/components/workspaces/forecast/integration.logic.ts": ["exports"],
+        "src/components/workspaces/handoff/Handoff.tsx": ["exports"],
+        "src/components/workspaces/handoff/handoffPresentation.ts": ["exports"],
+        "src/components/workspaces/herdr/HerdrRuntimeSettings.logic.ts": ["exports"],
+        "src/components/workspaces/jujutsu/pairActions.logic.ts": ["exports"],
+        "src/components/workspaces/knowledge/knowledge.logic.ts": ["exports"],
+        "src/components/workspaces/marks.tsx": ["exports"],
+        "src/components/workspaces/memory/MemoryRecords.tsx": ["exports"],
+        "src/components/workspaces/memory/memory.actions.ts": ["exports"],
+        "src/components/workspaces/metrics/Metrics.tsx": ["exports"],
+        "src/components/workspaces/overlap/overlap.logic.ts": ["exports"],
+        "src/components/workspaces/ownership/ownerDecision.logic.ts": ["exports"],
+        "src/components/workspaces/ownership/ownership.testkit.ts": ["exports"],
+        "src/components/workspaces/roles/RoleMark.tsx": ["exports"],
+        "src/components/workspaces/settings/AiSubscriptionsParts.tsx": ["exports"],
+        "src/components/workspaces/settings/DraftBar.tsx": ["exports"],
+        "src/components/workspaces/settings/PeerSettingsPage.tsx": ["exports"],
+        "src/components/workspaces/settings/Proposals.tsx": ["exports"],
+        "src/components/workspaces/settings/projectAreas.logic.ts": ["duplicates"],
+        "src/components/workspaces/settings/projectCapacity.logic.ts": ["exports"],
+        "src/components/workspaces/settings/projectCoordination.logic.ts": ["exports"],
+        "src/components/workspaces/settings/webhookForm.logic.ts": ["exports"],
+        "src/components/workspaces/task/runs.logic.ts": ["exports"],
+        "src/components/workspaces/task/task.logic.ts": ["exports"],
+        "src/components/workspaces/usage/usagePalette.ts": ["exports"],
+        "src/components/workspaces/vcsWords.ts": ["exports"],
+        "src/components/workspaces/workBoard.logic.ts": ["exports"],
+        "src/components/workspaces/workScope.ts": ["exports"],
+        "src/components/workspaces/workTree.logic.ts": ["exports"],
+        "src/lib/projectPaths.ts": ["exports"],
+        // Upstream exports read only by upstream's shell or tests, which Peer's shell
+        // replaced. Removing the keyword would conflict on the next upstream merge.
+        "src/components/Sidebar.logic.ts": ["exports"],
+        "src/components/settings/ThemePreviewCircles.tsx": ["exports"],
+        "src/components/settings/settingsSearch.ts": ["exports"],
+        "src/components/sidebar/SidebarThreadRow.tsx": ["exports"],
+        "src/lib/sidebarTree.ts": ["exports"],
+        "src/sidebarProjectGrouping.ts": ["exports"],
+        "src/state/olderSettledShelf.ts": ["exports"],
+      },
+      "ignore": [
+        // Upstream components only upstream's shell imports. Peer kept its own versions of
+        // DraftHeroHeadline, Sidebar, SettingsSidebarNav and ThemeSettings in the merge.
+        "src/components/chat/DraftHeroProjectHeading.tsx",
+        "src/components/settings/ThemeWireframe.tsx",
+        "src/components/settings/useSettingsSectionNavigation.ts",
+        "src/components/sidebar/SidebarListMarkers.tsx",
+        "src/components/sidebar/SidebarProjectFolderHeader.tsx",
+        // Peer files nothing imports, kept until a maintainer decides each one.
+        "src/bootAppearance.ts",
+        "src/components/workspaces/needs-you/StaleInputsCard.tsx",
+        "src/components/workspaces/settings/CheckoutBadge.tsx",
+      ],
     },
     "apps/marketing": {
       // `astro check` runs from the typecheck task in vite.config.ts, which knip does not read.
@@ -138,6 +252,24 @@
     "packages/*": {
       // These workspace packages are private to this monorepo.
       "includeEntryExports": true,
+    },
+    "packages/client-runtime": {
+      "includeEntryExports": true,
+      // Baseline for Peer's own client code, taken when this check first ran on it.
+      "ignoreIssues": {
+        "src/peer/**": ["exports"],
+        "src/peerOrganizations.ts": ["exports"],
+      },
+    },
+    "packages/contracts": {
+      "includeEntryExports": true,
+      // Baseline for Peer's own contracts, taken when this check first ran on it.
+      "ignoreIssues": { "src/peer/**": ["exports"] },
+    },
+    "packages/shared": {
+      "includeEntryExports": true,
+      // Peer's DEFAULT_VCS_TERMINOLOGY aliases GIT_VCS_TERMINOLOGY; both names have callers.
+      "ignoreIssues": { "src/vcs.ts": ["duplicates"] },
     },
     "packages/effect-acp": {
       "includeEntryExports": true,

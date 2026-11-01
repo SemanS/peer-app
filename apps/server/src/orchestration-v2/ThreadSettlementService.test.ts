@@ -1344,8 +1344,9 @@ describe("ThreadSettlementServiceV2 worker", () => {
     ),
   );
 
-  for (const linked of [false, true]) {
-    it.effect(`normalizes secondary jj PR lookup cwd with linked PR ${linked}`, () =>
+  it.effect.each([false, true])(
+    "normalizes secondary jj PR lookup cwd with linked PR %s",
+    (linked) =>
       Effect.scoped(
         Effect.gen(function* () {
           yield* TestClock.setTime(Date.parse(NOW));
@@ -1388,11 +1389,11 @@ describe("ThreadSettlementServiceV2 worker", () => {
           }).pipe(Effect.provide(fixture.layer));
         }),
       ),
-    );
-  }
+  );
 
-  for (const checkoutFailure of ["ensureUsable"] as const) {
-    it.effect(`preserves PR lookup behavior when ${checkoutFailure} fails`, () =>
+  it.effect.each(["ensureUsable"] as const)(
+    "preserves PR lookup behavior when %s fails",
+    (checkoutFailure) =>
       Effect.scoped(
         Effect.gen(function* () {
           yield* TestClock.setTime(Date.parse(NOW));
@@ -1431,8 +1432,7 @@ describe("ThreadSettlementServiceV2 worker", () => {
           }).pipe(Effect.provide(fixture.layer));
         }),
       ),
-    );
-  }
+  );
 });
 
 describe("ThreadSettlementServiceV2 terminals", () => {

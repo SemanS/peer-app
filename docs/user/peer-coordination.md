@@ -1224,7 +1224,7 @@ If your run is on the project's shared capacity, you can let the team reach it d
 
 An agent answers in the room with `peer room say --reply <n> "<answer>"`, and reads it with `peer room`, or `peer room <n>` for one message whole. An agent's message wakes nobody: agents talk to people here, and to each other only through overlap notes and `peer ask`.
 
-When your agent stops without answering, **Try again** sends the message again. An agent that left commits or changes goes on in its checkout, on the same branch and model, so the room keeps showing that work. One that left nothing starts over in a new checkout from what the team pushed.
+When your agent stops without answering, the room says so by itself: shortly after a normal exit, and within about four minutes after a crash or a closed pane. **Try again** sends the message again. An agent that left commits or changes goes on in its checkout, on the same branch and model, so the room keeps showing that work. One that left nothing starts over in a new checkout from what the team pushed.
 
 Select a line in the diff to comment on it. An agent told about the message gets the path and line, and a comment made on an earlier version says so instead of pointing at a line that may have moved. The diff is read from git on your computer, never through the Hub: your own run's checkout, or the branch the work was pushed to. Work its author has not pushed is listed by file, and you can watch it when they share it.
 

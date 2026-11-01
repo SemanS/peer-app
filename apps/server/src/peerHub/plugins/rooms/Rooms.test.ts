@@ -6,10 +6,11 @@ import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import type { PeerRoomDiff } from "@t3tools/contracts";
+import { PEER_ROOM_START_GRACE_MS, type PeerRoomDiff } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
+import * as TestClock from "effect/testing/TestClock";
 
 import {
   bindPlugin,
@@ -733,6 +734,85 @@ describe("a delivery its owner sent on again", () => {
         assert.strictEqual(diff.state, "here");
         assert.strictEqual(diff.folder, tree);
         if (diff.state === "here") assert.include(diff.patch, "total.ts");
+      }),
+    ),
+  );
+});
+
+describe("a session that leaves", () => {
+  const url = `${ROOM}/12/deliveries/${encodeURIComponent(BOB)}`;
+  const reads = (peer: Peer) => callsTo(peer, "GET", "/rooms/inbox").length;
+  const ending = (over: Parameters<typeof sessionOf>[0] = {}) => ({
+    session: sessionOf(over),
+    event: "session-end" as const,
+    remainingMs: 1000,
+  });
+
+  /** Bob's Peer past the start grace, with a delivery that `run_1` took and no read since. */
+  const taken = Effect.gen(function* () {
+    const current = roomHubOf();
+    const peer = yield* roomPeer(current);
+    yield* waitFor(() => reads(peer) > 0);
+    yield* TestClock.adjust(PEER_ROOM_START_GRACE_MS);
+    current.inbox = {
+      ...current.inbox,
+      work: [
+        {
+          project: "app",
+          task: "vl-7",
+          message: messageOf({
+            author: { email: BOB },
+            to: [{ kind: "agent", email: BOB, state: "taken", run: "run_1" }],
+          }),
+        },
+      ],
+    };
+    const { hooks } = yield* contributionsOf(peer);
+    return { peer, hooks: hooks! };
+  });
+
+  it.effect.each(["sessionEnd", "sessionExpired"] as const)(
+    "%s fails what its run took, with no ping or sync",
+    (hook) =>
+      run(
+        Effect.gen(function* () {
+          const { peer, hooks } = yield* taken;
+          yield* hooks[hook]!(ending());
+          yield* TestClock.adjust("3 seconds");
+          yield* waitFor(() => callsTo(peer, "PATCH", url).length > 0);
+          assert.deepStrictEqual(bodyOf(callsTo(peer, "PATCH", url)[0]), {
+            move: "fail",
+            environment: TEST_ENVIRONMENT,
+            reason: "The agent is no longer running.",
+          });
+        }),
+      ),
+  );
+
+  it.effect("gives a session that only restarts a moment to come back", () =>
+    run(
+      Effect.gen(function* () {
+        const { peer, hooks } = yield* taken;
+        const before = reads(peer);
+        yield* hooks.sessionEnd!(ending());
+        yield* TestClock.adjust("2 seconds");
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 20)));
+        assert.strictEqual(reads(peer), before);
+        yield* TestClock.adjust("1 second");
+        yield* waitFor(() => reads(peer) > before);
+      }),
+    ),
+  );
+
+  it.effect("reads nothing for a session of no run", () =>
+    run(
+      Effect.gen(function* () {
+        const { peer, hooks } = yield* taken;
+        const before = reads(peer);
+        yield* hooks.sessionEnd!(ending({ run: undefined }));
+        yield* TestClock.adjust("3 seconds");
+        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 20)));
+        assert.strictEqual(reads(peer), before);
       }),
     ),
   );

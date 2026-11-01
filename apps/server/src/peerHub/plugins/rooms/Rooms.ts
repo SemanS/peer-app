@@ -99,6 +99,9 @@ const kindOf = (item: PeerRoomInboxItem, me: string): HeardKind =>
 const owed = (error: PeerHubError) =>
   error.status === undefined || error.status >= 500 || error.status === 429;
 
+/** How long a session that only restarts (`/clear`) has to be back before its room looks. */
+const SESSION_RETURNS_MS = 3_000;
+
 const THREAD_ONLY_CLAUDE = "Peer can read only Claude Code's thread here.";
 const THREAD_SESSIONS = 3;
 const THREAD_BYTES = 2 * 1024 * 1024;
@@ -110,6 +113,7 @@ const make = Effect.gen(function* () {
   const agents = yield* PeerAgents.PeerAgents;
   const plugins = yield* PeerPlugins.PeerPlugins;
   const work = yield* PeerWork.PeerWork;
+  const scope = yield* Effect.scope;
   const hub = roomsHub(yield* PeerHubClient.PeerHubClient);
   const inboxes = yield* Ref.make<ReadonlyMap<string, PeerRoomInbox>>(new Map());
   const jobs = yield* Queue.unbounded<Job>();
@@ -736,6 +740,18 @@ const make = Effect.gen(function* () {
     wake: agents.wake,
     readSoon,
     /** Reads every workspace now, then as pings and syncs ask, and sends what hooks queued. */
+    /**
+     * A run's session left, so a delivery it took may have lost its agent. Nothing else reads a quiet
+     * room, and its owner's Try again waits on that read.
+     */
+    sessionLeft: (session: PeerSessionView) =>
+      session.run === undefined
+        ? Effect.void
+        : Effect.sleep(SESSION_RETURNS_MS).pipe(
+            Effect.andThen(readSoon(session.workspace)),
+            Effect.forkIn(scope),
+            Effect.asVoid,
+          ),
     follow: Effect.gen(function* () {
       yield* readAll;
       while (true) {

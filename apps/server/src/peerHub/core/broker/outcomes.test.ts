@@ -94,10 +94,10 @@ describe("peer command outcomes", () => {
         ["index", ["0"], "usage", "peer index"],
         ["release", ["--typo"], "usage", "peer release"],
         ["claim", ["pay.ts", "--intent"], "usage", "peer claim"],
-        ["note", ["hello"], "refused", "peer status"],
+        ["note", ["hello"], "refused", "peer room say"],
         ["resolve", ["agreed"], "refused", "peer status"],
-        ["review", [], "refused", "assign"],
-        ["done", [], "refused", "assign"],
+        ["review", [], "refused", "on a task in Peer"],
+        ["done", [], "refused", "on a task in Peer"],
         ["ack", ["KRK-7"], "refused", "peer context"],
         ["log", [], "refused", "update"],
       ];

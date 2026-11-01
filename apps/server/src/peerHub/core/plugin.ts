@@ -9,6 +9,10 @@ export { isLanding, landingKind } from "./broker/landing.ts";
 // words. Landing reads jj commands through the same parser, so a plugin that judges one cannot read it differently.
 export { jjInvocations, shellWrite } from "../shellCommands.ts";
 export type { JjGlobalOption, JjInvocation } from "../shellCommands.ts";
+// A person's card, which more than one plugin reads.
+export { cardData, cardOf } from "./state/card.ts";
+// The other projects a run works in, as an agent is told of them.
+export { projectsText } from "./work/runRoots.ts";
 import * as NodeCrypto from "node:crypto";
 /**
  * The Peer plugin definition: what one optional Peer feature contributes to agents, clients and

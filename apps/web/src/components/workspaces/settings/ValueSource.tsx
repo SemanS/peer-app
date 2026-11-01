@@ -70,7 +70,7 @@ export function ValueSource({
 }: {
   readonly value: ReactNode;
   readonly from: ValueSourceFrom;
-  /** What the source is in words: "from Booking", "your computer", "path rules are off on this Hub". */
+  /** What the source is in words: "from Booking", "your computer". */
   readonly source: ReactNode;
   readonly tone?: ValueSourceTone;
   /** Where the value changes; without it the value is shown and nothing more. */

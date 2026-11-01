@@ -81,6 +81,7 @@ describe("the one settings navigation", () => {
 
   it("puts Peer's pages and the app's own together under This computer and App", () => {
     expect(labels("computer")).toEqual([
+      "Your card",
       "Plugins",
       "Tool trust",
       "Providers",
@@ -197,6 +198,7 @@ describe("with no workspace", () => {
       nav({ workspace: null, signedOut }).groups.find((group) => group.id === "computer")?.items;
     for (const signedOut of [false, true])
       expect(computer(signedOut)?.map((item) => item.label)).toEqual([
+        "Your card",
         "Plugins",
         "Tool trust",
         "Providers",
@@ -236,9 +238,7 @@ describe("the page being shown", () => {
     expect(nav().overview.current).toBe(true);
     expect(nav({ pathname: "/settings/peer/w/acme/people" }).overview.current).toBe(false);
     expect(current("/settings/peer/w/acme/people")).toEqual(["workspace:people"]);
-    expect(current("/settings/peer/w/acme/project/booking/coordination")).toEqual([
-      "project:booking",
-    ]);
+    expect(current("/settings/peer/w/acme/project/booking/tools")).toEqual(["project:booking"]);
     expect(current("/settings/peer/w/acme/new-project")).toEqual(["workspace:new-project"]);
     expect(current("/settings/peer/computer/tool-trust")).toEqual(["computer:tool-trust"]);
     expect(current("/settings/providers")).toEqual(["settings:/settings/providers"]);

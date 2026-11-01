@@ -30,12 +30,12 @@ describe("catalog projection", () => {
       project(
         "intent",
         metricsOf("intent", {
-          verdicts: [{ path: "private", verdict: "deny" }],
+          verdicts: [{ path: "private", verdict: "notify" }],
           files: ["private"],
           ms: 5,
         }),
       ),
-    ).toMatchObject({ verdictCounts: { deny: 1 }, fileCount: 1, ms: 5 });
+    ).toMatchObject({ verdictCounts: { notify: 1 }, fileCount: 1, ms: 5 });
     expect(
       project(
         "cli",

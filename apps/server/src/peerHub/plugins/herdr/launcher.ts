@@ -15,8 +15,7 @@ import { PeerHubError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
-import type { PeerTaskLauncher } from "../../core/plugin.ts";
-import { projectsText } from "../../core/work/runRoots.ts";
+import { projectsText, type PeerTaskLauncher } from "../../core/plugin.ts";
 import { realDirectory, within } from "./client/checkouts.ts";
 import { HerdrClient } from "./client/HerdrClient.ts";
 import { trustQuestionOf } from "./client/trust.ts";

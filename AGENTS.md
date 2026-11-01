@@ -33,8 +33,8 @@ Peer has web, desktop and mobile clients.
 ## Provider authentication
 
 Follow upstream T3 Code's provider authentication for the owner's local environment. Personal
-credentials stay on that environment; the Hub and company API gateway never receive them. Personal
-subscriptions are never pooled or shared between people. Shared capacity uses the workspace's own API keys.
+credentials stay on that environment; the Hub never receives them. Personal subscriptions are never
+pooled or shared between people.
 
 ## Implementation approach
 

@@ -14,8 +14,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import { bindPlugin, type PeerContributions } from "../../core/plugin.ts";
-import { cardData, cardOf } from "../../core/state/card.ts";
+import { bindPlugin, cardData, cardOf, type PeerContributions } from "../../core/plugin.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 
 export const NO_CARD = "Your person has no card yet.";
@@ -25,6 +24,7 @@ export const cardText = (text: string) => `Your person's card, in their own word
 
 export const CardPlugin = bindPlugin({
   ...PEER_CARD_PLUGIN,
+  id: "card",
   commandNames: ["card"],
   layer: Layer.empty,
   make: Effect.gen(function* () {

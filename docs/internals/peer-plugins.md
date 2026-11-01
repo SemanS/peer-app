@@ -13,15 +13,15 @@ in [`plugins/`](../../apps/server/src/peerHub/plugins).
 ## Core or plugin
 
 Core is what coordination cannot work without: the environment's state and Hub session, workspaces
-and checkouts, the work report, the status stream, adapter installation, and the broker with the
-five primitives (session, claim, versioned context, declared read, shared message). Overlaps,
-contexts and the index carry the guarantees agents rely on, such as an explicit fallback for every
-verdict, so they cannot be turned off and the broker runs them before any plugin.
+and checkouts, the work report, the status stream, adapter installation, and the broker with
+sessions, runs, claims and overlaps. Overlaps are facts Peer reports: nothing in core refuses an
+edit, whatever the Hub answers or if it answers nothing. They cannot be turned off, and the broker
+runs them before any plugin.
 
 A feature is a plugin when coordination keeps working without it. Extend core instead when:
 
-- an edit must be decided through the Hub. Plugin verdicts share a 1,000 ms budget and must be
-  local or cached; a check that needs the Hub per edit belongs in core's intent.
+- something must hear of an edit through the Hub. Plugin verdicts share a 1,000 ms budget and must
+  be local or cached; what needs the Hub per edit belongs in core's intent.
 - other features would have to import it. Plugins never import each other.
 - every agent must get it, whatever the environment's owner chose.
 
@@ -29,10 +29,6 @@ Plugins that need each other's work meet in capability slots: a runtime that run
 launcher, whether a person shares unfinished work. At most one active plugin fills each, and core
 works without it. `PeerPlugins.require(slot)` returns the plugin that fills a slot, or fails saying
 that plugin is off or needs a newer Hub, so core can tell people why a capability is missing.
-
-An agent's working context (its own notes, what it marks for the team, the shared context it keeps)
-has no slot: no plugin can move it or change what core says about it. A plugin that needs to take
-the working context over needs a new decision, not a branch in the broker.
 
 ## Where a plugin lives
 
@@ -62,16 +58,15 @@ contribution never checks whether its plugin is on.
   [Effect services](./effect-services.md) describes. Its commands, RPC handlers, hooks and Hub
   listeners decode, call that method and map errors, so a `peer` command and an RPC do the same thing.
 - **Verdicts only tighten.** A plugin's verdict on a tool call may deny or ask, never allow, and has
-  no side effects, since core may discard it. Its fallback applies when it misses the budget. Letting
-  Peer's own files through is `ownPaths`.
+  no side effects, since core may discard it. Its fallback applies when it misses the budget.
 - **Text is bounded and comes after core's.** A plugin's start block is cut at 2,000 characters and
   its text for one step at 1,200, ending with the command that shows the rest. Text not ready by the
   hook's deadline reaches the agent at its next step. Only notices the agent must answer may wake an
   idle agent, and only a message addressed to the agent may set `landing`: words in its room, or the
   push notice of the `jujutsu` plugin (the session pushes a change that builds on a teammate's
   unmerged bookmark, so it should name that bookmark as the pull request's base). A landing step (a
-  commit, push, pull request or their jj forms) then stops once to give it, as it does a teammate's
-  note. Advice never does. Text a teammate wrote goes through the fences in
+  commit, push, pull request or their jj forms) then stops once to give it. Advice never does. Text a
+  teammate wrote goes through the fences in
   [`peerText.ts`](../../apps/server/src/peerHub/peerText.ts).
 - **Said once stays said.** What a plugin must not tell a session twice goes, as ids, in
   `session.told(plugin)`: core keeps it in the session's memory file across Peer's restarts and drops
@@ -99,9 +94,8 @@ contribution never checks whether its plugin is on.
 Plugins reach core only through `core/plugin.ts` and the services that `PeerCore` lists in
 `core/<area>/Peer*.ts`: `PeerState` (places, the lock, a plugin's own `pluginData`), `PeerHubClient`
 (`request` and `stream` on the session), `PeerPlugins`, `PeerStatus` (`publish`), `PeerWork` (the
-work report, a thread's `view`, its task), `PeerAgents` (the agent sessions coordination knows) and
-`PeerIndex` (the works an agent chooses its context from);
-sessions and works are known only while coordination is on. `PeerCore` also carries the T3 services
+work report, a thread's `view`, its task) and `PeerAgents` (the agent sessions coordination knows);
+sessions are known only while coordination is on. `PeerCore` also carries the T3 services
 plugins build on: provider settings and the server's configuration, HTTP client, projects and
 thread projections. Headless, Peer Core supplies
 stand-ins for those T3 services, so a plugin that needs the app's threads or provider instances finds them empty there; see
@@ -113,8 +107,8 @@ Beside those, a plugin's code may use the few helpers that keep no state of thei
 fences of `peerText.ts` and the commands of `core/local.ts`.
 [`core/structure.test.ts`](../../apps/server/src/peerHub/core/structure.test.ts) lists them and fails
 on any other import of core, and on any import of another plugin. What a plugin needs of core
-beyond them becomes part of a service's API, as `PeerIndex` exports how the index names works. A
-plugin's tests may drive all of core.
+beyond them becomes part of `core/plugin.ts` or a service's API. A plugin's tests may drive all of
+core.
 
 `peerPlugins()` is a function, read when core starts: plugins import core's services, which import
 the registry, so the list cannot be built while modules load. For the same reason, a plugin's
@@ -191,8 +185,8 @@ manifest, which also names any write it must make together with another domain's
 
 ## Turning things off
 
-- **A plugin, on one environment.** Its owner turns it off in Settings → Peer → Coordination & plugins on
-  web and desktop, or in Peer workspaces on mobile, through `peerHub.setPlugin`, which needs
+- **A plugin, on one environment.** Its owner turns it off in Settings → Peer → Plugins on web and
+  desktop, or in Peer workspaces on mobile, through `peerHub.setPlugin`, which needs
   access-write. The choice persists in `peer-hub.json` and applies from the next hook, command and
   request.
 - **While a plugin is inactive**, its commands answer `peer: <name> is turned off on this

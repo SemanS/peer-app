@@ -67,13 +67,6 @@ const WORKSPACE_ENTRIES: ReadonlyArray<Entry> = [
     place: w("general"),
     terms: "domain dns txt verify email admit allowed domains join invite claim",
   },
-  {
-    id: "workspace-yaml",
-    title: "Workspace YAML",
-    place: w("general"),
-    terms: "yaml import export configuration file manifest",
-    admin: true,
-  },
   // People
   {
     id: "people",
@@ -96,10 +89,10 @@ const WORKSPACE_ENTRIES: ReadonlyArray<Entry> = [
   },
   // Audit, Hub, New project
   {
-    id: "settings-history",
-    title: "Settings history",
+    id: "audit-log",
+    title: "Audit log",
     place: w("audit"),
-    terms: "history revision audit revert log who changed",
+    terms: "history audit log who changed",
     plugin: "audit",
   },
   {

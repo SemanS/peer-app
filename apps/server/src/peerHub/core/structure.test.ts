@@ -30,13 +30,13 @@ const ENTRY_BUDGET = 150;
  * integrate and converge, with every jj call and parser in `client/`; `follow.ts` and
  * `operations.ts` are the seams to split along. 82 lines more than at that landing, for the fixes of
  * the simulated lab: the author alignment before a second converge, the fetch's budget, the person's name
- * on an undo and the push notice's fallback. Rooms' is its size when the review of `add-task-rooms`
- * was fixed: consent checks in `decide`, stuck deliveries, the marked cuts and the diff's search;
- * `follow.ts` and `client/` are the seams to split along.
+ * on an undo and the push notice's fallback. Rooms' is its size when chat became Peer's core and
+ * rooms the product: set once there, it falls like any other; `follow.ts` and `client/` are the
+ * seams to split along.
  */
 const CEILINGS: Readonly<Record<string, number>> = {
   jujutsu: 2354,
-  rooms: 2261,
+  rooms: 3519,
 };
 
 /**

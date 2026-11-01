@@ -446,35 +446,33 @@ describe("searching Peer's pages", () => {
         find(query).map(([name]) => name),
         query,
       ).toContain(title);
-    found("coordination", "Coordination policy");
+    found("coordination", "Agent coordination");
     found("tool trust", "Tool trust");
     found("catalog", "Tools catalog");
     found("secrets", "Hub secrets");
     found("people", "People and roles");
     found("domains", "Email domains");
-    found("history", "Settings history");
+    found("audit", "Audit log");
     found("herdr", "Peer plugins");
     found("dns", "Email domains");
   });
 
   it("finds a project's pages once for each project the person is on", () => {
-    expect(find("coordination policy").filter(([name]) => name === "Coordination policy")).toEqual([
-      ["Coordination policy", "Projects › Booking › Coordination"],
-      ["Coordination policy", "Projects › Peer Hub › Coordination"],
+    expect(find("repositories").filter(([name]) => name === "Repositories")).toEqual([
+      ["Repositories", "Projects › Booking › Repositories"],
+      ["Repositories", "Projects › Peer Hub › Repositories"],
     ]);
-    const [booking] = searchSettingsEntries("coordination policy", entries()).filter(
-      (entry) => entry.title === "Coordination policy",
+    const [booking] = searchSettingsEntries("repositories", entries()).filter(
+      (entry) => entry.title === "Repositories",
     );
     expect(booking).toMatchObject({
-      location: { kind: "project", workspace: "acme", projectId: "booking", tab: "coordination" },
+      location: { kind: "project", workspace: "acme", projectId: "booking", tab: "repositories" },
     });
   });
 
   it("does not hand a member the admin pages or their fields", () => {
     const member = entries("member");
     expect(find("secrets", member).map(([title]) => title)).not.toContain("Hub secrets");
-    expect(find("yaml", member)).toEqual([]);
-    expect(find("yaml").map(([title]) => title)).toEqual(["Workspace YAML"]);
     // What every member may read stays.
     expect(find("people", member).map(([title]) => title)).toContain("People and roles");
     expect(find("tool trust", member).map(([title]) => title)).toContain("Tool trust");
@@ -485,7 +483,7 @@ describe("searching Peer's pages", () => {
       plugin.id === "audit" ? { ...plugin, enabled: false, active: false, reason: "off" } : plugin,
     );
     const items = entries("admin", { status: { plugins: off, signedIn: true } });
-    expect(find("history", items).map(([title]) => title)).not.toContain("Settings history");
+    expect(find("audit", items).map(([title]) => title)).not.toContain("Audit log");
   });
 
   it("leaves a plugin the Hub cannot serve yet in, since its page says so", () => {
@@ -493,7 +491,7 @@ describe("searching Peer's pages", () => {
       plugin.id === "audit" ? { ...plugin, active: false, reason: "hub" } : plugin,
     );
     const items = entries("admin", { status: { plugins: waiting, signedIn: true } });
-    expect(find("history", items).map(([title]) => title)).toContain("Settings history");
+    expect(find("audit", items).map(([title]) => title)).toContain("Audit log");
   });
 
   it("offers only This computer's pages with no workspace, and none when nobody is signed in", () => {

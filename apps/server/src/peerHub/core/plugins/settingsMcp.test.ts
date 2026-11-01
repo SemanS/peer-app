@@ -27,27 +27,24 @@ const project = {
   leads: ["ana@acme.test"],
   repositories: [],
   tools: [],
-  capacity: { personal: "any" },
-  coordination: { policy: "notify" },
 };
-const proposal = {
-  id: "p_1",
-  by: eva,
-  via: { kind: "agent", agent: "cursor" },
-  at: "2026-10-11T12:00:00Z",
+const saved = {
   base: 42,
-  message: "Over MCP",
-  instruction: null,
-  lines: [],
-  scopes: ["project:app"],
-  owners: "App's leads and admins",
-  state: "pending",
-  decidedBy: null,
-  decidedAt: null,
-  reason: null,
-  revision: null,
-  mine: true,
-  canDecide: false,
+  head: { seq: 42, by: eva, at: "2026-10-11T12:00:00Z" },
+  lines: [
+    {
+      path: ["projects", "app", "name"],
+      scope: { kind: "project", id: "app", name: "App" },
+      label: "Name",
+      from: "App",
+      to: "Application",
+    },
+  ],
+  conflicts: [],
+  diagnostics: [],
+  applies: [],
+  noop: false,
+  revision: { seq: 43, commit: "9c1d", at: "2026-10-11T12:01:00Z" },
 };
 
 interface Reply {
@@ -71,13 +68,10 @@ it.effect("serves peer config to an agent without a shell, through the active pl
                   revision: { seq: 42, commit: "3f2a", at: "x", by: eva, message: "Start" },
                   rights: { admin: false, owner: false, leads: ["app"] },
                   document: { projects: { app: project } },
-                  features: { pathRules: true, webhooks: true, github: true },
                   people: [],
                 },
               ]
-            : url === `${WS}/settings/proposals`
-              ? [201, proposal]
-              : [200, { proposals: [] }],
+            : [200, saved],
     });
     const core = yield* Layer.build(
       coreLayer(yield* seedState(signedInSeed(hub.url)), {
@@ -101,7 +95,6 @@ it.effect("serves peer config to an agent without a shell, through the active pl
       yield* (yield* PeerStatus).coordinationFrom(() =>
         Effect.succeed({
           enabled: false,
-          policy: "coordinate",
           claudeHooks: false,
           logPath: "/tmp/settings-mcp",
           sessions: [],
@@ -124,7 +117,7 @@ it.effect("serves peer config to an agent without a shell, through the active pl
       const tools = (id: number) =>
         call(id, "tools/list").pipe(Effect.map((reply) => reply.result.tools.map((t) => t.name)));
 
-      assert.includeMembers(yield* tools(1), ["peer_config_show", "peer_config_propose"]);
+      assert.includeMembers(yield* tools(1), ["peer_config_show", "peer_config_save"]);
       const shown = (yield* call(2, "tools/call", { name: "peer_config_show", arguments: {} }))
         .result;
       assert.notStrictEqual(shown.isError, true);
@@ -132,48 +125,43 @@ it.effect("serves peer config to an agent without a shell, through the active pl
         shown.content[0]!.text,
         "# Peer settings · acme · revision 42 · scope project:app",
       );
-      // The agent edits the file it was shown and proposes it; relative to its own directory.
+      // The agent edits the file it was shown and saves it; relative to its own directory.
       yield* Effect.promise(() =>
         NodeFSP.writeFile(
           NodePath.join(fixture.root, "edited.yaml"),
-          shown.content[0]!.text.replace("policy: notify", "policy: coordinate"),
+          shown.content[0]!.text.replace("name: App", "name: Application"),
         ),
       );
       const sent = (yield* call(3, "tools/call", {
-        name: "peer_config_propose",
+        name: "peer_config_save",
         arguments: { file: "edited.yaml", why: "Over MCP" },
       })).result;
       assert.notStrictEqual(sent.isError, true);
-      assert.include(sent.content[0]!.text, "Proposal p_1");
+      assert.include(sent.content[0]!.text, "Saved revision 43 of acme");
       const posted = hub.calls.filter(
-        (c) => c.method === "POST" && c.url === `${WS}/settings/proposals`,
+        (c) => c.method === "POST" && c.url === `${WS}/settings/changes`,
       );
       assert.deepStrictEqual(parseJson(posted.at(-1)!.body), {
         base: 42,
-        set: [
-          {
-            path: ["projects", "app"],
-            value: { ...project, coordination: { policy: "coordinate" } },
-          },
-        ],
+        set: [{ path: ["projects", "app"], value: { ...project, name: "Application" } }],
         message: "Over MCP",
         via: { kind: "agent", agent: "cursor" },
       });
       // A reason that is a flag is refused, and nothing more reaches the Hub.
       const refused = (yield* call(4, "tools/call", {
-        name: "peer_config_propose",
+        name: "peer_config_save",
         arguments: { file: "edited.yaml", why: "--file elsewhere" },
       })).result;
       assert.strictEqual(refused.isError, true);
       assert.strictEqual(
-        hub.calls.filter((c) => c.method === "POST" && c.url === `${WS}/settings/proposals`).length,
+        hub.calls.filter((c) => c.method === "POST" && c.url === `${WS}/settings/changes`).length,
         1,
       );
       // Turned off, the tools are gone.
       yield* plugins.setPlugin({ id: "settings", enabled: false });
       const left = yield* tools(5);
       assert.notInclude(left, "peer_config_show");
-      assert.notInclude(left, "peer_config_propose");
+      assert.notInclude(left, "peer_config_save");
     }).pipe(Effect.provideContext(core));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );

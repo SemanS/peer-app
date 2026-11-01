@@ -5,12 +5,11 @@
  * each of its features is then on, off for the operator's choice, or waiting for a newer Hub, as
  * the catalog says. A Hub that says less (an older one) leaves the app to tell from each plugin's
  * state (a plugin that needs a Hub feature is inactive with the reason `hub` while the Hub does not
- * serve it) and, from the settings feature, whether path rules and GitHub's checks are served; so
- * for such a Hub a row is only there where one of those says something true.
+ * serve it); so for such a Hub a row is only there where one of those says something true.
  *
- * Each feature is told in the status language (`ConnectionStatus`): the Hub serves it (Connected, or
- * what the workspace still has to do for GitHub's checks), its operator turned it off or
- * the Hub is too old (Not available), or this computer's owner turned its plugin off (Off).
+ * Each feature is told in the status language (`ConnectionStatus`): the Hub serves it (Connected),
+ * its operator turned it off or the Hub is too old (Not available), or this computer's owner turned
+ * its plugin off (Off).
  */
 import { hubFeatureState, pluginLockNote } from "@t3tools/client-runtime/peer/plugins";
 import type { PeerHubInfo, PeerPluginState } from "@t3tools/contracts";
@@ -78,7 +77,7 @@ const FEATURES: ReadonlyArray<Feature> = [
     name: "Workspace settings",
     without: "plugin",
     words: {
-      on: "Settings changed in the app are saved with their history and reviewed first.",
+      on: "Settings changed in the app are reviewed first, then saved on the Hub.",
       off: "Settings can’t be changed in the app: this Hub doesn’t run them.",
       newer: "Settings can be read here but not changed until the Hub is updated.",
     },

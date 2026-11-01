@@ -211,7 +211,7 @@ const WAIT_MS = 20_000;
 
 /**
  * One change ping of a workspace's event stream, as the Hub names it: `work`, `coord`, `projects`
- * and `resync` (pings it missed) for core, and each feature's own (`requests`, `observe`, ...).
+ * and `resync` (pings it missed) for core, and each feature's own (`rooms`, `observe`, ...).
  * Content-free: its fields are ids and counters, like the computer and thread `observe` names.
  */
 export interface HubPing {

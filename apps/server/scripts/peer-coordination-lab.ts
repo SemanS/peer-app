@@ -227,10 +227,10 @@ import {
   PeerPlansView,
 } from "@t3tools/contracts";
 
+import { codexPeerPluginEnabled, codexPeerPluginPaths } from "../src/peerHub/codexPlugin.ts";
 import {
   claudeHookGroups,
   codexHookGroups,
-  codexHookHash,
   withContextAccess,
   type HookGroup,
 } from "../src/peerHub/core/adapters/scripts.ts";
@@ -1249,7 +1249,13 @@ function agent(
  * payloads, its shell as Bash and its edits as apply_patch with paths relative
  * to its directory, and its commands given their thread as CODEX_THREAD_ID.
  */
-function codexAgent(computer: Computer, sessionId: string, pane: string) {
+function codexAgent(
+  computer: Computer,
+  sessionId: string,
+  pane: string,
+  /** The installed Peer plugin whose wrapper runs its hooks, as Codex runs them. */
+  plugin?: string,
+) {
   const env = { ...process.env, HERDR_PANE_ID: pane };
   const base = {
     session_id: sessionId,
@@ -1268,7 +1274,11 @@ function codexAgent(computer: Computer, sessionId: string, pane: string) {
   return {
     name: `${computer.name}'s agent (Codex)`,
     hook(event: string, extra: Record<string, unknown> = {}): HookOut {
-      const out = NodeChildProcess.execFileSync("sh", [computer.scripts.hook, "codex"], {
+      const script =
+        plugin === undefined
+          ? [computer.scripts.hook, "codex"]
+          : [NodePath.join(plugin, "scripts", "hook.sh")];
+      const out = NodeChildProcess.execFileSync("sh", script, {
         env,
         input: JSON.stringify({ ...base, hook_event_name: event, ...extra }),
         encoding: "utf8",
@@ -3531,23 +3541,32 @@ const program = Effect.gen(function* () {
     );
   }
 
-  // 11. Codex agents take part as Claude Code's do. Peer adds its hooks to Codex beside its
-  //     person's own, and a Codex session on Ana's computer meets Bob's Claude Code session.
+  // 11. Codex agents take part as Claude Code's do. Peer adds its hooks to Codex as a plugin, beside
+  //     its person's own, and a Codex session on Ana's computer meets Bob's Claude Code session.
   const codexHome = NodePath.join(ana.home, "codex");
   const codexHooksFile = NodePath.join(codexHome, "hooks.json");
+  const codexConfig = NodePath.join(codexHome, "config.toml");
+  const codexPlugin = codexPeerPluginPaths(codexHome).installed;
   NodeFS.mkdirSync(codexHome, { recursive: true });
-  const theirs = { type: "command", command: "/usr/bin/true" };
-  NodeFS.writeFileSync(codexHooksFile, JSON.stringify({ hooks: { Stop: [{ hooks: [theirs] }] } }));
+  const theirHooks = JSON.stringify({
+    hooks: { Stop: [{ hooks: [{ type: "command", command: "/usr/bin/true" }] }] },
+  });
+  NodeFS.writeFileSync(codexHooksFile, theirHooks);
   const withCodex = yield* ana.client[WS_METHODS.peerHubSetCoordination]({ codexHooks: true });
-  type CodexHooks = {
-    hooks: Record<string, Array<{ matcher?: string; hooks: Array<Record<string, unknown>> }>>;
-  };
-  const codexHooks = JSON.parse(NodeFS.readFileSync(codexHooksFile, "utf8")) as CodexHooks;
+  const pluginHooks = (
+    JSON.parse(NodeFS.readFileSync(NodePath.join(codexPlugin, "hooks", "hooks.json"), "utf8")) as {
+      hooks: Record<string, Array<{ matcher?: string; hooks: Array<Record<string, unknown>> }>>;
+    }
+  ).hooks;
   check(
-    codexHooks.hooks.Stop?.[0]?.hooks[0]?.command === "/usr/bin/true" &&
-      String(codexHooks.hooks.Stop?.[1]?.hooks[0]?.command).endsWith("/hook codex") &&
-      codexHooks.hooks.PreToolUse?.[0]?.matcher === "Bash|apply_patch",
-    "Peer adds its hooks to Codex after its person's own, which keep their place",
+    pluginHooks.Stop?.[0]?.hooks[0]?.command === 'sh "${PLUGIN_ROOT}/scripts/hook.sh"' &&
+      pluginHooks.PreToolUse?.[0]?.matcher === "Bash|apply_patch" &&
+      codexPeerPluginEnabled(NodeFS.readFileSync(codexConfig, "utf8")) === true,
+    "Peer adds its hooks to Codex as a plugin",
+  );
+  check(
+    NodeFS.readFileSync(codexHooksFile, "utf8") === theirHooks,
+    "and leaves its person's own hooks as they are",
   );
   check(
     NodeFS.readFileSync(NodePath.join(codexHome, "rules", "peer.rules"), "utf8").includes(
@@ -3560,40 +3579,28 @@ const program = Effect.gen(function* () {
       withCodex.coordination.codexHooksTrusted === false,
     "Peer says Codex runs them only once its person trusts them",
   );
-  // Its person trusts them in Codex, which keeps the hash of each hook it trusts in config.toml,
-  // keyed by the home's real path (macOS's temporary directory is behind a symlink).
-  const trustedFile = NodeFS.realpathSync(codexHooksFile);
-  const trust = Object.entries(codexHooks.hooks).flatMap(([event, groups]) =>
-    groups.flatMap((group, g) =>
-      group.hooks.flatMap((handler, h) =>
-        String(handler.command).endsWith("/hook codex")
-          ? [
-              `[hooks.state."${trustedFile}:${event.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase()}:${g}:${h}"]`,
-              `trusted_hash = "${codexHookHash(event, group.matcher, handler) ?? ""}"`,
-              "",
-            ]
-          : [],
-      ),
-    ),
-  );
-  NodeFS.writeFileSync(
-    NodePath.join(codexHome, "config.toml"),
-    ['model = "gpt-5"', "", ...trust].join("\n"),
-  );
-  const trustedNow = yield* ana.client[WS_METHODS.peerHubSetCoordination]({});
+  // Its person reviews them in Peer's settings, which approves them where Codex looks.
+  const codexReview = withCodex.coordination.codexHookHomes?.[0];
+  check(codexReview !== undefined, "and shows them for review");
+  const trustedNow = yield* ana.client[WS_METHODS.peerHubSetCoordination]({
+    codexHookApproval: { home: codexReview.home, reviewId: codexReview.reviewId },
+  });
+  const approved = NodeFS.readFileSync(codexConfig, "utf8");
   check(
-    trustedNow.coordination.codexHooksTrusted === true,
+    trustedNow.coordination.codexHooksTrusted === true &&
+      codexReview.hooks.every((hook) => approved.includes(JSON.stringify(hook.key))) &&
+      approved.includes("trusted_content_hash"),
     "and that Codex runs them once its person trusted them",
   );
 
-  const codexs = codexAgent(ana, "lab-ana-codex", "w1:p4");
+  const codexs = codexAgent(ana, "lab-ana-codex", "w1:p4", codexPlugin);
   const codexStart = context(codexs.hook("SessionStart", { source: "startup" }));
   told(codexs.name, codexStart);
   check(
     codexStart?.includes("You are Ana's agent here.") === true &&
       codexStart.includes(ana.scripts.peer) &&
-      codexStart.includes("working context"),
-    "a Codex session starts with who it is, its working context and where Peer's command is",
+      codexStart.includes("Your private notes:"),
+    "a Codex session starts with who it is, its private notes and where Peer's command is",
   );
   codexs.hook("UserPromptSubmit", { prompt: "Show the VAT of each cart line in src/cart.ts" });
   const codexStopped = codexs.patch("PreToolUse", ["src/lines.ts", "src/cart.ts"]);
@@ -3680,13 +3687,14 @@ const program = Effect.gen(function* () {
     "and when Codex does not take it, the agent hears the note at its next step",
   );
   codexs.hook("SessionEnd", { reason: "other" });
-  yield* ana.client[WS_METHODS.peerHubSetCoordination]({ codexHooks: false });
+  const withoutCodex = yield* ana.client[WS_METHODS.peerHubSetCoordination]({ codexHooks: false });
   check(
-    JSON.stringify(
-      (JSON.parse(NodeFS.readFileSync(codexHooksFile, "utf8")) as CodexHooks).hooks,
-    ) === JSON.stringify({ Stop: [{ hooks: [theirs] }] }) &&
-      !NodeFS.existsSync(NodePath.join(codexHome, "rules", "peer.rules")),
-    "taking Peer's hooks out of Codex leaves its person's own",
+    withoutCodex.coordination.codexHooks === false &&
+      !NodeFS.existsSync(codexPlugin) &&
+      codexPeerPluginEnabled(NodeFS.readFileSync(codexConfig, "utf8")) === false &&
+      !NodeFS.existsSync(NodePath.join(codexHome, "rules", "peer.rules")) &&
+      NodeFS.readFileSync(codexHooksFile, "utf8") === theirHooks,
+    "taking Peer's plugin out of Codex leaves its person's own hooks",
   );
 
   // 12. Two related tasks on two computers (after the paper's coexisting contexts): an agent
@@ -4052,9 +4060,9 @@ const program = Effect.gen(function* () {
       barsStart.includes("Ana's agent (Claude Code, working, on another computer: src/stats.ts)") &&
       barsStart.includes("its context v1") &&
       barsStart.includes('Under "## Team" note what you') &&
-      barsStart.includes("`peer index [page]` lists more work") &&
-      barsStart.includes("`peer context <task>` reads an exact version") &&
-      barsStart.includes('`peer ask <task> "<question>"` reaches its agents') &&
+      barsStart.includes("`peer index [page]` lists more") &&
+      barsStart.includes("`peer context <task>` reads a context") &&
+      barsStart.includes('`peer ask <task> "<question>"` reaches a task\'s agents') &&
       // What each builds waits for the first ask, and the way to use the index is said with it.
       !barsStart.includes("Endpoint written; not built yet.") &&
       !barsStart.includes("It is yours to judge") &&

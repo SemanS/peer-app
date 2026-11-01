@@ -101,7 +101,8 @@ export interface PlansLabInput {
 export const START_WORDS =
   'Before your first edit run peer plan --change <path[#symbol]> --uses <path#symbol> --provides "<symbol> (<path>): <contract>"; it shows whose work meets yours.';
 export const WITHDRAWN_WORDS = "Plan withdrawn. Its relations are gone from every view.";
-export const NOTHING_MEETS = "Nothing in the project meets your plan.";
+export const NOTHING_MEETS =
+  "Nothing in the project’s live plans, reported changes or open challenges meets your plan.";
 export const NOTHING_NEW = "Nothing new meets your plan.";
 export const CONTRACT_LEAD = "Their contract (teammate text):";
 /** The most characters an answer to `peer plan` takes, a notice to the other side, and the start line. */

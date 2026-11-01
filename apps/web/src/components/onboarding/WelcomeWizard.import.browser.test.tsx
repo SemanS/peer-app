@@ -9,10 +9,10 @@ import {
   type AuthSessionState,
 } from "@t3tools/contracts";
 import { AsyncResult, Atom } from "effect/reactivity";
+import { act, render, type Screen } from "../../../test/render";
 import { expect, it, vi } from "vite-plus/test";
 
 import "~/index.css";
-import { act, render } from "../../../test/render";
 
 type SessionResult = AsyncResult.AsyncResult<AuthSessionState, Error>;
 type Project = { id: ProjectId; environmentId: EnvironmentId; workspaceRoot: string };
@@ -32,12 +32,15 @@ const state = vi.hoisted(() => ({
   refreshProviders: vi.fn(),
   connectPairing: vi.fn(),
   completeOnboarding: vi.fn(),
+  waitForProject: vi.fn(),
   onDone: vi.fn(),
   scan: vi.fn(),
   refreshScan: vi.fn(),
-  waitForProject: vi.fn(),
 }));
 
+// Session grants come from per-test atoms so a test can revoke or regrant mid-flow; the
+// real scope checks in ~/state/session read them through the app registry, which the
+// wizard is also rendered with.
 vi.mock(import("@t3tools/client-runtime/state/session"), async (original) => {
   const actual = await original();
   return {
@@ -54,20 +57,8 @@ vi.mock(import("../../cloud/publicConfig"), async (original) => ({
 }));
 vi.mock(import("../../onboarding/firstRun"), async (original) => ({
   ...(await original()),
-  completeOnboarding: state.completeOnboarding,
+  completeOnboarding: () => state.completeOnboarding(),
 }));
-vi.mock("./WorkspaceStep", async () => {
-  const { useEffect } = await import("react");
-  return {
-    // The first-run workspace step is Peer's and has its own tests; these go on to the next step.
-    WorkspaceStep: ({ onContinue }: { readonly onContinue: () => void }) => {
-      useEffect(() => {
-        onContinue();
-      }, [onContinue]);
-      return null;
-    },
-  };
-});
 vi.mock(import("../../state/environments"), async (original) => {
   const environment = (environmentId: string) => ({
     environmentId,
@@ -175,16 +166,13 @@ function setGrant(environmentId: EnvironmentId, allowed: boolean) {
   );
 }
 
-// Default selection only picks recently active projects, so pin "now".
-const NOW = Date.parse("2026-01-01T00:00:00.000Z");
-
 function candidate(path: string): AgentSessionProjectCandidate {
   return {
     path,
     title: path.split("/").at(-1)!,
     sources: ["codex"],
     threadCount: 10,
-    lastActiveAt: new Date(NOW - 60_000).toISOString(),
+    lastActiveAt: "2026-09-05T00:00:00.000Z",
     alreadyImported: false,
   };
 }
@@ -195,27 +183,6 @@ function recordProject({ environmentId, input }: CreateProjectInput) {
     { id: input.projectId, environmentId, workspaceRoot: input.workspaceRoot },
   ]);
   return AsyncResult.success(undefined);
-}
-
-// Resolves once the project reaches the mocked projects atom; the real helper's timeout is
-// replaced per test with a rejection.
-function waitForRecordedProject(ref: { environmentId: EnvironmentId; projectId: string }) {
-  const find = () =>
-    appAtomRegistry
-      .get(projectsAtom())
-      .find(
-        (project) => project.id === ref.projectId && project.environmentId === ref.environmentId,
-      );
-  return new Promise<Project>((resolve) => {
-    const current = find();
-    if (current) return resolve(current);
-    const unsubscribe = appAtomRegistry.subscribe(projectsAtom(), () => {
-      const project = find();
-      if (!project) return;
-      unsubscribe();
-      resolve(project);
-    });
-  });
 }
 
 function deferred<T>() {
@@ -244,28 +211,40 @@ async function click(label: string) {
   await act(async () => target.click());
 }
 
-async function mountImport(remote = false) {
-  state.selectedEnvironment = remote ? "remote" : "primary";
-  await using stack = new AsyncDisposableStack();
-  const screen = stack.use(
-    await render(
-      <RegistryContext.Provider value={appAtomRegistry}>
-        <WelcomeWizard localAvailable={!remote} onDone={state.onDone} />
-      </RegistryContext.Provider>,
-    ),
-  );
-  await click("Continue");
-  await click("Continue");
-  expect(pageText()).toContain("Import your projects");
-  stack.move();
-  return screen;
+function checkboxes() {
+  return [...document.querySelectorAll<HTMLElement>('[role="checkbox"]')];
 }
 
-// The mocked modules read `state`, so every test starts by replacing all of it.
-// Returns the clock spy so each test can `using` it; the spy would otherwise outlive the test.
+function projectCheckboxes() {
+  return checkboxes().slice(0, -1);
+}
+
+function historyCheckbox() {
+  return checkboxes().at(-1)!;
+}
+
+async function mountImport(screen: Screen, remote = false) {
+  state.selectedEnvironment = remote ? "remote" : "primary";
+  await screen.rerender(
+    <RegistryContext.Provider value={appAtomRegistry}>
+      <WelcomeWizard localAvailable={!remote} onDone={state.onDone} />
+    </RegistryContext.Provider>,
+  );
+  // Without a local server the wizard opens on Connect; with one, on how Peer will be used.
+  await click(remote ? "Continue" : "Work on this computer");
+  await click("Continue");
+  expect(pageText()).toContain("Choose your first project");
+}
+
+// The most recent project starts selected and its conversations stay out until asked for.
+async function chooseBothWithHistory() {
+  await click("Select all");
+  await act(async () => historyCheckbox().click());
+}
+
 function setup() {
-  const now = vi.spyOn(Date, "now").mockReturnValue(NOW);
-  state.sessions.clear();
+  // Only projects active in the last 30 days start selected.
+  const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-05T00:01:00.000Z"));
   for (const id of [primaryId, remoteId]) {
     state.sessions.set(
       id,
@@ -287,21 +266,132 @@ function setup() {
   state.refreshProviders.mockReset().mockResolvedValue(AsyncResult.success(undefined));
   state.connectPairing.mockReset().mockResolvedValue(AsyncResult.success(remoteId));
   state.completeOnboarding.mockReset().mockResolvedValue(undefined);
+  state.waitForProject.mockReset().mockResolvedValue(undefined);
   state.onDone.mockReset();
   state.scan.mockReset();
   state.refreshScan.mockReset();
-  state.waitForProject.mockReset().mockImplementation(waitForRecordedProject);
-  return now;
+  return {
+    [Symbol.dispose]() {
+      state.sessions.clear();
+      clock.mockRestore();
+    },
+  };
 }
 
+it("keeps scanning, choosing and skipping available to a paired read-only environment", async () => {
+  using _setup = setup();
+  await using screen = await render(null);
+  setGrant(remoteId, false);
+  await mountImport(screen, true);
+  expect(state.scan).toHaveBeenCalledWith(expect.objectContaining({ environmentId: remoteId }));
+  expect(pageText()).toContain("/projects/first");
+  expect(button("Open 1 project").disabled).toBe(true);
+  expect(pageText()).toContain(permissionMessage);
+  await click("Choose a project later");
+  expect(state.createProject).not.toHaveBeenCalled();
+  expect(state.importThreads).not.toHaveBeenCalled();
+  expect(state.completeOnboarding).toHaveBeenCalledOnce();
+  expect(state.onDone).toHaveBeenCalledOnce();
+});
+
+it("opens the most recent project without copying its conversations", async () => {
+  using _setup = setup();
+  await using screen = await render(null);
+  await mountImport(screen);
+  expect(projectCheckboxes().map((box) => box.getAttribute("aria-checked"))).toEqual([
+    "true",
+    "false",
+  ]);
+  await click("Open 1 project");
+  expect(state.createProject).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      input: expect.objectContaining({ workspaceRoot: "/projects/first" }),
+    }),
+  );
+  expect(state.importThreads).not.toHaveBeenCalled();
+  expect(state.onDone).toHaveBeenCalledWith(
+    expect.objectContaining({ environmentId: primaryId }),
+    undefined,
+  );
+});
+
+it("finishes setup without landing when the imported project never reaches the client", async () => {
+  using _setup = setup();
+  await using screen = await render(null);
+  // The server accepts the project, but it never shows up in the client's projects.
+  state.waitForProject.mockRejectedValue(new Error("The project did not appear."));
+  state.completeOnboarding.mockRejectedValueOnce(new Error("offline"));
+  await mountImport(screen);
+
+  await click("Open 1 project");
+  await vi.waitFor(() => expect(state.completeOnboarding).toHaveBeenCalledOnce());
+  // A failed completion hands the step back instead of leaving it importing.
+  await vi.waitFor(() => expect(button("Open 1 project").disabled).toBe(false));
+  expect(state.onDone).not.toHaveBeenCalled();
+
+  await click("Open 1 project");
+  await vi.waitFor(() => expect(state.onDone).toHaveBeenCalledOnce());
+  expect(state.onDone.mock.calls[0]?.[0]).toBeUndefined();
+});
+
+it("waits for the selected grant and enables import when it arrives", async () => {
+  using _setup = setup();
+  await using screen = await render(null);
+  appAtomRegistry.set(sessionAtom(primaryId), AsyncResult.initial());
+  await mountImport(screen);
+  await chooseBothWithHistory();
+  expect(button("Import 2 projects").disabled).toBe(true);
+  await act(async () => setGrant(primaryId, true));
+  await click("Import 2 projects");
+  expect(state.createProject).toHaveBeenCalledTimes(2);
+  expect(state.importThreads).toHaveBeenCalledTimes(2);
+  expect(state.onDone).toHaveBeenCalledWith(
+    expect.objectContaining({ environmentId: primaryId }),
+    undefined,
+  );
+});
+
+it("preserves selections and denies a click that lands as the paired environment's grant is revoked", async () => {
+  using _setup = setup();
+  await using screen = await render(null);
+  await mountImport(screen, true);
+  await chooseBothWithHistory();
+  await act(async () => projectCheckboxes()[1]!.click());
+  expect(projectCheckboxes()[1]!.getAttribute("aria-checked")).toBe("false");
+  const importButton = button("Import 1 project");
+  // The click reaches the still-enabled button before React re-renders the revocation.
+  await act(async () => {
+    setGrant(remoteId, false);
+    importButton.click();
+  });
+  expect(button("Import 1 project").disabled).toBe(true);
+  expect(projectCheckboxes()[1]!.getAttribute("aria-checked")).toBe("false");
+  expect(pageText()).toContain(permissionMessage);
+  expect(state.createProject).not.toHaveBeenCalled();
+  expect(state.importThreads).not.toHaveBeenCalled();
+  expect(state.onDone).not.toHaveBeenCalled();
+
+  await act(async () => setGrant(remoteId, true));
+  expect(pageText()).not.toContain(permissionMessage);
+  await click("Import 1 project");
+  expect(state.createProject).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ environmentId: remoteId }),
+  );
+  expect(state.importThreads).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ environmentId: remoteId }),
+  );
+});
+
 it("rechecks after project creation and can retry its history without recreating the project", async () => {
-  using _now = setup();
+  using _setup = setup();
+  await using screen = await render(null);
   const creation = deferred<void>();
   state.createProject.mockImplementationOnce(async (input: CreateProjectInput) => {
     await creation.promise;
     return recordProject(input);
   });
-  await using _screen = await mountImport();
+  await mountImport(screen);
+  await chooseBothWithHistory();
   await click("Import 2 projects");
   expect(state.createProject).toHaveBeenCalledOnce();
   await act(async () => {
@@ -321,14 +411,55 @@ it("rechecks after project creation and can retry its history without recreating
   expect(state.onDone).toHaveBeenCalledOnce();
 });
 
+it.each([false, true])(
+  "rechecks after history import before the next project write (existing: %s)",
+  async (existing) => {
+    using _setup = setup();
+    await using screen = await render(null);
+    if (existing) {
+      const projectId = ProjectId.make("second-existing");
+      state.candidates[1] = { ...state.candidates[1]!, projectId };
+      appAtomRegistry.set(projectsAtom(), [
+        { id: projectId, environmentId: primaryId, workspaceRoot: "/projects/second" },
+      ]);
+    }
+    const imported = deferred<{ importedCount: number; skippedCount: number }>();
+    state.importThreads.mockImplementationOnce(async () =>
+      AsyncResult.success(await imported.promise),
+    );
+    await mountImport(screen);
+    await chooseBothWithHistory();
+    await click("Import 2 projects");
+    expect(state.createProject).toHaveBeenCalledOnce();
+    expect(state.importThreads).toHaveBeenCalledOnce();
+    await act(async () => {
+      setGrant(primaryId, false);
+      imported.resolve({ importedCount: 1, skippedCount: 0 });
+      await imported.promise;
+    });
+    expect(state.createProject).toHaveBeenCalledOnce();
+    expect(state.importThreads).toHaveBeenCalledOnce();
+    expect(state.onDone).not.toHaveBeenCalled();
+    expect(pageText()).toContain(permissionMessage);
+
+    await act(async () => setGrant(primaryId, true));
+    await click("Import 2 projects");
+    expect(state.createProject).toHaveBeenCalledTimes(existing ? 1 : 2);
+    expect(state.importThreads).toHaveBeenCalledTimes(2);
+    expect(state.onDone).toHaveBeenCalledOnce();
+  },
+);
+
 it("completes accepted imports when permission is revoked after the final server write", async () => {
-  using _now = setup();
+  using _setup = setup();
+  await using screen = await render(null);
   state.candidates = state.candidates.slice(0, 1);
   const imported = deferred<{ importedCount: number; skippedCount: number }>();
   state.importThreads.mockImplementationOnce(async () =>
     AsyncResult.success(await imported.promise),
   );
-  await using _screen = await mountImport();
+  await mountImport(screen);
+  await act(async () => historyCheckbox().click());
   await click("Import 1 project");
   await act(async () => {
     setGrant(primaryId, false);
@@ -339,24 +470,4 @@ it("completes accepted imports when permission is revoked after the final server
   expect(state.importThreads).toHaveBeenCalledOnce();
   expect(state.completeOnboarding).toHaveBeenCalledOnce();
   expect(state.onDone).toHaveBeenCalledOnce();
-});
-
-it("finishes setup without landing when the imported project never reaches the client", async () => {
-  using _now = setup();
-  state.candidates = state.candidates.slice(0, 1);
-  // The server accepts the project, but it never shows up in the client's projects.
-  state.createProject.mockResolvedValue(AsyncResult.success(undefined));
-  state.waitForProject.mockRejectedValue(new Error("The project did not appear."));
-  state.completeOnboarding.mockRejectedValueOnce(new Error("offline"));
-  await using _screen = await mountImport();
-
-  await click("Import 1 project");
-  await vi.waitFor(() => expect(state.completeOnboarding).toHaveBeenCalledOnce());
-  // A failed completion hands the step back instead of leaving it importing.
-  await vi.waitFor(() => expect(button("Import 1 project").disabled).toBe(false));
-  expect(state.onDone).not.toHaveBeenCalled();
-
-  await click("Import 1 project");
-  await vi.waitFor(() => expect(state.onDone).toHaveBeenCalledOnce());
-  expect(state.onDone).toHaveBeenCalledWith(undefined);
 });

@@ -161,17 +161,6 @@
       "count": 1
     }
   },
-  "apps/server/scripts/peer-coordination-lab.ts": {
-    "no-unused-vars": {
-      "count": 1
-    },
-    "t3code/no-low-value-comments": {
-      "count": 11
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 10
-    }
-  },
   "apps/server/scripts/peer-lab/agreements.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -230,11 +219,6 @@
   "apps/server/scripts/peer-lab/owners.ts": {
     "t3code/no-low-value-comments": {
       "count": 4
-    }
-  },
-  "apps/server/scripts/peer-lab/plans.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
     }
   },
   "apps/server/scripts/peer-lab/rooms.ts": {

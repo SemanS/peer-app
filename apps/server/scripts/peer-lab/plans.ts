@@ -1,20 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalConsole:off preferSchemaOverJson:off - host-side lab harness: reads the logs of computers it did not start itself.
 /**
- * The lab's plans step: what an agent hears when it declares a plan with `peer plan`, and what the
- * other side hears, checked against the Hub's own view and the computers' coordination logs, with
- * the words the design canvas gives (4b, "peer plan and what agents hear").
- *
- *   Ana's provider declares what it changes and the contract it provides, and goes idle. Bob's
- *   consumer declares what it uses: its answer lists the relation with Ana's contract line as
- *   fenced teammate text. Ana's agent is not woken; it hears the relation once at its next step,
- *   and Bob's agent hears Ana's contract line again only when it changes, and once more after a
- *   compaction. A session that declared nothing but changed a file the consumer uses is an
- *   observed relation, heard once by both sides. Withdrawing ends a plan and its relations;
- *   turning plans off for a computer withdraws its plans; the coordination logs hold sizes and
- *   counts, never a path, a name, a contract or a task.
- *
- * It takes sessions that already run (the lab owns the processes), and reads what a session was
- * told from its computer's log as well, whichever hook carried it.
+ * The lab's plans step: what an agent hears from `peer plan` and what the other side hears, checked
+ * against the Hub and the coordination logs, which hold sizes and counts, never a path, name or task.
  */
 import * as NodeFS from "node:fs";
 
@@ -101,7 +88,8 @@ export interface PlansLabInput {
 export const START_WORDS =
   'Before your first edit run peer plan --change <path[#symbol]> --uses <path#symbol> --provides "<symbol> (<path>): <contract>"; it shows whose work meets yours.';
 export const WITHDRAWN_WORDS = "Plan withdrawn. Its relations are gone from every view.";
-export const NOTHING_MEETS = "Nothing in the project meets your plan.";
+export const NOTHING_MEETS =
+  "Nothing in the project’s live plans, reported changes or open challenges meets your plan.";
 export const NOTHING_NEW = "Nothing new meets your plan.";
 export const CONTRACT_LEAD = "Their contract (teammate text):";
 /** The most characters an answer to `peer plan` takes, a notice to the other side, and the start line. */

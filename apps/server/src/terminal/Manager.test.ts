@@ -409,6 +409,106 @@ it.layer(
   Layer.merge(NodeServices.layer, ProcessRunner.layer.pipe(Layer.provide(NodeServices.layer))),
   { excludeTestServices: true },
 )("TerminalManager", (it) => {
+  it.effect("answers whether a terminal's process runs from the session itself", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager();
+      const input = { threadId: openInput().threadId, terminalId: openInput().terminalId };
+      assert.isFalse(yield* manager.isProcessRunning(input));
+
+      yield* manager.open(openInput());
+      assert.isTrue(yield* manager.isProcessRunning(input));
+
+      const ended = yield* Deferred.make<void>();
+      const unsubscribe = yield* manager.subscribe((event) =>
+        event.type === "exited" ? Deferred.succeed(ended, undefined) : Effect.void,
+      );
+      ptyAdapter.processes[0]?.emitExit({ exitCode: 0, signal: 0 });
+      yield* Deferred.await(ended);
+      unsubscribe();
+      assert.isFalse(yield* manager.isProcessRunning(input));
+
+      yield* manager.open(openInput());
+      yield* manager.close(input);
+      assert.isFalse(yield* manager.isProcessRunning(input));
+    }),
+  );
+
+  it.effect("says restarted when an open replaces a live process, started when none ran", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter, baseDir } = yield* createManager();
+      const path = yield* Path.Path;
+      const differentCwd = path.join(baseDir, "other-context");
+      yield* (yield* FileSystem.FileSystem).makeDirectory(differentCwd, { recursive: true });
+      const types: Array<string> = [];
+      const unsubscribe = yield* manager.subscribe((event) =>
+        Effect.sync(() => {
+          if (event.type === "started" || event.type === "restarted") types.push(event.type);
+        }),
+      );
+
+      yield* manager.open(openInput());
+      yield* manager.open(openInput({ cwd: differentCwd }));
+      const ended = yield* Deferred.make<void>();
+      const unsubscribeEnded = yield* manager.subscribe((event) =>
+        event.type === "exited" ? Deferred.succeed(ended, undefined) : Effect.void,
+      );
+      ptyAdapter.processes[1]?.emitExit({ exitCode: 0, signal: 0 });
+      yield* Deferred.await(ended);
+      unsubscribeEnded();
+      yield* manager.open(openInput({ cwd: differentCwd }));
+      unsubscribe();
+
+      assert.deepEqual(types, ["started", "restarted", "started"]);
+    }),
+  );
+
+  it.effect("answers when a stopped process has exited, not when the close returned", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, { processKillGraceMs: 10_000 });
+      yield* manager.open(openInput());
+      const process = ptyAdapter.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+      const input = { threadId: openInput().threadId, terminalId: openInput().terminalId };
+      const sigterm = yield* Deferred.make<void>();
+      process.onKill = (signal) => {
+        if (signal === "SIGTERM") Deferred.doneUnsafe(sigterm, Effect.void);
+      };
+
+      yield* manager.close(input);
+      yield* Deferred.await(sigterm);
+      const gone = yield* manager.awaitStoppedProcess(input).pipe(Effect.forkChild);
+      yield* Effect.yieldNow;
+      expect(gone.pollUnsafe()).toBeUndefined();
+
+      process.emitExit({ exitCode: 0, signal: 15 });
+      yield* Fiber.join(gone);
+      yield* manager.awaitStoppedProcess(input);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
+  it.effect("stops waiting for a stopped process at the kill grace", () =>
+    Effect.gen(function* () {
+      const { manager, ptyAdapter } = yield* createManager(5, { processKillGraceMs: 10_000 });
+      yield* manager.open(openInput());
+      const process = ptyAdapter.processes[0];
+      expect(process).toBeDefined();
+      if (!process) return;
+      const input = { threadId: openInput().threadId, terminalId: openInput().terminalId };
+      const sigterm = yield* Deferred.make<void>();
+      process.onKill = (signal) => {
+        if (signal === "SIGTERM") Deferred.doneUnsafe(sigterm, Effect.void);
+      };
+
+      yield* manager.close(input);
+      yield* Deferred.await(sigterm);
+      const gone = yield* manager.awaitStoppedProcess(input).pipe(Effect.forkChild);
+      yield* TestClock.adjust("10 seconds");
+      yield* Fiber.join(gone);
+      assert.deepEqual(process.killSignals, ["SIGTERM", "SIGKILL"]);
+    }).pipe(Effect.provide(TestClock.layer())),
+  );
+
   it.effect("spawns lazily and reuses running terminal per thread", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter } = yield* createManager();

@@ -56,6 +56,12 @@ import {
 } from "./checkpointDiff.ts";
 import { ModelSelection } from "./modelSelection.ts";
 import {
+  NativeCliGap,
+  NativeCliTurn,
+  OrchestrationV2CliLoan,
+  OrchestrationV2CliLoanJson,
+} from "./nativeCli.ts";
+import {
   ThreadLinkedPullRequest,
   ThreadPullRequestLink,
   ThreadPullRequestKey,
@@ -702,6 +708,8 @@ export const OrchestrationV2Run = Schema.Struct({
   ),
   delegatedCompletion: Schema.optional(OrchestrationV2DelegatedCompletionCohort),
   workspacePreparation: Schema.optional(OrchestrationV2ThreadLaunchWorkspaceStrategy),
+  /** Set on a turn a person ran in the agent's own CLI and Peer imported afterwards. */
+  origin: Schema.optional(Schema.Literal("native_cli")),
 });
 export type OrchestrationV2Run = typeof OrchestrationV2Run.Type;
 
@@ -1100,6 +1108,17 @@ export const OrchestrationV2ProviderThread = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
   goal: Schema.optional(Schema.NullOr(OrchestrationV2ProviderGoal)).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  cliLoan: Schema.optional(Schema.NullOr(OrchestrationV2CliLoan)).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  /**
+   * The last provider turn ordinal before the part of a CLI loan Peer could not import: the turn
+   * before the loan, or its last imported turn when the end of the session was cut off. How many
+   * native turns follow that point is unknown from here on.
+   */
+  cliGapAfterTurnOrdinal: Schema.optional(Schema.NullOr(NonNegativeInt)).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
   createdAt: Schema.DateTimeUtc,
@@ -2347,6 +2366,9 @@ export type OrchestrationV2ProviderSessionDetachedJson =
 export const OrchestrationV2ProviderThreadJson = OrchestrationV2ProviderThread.mapFields(
   (fields) => ({
     ...fields,
+    cliLoan: Schema.optional(Schema.NullOr(OrchestrationV2CliLoanJson)).pipe(
+      Schema.withDecodingDefault(Effect.succeed(null)),
+    ),
     createdAt: Schema.DateTimeUtcFromString,
     updatedAt: Schema.DateTimeUtcFromString,
   }),
@@ -3124,6 +3146,8 @@ export const OrchestrationV2Command = Schema.Union([
     threadId: ThreadId,
     providerSessionId: ProviderSessionId,
     reason: Schema.optional(Schema.String),
+    /** Refused inside the thread's lock while a run is live, where no run can start meanwhile. */
+    onlyWhenIdle: Schema.optional(Schema.Boolean),
   }),
   Schema.Struct({
     type: Schema.Literal("message.dispatch"),
@@ -3499,6 +3523,22 @@ const OrchestrationV2InternalCommand = Schema.Union([
         }),
       }),
     ),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("thread.cli-loan.start"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    providerThreadId: ProviderThreadId,
+    loan: OrchestrationV2CliLoan,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("thread.cli-loan.finish"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    providerThreadId: ProviderThreadId,
+    turns: Schema.Array(NativeCliTurn),
+    gap: NativeCliGap,
+    finishedAt: Schema.DateTimeUtc,
   }),
   /**
    * Internal so no client can mark a request saved without the value being

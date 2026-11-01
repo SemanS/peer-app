@@ -128,6 +128,8 @@ export interface CheckpointServiceV2Shape {
     readonly ordinalWithinScope: number;
     readonly appRunOrdinal: number | null;
     readonly capturedAt: DateTime.Utc;
+    /** Compare with this ref instead of the scope's own previous ordinal. */
+    readonly baselineRef?: CheckpointRef;
     readonly forceMissing?: boolean;
   }) => Effect.Effect<OrchestrationV2Checkpoint, CheckpointServiceV2Error>;
   readonly restore: (input: {
@@ -363,10 +365,12 @@ export const layer: Layer.Layer<
             scopeId: input.scope.id,
             ordinalWithinScope: input.ordinalWithinScope,
           });
-          const previousCheckpointRef = yield* checkpointRefFor({
-            scopeId: input.scope.id,
-            ordinalWithinScope: Math.max(0, input.ordinalWithinScope - 1),
-          });
+          const previousCheckpointRef =
+            input.baselineRef ??
+            (yield* checkpointRefFor({
+              scopeId: input.scope.id,
+              ordinalWithinScope: Math.max(0, input.ordinalWithinScope - 1),
+            }));
 
           if (input.forceMissing === true || !(yield* supportsCheckpoints(input.scope.cwd))) {
             return makeCheckpoint({

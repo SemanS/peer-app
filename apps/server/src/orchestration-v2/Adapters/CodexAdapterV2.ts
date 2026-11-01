@@ -3,6 +3,7 @@ import * as DocumentText from "../../provider/DocumentText.ts";
 import { revertCodexThread } from "../../provider/CodexThreadRevert.ts";
 import { historyResponseItems } from "@t3tools/provider-core/server/handoffBudget";
 import { makeProviderTextDeltaCoalescer } from "./ProviderTextDeltaCoalescer.ts";
+import { isCodexSessionHeld, waitOutCodexSessionHold } from "../CodexSessionHold.ts";
 import {
   mcpToolPresentation,
   type McpToolPresentation,
@@ -340,6 +341,17 @@ function toProtocolError(
     ...(payload === undefined ? {} : { payload }),
   });
 }
+
+const isCodexAppServerRequestError = Schema.is(CodexErrors.CodexAppServerRequestError);
+
+const isCodexResumeHeld = (error: unknown): error is CodexErrors.CodexAppServerRequestError =>
+  isCodexAppServerRequestError(error) &&
+  isCodexSessionHeld({ message: error.errorMessage, data: error.data });
+
+const isProviderAdapterRollbackThreadError = Schema.is(
+  ProviderAdapter.ProviderAdapterRollbackThreadError,
+);
+const isProviderAdapterForkThreadError = Schema.is(ProviderAdapter.ProviderAdapterForkThreadError);
 
 function codexTimestamp(seconds: number | null | undefined): DateTime.Utc {
   return seconds === null || seconds === undefined
@@ -948,21 +960,48 @@ const countTerminalTurnsAfterBoundary = (
   ).length;
 };
 
+const heldNativeTurnIds = (
+  providerTurns: ReadonlyArray<OrchestrationV2ProviderTurn>,
+): ReadonlySet<string> =>
+  new Set(providerTurns.flatMap((turn) => turn.nativeTurnRef?.nativeId ?? []));
+
+const CODEX_ROLLBACK_PAST_GAP_REFUSAL =
+  "Codex cannot go back past a CLI session Peer could not read in full, because it does not know how many turns ran there. Roll back to a turn after that session instead.";
+const CODEX_FORK_PAST_GAP_REFUSAL =
+  "Codex cannot fork from before a CLI session Peer could not read in full, because it does not know how many turns ran there. Fork from a turn after that session instead.";
+
 const resolveCodexForkRollbackTurnCount = Effect.fn("CodexAdapterV2.resolveForkRollbackTurnCount")(
   function* (input: ProviderAdapter.ProviderAdapterV2ForkThreadInput) {
     if (input.providerTurnId === undefined || input.sourceProviderTurns === undefined) {
       return 0;
     }
 
-    const rollbackTurnCount = countTerminalTurnsAfterBoundary(
-      providerTurnsForThread(input.sourceProviderTurns, input.sourceProviderThread),
-      input.providerTurnId,
+    const providerTurns = providerTurnsForThread(
+      input.sourceProviderTurns,
+      input.sourceProviderThread,
     );
+    const rollbackTurnCount = countTerminalTurnsAfterBoundary(providerTurns, input.providerTurnId);
     if (rollbackTurnCount === null) {
       return yield* new ProviderAdapter.ProviderAdapterForkThreadError({
         driver: CODEX_PROVIDER,
         providerThreadId: input.sourceProviderThread.id,
         cause: `Cannot fork Codex thread from provider turn ${input.providerTurnId}: source turn was not found in provider thread ${input.sourceProviderThread.id}.`,
+      });
+    }
+    // A boundary with a native id forks by `lastTurnId`, and only a fork by count needs to know how
+    // many turns ran in the gap.
+    const gapOrdinal = input.sourceProviderThread.cliGapAfterTurnOrdinal ?? null;
+    const boundary = providerTurns.find((turn) => turn.id === input.providerTurnId);
+    if (
+      gapOrdinal !== null &&
+      boundary !== undefined &&
+      boundary.ordinal <= gapOrdinal &&
+      boundary.nativeTurnRef?.nativeId == null
+    ) {
+      return yield* new ProviderAdapter.ProviderAdapterForkThreadError({
+        driver: CODEX_PROVIDER,
+        providerThreadId: input.sourceProviderThread.id,
+        cause: CODEX_FORK_PAST_GAP_REFUSAL,
       });
     }
 
@@ -1025,8 +1064,17 @@ const readCodexThreadHistoryMetadata = Effect.fn("CodexAdapterV2.readThreadHisto
 export const resolveCodexRollbackTurnCount = Effect.fn("CodexAdapterV2.resolveRollbackTurnCount")(
   function* (input: ProviderAdapter.ProviderAdapterV2RollbackThreadInput) {
     const providerTurns = input.providerThreadTurns;
+    // Codex rewinds by a count, and the turns of a CLI session Peer could not import are not in it.
+    const gapOrdinal = input.providerThread.cliGapAfterTurnOrdinal ?? null;
+    const refusePastGap = new ProviderAdapter.ProviderAdapterRollbackThreadError({
+      driver: CODEX_PROVIDER,
+      providerThreadId: input.providerThread.id,
+      refusal: CODEX_ROLLBACK_PAST_GAP_REFUSAL,
+      cause: CODEX_ROLLBACK_PAST_GAP_REFUSAL,
+    });
     switch (input.target.type) {
       case "thread_start":
+        if (gapOrdinal !== null) return yield* refusePastGap;
         return providerTurns.filter(isTerminalProviderTurn).length;
       case "provider_turn": {
         if (input.target.providerTurn.providerThreadId !== input.providerThread.id) {
@@ -1035,6 +1083,9 @@ export const resolveCodexRollbackTurnCount = Effect.fn("CodexAdapterV2.resolveRo
             providerThreadId: input.providerThread.id,
             cause: `Cannot roll back Codex thread ${input.providerThread.id} to provider turn ${input.target.providerTurn.id}: target turn belongs to provider thread ${input.target.providerTurn.providerThreadId}.`,
           });
+        }
+        if (gapOrdinal !== null && input.target.providerTurn.ordinal <= gapOrdinal) {
+          return yield* refusePastGap;
         }
 
         const rollbackTurnCount = countTerminalTurnsAfterBoundary(
@@ -1367,7 +1418,9 @@ export function codexThreadRuntimeParams(input: {
     ...(input.modelSelection === undefined ? {} : { model: input.modelSelection.model }),
     config: {
       ...CODEX_THREAD_CONFIG,
-      ...Object.fromEntries(Object.entries(mcpServers).map(([name, server]) => [`mcp_servers.${name}`, server])),
+      ...Object.fromEntries(
+        Object.entries(mcpServers).map(([name, server]) => [`mcp_servers.${name}`, server]),
+      ),
     },
   };
 }
@@ -1572,7 +1625,10 @@ export type CodexAdapterV2DriverEnv =
 
 export const createCodexAdapterV2 = Effect.fn("CodexAdapterV2.createCodexAdapterV2")(function* (
   { instanceId, environment, enabled, config }: ProviderAdapterDriverCreateInput<CodexSettings>,
-  hooks: Pick<CodexAdapterV2Options, "onUsageLimits" | "resolveRuntime" | "getRuntimeRevision" | "compatibility"> = {},
+  hooks: Pick<
+    CodexAdapterV2Options,
+    "onUsageLimits" | "resolveRuntime" | "getRuntimeRevision" | "compatibility"
+  > = {},
 ) {
   const clientFactory = yield* CodexAppServerClientFactory;
   const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
@@ -7029,25 +7085,22 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                     : { runtimePolicy: threadInput.runtimePolicy }),
                 }),
               });
+              const resumeOrUnarchive = resume.pipe(
+                Effect.catchTags({
+                  CodexAppServerRequestError: (cause) => {
+                    if (
+                      !/\bsession \S+ is archived\b|\bcodex unarchive\b/i.test(cause.errorMessage)
+                    ) {
+                      return Effect.fail(cause);
+                    }
+                    return client.raw
+                      .request("thread/unarchive", { threadId: nativeThreadId })
+                      .pipe(Effect.andThen(resume));
+                  },
+                }),
+              );
               const response = yield* ensureInitialized.pipe(
-                Effect.andThen(
-                  resume.pipe(
-                    Effect.catchTags({
-                      CodexAppServerRequestError: (cause) => {
-                        if (
-                          !/\bsession \S+ is archived\b|\bcodex unarchive\b/i.test(
-                            cause.errorMessage,
-                          )
-                        ) {
-                          return Effect.fail(cause);
-                        }
-                        return client.raw
-                          .request("thread/unarchive", { threadId: nativeThreadId })
-                          .pipe(Effect.andThen(resume));
-                      },
-                    }),
-                  ),
-                ),
+                Effect.andThen(waitOutCodexSessionHold(resumeOrUnarchive, isCodexResumeHeld)),
                 Effect.flatMap(decodeCodexResumeMetadata),
               );
               return {
@@ -7066,14 +7119,19 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             },
             (effect, threadInput) =>
               effect.pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new ProviderAdapter.ProviderAdapterResumeThreadError({
-                      driver: CODEX_PROVIDER,
-                      providerSessionId: input.providerSessionId,
-                      providerThreadId: threadInput.providerThread.id,
-                      cause,
-                    }),
+                Effect.mapError((cause) =>
+                  isCodexResumeHeld(cause)
+                    ? new ProviderAdapter.ProviderAdapterSessionInUseError({
+                        driver: CODEX_PROVIDER,
+                        providerThreadId: threadInput.providerThread.id,
+                        reason: cause.errorMessage,
+                      })
+                    : new ProviderAdapter.ProviderAdapterResumeThreadError({
+                        driver: CODEX_PROVIDER,
+                        providerSessionId: input.providerSessionId,
+                        providerThreadId: threadInput.providerThread.id,
+                        cause,
+                      }),
                 ),
               ),
           ),
@@ -7801,19 +7859,29 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
               }
               // thread/revert requires the thread loaded in this app-server; resume after restart or idle release.
               if (!loaded) {
-                yield* client.raw.request("thread/resume", {
-                  threadId,
-                  excludeTurns: true,
-                  ...codexThreadRuntimeParams({
-                    mcpSession: yield* readMcpSession(threadInput.providerThread.appThreadId),
-                    threadId: threadInput.providerThread.appThreadId,
-                    modelSelection: input.modelSelection,
-                    runtimePolicy: input.runtimePolicy,
+                yield* waitOutCodexSessionHold(
+                  client.raw.request("thread/resume", {
+                    threadId,
+                    excludeTurns: true,
+                    ...codexThreadRuntimeParams({
+                      mcpSession: yield* readMcpSession(threadInput.providerThread.appThreadId),
+                      threadId: threadInput.providerThread.appThreadId,
+                      modelSelection: input.modelSelection,
+                      runtimePolicy: input.runtimePolicy,
+                    }),
                   }),
-                });
+                  isCodexResumeHeld,
+                );
               }
               const response = yield* ensureInitialized.pipe(
-                Effect.andThen(revertCodexThread(client, threadId, numTurns)),
+                Effect.andThen(
+                  revertCodexThread(
+                    client,
+                    threadId,
+                    numTurns,
+                    heldNativeTurnIds(threadInput.providerThreadTurns),
+                  ),
+                ),
               );
               turnTokenUsageByThread.delete(threadId);
               return {
@@ -7836,13 +7904,14 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             },
             (effect, threadInput) =>
               effect.pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new ProviderAdapter.ProviderAdapterRollbackThreadError({
-                      driver: CODEX_PROVIDER,
-                      providerThreadId: threadInput.providerThread.id,
-                      cause,
-                    }),
+                Effect.mapError((cause) =>
+                  isProviderAdapterRollbackThreadError(cause)
+                    ? cause
+                    : new ProviderAdapter.ProviderAdapterRollbackThreadError({
+                        driver: CODEX_PROVIDER,
+                        providerThreadId: threadInput.providerThread.id,
+                        cause,
+                      }),
                 ),
               ),
           ),
@@ -7892,7 +7961,12 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
                 }
                 forkedThread = (yield* ensureInitialized.pipe(
                   Effect.andThen(
-                    revertCodexThread(client, response.thread.id, boundary.rollbackTurnCount),
+                    revertCodexThread(
+                      client,
+                      response.thread.id,
+                      boundary.rollbackTurnCount,
+                      heldNativeTurnIds(threadInput.sourceProviderTurns ?? []),
+                    ),
                   ),
                   Effect.mapError(
                     (cause) =>
@@ -7921,13 +7995,15 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
             },
             (effect, threadInput) =>
               effect.pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new ProviderAdapter.ProviderAdapterForkThreadError({
-                      driver: CODEX_PROVIDER,
-                      providerThreadId: threadInput.sourceProviderThread.id,
-                      cause,
-                    }),
+                // `settleStartFailure` shows a string cause and an Error's generic message.
+                Effect.mapError((cause) =>
+                  isProviderAdapterForkThreadError(cause)
+                    ? cause
+                    : new ProviderAdapter.ProviderAdapterForkThreadError({
+                        driver: CODEX_PROVIDER,
+                        providerThreadId: threadInput.sourceProviderThread.id,
+                        cause,
+                      }),
                 ),
               ),
           ),

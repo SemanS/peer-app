@@ -341,6 +341,13 @@ export const layer: Layer.Layer<
     const instances = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
     const scope = yield* Effect.scope;
     const completedTurnAnalytics = new Set<string>();
+    const storedProviderThread = (threadId: ThreadId, providerThreadId: ProviderThreadId) =>
+      projections.getThreadRecords(threadId, ["providerThreads"]).pipe(
+        Effect.map((records) =>
+          records.providerThreads.find((candidate) => candidate.id === providerThreadId),
+        ),
+        Effect.catchTags({ ProjectionStoreThreadNotFoundError: () => Effect.succeed(undefined) }),
+      );
 
     const makeDomainEvent =
       /* This helper runs for individual orchestration events; the enclosing operation owns the span. */
@@ -586,10 +593,19 @@ export const layer: Layer.Layer<
               ];
             case "provider_thread.updated": {
               const threadId = input.event.providerThread.appThreadId ?? input.threadId;
+              const stored = yield* storedProviderThread(threadId, input.event.providerThread.id);
               const updated = yield* makeDomainEvent(input, {
                 type: "provider-thread.updated",
                 threadId,
-                payload: input.event.providerThread,
+                // An adapter's copy can predate a loan, and only commands write these two.
+                payload:
+                  stored === undefined
+                    ? input.event.providerThread
+                    : {
+                        ...input.event.providerThread,
+                        cliLoan: stored.cliLoan ?? null,
+                        cliGapAfterTurnOrdinal: stored.cliGapAfterTurnOrdinal ?? null,
+                      },
               });
               return input.event.retainedNativeTurnIds === undefined
                 ? [updated]
@@ -905,7 +921,13 @@ export const layer: Layer.Layer<
               (effect) =>
                 input.event.type === "app_thread.created"
                   ? threadCommands.withLock(input.event.appThread.id, effect)
-                  : effect,
+                  : // Keeps a loan that commits between this event's read and its write.
+                    input.event.type === "provider_thread.updated"
+                    ? threadCommands.withLock(
+                        input.event.providerThread.appThreadId ?? input.threadId,
+                        effect,
+                      )
+                    : effect,
             ),
         ),
     });

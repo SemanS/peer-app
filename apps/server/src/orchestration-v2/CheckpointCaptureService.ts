@@ -1,4 +1,5 @@
 import {
+  CheckpointRef,
   CheckpointScopeId,
   CommandId,
   type OrchestrationV2Checkpoint,
@@ -37,6 +38,7 @@ export interface CheckpointCaptureServiceV2Shape {
     readonly threadId: ThreadId;
     readonly runId: RunId;
     readonly scopeId: CheckpointScopeId;
+    readonly baselineRef?: CheckpointRef;
   }) => Effect.Effect<void, CheckpointCaptureExecutionError>;
 }
 
@@ -64,6 +66,7 @@ export const layer: Layer.Layer<
       readonly threadId: ThreadId;
       readonly runId: RunId;
       readonly scopeId: CheckpointScopeId;
+      readonly baselineRef?: CheckpointRef;
     }) {
       const { run, rootNode, scope, providerThread, readyCheckpointOrdinals, sideChat } =
         yield* projections.getCheckpointCaptureContext(input.threadId, input);
@@ -125,6 +128,7 @@ export const layer: Layer.Layer<
         ordinalWithinScope: run.ordinal,
         appRunOrdinal: run.ordinal,
         capturedAt,
+        ...(input.baselineRef === undefined ? {} : { baselineRef: input.baselineRef }),
         forceMissing: sideChat,
       });
       // Omit delegatedCompletion to preserve cohort writes made after capture loaded the run.
@@ -240,7 +244,12 @@ export const layer: Layer.Layer<
           Effect.mapError((cause) =>
             isCheckpointCaptureExecutionError(cause)
               ? cause
-              : new CheckpointCaptureExecutionError({ ...input, cause }),
+              : new CheckpointCaptureExecutionError({
+                  threadId: input.threadId,
+                  runId: input.runId,
+                  scopeId: input.scopeId,
+                  cause,
+                }),
           ),
         );
       }),

@@ -2,6 +2,7 @@ import {
   CheckpointId,
   CheckpointScopeId,
   latestProviderTurnForAttempt,
+  type OrchestrationV2Checkpoint,
   type OrchestrationV2DomainEvent,
   ProviderThreadId,
   ThreadId,
@@ -31,13 +32,28 @@ import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import { ProjectionStoreV2 } from "./ProjectionStore.ts";
 import { GIT_INDEX_LOCKED_DETAIL } from "../vcs/VcsProcess.ts";
 import * as ProjectStore from "./ProjectStore.ts";
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import { ProviderSessionManagerV2 } from "./ProviderSessionManager.ts";
 import { RuntimePolicyV2 } from "./RuntimePolicy.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 
 export const ROLLBACK_FAILED_MESSAGE =
   "The provider could not roll back this conversation. Try again; if it keeps failing, check the provider and server logs.";
+
+/**
+ * Turns of one CLI loan point at the tree the loan started from, so a ref can outlive some of the
+ * checkpoints that name it.
+ */
+export const checkpointsWithUnusedRefs = (
+  stale: ReadonlyArray<OrchestrationV2Checkpoint>,
+  all: ReadonlyArray<Pick<OrchestrationV2Checkpoint, "id" | "ref">>,
+): ReadonlyArray<OrchestrationV2Checkpoint> => {
+  const staleIds = new Set(stale.map((checkpoint) => checkpoint.id));
+  const survivingRefs = new Set(
+    all.filter((checkpoint) => !staleIds.has(checkpoint.id)).map((checkpoint) => checkpoint.ref),
+  );
+  return stale.filter((checkpoint) => !survivingRefs.has(checkpoint.ref));
+};
 
 export class CheckpointRollbackExecutionError extends Schema.TaggedError<CheckpointRollbackExecutionError>()(
   "CheckpointRollbackExecutionError",
@@ -48,10 +64,12 @@ export class CheckpointRollbackExecutionError extends Schema.TaggedError<Checkpo
       "provider-turn-unavailable",
       "unexpected-failure",
       "shared-workspace",
+      "provider-refused",
     ]),
     threadId: ThreadId,
     providerThreadId: ProviderThreadId,
     checkpointId: CheckpointId,
+    refusal: Schema.optional(Schema.String),
     cause: Schema.optional(Schema.Defect()),
   },
 ) {
@@ -65,6 +83,8 @@ export class CheckpointRollbackExecutionError extends Schema.TaggedError<Checkpo
         return `Provider turn for rollback target ${this.checkpointId} is unavailable on provider thread ${this.providerThreadId}.`;
       case "shared-workspace":
         return SHARED_WORKSPACE_RESTORE_MESSAGE;
+      case "provider-refused":
+        return this.refusal ?? ROLLBACK_FAILED_MESSAGE;
       case "unexpected-failure":
         return ROLLBACK_FAILED_MESSAGE;
     }
@@ -72,15 +92,19 @@ export class CheckpointRollbackExecutionError extends Schema.TaggedError<Checkpo
 }
 
 const isCheckpointRollbackExecutionError = Schema.is(CheckpointRollbackExecutionError);
+const isProviderAdapterRollbackThreadError = Schema.is(
+  ProviderAdapter.ProviderAdapterRollbackThreadError,
+);
 const isVcsProcessExitError = Schema.is(VcsProcessExitError);
 const isCheckpointRestoreError = Schema.is(CheckpointRestoreError);
 
 /**
- * The message clients see when a rollback fails. Only a held Git index lock
- * gets its own explanation; other reasons carry internal ids or raw Git
+ * The message clients see when a rollback fails. A refusal the adapter worded for a person and a
+ * held Git index lock get their own explanation; other reasons carry internal ids or raw Git
  * output, so they fall back to the generic message.
  */
 export function rollbackFailureClientMessage(error: CheckpointRollbackExecutionError): string {
+  if (error.reason === "provider-refused") return error.message;
   const restoreCause = isCheckpointRestoreError(error.cause) ? error.cause.cause : undefined;
   return isVcsProcessExitError(restoreCause) && restoreCause.detail === GIT_INDEX_LOCKED_DETAIL
     ? GIT_INDEX_LOCKED_DETAIL
@@ -274,14 +298,23 @@ export const layer: Layer.Layer<
               providerThreadTurns,
             });
       if (input.restoreFiles !== false) yield* checkpoints.restore({ scope, checkpoint });
-      if (staleCheckpoints.length > 0) {
-        yield* checkpoints.deleteStaleRefs({ scope, checkpoints: staleCheckpoints });
+      const deletableCheckpoints = checkpointsWithUnusedRefs(
+        staleCheckpoints,
+        context.checkpointRefs,
+      );
+      if (deletableCheckpoints.length > 0) {
+        yield* checkpoints.deleteStaleRefs({ scope, checkpoints: deletableCheckpoints });
       }
 
       // Lock against full-row thread writes that could restore the old native session after rollback.
       yield* threadCommands.withLock(
         input.threadId,
         Effect.gen(function* () {
+          // Only commands write these two, and a loan can have opened since the row above was read.
+          const { providerThread: current } = yield* projections.getCheckpointRollbackContext(
+            input.threadId,
+            input,
+          );
           const now = yield* DateTime.now;
           const makeEvent = <Event extends OrchestrationV2DomainEvent>(event: Omit<Event, "id">) =>
             Effect.map(
@@ -302,6 +335,8 @@ export const layer: Layer.Layer<
               occurredAt: now,
               payload: {
                 ...snapshot.providerThread,
+                cliLoan: current?.cliLoan ?? null,
+                cliGapAfterTurnOrdinal: current?.cliGapAfterTurnOrdinal ?? null,
                 lastRunOrdinal: targetOrdinal === 0 ? null : targetOrdinal,
                 updatedAt: now,
               },
@@ -368,7 +403,9 @@ export const layer: Layer.Layer<
               isCheckpointRollbackExecutionError(cause)
                 ? cause
                 : new CheckpointRollbackExecutionError({
-                    reason: "unexpected-failure",
+                    ...(isProviderAdapterRollbackThreadError(cause) && cause.refusal !== undefined
+                      ? { reason: "provider-refused", refusal: cause.refusal }
+                      : { reason: "unexpected-failure" }),
                     threadId: input.threadId,
                     providerThreadId: input.providerThreadId,
                     checkpointId: input.checkpointId,

@@ -1,5 +1,6 @@
 import {
   CheckpointId,
+  CheckpointRef,
   CheckpointScopeId,
   CommandId,
   MessageId,
@@ -94,6 +95,8 @@ export const OrchestrationEffectRequestV2 = Schema.Union([
     type: Schema.Literal("checkpoint.capture"),
     runId: RunId,
     scopeId: CheckpointScopeId,
+    /** What the turn changed is measured from here when its own baseline was never taken. */
+    baselineRef: Schema.optional(CheckpointRef),
   }),
   Schema.Struct({
     type: Schema.Literal("scheduled-tasks.cleanup"),
@@ -207,6 +210,10 @@ export interface EffectOutboxV2Shape {
   readonly listByCommandId: (
     commandId: CommandId,
   ) => Effect.Effect<ReadonlyArray<OrchestrationEffectV2>, EffectOutboxError>;
+  readonly hasUnsettled: (input: {
+    readonly threadId: ThreadId;
+    readonly effectType: OrchestrationEffectRequestV2["type"];
+  }) => Effect.Effect<boolean, EffectOutboxError>;
   readonly cancelUnsettled: (input: {
     readonly threadId: ThreadId;
     readonly effectTypes: ReadonlyArray<OrchestrationEffectRequestV2["type"]>;
@@ -435,6 +442,18 @@ export const layer: Layer.Layer<EffectOutboxV2, never, SqlClient.SqlClient> = La
               ? cause
               : new EffectOutboxError({ operation: "list", cause }),
           ),
+        ),
+      hasUnsettled: ({ threadId, effectType }) =>
+        sql<{ readonly found: number }>`
+          SELECT 1 AS found
+          FROM orchestration_v2_effect_outbox
+          WHERE thread_id = ${threadId}
+            AND effect_type = ${effectType}
+            AND status IN ('pending', 'running')
+          LIMIT 1
+        `.pipe(
+          Effect.map((rows) => rows.length > 0),
+          Effect.mapError((cause) => new EffectOutboxError({ operation: "list", cause })),
         ),
       cancelUnsettled: Effect.fn("EffectOutbox.cancelUnsettled")(
         function* ({ threadId, effectTypes, reason }) {

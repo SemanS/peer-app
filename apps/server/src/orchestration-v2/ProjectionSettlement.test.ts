@@ -256,7 +256,12 @@ it.effect(
         new Set(eligible.map((thread) => thread.id)),
         new Set(
           shell.threads
-            .filter((thread) => isAutoSettlementCandidate(thread, DateTime.toEpochMillis(now)))
+            .filter((thread) =>
+              isAutoSettlementCandidate(
+                { ...thread, hasOpenCliLoan: false },
+                DateTime.toEpochMillis(now),
+              ),
+            )
             .map((thread) => thread.id),
         ),
       );
@@ -276,6 +281,7 @@ it.effect(
             thread: {
               ...expected,
               latestUserAuthoredMessageAt: candidate.latestUserAuthoredMessageAt,
+              hasOpenCliLoan: candidate.hasOpenCliLoan,
             },
           }),
         );

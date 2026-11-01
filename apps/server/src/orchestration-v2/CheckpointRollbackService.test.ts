@@ -17,6 +17,7 @@ import {
   ProviderSessionId,
   ProviderThreadId,
   ThreadId,
+  type OrchestrationV2Checkpoint,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as DateTime from "effect/DateTime";
@@ -216,6 +217,7 @@ it.effect.each([
       targetAttempt: undefined,
       rolledBackAttemptIds: [],
       staleCheckpoints: [],
+      checkpointRefs: [],
       rootNodes: [],
       providerTurns: [],
     } as unknown as ProjectionStore.ProjectionCheckpointRollbackContext;
@@ -557,6 +559,7 @@ const seedRollbackHistory = Effect.gen(function* () {
     });
   }
 
+  const during = { rollback: Effect.void as Effect.Effect<void> };
   const rollbackCounts: number[] = [];
   const restored: CheckpointId[] = [];
   const deletedRefs: CheckpointId[] = [];
@@ -598,6 +601,7 @@ const seedRollbackHistory = Effect.gen(function* () {
               rollbackThread: (input: ProviderAdapter.ProviderAdapterV2RollbackThreadInput) =>
                 Effect.gen(function* () {
                   rollbackCounts.push(yield* resolveCodexRollbackTurnCount(input));
+                  yield* during.rollback;
                   return { providerThread: input.providerThread };
                 }),
             } as never),
@@ -625,6 +629,8 @@ const seedRollbackHistory = Effect.gen(function* () {
     nodeId,
     checkpointId,
     rollback,
+    during,
+    providerThreadId,
     rollbackCounts,
     restored,
     deletedRefs,
@@ -635,6 +641,39 @@ const seedRollbackHistory = Effect.gen(function* () {
 it.layer(ProjectionStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemory)))(
   "rollback history reads",
   (it) => {
+    it.effect("keeps a loan that opened while the rollback ran", () =>
+      Effect.gen(function* () {
+        const history = yield* seedRollbackHistory;
+        const { threadId, store, providerThreadId } = history;
+        const row = Effect.map(store.getThreadRecords(threadId, ["providerThreads"]), (records) =>
+          records.providerThreads.find((thread) => thread.id === providerThreadId)!,
+        );
+        const loan = {
+          terminalId: "cli-loan-1",
+          afterNativeMessageId: null,
+          startedAt: history.now,
+        };
+        history.during.rollback = Effect.gen(function* () {
+          const providerThread = yield* row;
+          yield* store.apply({
+            id: EventId.make("rollback-history-loan"),
+            type: "provider-thread.updated",
+            threadId,
+            driver: providerThread.driver,
+            providerInstanceId: providerThread.providerInstanceId,
+            occurredAt: history.now,
+            payload: { ...providerThread, cliLoan: loan, cliGapAfterTurnOrdinal: 7 },
+          });
+        }).pipe(Effect.orDie);
+
+        yield* history.rollback(3);
+
+        const after = yield* row;
+        assert.isNotNull(after.cliLoan ?? null);
+        assert.equal(after.cliGapAfterTurnOrdinal, 7);
+      }),
+    );
+
     it.effect("rolls back later terminal runs despite obsolete unrelated SQLite payloads", () =>
       Effect.gen(function* () {
         const history = yield* seedRollbackHistory;
@@ -731,3 +770,45 @@ it.layer(ProjectionStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMe
     );
   },
 );
+
+it("keeps a person's wording only for a refusal the adapter worded for one", () => {
+  const failure = (fields: {
+    readonly reason: "provider-refused" | "unexpected-failure";
+    readonly refusal?: string;
+  }) =>
+    new CheckpointRollbackService.CheckpointRollbackExecutionError({
+      ...fields,
+      threadId: ThreadId.make("thread"),
+      providerThreadId: ProviderThreadId.make("provider-thread"),
+      checkpointId: CheckpointId.make("checkpoint"),
+    });
+  const refusal = "Codex cannot go back past a CLI session.";
+  assert.equal(
+    CheckpointRollbackService.rollbackFailureClientMessage(
+      failure({ reason: "provider-refused", refusal }),
+    ),
+    refusal,
+  );
+  assert.equal(
+    CheckpointRollbackService.rollbackFailureClientMessage(
+      failure({ reason: "unexpected-failure" }),
+    ),
+    CheckpointRollbackService.ROLLBACK_FAILED_MESSAGE,
+  );
+});
+
+it("keeps a ref a surviving checkpoint still points at", () => {
+  const checkpoint = (id: string, ref: string) =>
+    ({ id, ref }) as unknown as OrchestrationV2Checkpoint;
+  const survivor = checkpoint("imported-1", "refs/shared");
+  const staleShared = checkpoint("imported-2", "refs/shared");
+  const staleOwn = checkpoint("imported-3", "refs/own");
+
+  assert.deepEqual(
+    CheckpointRollbackService.checkpointsWithUnusedRefs(
+      [staleShared, staleOwn],
+      [survivor, staleShared, staleOwn],
+    ),
+    [staleOwn],
+  );
+});

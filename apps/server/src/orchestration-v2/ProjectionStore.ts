@@ -68,6 +68,7 @@ import {
   RuntimeRequestId,
   CheckpointScopeId,
   CheckpointId,
+  CheckpointRef,
   ThreadId,
   TurnItemId,
   NodeId,
@@ -220,6 +221,7 @@ export type ProjectionSettlementCandidate = Pick<
 > &
   Pick<OrchestrationV2AppThread, "lastSnoozeWakeAt"> & {
     readonly latestUserAuthoredMessageAt: DateTime.Utc | null;
+    readonly hasOpenCliLoan: boolean;
   };
 
 const ProjectionCheckpointContext = Schema.Struct({
@@ -280,6 +282,8 @@ export interface ProjectionCheckpointRollbackContext {
   readonly runsToRollback: ReadonlyArray<OrchestrationV2Run>;
   readonly rootNodes: ReadonlyArray<OrchestrationV2ExecutionNode>;
   readonly staleCheckpoints: ReadonlyArray<OrchestrationV2Checkpoint>;
+  /** Every checkpoint's ref: turns of one CLI loan share a ref, which outlives some of them. */
+  readonly checkpointRefs: ReadonlyArray<Pick<OrchestrationV2Checkpoint, "id" | "ref">>;
 }
 
 export interface ProjectionProviderControlContext {
@@ -515,6 +519,10 @@ export interface ProjectionStoreV2Shape {
   readonly getSettlementCandidates: (
     threadId?: ThreadId,
   ) => Effect.Effect<ReadonlyArray<ProjectionSettlementCandidate>, ProjectionStoreV2Error>;
+  readonly getThreadIdsWithOpenCliLoan: () => Effect.Effect<
+    ReadonlyArray<ThreadId>,
+    ProjectionStoreV2Error
+  >;
   readonly getThreadsWithPullRequests: (
     threadId?: ThreadId,
   ) => Effect.Effect<ReadonlyArray<ProjectionThreadPullRequests>, ProjectionStoreV2Error>;
@@ -5188,6 +5196,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               runsToRollback: [],
               rootNodes: [],
               staleCheckpoints: [],
+              checkpointRefs: [],
             };
             if (
               providerThread === undefined ||
@@ -5258,6 +5267,14 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
               rootNodes: yield* decodeRows(decodeNodePayload, threadId)(nodeRows),
               providerTurns: yield* decodeRows(decodeProviderTurnPayload, threadId)(turnRows),
               staleCheckpoints: yield* decodeRows(decodeCheckpointPayload, threadId)(staleRows),
+              checkpointRefs: (yield* sql<{ readonly id: string; readonly ref: string }>`
+                SELECT checkpoint_id AS id, json_extract(payload_json, '$.ref') AS ref
+                FROM orchestration_v2_projection_checkpoints
+                WHERE thread_id = ${threadId}
+              `).map(({ id, ref }) => ({
+                id: CheckpointId.make(id),
+                ref: CheckpointRef.make(ref),
+              })),
             };
           }),
         )
@@ -6359,6 +6376,9 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                     row.latest_user_authored_message_at === null
                       ? null
                       : DateTime.makeUnsafe(row.latest_user_authored_message_at),
+                  hasOpenCliLoan: (providerThreadsByThreadId.get(thread.id) ?? []).some(
+                    (providerThread) => providerThread.cliLoan != null,
+                  ),
                   activityRunStatus: null,
                   activityRunStartedAt: null,
                   pendingRuntimeRequest: null,
@@ -6380,6 +6400,18 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           }),
         )
         .pipe(Effect.mapError((cause) => new ProjectionStoreSetupError({ cause })));
+
+    const getThreadIdsWithOpenCliLoan: ProjectionStoreV2Shape["getThreadIdsWithOpenCliLoan"] = () =>
+      sql<{ readonly thread_id: string }>`
+        SELECT DISTINCT p.thread_id
+        FROM orchestration_v2_projection_provider_threads p
+        JOIN orchestration_v2_projection_threads t ON t.thread_id = p.thread_id
+        WHERE t.deleted_at IS NULL
+          AND json_extract(p.payload_json, '$.cliLoan') IS NOT NULL
+      `.pipe(
+        Effect.map((rows) => rows.map((row) => ThreadId.make(row.thread_id))),
+        Effect.mapError((cause) => new ProjectionStoreSetupError({ cause })),
+      );
 
     const getOpenRemoteDelegatedTasks: ProjectionStoreV2Shape["getOpenRemoteDelegatedTasks"] = sql<{
       readonly thread_id: string;
@@ -7033,6 +7065,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       findGuestShareThreadId: readOnReader(findGuestShareThreadId),
       getThread: readOnReader(getThread),
       getSettlementCandidates: readOnReader(getSettlementCandidates),
+      getThreadIdsWithOpenCliLoan: readOnReader(getThreadIdsWithOpenCliLoan),
       getThreadsWithPullRequests: readOnReader(getThreadsWithPullRequests),
       getThreadWorktreePaths: readOnReader(getThreadWorktreePaths),
       getOpenRemoteDelegatedTasks: getOpenRemoteDelegatedTasks.pipe(NodeSqliteClient.readOnly),

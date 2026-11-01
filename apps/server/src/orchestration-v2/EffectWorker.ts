@@ -482,6 +482,9 @@ export const layerExecutor: Layer.Layer<
                 threadId: effect.threadId,
                 runId: effect.request.runId,
                 scopeId: effect.request.scopeId,
+                ...(effect.request.baselineRef === undefined
+                  ? {}
+                  : { baselineRef: effect.request.baselineRef }),
               })
               .pipe(
                 Effect.mapError(

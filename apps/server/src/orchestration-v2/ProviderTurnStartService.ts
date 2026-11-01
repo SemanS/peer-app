@@ -1294,6 +1294,18 @@ export const layer: Layer.Layer<
             );
           }
         }
+        // The adapter already waited, so a retry would only hold a worker for another minute.
+        if (
+          resumed._tag === "Failure" &&
+          resumed.failure._tag === "ProviderAdapterSessionInUseError"
+        ) {
+          yield* settleStartFailure({
+            signal: "provider-thread-session-in-use",
+            title: "Provider turn failed to start",
+            error: resumed.failure,
+          });
+          return undefined;
+        }
         resumedHandoffContext = undefined;
         resumedRetryHandoff = [];
         if (!(yield* isCurrentAttemptInStatus("starting"))) return undefined;

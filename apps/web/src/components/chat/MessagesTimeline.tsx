@@ -1017,6 +1017,9 @@ const ConversationTimeline = memo(function ConversationTimeline({
     };
   };
 
+  const nativeCliRunIds = new Set(
+    runs.flatMap((run) => (run.origin === "native_cli" ? [run.id] : [])),
+  );
   // Built from props after the last hook so the compiler can memoize the row context; a map
   // made before a hook would rebuild it, and re-render every row, on each streamed update.
   const pendingApprovalsByRequestId = new Map(
@@ -1040,6 +1043,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     vcsTerminology,
     skills,
     runs,
+    nativeCliRunIds,
     activeThreadEnvironmentId,
     onRevertToTurnCount,
     onRunShellCommand,

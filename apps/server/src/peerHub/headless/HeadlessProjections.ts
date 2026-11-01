@@ -44,6 +44,7 @@ export const layer = Layer.succeed(
     getThread: (threadId) => missing(threadId),
     getLimitRecoveryCandidates: () => Effect.succeed([]),
     getSettlementCandidates: () => Effect.succeed([]),
+    getThreadIdsWithOpenCliLoan: () => Effect.succeed([]),
     getThreadsWithPullRequests: () => Effect.succeed([]),
     getThreadWorktreePaths: () => Effect.succeed([]),
     getTurnStartContext: (threadId) => missing(threadId),

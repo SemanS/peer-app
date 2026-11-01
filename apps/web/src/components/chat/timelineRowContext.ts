@@ -61,6 +61,7 @@ export interface TimelineRowSharedState {
   vcsTerminology: VcsTerminology;
   skills: ReadonlyArray<ServerProviderSkill>;
   runs: ReadonlyArray<HandoffTimelineRun>;
+  nativeCliRunIds: ReadonlySet<RunId>;
   activeThreadEnvironmentId: EnvironmentId;
   onRevertToTurnCount: (targetTurnCount: number, messageId: MessageId) => void;
   onUseArtifactTemplate: (template: CodexArtifactTemplate) => void;

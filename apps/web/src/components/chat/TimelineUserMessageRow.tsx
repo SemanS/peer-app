@@ -832,6 +832,9 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
       !row.continuesSteer ? (
         <UserMessageIntentMarker intent={row.message.inputIntent} />
       ) : null}
+      {row.message.runId != null && ctx.nativeCliRunIds.has(row.message.runId) ? (
+        <p className="me-1 text-xs leading-none text-muted-foreground">Ran in the CLI</p>
+      ) : null}
       {mediaAboveText ? (
         <div className="flex max-w-[80%] justify-end">
           {/* The heading leads the media so screen readers reach it before the images. */}

@@ -20,6 +20,7 @@ import {
   buildThreadActionMenuItems,
   threadActionRequiresOperate,
   type ThreadActionMenuId,
+  type ThreadActionMenuState,
 } from "../components/threadActionMenu.logic";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { copyThreadReference } from "../lib/copyThreadReference";
@@ -48,6 +49,12 @@ import { useNewThreadHandler } from "./useHandleNewThread";
 import { useClientSettings } from "./useSettings";
 import { canTurnThreadIntoProject, useThreadActions } from "./useThreadActions";
 
+export type ThreadActionMenuNativeCli = NonNullable<ThreadActionMenuState["nativeCli"]> & {
+  readonly onContinue: () => void;
+  readonly onReturn: () => void;
+  readonly onFork: () => void;
+};
+
 function failureToast(title: string, error: unknown) {
   toastManager.add(
     stackedThreadToast({
@@ -62,10 +69,18 @@ export function useThreadActionMenu(input: {
   readonly threadRef: ScopedThreadRef | null;
   readonly projectCwd: string | null;
   readonly onStartRename: () => void;
+  readonly nativeCli?: ThreadActionMenuNativeCli | null;
   readonly onFind?: ((threadRef: ScopedThreadRef) => void) | undefined;
   readonly canShareWithGuest: boolean;
 }) {
-  const { threadRef, projectCwd, onStartRename, onFind, canShareWithGuest } = input;
+  const {
+    threadRef,
+    projectCwd,
+    onStartRename,
+    nativeCli = null,
+    onFind,
+    canShareWithGuest,
+  } = input;
   const router = useRouter();
   const projects = useProjects();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
@@ -153,6 +168,7 @@ export function useThreadActionMenu(input: {
         canSnoozeNow: canSnooze(thread, { now: now.toISOString() }),
         isRegeneratingTitle,
         isRunning: !threadRuntimeCanArchive(thread.runtime),
+        nativeCli,
         supports,
         snoozePresets,
         canShareWithGuest,
@@ -308,6 +324,15 @@ export function useThreadActionMenu(input: {
           return;
         case "copy-thread-id":
           copyThreadIdToClipboard(thread.id, { threadId: thread.id });
+          return;
+        case "continue-in-cli":
+          nativeCli?.onContinue();
+          return;
+        case "return-from-cli":
+          nativeCli?.onReturn();
+          return;
+        case "fork-in-cli":
+          nativeCli?.onFork();
           return;
         case "archive": {
           if (confirmThreadArchive) {

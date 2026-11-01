@@ -45,6 +45,15 @@ import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { visibleThreadPullRequests } from "@t3tools/shared/threadPullRequests";
 import type { UsageLimitSourceSnapshots } from "@t3tools/contracts";
 import { feedbackBannerItem } from "./chat/ComposerFeedback";
+import { useNativeCliHandoff } from "./chat/useNativeCliHandoff";
+import { Spinner } from "./ui/spinner";
+import {
+  nativeCliAgentForDriver,
+  nativeCliLoanDescription,
+  nativeCliProgressDescription,
+  nativeCliProgressTitle,
+  resolveNativeCliAgent,
+} from "./chat/nativeCli.logic";
 import { useUsageLimitsPanel } from "./chat/useUsageLimitsPanel";
 import { useWorktreeSetup } from "./chat/useWorktreeSetup";
 import { useChatShortcuts } from "./chat/useChatShortcuts";
@@ -275,6 +284,8 @@ import { ProviderSubagentBar } from "./chat/ProviderSubagentBar";
 import { getTriggerDisplayModelName } from "./chat/providerIconUtils";
 import { resolveScrollToEndClearance } from "./composerFooterLayout";
 import { ChatHeader } from "./chat/ChatHeader";
+import { TerminalSquareIcon } from "lucide-react";
+import { Button } from "./ui/button";
 import { useSideChat } from "./chat/useSideChat";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { shouldShowOpenInPicker } from "./chat/OpenInPicker.logic";
@@ -1311,8 +1322,18 @@ export default function ChatView(props: ChatViewProps) {
   const conversationProviderStatus =
     providerStatuses.find((status) => status.instanceId === activeRuntime?.providerInstanceId) ??
     activeProviderStatus;
+  const cliLoanProviderThread =
+    serverProjection?.providerThreads.find((thread) => thread.cliLoan != null) ?? null;
+  const cliLoan = cliLoanProviderThread?.cliLoan ?? null;
+  const cliLoanAgent =
+    cliLoanProviderThread === null ? null : nativeCliAgentForDriver(cliLoanProviderThread.driver);
+  const cliLoanSendBlockReason =
+    cliLoan === null
+      ? null
+      : `This thread is in ${cliLoanAgent ?? "the CLI"}. Return it to Peer first.`;
   const supportsConversationRollback =
     canOperateThread &&
+    cliLoan === null &&
     conversationProviderStatus !== null &&
     conversationProviderStatus.supportsConversationRollback !== false;
   const phase = derivePhase(activeRuntime);
@@ -1882,6 +1903,40 @@ export default function ChatView(props: ChatViewProps) {
   };
   const sendAppMessageStable = useStableCallback(sendAppMessage);
   const queuedRunsControlRef = useRef<QueuedRunsControlHandle>(null);
+  const nativeCliHandoff = useNativeCliHandoff({
+    threadRef: isServerThread ? activeThreadRef : null,
+    worktreePath: activeThread?.worktreePath ?? null,
+  });
+  const nativeCliProviderThread =
+    serverProjection?.providerThreads.find(
+      (thread) => thread.id === serverProjection.thread.activeProviderThreadId,
+    ) ?? null;
+  const nativeCliAgent =
+    cliLoanAgent ??
+    resolveNativeCliAgent({
+      nativeThreadRef: nativeCliProviderThread?.nativeThreadRef ?? null,
+      instanceConfig:
+        nativeCliProviderThread === null
+          ? undefined
+          : settings.providerInstances[nativeCliProviderThread.providerInstanceId]?.config,
+    });
+  const startNativeCli = useStableCallback((kind: "continue" | "fork") => {
+    if (nativeCliAgent !== null) void nativeCliHandoff.start(kind, nativeCliAgent);
+  });
+  const returnFromNativeCli = useStableCallback(() => {
+    if (nativeCliAgent !== null) void nativeCliHandoff.finish(nativeCliAgent);
+  });
+  const threadMenuNativeCli =
+    nativeCliAgent !== null && nativeCliHandoff.canOperate
+      ? {
+          agent: nativeCliAgent,
+          isOutInCli: cliLoan !== null,
+          isBusy: nativeCliHandoff.operation !== null,
+          onContinue: () => startNativeCli("continue"),
+          onReturn: returnFromNativeCli,
+          onFork: () => startNativeCli("fork"),
+        }
+      : null;
 
   const {
     activatePanelTerminalStable,
@@ -1910,6 +1965,7 @@ export default function ChatView(props: ChatViewProps) {
     panelTerminalIds,
     canReuseTerminal,
     gitCwd,
+    cliLoanTerminalId: cliLoan?.terminalId ?? null,
     setTerminalUiLaunchContext,
     setThreadError,
   });
@@ -2559,6 +2615,52 @@ export default function ChatView(props: ChatViewProps) {
           },
         })
       : null;
+  const nativeCliBannerItem = (() => {
+    if (nativeCliAgent === null) return null;
+    const operation = nativeCliHandoff.operation;
+    if (operation !== null) {
+      return {
+        id: "native-cli:progress",
+        variant: "info",
+        priority: "activity",
+        icon: <Spinner />,
+        title: nativeCliProgressTitle(operation, nativeCliAgent),
+        description: nativeCliProgressDescription(operation, nativeCliAgent),
+      };
+    }
+    if (cliLoan === null) return null;
+    const terminalId = cliLoan.terminalId;
+    return {
+      id: "native-cli:loan",
+      variant: "info",
+      priority: "urgent",
+      icon: <TerminalSquareIcon />,
+      title: `This thread is out in ${nativeCliAgent}`,
+      description: nativeCliLoanDescription(nativeCliAgent),
+      actions: (
+        <>
+          {terminalUiState.terminalIds.includes(terminalId) ||
+          activeServerOrderedTerminalIds.includes(terminalId) ? (
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => nativeCliHandoff.showTerminal(terminalId)}
+            >
+              Show terminal
+            </Button>
+          ) : null}
+          <Button
+            size="xs"
+            variant="ghost"
+            disabled={!nativeCliHandoff.canOperate}
+            onClick={returnFromNativeCli}
+          >
+            Return to Peer
+          </Button>
+        </>
+      ),
+    };
+  })() as ComposerBannerStackItem | null;
   const composerBannerItems = (() => {
     const fallbackSelection = draftFallback?.selection;
     const defaultSelection =
@@ -2608,8 +2710,10 @@ export default function ChatView(props: ChatViewProps) {
     const limitRecoveryItems = limitRecoveryBanner === null ? [] : [limitRecoveryBanner];
     const usageLimitsItems = usageLimitsBanner === null ? [] : [usageLimitsBanner];
     const projectCloneItems = projectCloneBannerItem === null ? [] : [projectCloneBannerItem];
+    const nativeCliItems = nativeCliBannerItem === null ? [] : [nativeCliBannerItem];
     if (!localCheckoutBranchMismatch || !showBranchMismatchBanner || !activeBranchMismatchKey) {
       return [
+        ...nativeCliItems,
         ...feedbackBannerItems,
         ...fallbackItems,
         ...limitRecoveryItems,
@@ -2619,6 +2723,7 @@ export default function ChatView(props: ChatViewProps) {
       ];
     }
     return [
+      ...nativeCliItems,
       ...feedbackBannerItems,
       ...fallbackItems,
       ...limitRecoveryItems,
@@ -3331,6 +3436,7 @@ export default function ChatView(props: ChatViewProps) {
             {!rightPanelControlsAtRoot && !rightPanelControlsInPanel ? panelLayoutControls : null}
             {inlineRightPanelOwnsTitleBar ? threadPanelHeaderControl : null}
             <ChatHeader
+              nativeCli={threadMenuNativeCli}
               activeThreadEnvironmentId={activeThread.environmentId}
               activeThreadId={activeThread.id}
               isServerThread={isServerThread}
@@ -3624,7 +3730,8 @@ export default function ChatView(props: ChatViewProps) {
                                           ? "Messages loading"
                                           : worktreeSetupBlocksSend
                                             ? `Preparing ${vcsTerminology.workspaceNoun}`
-                                            : projectCloneSendBlockReason
+                                            : (cliLoanSendBlockReason ??
+                                              projectCloneSendBlockReason)
                               }
                               isPreparingWorktree={isPreparingWorktree && !sendQueuesBehindSetup}
                               bannerItems={isDraftHeroState ? [] : composerBannerItems}

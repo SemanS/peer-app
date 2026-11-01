@@ -109,6 +109,10 @@ const ICON_PATHS: Record<string, ReadonlyArray<{ tag: string; attrs: Record<stri
     { tag: "path", attrs: { d: "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" } },
     { tag: "path", attrs: { d: "M8 16H3v5" } },
   ],
+  terminal: [
+    { tag: "path", attrs: { d: "m4 17 6-6-6-6" } },
+    { tag: "path", attrs: { d: "M12 19h8" } },
+  ],
   settings: [
     {
       tag: "path",

@@ -91,6 +91,10 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerAcceptanceSetReviewPolicy]: AuthOrchestrationOperateScope,
   // Consent to send this person's usage off the computer; turning it off erases it on the Hub.
   [WS_METHODS.peerUsageSetSharing]: AuthAccessWriteScope,
+  // These also need the terminal scope: see NATIVE_CLI_METHODS.
+  [WS_METHODS.nativeCliStart]: AuthOrchestrationOperateScope,
+  [WS_METHODS.nativeCliFinish]: AuthOrchestrationOperateScope,
+  [WS_METHODS.nativeCliFork]: AuthOrchestrationOperateScope,
   [ORCHESTRATION_V2_WS_METHODS.stopWorkflow]: AuthOrchestrationOperateScope,
   // Force stop kills agent processes, as Stop on a terminal does.
   [ORCHESTRATION_V2_WS_METHODS.forceStopThread]: AuthOrchestrationOperateScope,
@@ -103,6 +107,13 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
 } as const;
 export type ClientGuardedRpcTag = keyof typeof CLIENT_GUARDED_RPC_SCOPES;
 
+/** Handing a thread to a CLI is orchestration work done by running a program in a terminal. */
+const NATIVE_CLI_METHODS: ReadonlySet<string> = new Set([
+  WS_METHODS.nativeCliStart,
+  WS_METHODS.nativeCliFinish,
+  WS_METHODS.nativeCliFork,
+]);
+
 const decodePrepareThread = Schema.decodeUnknownSync(GitPreparePullRequestThreadInput);
 const decodeStackedAction = Schema.decodeUnknownSync(GitRunStackedActionInput);
 
@@ -114,6 +125,9 @@ export function clientRpcRequiredScopes(
     const payload = decodePrepareThread(input);
     if (payload.mode === "worktree" && payload.threadId !== undefined)
       return [AuthSourceControlWriteScope, AuthOrchestrationOperateScope];
+  }
+  if (NATIVE_CLI_METHODS.has(method)) {
+    return [AuthOrchestrationOperateScope, AuthTerminalOperateScope];
   }
   if (method === WS_METHODS.gitRunStackedAction && input !== undefined) {
     const payload = decodeStackedAction(input);

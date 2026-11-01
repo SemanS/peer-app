@@ -7,6 +7,12 @@ export const revertCodexThread = Effect.fn("revertCodexThread")(function* (
   client: Pick<CodexClient.CodexAppServerClient["Service"], "request">,
   threadId: string,
   numTurns: number,
+  /**
+   * Peer's count comes from its own provider turns, so a native turn it never saw must not use up
+   * the count. `/compact` run in the CLI is one: an empty turn with an id Peer does not hold. Peer's
+   * own compact and goal turns are held and so stay counted, whatever their shape.
+   */
+  heldNativeTurnIds: ReadonlySet<string>,
 ) {
   let remaining = numTurns;
   let beforeTurnId: string | undefined;
@@ -29,6 +35,7 @@ export const revertCodexThread = Effect.fn("revertCodexThread")(function* (
       itemsView: "summary",
     });
     for (const turn of page.data) {
+      if (turn.items.length === 0 && !heldNativeTurnIds.has(turn.id)) continue;
       beforeTurnId = turn.id;
       if (--remaining === 0) break;
     }

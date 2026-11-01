@@ -75,6 +75,7 @@ interface ChatTerminalActionsInput {
   readonly panelTerminalIds: ReadonlySet<string>;
   readonly canReuseTerminal: boolean;
   readonly gitCwd: string | null;
+  readonly cliLoanTerminalId: string | null;
   readonly setTerminalUiLaunchContext: Dispatch<SetStateAction<TerminalLaunchContext | null>>;
   readonly setThreadError: ReturnType<typeof makeThreadErrorSetter>;
 }
@@ -101,6 +102,7 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     gitCwd,
     setTerminalUiLaunchContext,
     setThreadError,
+    cliLoanTerminalId,
   } = input;
   const openPreview = useAtomCommand(previewEnvironment.open, { reportFailure: false });
 
@@ -230,7 +232,12 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
             ],
             activeTerminalId: terminalUiState.activeTerminalId,
             panelTerminalIds,
-            runningTerminalIds,
+            // Reusing a terminal opens it with the script's env, which restarts a shell started with
+            // another one. Subprocess reports lag, so a loan's terminal never counts as free.
+            runningTerminalIds:
+              cliLoanTerminalId === null
+                ? runningTerminalIds
+                : [...runningTerminalIds, cliLoanTerminalId],
           });
     const targetWorktreePath = options?.worktreePath ?? activeThread.worktreePath ?? null;
 

@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./server/AcpSessionHistory": {
+      "types": "./src/server/AcpSessionHistory.ts",
+      "import": "./src/server/AcpSessionHistory.ts"
+    },
     "./server/AcpSessionRuntime": {
       "types": "./src/server/AcpSessionRuntime.ts",
       "import": "./src/server/AcpSessionRuntime.ts"

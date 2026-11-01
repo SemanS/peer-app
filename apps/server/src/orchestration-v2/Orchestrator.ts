@@ -75,6 +75,7 @@ import {
 import { modelSelectionsEqual } from "@t3tools/shared/model";
 import { recordThreadOpen } from "@t3tools/shared/paletteSearch";
 import {
+  backgroundWorkHoldsCompletion,
   derivePendingBackgroundWork,
   pendingBackgroundTurnItems,
 } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
@@ -134,6 +135,7 @@ import {
   type GuestShareCommand,
 } from "./GuestShareDecider.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
+import * as NativeCliImport from "./NativeCliImport.ts";
 import { withCommandMetrics } from "../observability/Metrics.ts";
 import type { OrchestrationEffectRequestV2, PendingOrchestrationEffectV2 } from "./EffectOutbox.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
@@ -304,6 +306,81 @@ export class OrchestratorCommandIdConflictError extends Schema.TaggedError<Orche
   }
 }
 
+export class OrchestratorThreadOutInCliError extends Schema.TaggedError<OrchestratorThreadOutInCliError>()(
+  "OrchestratorThreadOutInCliError",
+  { commandId: CommandId, commandType: Schema.String, threadId: ThreadId },
+) {
+  override get message(): string {
+    // Return is itself refused while the CLI runs, so these two name the step that actually works.
+    switch (this.commandType) {
+      case "thread.archive":
+        return "This thread is out in the CLI. Quit the CLI to bring it back to Peer, then archive it.";
+      case "thread.settle":
+        return "This thread is out in the CLI. Quit the CLI to bring it back to Peer, then finish it.";
+      default:
+        return "This thread is out in the CLI. Return it to Peer first.";
+    }
+  }
+}
+
+export const BACKGROUND_WORK_TURN_ITEM_TYPES = [
+  "command_execution",
+  "dynamic_tool",
+  "subagent",
+] as const;
+
+export const THREAD_ROLLING_BACK_MESSAGE =
+  "This thread is still rolling back. Try again in a moment.";
+export const THREAD_BACKGROUND_WORK_MESSAGE =
+  "Background work is still running in this thread. Wait for it to finish first.";
+
+/** Both hold only for now, and closing the provider process would end or overwrite the work. */
+export class OrchestratorThreadNotReadyForCliError extends Schema.TaggedError<OrchestratorThreadNotReadyForCliError>()(
+  "OrchestratorThreadNotReadyForCliError",
+  {
+    commandId: CommandId,
+    commandType: Schema.String,
+    threadId: ThreadId,
+    reason: Schema.Literals(["rolling_back", "background_work"]),
+  },
+) {
+  override get message(): string {
+    return this.reason === "rolling_back"
+      ? THREAD_ROLLING_BACK_MESSAGE
+      : THREAD_BACKGROUND_WORK_MESSAGE;
+  }
+}
+
+/**
+ * Pull request watches are left out on purpose: the server runs them, so closing the provider
+ * process ends none. Settlement's rule decides the rest, so a plain background command counts for
+ * neither.
+ */
+export const hasBackgroundWorkInProcess = (
+  projection: Pick<
+    OrchestrationV2ThreadProjection,
+    "thread" | "runs" | "providerThreads" | "turnItems"
+  >,
+): boolean =>
+  backgroundWorkHoldsCompletion(
+    derivePendingBackgroundWork({
+      latestRun: projection.runs.findLast((run) => run.status !== "queued"),
+      providerThreads: projection.providerThreads,
+      turnItems: projection.turnItems,
+      activeProviderThreadId: projection.thread.activeProviderThreadId,
+      runs: projection.runs,
+    }),
+  );
+
+export class OrchestratorThreadHasLiveRunError extends Schema.TaggedError<OrchestratorThreadHasLiveRunError>()(
+  "OrchestratorThreadHasLiveRunError",
+  { commandId: CommandId, commandType: Schema.String, threadId: ThreadId },
+) {
+  override get message(): string {
+    return "This thread is still running. Wait for it to finish first.";
+  }
+}
+
 export const OrchestratorV2Error = Schema.Union([
   OrchestratorDispatchError,
   OrchestratorThreadAlreadyExistsError,
@@ -315,6 +392,9 @@ export const OrchestratorV2Error = Schema.Union([
   OrchestratorCommandIdConflictError,
   OrchestratorSubagentThreadReadOnlyError,
   OrchestratorThreadAboveModeLimitError,
+  OrchestratorThreadOutInCliError,
+  OrchestratorThreadHasLiveRunError,
+  OrchestratorThreadNotReadyForCliError,
 ]);
 export type OrchestratorV2Error = typeof OrchestratorV2Error.Type;
 
@@ -546,6 +626,8 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "thread.background-work.settle":
     case "thread.interrupt.unresponsive":
     case "thread.stop":
+    case "thread.cli-loan.start":
+    case "thread.cli-loan.finish":
     case "provider.switch":
       return command.threadId;
     case "delegated_task.request":
@@ -618,6 +700,12 @@ function withoutPreparationResult(
 ) {
   const { output: _output, exitCode: _exitCode, outputIndicatesFailure: _failure, ...rest } = item;
   return rest;
+}
+
+function hasOpenCliLoan(
+  projection: Pick<OrchestrationV2ThreadProjection, "providerThreads">,
+): boolean {
+  return projection.providerThreads.some((providerThread) => providerThread.cliLoan != null);
 }
 
 /** Stop ended this task, so its result is not delivered to the parent agent. */
@@ -1546,6 +1634,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       if (
         projection.thread.archivedAt !== null ||
         projection.thread.deletedAt !== null ||
+        hasOpenCliLoan(projection) ||
         projection.runs.some(isActiveRun)
       ) {
         return;
@@ -3005,6 +3094,17 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           }),
       ),
     );
+    // The CLI holds this session on this provider and in this directory until it comes back.
+    if (
+      command.type === "provider.switch" ||
+      (command.type === "thread.model-selection.set" &&
+        command.modelSelection.instanceId !== thread.providerInstanceId) ||
+      (command.type === "thread.metadata.update" &&
+        command.worktreePath !== undefined &&
+        command.worktreePath !== thread.worktreePath)
+    ) {
+      yield* refuseWhileOutInCli(command, command.threadId);
+    }
     if (thread.deletedAt !== null) {
       return yield* new OrchestratorDispatchError({
         commandId: command.commandId,
@@ -4136,6 +4236,266 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     }
   });
 
+  const refuseWhileOutInCli = Effect.fn("Orchestrator.refuseWhileOutInCli")(function* (
+    command: OrchestrationV2ServerCommand,
+    threadId: ThreadId,
+  ) {
+    const projection = yield* projectionStore
+      .getThreadRecords(threadId, ["providerThreads"])
+      .pipe(Effect.mapError((cause) => new OrchestratorProjectionError({ threadId, cause })));
+    if (hasOpenCliLoan(projection)) {
+      return yield* new OrchestratorThreadOutInCliError({
+        commandId: command.commandId,
+        commandType: command.type,
+        threadId,
+      });
+    }
+  });
+
+  const dispatchCliLoanStart = Effect.fn("orchestrationV2.dispatch.cliLoanStart")(function* (
+    command: Extract<OrchestrationV2ServerCommand, { readonly type: "thread.cli-loan.start" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+  ) {
+    const refuse = (cause: string) =>
+      new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause,
+      });
+    yield* refuseWhileOutInCli(command, command.threadId);
+    // A read of committed state, not I/O a decision depends on from outside: a rollback's effect
+    // commits with its command, and this runs under the same thread lock, so one of the two always
+    // sees the other. A rollback writes its provider thread row when it ends.
+    const rollingBack = yield* effectOutbox
+      .hasUnsettled({ threadId: command.threadId, effectType: "provider-thread.rollback" })
+      .pipe(mapDispatchError(command));
+    if (rollingBack) {
+      return yield* new OrchestratorThreadNotReadyForCliError({
+        commandId: command.commandId,
+        commandType: command.type,
+        threadId: command.threadId,
+        reason: "rolling_back",
+      });
+    }
+    const projection = yield* projectionStore
+      .getThreadRecords(command.threadId, ["runs", "providerThreads", "providerSessions"])
+      .pipe(
+        Effect.mapError(
+          (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+        ),
+      );
+    if (projection.thread.archivedAt !== null || projection.thread.deletedAt !== null) {
+      return yield* refuse(`Thread ${command.threadId} is not active.`);
+    }
+    if (projection.thread.activeProviderThreadId !== command.providerThreadId) {
+      return yield* refuse("The thread moved to another provider session.");
+    }
+    const providerThread = projection.providerThreads.find(
+      (candidate) => candidate.id === command.providerThreadId,
+    );
+    const nativeThreadId = providerThread?.nativeThreadRef?.nativeId;
+    if (
+      providerThread === undefined ||
+      nativeThreadId == null ||
+      nativeThreadId.startsWith("pending:")
+    ) {
+      return yield* refuse("This thread has no provider session to continue yet.");
+    }
+    if (providerThread.driver !== "claudeAgent" && providerThread.driver !== "codex") {
+      return yield* refuse("Only Claude and Codex threads can continue in their own CLI.");
+    }
+    if (projection.runs.some(isActiveRun)) {
+      return yield* refuse("This thread is still running. Wait for it to finish first.");
+    }
+    // A process that opened after the detach would write beside the CLI.
+    if (
+      projection.providerSessions.some((session) => session.id === providerThread.providerSessionId)
+    ) {
+      return yield* refuse("This thread has a provider process again.");
+    }
+    // Claude rewinds on the next resume, and the CLI's resume would ignore that and continue the
+    // turns the rollback removed. Peer would then rewind past whatever the CLI added.
+    if (providerThread.driver === "claudeAgent" && providerThread.nativeConversationHeadRef) {
+      return yield* refuse("This thread was just rolled back. Send one message before leaving.");
+    }
+    const now = yield* DateTime.now;
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "provider-thread.updated",
+      threadId: command.threadId,
+      driver: providerThread.driver,
+      providerInstanceId: providerThread.providerInstanceId,
+      occurredAt: now,
+      payload: { ...providerThread, cliLoan: command.loan, updatedAt: now },
+    });
+  });
+
+  const dispatchCliLoanFinish = Effect.fn("orchestrationV2.dispatch.cliLoanFinish")(function* (
+    command: Extract<OrchestrationV2ServerCommand, { readonly type: "thread.cli-loan.finish" }>,
+    events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
+  ) {
+    const projection = yield* projectionStore
+      .getThreadRecords(command.threadId, [
+        "runs",
+        "providerThreads",
+        "providerTurns",
+        "checkpoints",
+      ])
+      .pipe(
+        Effect.mapError(
+          (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
+        ),
+      );
+    if (projection.thread.deletedAt !== null) return;
+    const providerThread = projection.providerThreads.find(
+      (candidate) => candidate.id === command.providerThreadId,
+    );
+    // A second finish, from the button racing the terminal's exit, has nothing left to do.
+    if (providerThread === undefined || providerThread.cliLoan == null) return;
+
+    const runsById = new Map(projection.runs.map((run) => [run.id, run]));
+    const baselineRef = projection.checkpoints
+      .filter(
+        (checkpoint) =>
+          checkpoint.status === "ready" &&
+          checkpoint.appRunOrdinal !== null &&
+          checkpoint.runId !== null &&
+          runsById.get(checkpoint.runId)?.status !== "rolled_back",
+      )
+      .toSorted((left, right) => (left.appRunOrdinal ?? 0) - (right.appRunOrdinal ?? 0))
+      .at(-1)?.ref;
+    const waiting = projection.runs
+      .filter((run) => run.status === "queued")
+      .toSorted((left, right) => left.ordinal - right.ordinal);
+    const known = new Set(projection.runs.map((run) => run.id));
+    const freshCount = command.turns.filter(
+      (turn) => !known.has(NativeCliImport.nativeCliRunId(command.threadId, turn.nativeMessageId)),
+    ).length;
+    // Queue reorders and delegated results leave queued ordinals anywhere among the others.
+    const firstRunOrdinal =
+      Math.max(
+        0,
+        ...projection.runs.filter((run) => run.status !== "queued").map((run) => run.ordinal),
+      ) + 1;
+    const now = command.finishedAt;
+    if (freshCount > 0) {
+      // A message that waited out the loan keeps its turn after the work it waited for: run
+      // ordinals decide rollback and timeline order, and a queued run has nothing else tied to one.
+      // Each moves only upward and the highest goes first, so no write meets a taken ordinal.
+      let nextOrdinal = firstRunOrdinal + freshCount;
+      const renumbered = waiting.map((run) => {
+        const ordinal = Math.max(nextOrdinal, run.ordinal);
+        nextOrdinal = ordinal + 1;
+        return { run, ordinal };
+      });
+      for (const { run, ordinal } of renumbered.toReversed()) {
+        if (ordinal === run.ordinal) continue;
+        yield* emit(
+          events,
+          command,
+        )({
+          type: "run.updated",
+          threadId: command.threadId,
+          runId: run.id,
+          providerInstanceId: run.providerInstanceId,
+          occurredAt: now,
+          payload: { ...run, ordinal },
+        });
+      }
+    }
+
+    // A resolve failure only costs the diff: the turns and the end of the loan must still land.
+    const cwd = yield* runtimePolicy
+      .resolve({ thread: projection.thread, modelSelection: projection.thread.modelSelection })
+      .pipe(
+        Effect.map((resolved) => resolved.cwd ?? projection.thread.worktreePath),
+        Effect.orElseSucceed(() => null),
+      );
+    const plan = yield* NativeCliImport.planNativeCliImport({
+      commandId: command.commandId,
+      projection,
+      providerThread,
+      turns: command.turns,
+      gap: command.gap,
+      now,
+      firstRunOrdinal,
+      baselineRef,
+      idAllocator,
+      prepareScope: ({ runId, rootNodeId }) =>
+        cwd === null
+          ? Effect.succeed(null)
+          : checkpointService
+              .prepareRootRunScope({
+                threadId: command.threadId,
+                runId,
+                rootNodeId,
+                providerThreadId: providerThread.id,
+                cwd,
+                createdAt: now,
+              })
+              .pipe(mapDispatchError(command)),
+      allocateCheckpointId: (checkpointScopeId, ordinal) =>
+        idAllocator.allocate
+          .checkpoint({ checkpointScopeId, name: String(ordinal) })
+          .pipe(mapDispatchError(command)),
+    }).pipe(mapDispatchError(command));
+    yield* Ref.update(events, (existing) => [...existing, ...plan.events]);
+    const lastRunOrdinal = freshCount > 0 ? firstRunOrdinal + freshCount - 1 : null;
+    const turnOrdinalBeforeImport = Math.max(
+      0,
+      ...projection.providerTurns
+        .filter((turn) => turn.providerThreadId === providerThread.id)
+        .map((turn) => turn.ordinal),
+    );
+    // Turns missing from a truncated import ran after the last one that fit, so even that one sits
+    // before the unknown; other gaps lost what came before the imported turns.
+    const cliGapAfterTurnOrdinal =
+      command.gap === "none"
+        ? (providerThread.cliGapAfterTurnOrdinal ?? null)
+        : command.gap === "truncated"
+          ? turnOrdinalBeforeImport + freshCount
+          : turnOrdinalBeforeImport;
+    yield* emit(
+      events,
+      command,
+    )({
+      type: "provider-thread.updated",
+      threadId: command.threadId,
+      driver: providerThread.driver,
+      providerInstanceId: providerThread.providerInstanceId,
+      occurredAt: now,
+      payload: {
+        ...providerThread,
+        cliLoan: null,
+        cliGapAfterTurnOrdinal,
+        firstRunOrdinal:
+          providerThread.firstRunOrdinal ?? (freshCount > 0 ? firstRunOrdinal : null),
+        lastRunOrdinal: lastRunOrdinal ?? providerThread.lastRunOrdinal,
+        updatedAt: now,
+      },
+    });
+    if (plan.capture !== null) {
+      const { baselineRef: captureBaseline, runId, scopeId } = plan.capture;
+      yield* Ref.update(effects, (existing) => [
+        ...existing,
+        {
+          id: `effect:checkpoint.capture:${runId}`,
+          commandId: CommandId.make(`command:effect:checkpoint.capture:${runId}`),
+          threadId: command.threadId,
+          request: {
+            type: "checkpoint.capture",
+            runId,
+            scopeId,
+            ...(captureBaseline === undefined ? {} : { baselineRef: captureBaseline }),
+          },
+        } satisfies PendingOrchestrationEffectV2,
+      ]);
+    }
+  });
+
   const dispatchProviderSessionDetach = Effect.fn("orchestrationV2.dispatch.providerSessionDetach")(
     function* (
       command: Extract<OrchestrationV2Command, { readonly type: "provider-session.detach" }>,
@@ -4143,12 +4503,31 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
     ) {
       const projection = yield* projectionStore
-        .getThreadRecords(command.threadId, ["providerSessions"])
+        .getThreadRecords(
+          command.threadId,
+          ["providerSessions", "providerThreads", "runs", "turnItems"],
+          { turnItemTypes: BACKGROUND_WORK_TURN_ITEM_TYPES, messageRoles: [] },
+        )
         .pipe(
           Effect.mapError(
             (cause) => new OrchestratorProjectionError({ threadId: command.threadId, cause }),
           ),
         );
+      if (command.onlyWhenIdle === true && projection.runs.some(isActiveRun)) {
+        return yield* new OrchestratorThreadHasLiveRunError({
+          commandId: command.commandId,
+          commandType: command.type,
+          threadId: command.threadId,
+        });
+      }
+      if (command.onlyWhenIdle === true && hasBackgroundWorkInProcess(projection)) {
+        return yield* new OrchestratorThreadNotReadyForCliError({
+          commandId: command.commandId,
+          commandType: command.type,
+          threadId: command.threadId,
+          reason: "background_work",
+        });
+      }
       const session = projection.providerSessions.find(
         (candidate) => candidate.id === command.providerSessionId,
       );
@@ -4296,6 +4675,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       );
     // Only side chat forks lock the source; validate the modes copied here, not an earlier read.
     yield* refuseAboveDispatchModeLimit(command, command.sourceThreadId, sourceProjection.thread);
+    yield* refuseWhileOutInCli(command, command.sourceThreadId);
     if (command.sideChat === true && sourceProjection.thread.deletedAt !== null) {
       return yield* new OrchestratorDispatchError({
         commandId: command.commandId,
@@ -4423,6 +4803,8 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       );
     // The source is unlocked; validate the modes copied here, not an earlier read.
     yield* refuseAboveDispatchModeLimit(command, command.sourceThreadId, sourceProjection.thread);
+    yield* refuseWhileOutInCli(command, command.sourceThreadId);
+    yield* refuseWhileOutInCli(command, command.targetThreadId);
     const targetProjection = yield* projectionStore
       .getThreadRecords(command.targetThreadId, ["runs", "contextTransfers"])
       .pipe(
@@ -5288,6 +5670,22 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     effects: Ref.Ref<Array<PendingOrchestrationEffectV2>>,
   ) {
     let projection = yield* getProjectionWithPendingEvents(command.threadId, events);
+    // Only a person at a client can be told to wait. A wake, a delegated result, a scheduled task or
+    // what a server feature sends for a person has nobody to retry it, so it queues below and starts
+    // when the thread comes back.
+    const outInCli = hasOpenCliLoan(projection);
+    if (
+      outInCli &&
+      command.createdBy === "user" &&
+      command.creationSource !== "server" &&
+      command.scheduledTaskId === undefined
+    ) {
+      return yield* new OrchestratorThreadOutInCliError({
+        commandId: command.commandId,
+        commandType: command.type,
+        threadId: command.threadId,
+      });
+    }
     if (command.manualContinuationOfRunId !== undefined) {
       const source = projection.runs.find((run) => run.id === command.manualContinuationOfRunId);
       const limited = latestRootProviderFailure(source ?? null, projection.turnItems);
@@ -5503,6 +5901,12 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       command.dispatchMode,
       command.deliveryIntent,
     );
+    if (
+      outInCli &&
+      (dispatchMode.type === "steer_active" || dispatchMode.type === "restart_active")
+    ) {
+      dispatchMode = { type: "queue_after_active" };
+    }
     if (dispatchMode.type === "steer_active") {
       const targetRunId = dispatchMode.targetRunId;
       const target = projection.runs.find((run) => run.id === targetRunId);
@@ -5768,7 +6172,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       dispatchMode.type === "defer_start" ||
       dispatchMode.type === "start_immediately" ||
       dispatchMode.type === "queue_after_active";
-    const shouldQueue = queueBehindRun !== undefined && startsOrQueuesRun;
+    const shouldQueue = (queueBehindRun !== undefined || outInCli) && startsOrQueuesRun;
     // Client messages resume held queues; server continuations and scheduled tasks do not.
     // Provider failure or usage limits re-hold the queue.
     const worktreeSetupUnresolved = worktreeSetupPending(projection);
@@ -5805,13 +6209,13 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       const queueProviderThread =
         activeProviderThread ??
         projection.providerThreads.find(
-          (candidate) => candidate.id === queueBehindRun.providerThreadId,
+          (candidate) => candidate.id === queueBehindRun?.providerThreadId,
         );
       if (queueProviderThread === undefined) {
         return yield* new OrchestratorDispatchError({
           commandId: command.commandId,
           commandType: command.type,
-          cause: `Active run ${queueBehindRun.id} has no provider thread for queued dispatch.`,
+          cause: `Active run ${queueBehindRun?.id} has no provider thread for queued dispatch.`,
         });
       }
       const now = yield* DateTime.now;
@@ -5865,7 +6269,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       const attemptId = idAllocator.derive.runAttempt({ runId, attemptOrdinal: 1 });
       const rootNodeId = idAllocator.derive.rootNode({ runId });
       const checkpointScope =
-        queueBehindRun.status === "preparing" || worktreeMissingRun !== undefined
+        queueBehindRun?.status === "preparing" || worktreeMissingRun !== undefined
           ? null
           : yield* runtimePolicy.resolve({ thread: projection.thread, modelSelection }).pipe(
               Effect.flatMap((resolvedRuntimePolicy) =>
@@ -11843,6 +12247,24 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           cause: `Checkpoint ${command.checkpointId} is ${targetCheckpoint.status} and cannot be restored.`,
         });
       }
+      // Peer saw only where a CLI loan ended, so a turn inside one has no files of its own.
+      const checkpointOrdinal = targetCheckpoint.appRunOrdinal;
+      if (
+        checkpointOrdinal !== null &&
+        projection.checkpoints.some(
+          (candidate) =>
+            candidate.ref === targetCheckpoint.ref &&
+            candidate.appRunOrdinal !== null &&
+            candidate.appRunOrdinal < checkpointOrdinal,
+        )
+      ) {
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause:
+            "That turn ran in the CLI, and only the last CLI turn has files to restore. Roll back to the last one or to a turn before them.",
+        });
+      }
       const targetScope = projection.checkpointScopes.find(
         (candidate) => candidate.id === targetCheckpoint.scopeId,
       );
@@ -12912,6 +13334,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             cause: `Thread ${command.threadId} changed before automatic settlement.`,
           });
         }
+        yield* refuseWhileOutInCli(command, command.threadId);
         yield* dispatchThreadMutation(
           {
             type: "thread.settle",
@@ -12985,8 +13408,12 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         };
       }
       case "thread.archive":
-      case "thread.unarchive":
       case "thread.settle":
+        // Both close the thread's terminals, and a loan's terminal process is the live CLI.
+        yield* refuseWhileOutInCli(command, command.threadId);
+        yield* dispatchThreadMutation(command, events, effects);
+        break;
+      case "thread.unarchive":
       case "thread.unsettle":
       case "thread.snooze":
       case "thread.unsnooze":
@@ -13060,6 +13487,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         updateDelegatedCompletionOnlyRunId = yield* dispatchNotificationAccepted(command, events);
         break;
       case "prepared-run.release":
+        yield* refuseWhileOutInCli(command, command.threadId);
         yield* dispatchPreparedRunRelease(command, events, effects);
         break;
       case "prepared-run.progress":
@@ -13069,6 +13497,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         yield* dispatchPreparedRunFail(command, events);
         break;
       case "prepared-run.retry":
+        yield* refuseWhileOutInCli(command, command.threadId);
         yield* dispatchPreparedRunRetry(command, events);
         break;
       case "runtime-request.respond":
@@ -13111,7 +13540,14 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       case "thread.stop":
         cancelUnsettledEffects = yield* dispatchThreadStop(command, events, effects);
         break;
+      case "thread.cli-loan.start":
+        yield* dispatchCliLoanStart(command, events);
+        break;
+      case "thread.cli-loan.finish":
+        yield* dispatchCliLoanFinish(command, events, effects);
+        break;
       case "queued-message.promote-to-steer":
+        yield* refuseWhileOutInCli(command, command.threadId);
         cancelUnsettledEffects = yield* dispatchQueuedMessagePromoteToSteer(
           command,
           events,
@@ -13132,6 +13568,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             cause: `Thread ${command.threadId} is not active.`,
           });
         }
+        yield* refuseWhileOutInCli(command, command.threadId);
         const selectedRunId = command.type === "queued-run.start" ? command.runId : undefined;
         const selectedRun =
           selectedRunId === undefined
@@ -13208,6 +13645,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         yield* dispatchQueuedRunEdit(command, events);
         break;
       case "checkpoint.rollback":
+        yield* refuseWhileOutInCli(command, command.threadId);
         yield* dispatchCheckpointRollback(command, events, effects);
         break;
       case "checkpoint.rollback.fail":
@@ -13323,7 +13761,11 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             }),
         ),
       );
-      if (command.type === "queue.resume" || command.type === "queued-run.start") {
+      if (
+        command.type === "queue.resume" ||
+        command.type === "queued-run.start" ||
+        command.type === "thread.cli-loan.finish"
+      ) {
         yield* mapDispatchError(command)(
           startNextQueuedRun(
             command.threadId,
@@ -13356,6 +13798,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           command.type === "thread.background-work.settle" ||
           command.type === "thread.interrupt.unresponsive" ||
           command.type === "thread.stop" ||
+          command.type === "thread.cli-loan.finish" ||
           command.type === "subagent.stop" ||
           // Closing a share again, or after it ended, is not an error.
           command.type === "thread.guest-share.close" ||
@@ -13369,7 +13812,15 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       ),
       Effect.catch((cause) =>
         Effect.gen(function* () {
-          if (cause._tag === "OrchestratorThreadAboveModeLimitError") return yield* cause;
+          // These hold only for now, and a receipt would keep the same command refused for good.
+          if (
+            cause._tag === "OrchestratorThreadAboveModeLimitError" ||
+            cause._tag === "OrchestratorThreadOutInCliError" ||
+            cause._tag === "OrchestratorThreadHasLiveRunError" ||
+            cause._tag === "OrchestratorThreadNotReadyForCliError"
+          ) {
+            return yield* cause;
+          }
           const rejectedAt = yield* DateTime.now;
           const receipt = yield* eventSink
             .commitRejectedCommand({
@@ -13470,7 +13921,11 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         detail: committed.receipt.error ?? "Previously rejected.",
       });
     }
-    if (command.type === "queue.resume" || command.type === "queued-run.start") {
+    if (
+      command.type === "queue.resume" ||
+      command.type === "queued-run.start" ||
+      command.type === "thread.cli-loan.finish"
+    ) {
       yield* mapDispatchError(command)(
         startNextQueuedRun(
           command.threadId,

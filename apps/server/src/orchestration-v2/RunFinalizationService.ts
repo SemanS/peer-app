@@ -1,4 +1,4 @@
-import { CheckpointScopeId, ProjectId, RunId, ThreadId } from "@t3tools/contracts";
+import { CheckpointRef, CheckpointScopeId, ProjectId, RunId, ThreadId } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -44,6 +44,7 @@ export class RunFinalizationService extends Context.Service<
       readonly threadId: ThreadId;
       readonly runId: RunId;
       readonly scopeId: CheckpointScopeId;
+      readonly baselineRef?: CheckpointRef;
     }) => Effect.Effect<void, RunFinalizationError>;
   }
 >()("t3/orchestration-v2/RunFinalizationService") {}
@@ -56,20 +57,30 @@ const make = Effect.gen(function* () {
   const finalize: RunFinalizationService["Service"]["finalize"] = Effect.fn(
     "RunFinalizationService.finalize",
   )(function* (input) {
-    yield* checkpointCapture
-      .execute(input)
-      .pipe(
-        Effect.mapError(
-          (cause) => new RunFinalizationError({ ...input, operation: "capture-checkpoint", cause }),
-        ),
-      );
-    const projection = yield* projections
-      .getCheckpointContext(input.threadId)
-      .pipe(
-        Effect.mapError(
-          (cause) => new RunFinalizationError({ ...input, operation: "refresh-workspace", cause }),
-        ),
-      );
+    yield* checkpointCapture.execute(input).pipe(
+      Effect.mapError(
+        (cause) =>
+          new RunFinalizationError({
+            threadId: input.threadId,
+            runId: input.runId,
+            scopeId: input.scopeId,
+            operation: "capture-checkpoint",
+            cause,
+          }),
+      ),
+    );
+    const projection = yield* projections.getCheckpointContext(input.threadId).pipe(
+      Effect.mapError(
+        (cause) =>
+          new RunFinalizationError({
+            threadId: input.threadId,
+            runId: input.runId,
+            scopeId: input.scopeId,
+            operation: "refresh-workspace",
+            cause,
+          }),
+      ),
+    );
     const cwd = projection.checkpointScopes.find((scope) => scope.id === input.scopeId)?.cwd;
     if (cwd !== undefined) {
       // Retrying a display refresh after the checkpoint is durable blocks the next turn.

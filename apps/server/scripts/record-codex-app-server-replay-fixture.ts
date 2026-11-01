@@ -1400,7 +1400,7 @@ const runReplaySession = Effect.fn("record-codex-app-server-replay-fixture.runRe
         // Fresh app-servers report notLoaded; resume before thread/revert and again on the next turn.
         yield* client.request("thread/read", { threadId, includeTurns: false });
         yield* client.request("thread/resume", resumeParams);
-        yield* revertCodexThread(client, threadId, rollback.numTurns);
+        yield* revertCodexThread(client, threadId, rollback.numTurns, new Set());
         yield* client.request("thread/resume", resumeParams);
         yield* runTurnStep(client, threadId, after);
       }).pipe(Effect.provide(layerCodex({ recorder })));
@@ -1419,7 +1419,7 @@ const runReplaySession = Effect.fn("record-codex-app-server-replay-fixture.runRe
       for (const [stepIndex, step] of run.steps.entries()) {
         if (step.type === "rollback") {
           yield* client.request("thread/read", { threadId: activeThreadId, includeTurns: false });
-          yield* revertCodexThread(client, activeThreadId, step.numTurns);
+          yield* revertCodexThread(client, activeThreadId, step.numTurns, new Set());
           continue;
         }
         if (step.type === "fork") {

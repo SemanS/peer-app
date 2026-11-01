@@ -17,6 +17,7 @@ import {
   AuthSourceControlWriteScope,
   AuthTerminalReadScope,
   AuthTerminalOperateScope,
+  type AuthEnvironmentScope,
   WS_METHODS,
   WsRpcGroup,
 } from "@t3tools/contracts";
@@ -352,6 +353,44 @@ it.effect("requires task permission before attaching a prepared worktree to a th
       }).pipe(Effect.flip),
     ).toMatchObject({ requiredPermission: AuthOrchestrationOperateScope });
     expect(handled).toBe(false);
+  }).pipe(Effect.scoped),
+);
+
+it.effect("requires both orchestration and terminal access to lend a thread to a CLI", () =>
+  Effect.gen(function* () {
+    const group = WsRpcGroup.omit(
+      ...[...WsRpcGroup.requests.keys()].filter(
+        (tag): tag is Exclude<keyof typeof RPC_REQUIRED_SCOPES, typeof WS_METHODS.nativeCliStart> =>
+          tag !== WS_METHODS.nativeCliStart,
+      ),
+    );
+    const launch = {
+      terminalId: "cli-loan-1",
+      cwd: "/repo",
+      command: "claude",
+      providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+    };
+    const attempt = (scopes: ReadonlyArray<AuthEnvironmentScope>) =>
+      RpcTest.makeClient(group).pipe(
+        Effect.flatMap((client) =>
+          client[WS_METHODS.nativeCliStart]({ threadId: ThreadId.make("thread") }),
+        ),
+        Effect.provide(
+          Layer.mergeAll(
+            group.toLayerHandler(WS_METHODS.nativeCliStart, () => Effect.succeed(launch)),
+            RpcAuthorization.layer(scopes),
+          ),
+        ),
+      );
+    expect(yield* attempt([AuthOrchestrationOperateScope]).pipe(Effect.flip)).toMatchObject({
+      requiredPermission: AuthTerminalOperateScope,
+    });
+    expect(yield* attempt([AuthTerminalOperateScope]).pipe(Effect.flip)).toMatchObject({
+      requiredPermission: AuthOrchestrationOperateScope,
+    });
+    expect(yield* attempt([AuthOrchestrationOperateScope, AuthTerminalOperateScope])).toEqual(
+      launch,
+    );
   }).pipe(Effect.scoped),
 );
 

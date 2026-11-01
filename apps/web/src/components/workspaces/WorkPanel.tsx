@@ -26,6 +26,7 @@ import {
 import type { SidebarTab } from "./SidebarViewSwitch.logic";
 import { useLocalProject } from "./StableWorkNavigation";
 import { useOpenScopedChats } from "./useOpenScopedChats";
+import { useSidebarRows } from "./useSidebarRows";
 import { sidebarNav } from "./sidebarNav.logic";
 import { WorkSectionLabel, WorkHereContext } from "./marks";
 import { ProjectMark, SignalCount } from "./signals";
@@ -490,11 +491,16 @@ function SharedRooms({
     readonly projects: ReadonlyArray<{ readonly scope: string; readonly name: string }>;
   }>;
 }) {
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const { visible, more } = useSidebarRows(
+    rooms,
+    (room) => `/together/${encodeURIComponent(room.group)}` === pathname,
+  );
   if (rooms.length === 0) return null;
   return (
     <div className="flex flex-col gap-0.5 pb-2">
       <WorkSectionLabel>Rooms</WorkSectionLabel>
-      {rooms.map((room) => (
+      {visible.map((room) => (
         <Link
           key={room.group}
           to="/together/$group"
@@ -519,6 +525,7 @@ function SharedRooms({
           </span>
         </Link>
       ))}
+      {more}
     </div>
   );
 }

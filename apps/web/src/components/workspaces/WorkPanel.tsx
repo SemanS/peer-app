@@ -13,6 +13,7 @@ import { SignalTiles } from "./ProjectSignals";
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
 import { useThreadShells } from "../../state/entities";
 import { buildThreadRouteParams } from "../../threadRoutes";
+import { useResolvedProjectSets } from "./projectScope";
 import { chatScopeKeys, isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
 import type { WorkActions } from "./useWorkActions";
 import { ShareProject } from "./ShareProject";
@@ -31,24 +32,26 @@ import { ProjectMark, SignalCount } from "./signals";
 import type { PeerWebPlugin } from "./slots.types";
 import { useWorkData } from "./useWorkData";
 import { ALL_PROJECTS, inScope, projectScopeKey } from "./workBoard.logic";
+import type { WorkProjectNode } from "./workTree.logic";
 import { sharedRoomsOf } from "./rooms/sharedRoom.logic";
 
 /**
  * The team's work in the sidebar, for the project the project button names (`scope`, which the root
  * checked against the projects there are). Each tab has a purpose of its own: Tasks is the work by
  * area, Knowledge what holds beyond one task, Activity what moved. With all projects, Tasks groups
- * the work under expandable project headings. A project no workspace shares has no team tasks, and
- * the view says so.
+ * the work under expandable headings, this computer's project sets first. A project no workspace
+ * shares has no team tasks, and the view says so.
  */
 export function WorkPanel({
   scope: resolved,
   tab,
 }: {
-  readonly scope: ResolvedProjectScope;
+  readonly scope: ResolvedProjectScope & { readonly setScope: (scope: string) => void };
   readonly tab: SidebarTab;
 }) {
   const { environmentId, status, plugins, tree, here, needs, actions, activeThread } =
     useWorkData();
+  const sets = useResolvedProjectSets();
   const scope = resolved.scope;
   const local = isLocalScope(scope);
   const current = tree.find((project) => projectScopeKey(project) === scope);
@@ -77,41 +80,44 @@ export function WorkPanel({
             <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
           ) : local ? (
             <LocalProjectTab scope={resolved} tab={tab} />
-          ) : current === undefined ? (
+          ) : current !== undefined ? (
+            <ProjectTab
+              environmentId={environmentId}
+              status={status}
+              project={current}
+              tab={tab}
+              sharedContext={counts.sharedContext}
+            />
+          ) : members === undefined ? (
             <p className="px-2 text-xs leading-relaxed text-muted-foreground">
               Choose one project to see its {tab === "knowledge" ? "knowledge" : "activity"}.
             </p>
-          ) : tab === "knowledge" ? (
-            <ProjectKnowledgeNav
-              status={status}
-              project={current}
-              plugins={plugins}
-              activeThread={activeThread}
-              sharedContext={counts.sharedContext}
-            />
           ) : (
-            <section aria-label="Activity" className="flex flex-col gap-3">
-              <ProjectActivityNav
-                environmentId={environmentId}
-                status={status}
-                project={current}
-                plugins={plugins}
-                activeThread={activeThread}
-              />
-              <SignalTiles
-                status={status}
-                project={current}
-                plugins={plugins}
-                activeThread={activeThread}
-                show={(signal) => signal.id === "overlaps"}
-              />
-              <ProjectHistory
-                environmentId={environmentId}
-                status={status}
-                project={current}
-                plugins={plugins}
-                activeThread={activeThread}
-              />
+            <section aria-label={tab === "knowledge" ? "Knowledge" : "Activity"}>
+              {members.map((member) => {
+                const project = listed.find((node) => projectScopeKey(node) === member.scope);
+                return (
+                  <ProjectDisclosure
+                    key={member.scope}
+                    name={member.name ?? member.scope}
+                    colorKey={member.scope}
+                    needs={null}
+                    defaultOpen
+                  >
+                    {project === undefined ? (
+                      <LocalProjectTab scope={member} tab={tab} />
+                    ) : (
+                      <ProjectTab
+                        environmentId={environmentId}
+                        status={status}
+                        project={project}
+                        tab={tab}
+                        sharedContext={sidebarNav([project], needs).sharedContext}
+                      />
+                    )}
+                  </ProjectDisclosure>
+                );
+              })}
             </section>
           )
         ) : (
@@ -129,7 +135,7 @@ export function WorkPanel({
               <p className="px-2 text-xs leading-relaxed text-muted-foreground">
                 No team tasks yet for this project.
               </p>
-            ) : tree.length === 0 && members === undefined ? (
+            ) : tree.length === 0 && members === undefined && sets.length === 0 ? (
               status.workspaces.length === 0 ? (
                 <p className="px-2 text-xs leading-relaxed text-muted-foreground">
                   Join or create a workspace in Settings → Peer to work with your team.
@@ -150,51 +156,73 @@ export function WorkPanel({
                     )}
                   />
                 )}
+                {members !== undefined || sets.length === 0 ? null : (
+                  <>
+                    <WorkSectionLabel>
+                      Workspaces
+                      <span className="font-normal tracking-normal normal-case tabular-nums">
+                        {sets.length}
+                      </span>
+                    </WorkSectionLabel>
+                    {sets.map((set) => {
+                      const setMembers = set.members ?? [];
+                      const held = tree.filter((project) =>
+                        setMembers.some((member) => member.scope === projectScopeKey(project)),
+                      );
+                      return (
+                        <ProjectDisclosure
+                          key={set.scope}
+                          name={set.name ?? set.scope}
+                          colorKey={set.scope}
+                          needs={sidebarNav(held, needs).needs}
+                        >
+                          <SharedRooms
+                            rooms={sharedRoomsOf(
+                              status,
+                              setMembers.map((member) => member.scope),
+                            )}
+                          />
+                          <Button
+                            className="mx-2 mb-1"
+                            size="xs"
+                            variant="outline"
+                            onClick={() => resolved.setScope(set.scope)}
+                          >
+                            Open workspace
+                          </Button>
+                          <ProjectRows
+                            rows={setMembers}
+                            stacked
+                            tree={tree}
+                            environmentId={environmentId}
+                            status={status}
+                          />
+                        </ProjectDisclosure>
+                      );
+                    })}
+                    <div className="h-3" />
+                  </>
+                )}
                 <WorkSectionLabel>
                   Projects
                   <span className="font-normal tracking-normal normal-case tabular-nums">
                     {listed.length}
                   </span>
                 </WorkSectionLabel>
-                {(
-                  members ??
-                  listed.map((project) => ({
-                    scope: projectScopeKey(project),
-                    name: project.name,
-                    refs: null,
-                  }))
-                ).map((member) => {
-                  const project = listed.find((node) => projectScopeKey(node) === member.scope);
-                  return (
-                    <ProjectDisclosure
-                      key={member.scope}
-                      name={member.name ?? member.scope}
-                      colorKey={member.scope}
-                      needs={project === undefined ? null : sidebarNav([project], needs).needs}
-                      defaultOpen={members !== undefined}
-                    >
-                      {project === undefined ? (
-                        <UnsharedProject
-                          name={member.name ?? member.scope}
-                          refs={member.refs ?? []}
-                          status={status}
-                          actions={actions}
-                        />
-                      ) : (
-                        <ProjectSection
-                          environmentId={environmentId}
-                          status={status}
-                          project={project}
-                          plugins={plugins}
-                          activeThread={activeThread}
-                          actions={actions}
-                          needOf={needOf}
-                          heading={members !== undefined}
-                        />
-                      )}
-                    </ProjectDisclosure>
-                  );
-                })}
+                <ProjectRows
+                  rows={
+                    members ??
+                    listed.map((project) => ({
+                      scope: projectScopeKey(project),
+                      name: project.name,
+                      refs: null,
+                    }))
+                  }
+                  stacked={members !== undefined}
+                  tree={tree}
+                  environmentId={environmentId}
+                  status={status}
+                />
               </section>
             ) : (
               <ProjectSection
@@ -222,6 +250,110 @@ export function WorkPanel({
         )}
       </div>
     </WorkHereContext.Provider>
+  );
+}
+
+/** A project's rows under a heading of its own, in All projects and in a project set. */
+function ProjectRows({
+  rows,
+  stacked,
+  tree,
+  environmentId,
+  status,
+}: {
+  readonly rows: ReadonlyArray<ResolvedProjectScope>;
+  /** A project set's projects stack open: their work is why they are grouped. */
+  readonly stacked: boolean;
+  readonly tree: ReadonlyArray<WorkProjectNode>;
+  readonly environmentId: EnvironmentId;
+  readonly status: PeerHubStatus;
+}) {
+  const { plugins, needs, actions, activeThread } = useWorkData();
+  const needOf = needsByOpen(needs);
+  return rows.map((member) => {
+    const project = tree.find((node) => projectScopeKey(node) === member.scope);
+    return (
+      <ProjectDisclosure
+        key={member.scope}
+        name={member.name ?? member.scope}
+        colorKey={member.scope}
+        needs={project === undefined ? null : sidebarNav([project], needs).needs}
+        defaultOpen={stacked}
+      >
+        {project === undefined ? (
+          <UnsharedProject
+            name={member.name ?? member.scope}
+            refs={member.refs ?? []}
+            status={status}
+            actions={actions}
+          />
+        ) : (
+          <ProjectSection
+            environmentId={environmentId}
+            status={status}
+            project={project}
+            plugins={plugins}
+            activeThread={activeThread}
+            actions={actions}
+            needOf={needOf}
+            heading={stacked}
+          />
+        )}
+      </ProjectDisclosure>
+    );
+  });
+}
+
+/** One team project's Knowledge or Activity. */
+function ProjectTab({
+  environmentId,
+  status,
+  project,
+  tab,
+  sharedContext,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly status: PeerHubStatus;
+  readonly project: WorkProjectNode;
+  readonly tab: "knowledge" | "activity";
+  readonly sharedContext: boolean;
+}) {
+  const { plugins, activeThread } = useWorkData();
+  if (tab === "knowledge") {
+    return (
+      <ProjectKnowledgeNav
+        status={status}
+        project={project}
+        plugins={plugins}
+        activeThread={activeThread}
+        sharedContext={sharedContext}
+      />
+    );
+  }
+  return (
+    <section aria-label="Activity" className="flex flex-col gap-3">
+      <ProjectActivityNav
+        environmentId={environmentId}
+        status={status}
+        project={project}
+        plugins={plugins}
+        activeThread={activeThread}
+      />
+      <SignalTiles
+        status={status}
+        project={project}
+        plugins={plugins}
+        activeThread={activeThread}
+        show={(signal) => signal.id === "overlaps"}
+      />
+      <ProjectHistory
+        environmentId={environmentId}
+        status={status}
+        project={project}
+        plugins={plugins}
+        activeThread={activeThread}
+      />
+    </section>
   );
 }
 

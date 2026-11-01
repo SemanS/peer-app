@@ -17,6 +17,7 @@ import {
   latestScopedChat,
   peerProjectIndex,
   resolveProjectScope,
+  resolveProjectSets,
   roomSetOf,
   scopeOfProject,
   withSharedProjects,
@@ -281,6 +282,13 @@ describe("a project set's scope", () => {
 
   it("falls back to every project for a set no longer here", () => {
     expect(resolveProjectScope("set:s2", known).scope).toBe("all");
+  });
+
+  it("lists every set with its projects, without one whose projects are all gone", () => {
+    const sets = [...known.sets, { id: "s2", name: "Old", projects: ["acme/gone"] }];
+    const listed = resolveProjectSets(sets, { peer: known.peer, groups: known.groups });
+    expect(listed.map((set) => [set.scope, set.name])).toEqual([["set:s1", "Shop"]]);
+    expect(listed[0]?.members).toHaveLength(2);
   });
 });
 

@@ -16,6 +16,7 @@ import {
   chatScopeKeys,
   peerProjectIndex,
   resolveProjectScope,
+  resolveProjectSets,
   scopeOfProject,
   withSharedProjects,
   type PeerProjectEntry,
@@ -138,6 +139,14 @@ export function useCurrentProjectSets() {
   const peer = usePeerProjectIndex();
   const [sets] = useProjectSets();
   return withSharedProjects(sets, { peer, groups });
+}
+
+/** The project sets the sidebar lists: each resolved like the set in scope, the empty ones left out. */
+export function useResolvedProjectSets() {
+  const groups = useSidebarProjectGroups();
+  const peer = usePeerProjectIndex();
+  const [sets] = useProjectSets();
+  return resolveProjectSets(withSharedProjects(sets, { peer, groups }), { peer, groups });
 }
 
 /** Preserve the saved choice in history even before the project catalogs have arrived. */

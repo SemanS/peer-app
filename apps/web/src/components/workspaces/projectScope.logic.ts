@@ -6,7 +6,13 @@ import {
   type ScopedProjectRef,
 } from "@t3tools/contracts";
 
-import { isSetScope, setIdOfScope, setOfScope, type ProjectSet } from "./projectSets.logic";
+import {
+  isSetScope,
+  setIdOfScope,
+  setOfScope,
+  setScope,
+  type ProjectSet,
+} from "./projectSets.logic";
 import { ALL_PROJECTS, projectScopeKey } from "./workBoard.logic";
 
 /**
@@ -124,6 +130,16 @@ export function resolveProjectScope(stored: string, known: ProjectCatalog): Reso
   return project === undefined
     ? EVERY_PROJECT
     : { scope: stored, name: project.name, refs: project.refs };
+}
+
+/** Each set as `resolveProjectScope` answers it, without a set none of whose projects remain. */
+export function resolveProjectSets(
+  sets: ReadonlyArray<ProjectSet>,
+  known: Omit<ProjectCatalog, "sets">,
+): ReadonlyArray<ResolvedProjectScope> {
+  return sets
+    .map((set) => resolveProjectScope(setScope(set.id), { ...known, sets }))
+    .filter((set) => (set.members?.length ?? 0) > 0);
 }
 
 /**

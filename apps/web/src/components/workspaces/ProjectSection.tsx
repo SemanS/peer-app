@@ -21,6 +21,7 @@ import {
   type ProjectCheckout,
   useOpenWorkspaceProject,
 } from "./useOpenWorkspaceProject";
+import { useSidebarRows } from "./useSidebarRows";
 import type { WorkActions } from "./useWorkActions";
 import type { AgentNeed, WorkProjectNode, WorkTaskNode } from "./workTree.logic";
 
@@ -136,7 +137,13 @@ export function ProjectSection({
           <p className="px-2 py-0.5 text-xs text-muted-foreground">No tasks yet.</p>
         ) : null}
         {areas.map((area) => (
-          <AreaGroup key={area.id} area={area} defaultOpen={opened.has(area.id)} rows={rows} />
+          <AreaGroup
+            key={area.id}
+            area={area}
+            defaultOpen={opened.has(area.id)}
+            activeTask={activeTask}
+            rows={rows}
+          />
         ))}
       </div>
     </section>
@@ -150,19 +157,23 @@ export function ProjectSection({
 function AreaGroup({
   area,
   defaultOpen,
+  activeTask,
   rows,
 }: {
   readonly area: SidebarArea;
   readonly defaultOpen: boolean;
+  readonly activeTask: string | undefined;
   readonly rows: (nested: ReadonlyArray<NestedRow<WorkTaskNode>>) => ReactNode;
 }) {
   // Until the person folds it, an area follows the work: it opens when its task opens.
   const [choice, setChoice] = useState<boolean | null>(null);
   const [showDone, setShowDone] = useState(false);
   const open = choice ?? defaultOpen;
+  const openTasks = useSidebarRows(area.open, (row) => row.item.id === activeTask);
   const body = (
     <>
-      <ul className="flex flex-col gap-0.5">{rows(area.open)}</ul>
+      <ul className="flex flex-col gap-0.5">{rows(openTasks.visible)}</ul>
+      {openTasks.more}
       {area.finished.length === 0 ? null : (
         <button
           type="button"

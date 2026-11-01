@@ -1,13 +1,10 @@
 import {
-  PEER_MEMORY_AVAILABLE,
-  PEER_MEMORY_PLUGIN,
   PEER_PLUGIN_REASONS,
   type PeerHubStatus,
   type PeerPluginId,
   type PeerPluginState,
 } from "@t3tools/contracts";
 import {
-  featuresBuiltWithout,
   hubFeatureState,
   pluginLockNote,
   type InactivePluginReason,
@@ -37,14 +34,6 @@ export interface PluginRow {
   readonly error: string | null;
 }
 
-/**
- * What a plugin's row says about the plugin itself, when it has something a person needs before
- * turning it on: Memory's agent tools appear only after Peer restarts.
- */
-export function pluginDescription(id: string): string | null {
-  return id === PEER_MEMORY_PLUGIN.id ? PEER_MEMORY_PLUGIN.summary : null;
-}
-
 const HUB_NOTE = "The Hub must be updated before this works.";
 const SIGN_IN_NOTE = "Works once you sign in to a Peer Hub.";
 const REACH_NOTE = "Works once Peer reaches its Peer Hub.";
@@ -58,37 +47,34 @@ export function pluginRows(
     readonly signedIn?: boolean;
   },
 ): ReadonlyArray<PluginRow> {
-  return plugins
-    .filter((plugin) => plugin.id !== "memory" || PEER_MEMORY_AVAILABLE)
-    .map((plugin) => {
-      const waitingForHub =
-        plugin.enabled &&
-        (plugin.reason === PEER_PLUGIN_REASONS.hub ||
-          plugin.reason === PEER_PLUGIN_REASONS.hubUnknown);
-      // No Hub has said whether it serves the plugin. Signed out, none can: an environment from
-      // before `hub-unknown` names it `hub` then.
-      const unanswered =
-        plugin.reason === PEER_PLUGIN_REASONS.hubUnknown || input.signedIn === false;
-      return {
-        id: plugin.id,
-        title: plugin.title,
-        state: !plugin.enabled ? "off" : !waitingForHub ? "on" : unanswered ? "waiting" : "hub",
-        on: plugin.enabled,
-        control: input.owner ? "switch" : "state",
-        busy: input.pending === plugin.id,
-        locked: plugin.locked === true,
-        note:
-          pluginLockNote(plugin) ??
-          (!waitingForHub
-            ? pluginDescription(plugin.id)
-            : !unanswered
-              ? HUB_NOTE
-              : input.signedIn === false
-                ? SIGN_IN_NOTE
-                : REACH_NOTE),
-        error: plugin.error ?? null,
-      };
-    });
+  return plugins.map((plugin) => {
+    const waitingForHub =
+      plugin.enabled &&
+      (plugin.reason === PEER_PLUGIN_REASONS.hub ||
+        plugin.reason === PEER_PLUGIN_REASONS.hubUnknown);
+    // No Hub has said whether it serves the plugin. Signed out, none can: an environment from
+    // before `hub-unknown` names it `hub` then.
+    const unanswered = plugin.reason === PEER_PLUGIN_REASONS.hubUnknown || input.signedIn === false;
+    return {
+      id: plugin.id,
+      title: plugin.title,
+      state: !plugin.enabled ? "off" : !waitingForHub ? "on" : unanswered ? "waiting" : "hub",
+      on: plugin.enabled,
+      control: input.owner ? "switch" : "state",
+      busy: input.pending === plugin.id,
+      locked: plugin.locked === true,
+      note:
+        pluginLockNote(plugin) ??
+        (!waitingForHub
+          ? null
+          : !unanswered
+            ? HUB_NOTE
+            : input.signedIn === false
+              ? SIGN_IN_NOTE
+              : REACH_NOTE),
+      error: plugin.error ?? null,
+    };
+  });
 }
 
 const REASON_TEXT: Readonly<Record<InactivePluginReason, string>> = {
@@ -111,9 +97,6 @@ export function reasonText(
 ): string {
   if (reason === "waiting" && status.signedIn === false) {
     return "works once you sign in to a Peer Hub.";
-  }
-  if (reason === "hub" && featuresBuiltWithout(status).has(plugin)) {
-    return "is not available: this Peer Hub was built without it.";
   }
   return reason === "hub" && hubFeatureState(status, plugin) === "off"
     ? "is turned off on this Peer Hub."

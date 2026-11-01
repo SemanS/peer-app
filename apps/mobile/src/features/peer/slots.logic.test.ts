@@ -4,7 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { PeerMobilePlugin } from "./slotTypes";
 import { alwaysWorkspaceSectionsAt, selectPeerPlugins, workspaceSectionsAt } from "./slots.logic";
 
-const REGISTRY = ["herdr", "requests", "memory"].map((id) => ({ id }));
+const REGISTRY = ["herdr", "requests", "roles"].map((id) => ({ id }));
 
 const plugin = (id: string, active = true): PeerPluginState => ({
   id,
@@ -21,8 +21,7 @@ const ids = (selected: ReadonlyArray<{ readonly id: string }>) => selected.map((
 
 describe("selectPeerPlugins", () => {
   it("selects only the plugins that are active, in registry order", () => {
-    const listed = status([plugin("requests"), plugin("herdr", false), plugin("memory")]);
-    // Memory stays hidden while the build excludes it.
+    const listed = status([plugin("requests"), plugin("herdr", false)]);
     expect(ids(selectPeerPlugins(REGISTRY, listed))).toEqual(["requests"]);
     expect(ids(selectPeerPlugins(REGISTRY, status([plugin("requests"), plugin("herdr")])))).toEqual(
       ["herdr", "requests"],

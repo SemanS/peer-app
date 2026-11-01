@@ -82,7 +82,7 @@ describe("a project's signal tiles", () => {
     }
   });
 
-  it("keeps a tile that opens a page without a count, as Memory's does", async () => {
+  it("keeps a tile that opens a page without a count", async () => {
     await show(null);
     expect(tiles()).toHaveLength(2);
   });

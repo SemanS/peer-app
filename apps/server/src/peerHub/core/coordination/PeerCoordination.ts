@@ -111,14 +111,14 @@ export const brokerPlugins = Effect.gen(function* () {
   const plugins = yield* PeerPlugins.PeerPlugins;
   const active = yield* plugins.active;
   // The runtime's observations (herdr's) fit within the Hub's bound after every other plugin's
-  // sessions (memory's runtimes), so the plugin that fills the runtime slot adds to a report last.
+  // sessions, so the plugin that fills the runtime slot adds to a report last.
   const reporting = active.toSorted(
     (a, b) =>
       Number(a.contributions.runtime !== undefined) - Number(b.contributions.runtime !== undefined),
   );
   return {
     active,
-    commands: (yield* plugins.built).flatMap(({ state, contributions, unserved }) =>
+    commands: (yield* plugins.built).flatMap(({ state, contributions }) =>
       (contributions.commands ?? []).map((command) => ({
         plugin: state.id,
         command,
@@ -132,10 +132,8 @@ export const brokerPlugins = Effect.gen(function* () {
                     ? "hub-unknown"
                     : "off",
             }),
-        ...(unserved === undefined ? {} : { unserved }),
       })),
     ),
-    excluded: yield* plugins.excluded,
     runtime: PeerPlugins.capability(
       active.map((plugin) => plugin.contributions),
       "runtime",

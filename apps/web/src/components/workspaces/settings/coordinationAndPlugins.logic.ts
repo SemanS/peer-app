@@ -171,8 +171,7 @@ export function hubOffPlugins(
 /**
  * Each plugin of the environment with its status and where it comes from: the owner's own choice
  * (`by you`), an operator forcing it off, the Hub turning its feature off, or the Hub being too
- * old to have it. Its owner gets a switch to change their choice; everyone else reads it. Memory
- * stays out while the build leaves it out, as in `pluginRows`.
+ * old to have it. Its owner gets a switch to change their choice; everyone else reads it.
  */
 export function pluginViews(
   plugins: ReadonlyArray<PeerPluginState>,
@@ -181,8 +180,6 @@ export function pluginViews(
     /** The plugin whose change is on its way. */
     readonly pending: string | null;
     readonly hubOff: ReadonlySet<string>;
-    /** The plugins the Hub was built without (`featuresBuiltWithout`): an update does not fix those. */
-    readonly builtWithout?: ReadonlySet<string>;
     /** Whether someone is signed in to a Hub, when known. */
     readonly signedIn?: boolean;
   },
@@ -227,15 +224,7 @@ export function pluginViews(
       };
     }
     if (row.state === "hub") {
-      return input.builtWithout?.has(row.id) === true
-        ? {
-            ...base,
-            ...decided,
-            note: null,
-            status: "unavailable",
-            source: "this Hub was built without it",
-          }
-        : { ...base, ...decided, status: "unavailable", source: "needs a newer Hub" };
+      return { ...base, ...decided, status: "unavailable", source: "needs a newer Hub" };
     }
     if (row.state === "waiting") {
       // Signed out nothing is being checked: the plugin works once the person signs in.

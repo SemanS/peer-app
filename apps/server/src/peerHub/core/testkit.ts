@@ -267,7 +267,7 @@ export const coreLayer = (
     Layer.provideMerge(PeerLog.layer),
     Layer.provideMerge(Layer.succeed(PeerPluginRegistry, options.plugins ?? [])),
     // Plugins may use T3's services too (shared capacity's provider instances), and the server's
-    // configuration and HTTP client (memory's local queue and Hub calls).
+    // configuration and HTTP client.
     Layer.provideMerge(options.t3 ?? emptyT3),
     Layer.provideMerge(
       options.relay ??

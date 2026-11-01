@@ -104,7 +104,7 @@ describe("the Hub's change pings", () => {
         listening("knowledge", { changes: ["knowledge.changed"], ownEcho: true }, heard),
         listening("audit", { changes: ["requests"] }, heard, false),
         listening("ask", { changes: ["done"] }, heard),
-        listening("memory", { changes: ["plans"] }, heard),
+        listening("observe", { changes: ["plans"] }, heard),
       ]);
       // Connecting is a resync for every active listener. Nobody follows `gossip`; this
       // environment's own `requests` reach no listener that skips its own echo; the inactive find
@@ -113,14 +113,14 @@ describe("the Hub's change pings", () => {
         "requests resync acme - ",
         "knowledge resync acme - ",
         "ask resync acme - ",
-        "memory resync acme - ",
+        "observe resync acme - ",
         "requests requests acme bob-laptop ",
-        "memory plans acme bob-laptop q4",
+        "observe plans acme bob-laptop q4",
         "knowledge knowledge.changed acme ana-laptop pay,2",
         "requests resync acme - ",
         "knowledge resync acme - ",
         "ask resync acme - ",
-        "memory resync acme - ",
+        "observe resync acme - ",
         "ask done acme - ",
       ]);
       assert.strictEqual(yield* Queue.size(heard), 0);
@@ -131,14 +131,14 @@ describe("the Hub's change pings", () => {
     Effect.gen(function* () {
       const { heard, reacted } = yield* following((heard) => [
         listening("ask", { changes: ["done"] }, heard),
-        listening("memory", { changes: ["plans"] }, heard),
+        listening("observe", { changes: ["plans"] }, heard),
       ]);
       assert.deepStrictEqual(yield* nextHeard(heard, 6), [
         "ask resync acme - ",
-        "memory resync acme - ",
-        "memory plans acme bob-laptop q4",
+        "observe resync acme - ",
+        "observe plans acme bob-laptop q4",
         "ask resync acme - ",
-        "memory resync acme - ",
+        "observe resync acme - ",
         "ask done acme - ",
       ]);
       // Its own `work` ping read nothing; bob's `coord` and the resync did.

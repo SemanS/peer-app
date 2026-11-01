@@ -5,7 +5,6 @@ import {
   HerdrRpcGroup,
   PeerCoreRpcGroup,
   PeerHubError,
-  MemoryRpcGroup,
   type PeerHubStatus,
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -30,7 +29,7 @@ const PingRpc = Rpc.make("peer.find.ping", {
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 const FindRpcGroup = RpcGroup.make(PingRpc);
-const AllRpcs = PeerCoreRpcGroup.merge(MemoryRpcGroup).merge(HerdrRpcGroup).merge(FindRpcGroup);
+const AllRpcs = PeerCoreRpcGroup.merge(HerdrRpcGroup).merge(FindRpcGroup);
 
 const status = { signedIn: false } as unknown as PeerHubStatus;
 
@@ -139,30 +138,28 @@ describe("Peer's RPC handlers", () => {
   it.effect(
     "refuse the methods of a plugin this build leaves out, through the same wrappers",
     () => {
-      const served = serving({ current: true }, new Set(["peerHub.memoryQueue"]));
+      const served = serving({ current: true }, new Set(["peerHub.focusAgent"]));
       return Effect.gen(function* () {
         const client = yield* RpcTest.makeClient(AllRpcs);
-        const scope = { workspace: "acme", project: "app" };
+        const agent = { agentId: "agent-1" };
         assert.strictEqual(
-          (yield* client["peerHub.memoryState"](scope).pipe(Effect.flip)).message,
-          "There is no Peer plugin for peerHub.memoryState on this environment.",
+          (yield* client["peerHub.promptAgent"]({ ...agent, text: "go on" }).pipe(Effect.flip))
+            .message,
+          "There is no Peer plugin for peerHub.promptAgent on this environment.",
         );
         assert.strictEqual(
-          (yield* client["peerHub.watchAgent"]({ agentId: "agent-1" }).pipe(
-            Stream.runCollect,
-            Effect.flip,
-          )).message,
+          (yield* client["peerHub.watchAgent"](agent).pipe(Stream.runCollect, Effect.flip)).message,
           "There is no Peer plugin for peerHub.watchAgent on this environment.",
         );
         // A caller without the method's scope hears that, not whether the build has the plugin.
         assert.strictEqual(
-          (yield* client["peerHub.memoryQueue"](scope).pipe(Effect.flip))._tag,
+          (yield* client["peerHub.focusAgent"]({ paneId: "pane-1" }).pipe(Effect.flip))._tag,
           "EnvironmentAuthorizationError",
         );
         assert.deepStrictEqual(served.traced, [
-          'peerHub.memoryState {"rpc.aggregate":"peerHub"}',
+          'peerHub.promptAgent {"rpc.aggregate":"peerHub"}',
           'peerHub.watchAgent {"rpc.aggregate":"peerHub"}',
-          'peerHub.memoryQueue {"rpc.aggregate":"peerHub"}',
+          'peerHub.focusAgent {"rpc.aggregate":"peerHub"}',
         ]);
       }).pipe(Effect.scoped, Effect.provide(served.layer));
     },

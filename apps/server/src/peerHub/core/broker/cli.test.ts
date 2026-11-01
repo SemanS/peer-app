@@ -322,16 +322,16 @@ describe("the peer command", () => {
     }
   });
 
-  it("refuses the commands of a plugin the build excludes in one line, and lists them nowhere", async () => {
+  it("refuses a command that says why it cannot run here, and a command nobody has prints help", async () => {
+    const { command } = deployCommand();
     const plugins: PeerBrokerPlugins = {
       ...NO_PLUGINS,
-      excluded: [
-        { plugin: "memory", name: "memory", refused: "off" },
+      commands: [
         {
-          plugin: "memory",
-          name: "remember",
+          plugin: "observe",
+          command,
           refused: "hub",
-          unserved: "this Peer Hub was built without Memory",
+          unserved: "this command needs a shared Hub project",
         },
       ],
     };
@@ -339,18 +339,10 @@ describe("the peer command", () => {
     try {
       await fixture.register("one");
       const headers = { "x-peer-session": "claude:one", "x-peer-cwd": fixture.root };
-      await expect(fixture.broker["runCli"]("memory", ["status"], headers)).rejects.toMatchObject({
+      await expect(fixture.broker["runCli"](command.name, [], headers)).rejects.toMatchObject({
         status: 409,
-        message: "memory is turned off on this environment.",
+        message: "this command needs a shared Hub project.",
       });
-      await expect(
-        fixture.broker["runCli"]("remember", ["--claim", "x"], headers),
-      ).rejects.toMatchObject({
-        status: 409,
-        message: "this Peer Hub was built without Memory.",
-      });
-      // Not listed, and a command nobody has still prints help.
-      expect(await fixture.broker["runCli"]("help", [], {})).toBe(HELP_WITHOUT_PLUGINS);
       await expect(fixture.broker["runCli"]("telepathy", [], headers)).rejects.toMatchObject({
         outcome: "usage",
       });

@@ -549,10 +549,6 @@
       "types": "./src/peer/knowledge.ts",
       "default": "./src/peer/knowledge.ts"
     },
-    "./peer/memory": {
-      "types": "./src/peer/memory.ts",
-      "default": "./src/peer/memory.ts"
-    },
     "./peer/observe": {
       "types": "./src/peer/observe.ts",
       "default": "./src/peer/observe.ts"

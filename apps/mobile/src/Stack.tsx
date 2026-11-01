@@ -83,9 +83,6 @@ import {
 import { McpAppFullscreenScreen } from "./features/threads/McpAppFullscreenScreen";
 import { ConnectionsRouteScreen } from "./features/connection/ConnectionsRouteScreen";
 import { ConnectionsNewRouteScreen } from "./features/connection/ConnectionsNewRouteScreen";
-import { MemoryProjectsRouteScreen } from "./features/peer/memory/MemoryProjectsRouteScreen";
-import { MemoryRouteScreen } from "./features/peer/memory/MemoryRouteScreen";
-import { MemoryRecordRouteScreen } from "./features/peer/memory/MemoryRecordRouteScreen";
 import { AddProjectDestinationRoute } from "./features/projects/AddProjectDestinationRoute";
 import { AddProjectLocalRoute } from "./features/projects/AddProjectLocalRoute";
 import { AddProjectNewRoute } from "./features/projects/AddProjectNewRoute";
@@ -757,24 +754,6 @@ const RootStackConfig = createWorkspaceStackNavigator({
       screen: WorkRouteScreen,
       linking: "work",
       options: { ...GLASS_HEADER_OPTIONS, title: "Work" },
-    }),
-    MemoryProjects: createNativeStackScreen({
-      screen: MemoryProjectsRouteScreen,
-      linking: "memory",
-      options: { ...GLASS_HEADER_OPTIONS, title: "Memory" },
-    }),
-    Memory: createNativeStackScreen({
-      screen: MemoryRouteScreen,
-      linking: "memory/:environmentId/:workspace/:project",
-      options: { ...GLASS_HEADER_OPTIONS, title: "Memory" },
-    }),
-    MemoryRecord: createNativeStackScreen({
-      screen: MemoryRecordRouteScreen,
-      linking: {
-        path: "memory/:environmentId/:workspace/:project/:id/:version",
-        parse: { version: Number },
-      },
-      options: { ...GLASS_HEADER_OPTIONS, title: "Memory detail" },
     }),
     Thread: createNativeStackScreen({
       screen: ThreadRouteScreen,

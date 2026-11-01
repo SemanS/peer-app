@@ -29,13 +29,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
-import type {
-  PeerContributions,
-  PeerCore,
-  PeerMcpHost,
-  PeerPluginEntry,
-  PeerPluginInfo,
-} from "../plugin.ts";
+import type { PeerContributions, PeerCore, PeerPluginEntry, PeerPluginInfo } from "../plugin.ts";
 import { PeerPluginRegistry, validatePlugins } from "../registry.ts";
 import * as PeerState from "../state/PeerState.ts";
 
@@ -45,15 +39,6 @@ export interface ActivePlugin {
   readonly id: PeerPluginId;
   readonly title: string;
   readonly contributions: PeerContributions;
-}
-
-/** A `peer` command of a plugin this build excludes, and why an agent running it is refused. */
-export interface ExcludedCommand {
-  readonly plugin: PeerPluginId;
-  readonly name: string;
-  readonly refused: "off" | "hub";
-  /** Why the Hub does not serve the plugin, when the plugin says (`PeerPluginInfo.unserved`). */
-  readonly unserved?: string;
 }
 
 /** The capability slots at most one plugin fills. */
@@ -103,23 +88,13 @@ export class PeerPlugins extends Context.Service<
     readonly states: Effect.Effect<ReadonlyArray<PeerPluginState>>;
     /** The active plugins' contributions, in registry order. */
     readonly active: Effect.Effect<ReadonlyArray<ActivePlugin>>;
-    /**
-     * Every plugin of this build with its state and contributions, active or not, and why it is
-     * inactive while the Hub does not serve its feature, when it says (`PeerPluginInfo.unserved`).
-     */
+    /** Every plugin of this build with its state and contributions, active or not. */
     readonly built: Effect.Effect<
       ReadonlyArray<{
         readonly state: PeerPluginState;
         readonly contributions: PeerContributions;
-        readonly unserved?: string;
       }>
     >;
-    /**
-     * The `peer` commands of the plugins this build excludes (`PeerPluginInfo.commandNames`), each
-     * with why an inactive plugin's would be refused: the signed-in Hub does not serve its feature,
-     * or it is off here.
-     */
-    readonly excluded: Effect.Effect<ReadonlyArray<ExcludedCommand>>;
     /**
      * The active plugins' contributions in registry order: what core reads capability slots, report
      * additions and lifecycle handlers from.
@@ -138,19 +113,10 @@ export class PeerPlugins extends Context.Service<
      */
     readonly setPlugin: (input: PeerHubSetPluginInput) => Effect.Effect<void, PeerHubError>;
     /**
-     * Every plugin's MCP toolkit, bound to core when it was built: the MCP server registers them
-     * at start, whether or not their plugin is active, and their tools refuse calls while it is not.
+     * Takes the plugins' contributions once `startPlugins` built them, and starts the active ones'
+     * work. Building needs core, PeerPlugins included, which is why it is a step of its own.
      */
-    readonly toolkits: Effect.Effect<ReadonlyArray<Layer.Layer<never, never, PeerMcpHost>>>;
-    /**
-     * Takes the plugins' contributions once `startPlugins` built them, with their toolkits bound to
-     * core, and starts the active ones' work. Building needs core, PeerPlugins included, which is
-     * why it is a step of its own.
-     */
-    readonly attach: (
-      built: ReadonlyMap<string, PeerContributions>,
-      toolkits: ReadonlyArray<Layer.Layer<never, never, PeerMcpHost>>,
-    ) => Effect.Effect<void>;
+    readonly attach: (built: ReadonlyMap<string, PeerContributions>) => Effect.Effect<void>;
   }
 >()("t3/peerHub/core/plugins/PeerPlugins") {}
 
@@ -162,11 +128,8 @@ const servedBy = (entry: PeerPluginInfo, features: PeerHubClient.HubFeatures) =>
 const make = Effect.gen(function* () {
   const state = yield* PeerState.PeerState;
   const client = yield* PeerHubClient.PeerHubClient;
-  const entries = yield* PeerPluginRegistry;
-  // A plugin the build excludes is not in the catalog at all.
-  const registry = entries.filter((entry) => entry.available !== false);
+  const registry = yield* PeerPluginRegistry;
   const attached = yield* Ref.make<ReadonlyMap<string, PeerContributions>>(new Map());
-  const toolkits = yield* Ref.make<ReadonlyArray<Layer.Layer<never, never, PeerMcpHost>>>([]);
   const errors = yield* Ref.make<ReadonlyMap<string, string>>(new Map());
   const fibers = yield* FiberMap.make<string>();
   const reconciling = yield* Semaphore.make(1);
@@ -247,15 +210,12 @@ const make = Effect.gen(function* () {
       const plugin = (yield* states).find((candidate) => candidate.id === id);
       if (plugin === undefined) return yield* unknownPlugin(id);
       if (plugin.active) return;
-      const unserved = registry.find((entry) => entry.id === id)?.unserved;
       return yield* hubError(
         plugin.reason === PEER_PLUGIN_REASONS.hubUnknown
           ? `${plugin.title} waits for a Peer Hub: it works once this environment is signed in and its Hub answers.`
           : plugin.reason !== PEER_PLUGIN_REASONS.hub
             ? `${plugin.title} is turned off on this environment.`
-            : unserved === undefined
-              ? `${plugin.title} needs a newer Peer Hub.`
-              : `${unserved.charAt(0).toUpperCase()}${unserved.slice(1)}.`,
+            : `${plugin.title} needs a newer Peer Hub.`,
       );
     });
 
@@ -281,25 +241,9 @@ const make = Effect.gen(function* () {
     const contributed = yield* Ref.get(attached);
     return (yield* states).flatMap((state) => {
       const contributions = contributed.get(state.id);
-      const unserved = registry.find((entry) => entry.id === state.id)?.unserved;
-      return contributions === undefined
-        ? []
-        : [{ state, contributions, ...(unserved === undefined ? {} : { unserved }) }];
+      return contributions === undefined ? [] : [{ state, contributions }];
     });
   });
-
-  const excluded: PeerPlugins["Service"]["excluded"] = Effect.map(client.features, (features) =>
-    entries.flatMap((entry) =>
-      entry.available !== false
-        ? []
-        : (entry.commandNames ?? []).map((name) => ({
-            plugin: entry.id,
-            name,
-            refused: servedBy(entry, features) ? ("off" as const) : ("hub" as const),
-            ...(entry.unserved === undefined ? {} : { unserved: entry.unserved }),
-          })),
-    ),
-  );
 
   const contributions: PeerPlugins["Service"]["contributions"] = Effect.map(active, (plugins) =>
     plugins.map((plugin) => plugin.contributions),
@@ -350,11 +294,10 @@ const make = Effect.gen(function* () {
       });
     }).pipe(state.lock.withPermits(1));
 
-  const attach: PeerPlugins["Service"]["attach"] = (built, bound) =>
+  const attach: PeerPlugins["Service"]["attach"] = (built) =>
     Effect.gen(function* () {
-      // The names a plugin the build excludes reserves count too: its refusal must not hide a command.
       const problems = validatePlugins(
-        entries.map((entry) => ({
+        registry.map((entry) => ({
           id: entry.id,
           commands: built.get(entry.id)?.commands ?? entry.commandNames?.map((name) => ({ name })),
         })),
@@ -363,7 +306,6 @@ const make = Effect.gen(function* () {
         return yield* Effect.die(new Error(`Peer's plugins collide: ${problems.join(" ")}`));
       }
       yield* Ref.set(attached, built);
-      yield* Ref.set(toolkits, bound);
       yield* reconcile;
     });
 
@@ -379,10 +321,8 @@ const make = Effect.gen(function* () {
     states,
     active,
     built,
-    excluded,
     contributions,
     require,
-    toolkits: Ref.get(toolkits),
     setPlugin,
     attach,
   });
@@ -392,22 +332,14 @@ export const layer = Layer.effect(PeerPlugins, make);
 
 /**
  * Builds every plugin of this build in the caller's scope and attaches them. The PeerHub layer
- * runs it once, with all of core in its context. A plugin's MCP toolkit is bound to core here, as
- * the MCP server registers it later, outside core.
+ * runs it once, with all of core in its context.
  */
 export const startPlugins = Effect.gen(function* () {
   const plugins = yield* PeerPlugins;
-  const core = yield* Effect.context<PeerCore>();
   const built = new Map<string, PeerContributions>();
-  const toolkits: Array<Layer.Layer<never, never, PeerMcpHost>> = [];
   const registry: ReadonlyArray<PeerPluginEntry> = yield* PeerPluginRegistry;
   for (const entry of registry) {
-    if (entry.available === false) continue;
-    const contributions = yield* entry.contributions;
-    built.set(entry.id, contributions);
-    if (contributions.mcp !== undefined) {
-      toolkits.push(contributions.mcp.pipe(Layer.provide(Layer.succeedContext(core))));
-    }
+    built.set(entry.id, yield* entry.contributions);
   }
-  yield* plugins.attach(built, toolkits);
+  yield* plugins.attach(built);
 }) satisfies Effect.Effect<void, never, PeerCore | PeerPlugins | Scope.Scope>;

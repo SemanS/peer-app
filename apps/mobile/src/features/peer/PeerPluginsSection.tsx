@@ -4,7 +4,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
-import { PEER_MEMORY_AVAILABLE, type PeerPluginState } from "@t3tools/contracts";
+import type { PeerPluginState } from "@t3tools/contracts";
 import { useState } from "react";
 import { View } from "react-native";
 
@@ -32,9 +32,7 @@ export function PeerPluginsSection({ environmentId, status }: PeerEnvironmentPro
   const setPlugin = useAtomCommand(serverEnvironment.peerHubSetPlugin, { reportFailure: false });
   const [pending, setPending] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
-  const plugins = (status.plugins ?? []).filter(
-    (plugin) => plugin.id !== "memory" || PEER_MEMORY_AVAILABLE,
-  );
+  const plugins = status.plugins ?? [];
   if (plugins.length === 0) return null;
 
   const toggle = (plugin: PeerPluginState, enabled: boolean) => {

@@ -25,7 +25,6 @@ const everything = [
   "requests",
   "observe",
   "knowledge",
-  "memory",
   "handoff",
   "dependencies",
   "ownership",
@@ -44,7 +43,6 @@ const ALL = [
   "requests",
   "observe",
   "knowledge",
-  "memory",
   "handoff",
   "dependencies",
   "announcements",
@@ -84,7 +82,6 @@ describe("the features of a Hub that serves them all", () => {
       "requests",
       "observe",
       "knowledge",
-      "memory",
       "handoff",
       "dependencies",
       "announcements",
@@ -138,14 +135,6 @@ describe("a feature a Hub with a catalog does not serve", () => {
     });
   });
 
-  it("is off, not waiting for an update, for what a Hub may be built without", () => {
-    const list = rows({ hub: catalog(ALL.filter((id) => id !== "memory")) });
-    expect(byId(list, "memory")).toMatchObject({
-      state: "off-hub",
-      effect: "This Hub was built without Memory, so projects can’t turn it on.",
-    });
-  });
-
   it("is told by the catalog, not by whether the Hub serves settings", () => {
     const list = rows({
       hub: catalog(
@@ -178,14 +167,12 @@ describe("what the Hub says is not what this computer chose", () => {
     expect(featuresFootnote(list)).not.toContain("this computer");
   });
 
-  it("lists a feature whose plugin this build has not, as the Hub says, but not Memory", () => {
+  it("lists a feature whose plugin this build has not, as the Hub says", () => {
     const list = rows({
       hub: catalog(ALL),
-      plugins: everything.filter((entry) => entry.id !== "memory" && entry.id !== "requests"),
+      plugins: everything.filter((entry) => entry.id !== "requests"),
     });
     expect(byId(list, "requests")?.state).toBe("on");
-    // Memory is frozen in a build that has no plugin for it; a Hub that serves it is not advertised.
-    expect(byId(list, "memory")).toBeUndefined();
   });
 });
 
@@ -254,22 +241,12 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
       "requests",
       "observe",
       "knowledge",
-      "memory",
       "handoff",
       "dependencies",
       "ownership",
       "agreements",
     ]);
     expect(list.every((row) => row.state === "on" && row.label === "Connected")).toBe(true);
-  });
-
-  it("is the operator's choice when the Hub serves settings, so it is newer than the feature", () => {
-    const memory = byId(rows({ plugins: without("memory") }), "memory");
-    expect(memory).toMatchObject({
-      state: "off-hub",
-      label: "Not available",
-      effect: "This Hub was built without Memory, so projects can’t turn it on.",
-    });
   });
 
   it("needs a newer Hub when the Hub does not even serve settings", () => {
@@ -330,8 +307,8 @@ describe("what the app cannot tell", () => {
   });
 
   it("leaves out a plugin the build does not have", () => {
-    const list = rows({ plugins: everything.filter((entry) => entry.id !== "memory") });
-    expect(byId(list, "memory")).toBeUndefined();
+    const list = rows({ plugins: everything.filter((entry) => entry.id !== "requests") });
+    expect(byId(list, "requests")).toBeUndefined();
     expect(byId(list, "handoff")).toBeDefined();
   });
 

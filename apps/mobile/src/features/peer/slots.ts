@@ -21,7 +21,6 @@ import { githubMobilePlugin } from "./github";
 import { auditMobilePlugin } from "./audit";
 import { herdrMobilePlugin } from "./herdr";
 import { knowledgeMobilePlugin } from "./knowledge";
-import { memoryMobilePlugin } from "./memory";
 import { toolTrustMobilePlugin } from "./tool-trust";
 import { mcpMobilePlugin } from "./mcp";
 import { ownershipMobilePlugin } from "./ownership";
@@ -43,7 +42,6 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   handoffMobilePlugin,
   requestsMobilePlugin,
   knowledgeMobilePlugin,
-  memoryMobilePlugin,
 
   auditMobilePlugin,
   toolTrustMobilePlugin,

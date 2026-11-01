@@ -15,7 +15,7 @@ const tile = (email: string, looking = {}, now = NOW) => {
 };
 
 describe("the Team tile", () => {
-  it("is there while nothing waits on the person, with no number, like Memory's", () => {
+  it("is there while nothing waits on the person, with no number", () => {
     const signal = tile(EVA);
     expect(signal).toMatchObject({
       id: "team",

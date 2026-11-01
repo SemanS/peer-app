@@ -333,7 +333,7 @@ describe("a Codex permission request", () => {
     const fixture = await brokerFixture((host) => ({
       plugins: async () =>
         only(
-          plugin("memory", {
+          plugin("observe", {
             hooks: {
               ownPaths: (session) => [NodePath.join(host.contextsDir, `${session.id}.notes`)],
             },

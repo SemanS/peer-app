@@ -1,5 +1,4 @@
 export * from "./baseSchemas.ts";
-export * from "./peerMemory.ts";
 export * from "./assistantCitations.ts";
 export * from "./composerContext.ts";
 export * from "./composerContextClipboard.ts";
@@ -84,7 +83,6 @@ export * from "./peer/capacity.rpc.ts";
 export * from "./peer/requests.rpc.ts";
 export * from "./peer/observe.rpc.ts";
 export * from "./peer/knowledge.rpc.ts";
-export * from "./peer/memory.rpc.ts";
 export * from "./peer/settings.ts";
 export * from "./peer/settings.rpc.ts";
 

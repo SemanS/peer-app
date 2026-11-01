@@ -76,12 +76,6 @@ interface Feature {
    * a feature no plugin of the app waits for says nothing of an older Hub.
    */
   readonly without: Without;
-  /**
-   * The Hub may be built without it, and so may the app (Memory, while it is frozen): neither served
-   * nor turned off then says the Hub was built without it, not that it is too old, since every Hub
-   * with a catalog had it from the catalog's start. A build without its plugin does not advertise it.
-   */
-  readonly optional?: true;
 }
 
 /** The features of the Hub the app has words for, in the order the page lists them. */
@@ -166,17 +160,6 @@ const FEATURES: ReadonlyArray<Feature> = [
       on: "What agents find becomes knowledge the team reviews and keeps.",
       off: "What agents find isn’t kept as team knowledge: this Hub doesn’t run it.",
       newer: "What agents find isn’t kept as team knowledge until the Hub is updated.",
-    },
-  },
-  {
-    id: "memory",
-    name: "Memory",
-    without: "plugin",
-    optional: true,
-    words: {
-      on: "Projects can turn on Memory.",
-      off: "This Hub was built without Memory, so projects can’t turn it on.",
-      newer: "Projects can’t turn on Memory until the Hub is updated.",
     },
   },
   {
@@ -287,13 +270,12 @@ interface Context {
  */
 function stateOf(feature: Feature, context: Context): FeatureState | undefined {
   const plugin = context.plugins.find((candidate) => candidate.id === feature.id);
-  if (feature.optional === true && plugin === undefined) return undefined;
   const listed = hubFeatureState({ hub: context.hub }, feature.id);
   if (listed !== undefined) {
     // The Hub serves it, but not at the revision the plugin needs.
     if (listed === "on") return plugin?.reason === "hub" ? "newer" : "on";
     if (listed === "off") return "off-hub";
-    return feature.optional === true ? "off-hub" : "newer";
+    return "newer";
   }
   switch (feature.without) {
     case "plugin":

@@ -150,8 +150,6 @@
         "src/components/workspaces/herdr/HerdrRuntimeSettings.logic.ts": ["exports"],
         "src/components/workspaces/jujutsu/pairActions.logic.ts": ["exports"],
         "src/components/workspaces/knowledge/knowledge.logic.ts": ["exports"],
-        "src/components/workspaces/memory/MemoryRecords.tsx": ["exports"],
-        "src/components/workspaces/memory/memory.actions.ts": ["exports"],
         "src/components/workspaces/overlap/overlap.logic.ts": ["exports"],
         "src/components/workspaces/ownership/ownerDecision.logic.ts": ["exports"],
         "src/components/workspaces/ownership/ownership.testkit.ts": ["exports"],

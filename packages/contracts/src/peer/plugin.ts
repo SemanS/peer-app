@@ -17,7 +17,6 @@ export const PEER_PLUGIN_IDS = [
   "observe",
   "knowledge",
   "ask",
-  "memory",
 
   "audit",
   "tool-trust",

@@ -105,17 +105,16 @@ describe("Peer plugins", () => {
         assert.equal(yield* Queue.size(seen), 0);
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
-  it.effect("start from their defaults, and a plugin the build excludes is not listed", () =>
+  it.effect("start from their defaults", () =>
     Effect.gen(function* () {
       const seen = yield* Queue.unbounded<SeenEvent>();
       const core = yield* startedCore(yield* seedState(), [
         fakePlugin({ id: "audit" }, seen),
-        fakePlugin({ id: "memory", title: "Peer Memory", defaultEnabled: false }, seen),
-        fakePlugin({ id: "ask", available: false }, seen),
+        fakePlugin({ id: "observe", title: "Observe", defaultEnabled: false }, seen),
       ]);
       assert.deepStrictEqual(yield* core.plugins.states, [
         { id: "audit", title: "The audit plugin", enabled: true, active: true },
-        { id: "memory", title: "Peer Memory", enabled: false, active: false, reason: "off" },
+        { id: "observe", title: "Observe", enabled: false, active: false, reason: "off" },
       ]);
       assert.deepStrictEqual(
         (yield* core.plugins.active).map((plugin) => plugin.id),
@@ -125,8 +124,8 @@ describe("Peer plugins", () => {
       assert.isFalse(yield* core.plugins.isActive("ask"));
       assert.isNull(yield* refusal(core.plugins.requireActive("audit")));
       assert.strictEqual(
-        yield* refusal(core.plugins.requireActive("memory")),
-        "Peer Memory is turned off on this environment.",
+        yield* refusal(core.plugins.requireActive("observe")),
+        "Observe is turned off on this environment.",
       );
       assert.strictEqual(
         yield* refusal(core.plugins.requireActive("ask")),
@@ -228,55 +227,12 @@ describe("Peer plugins", () => {
       }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect(
-    "name the commands of a plugin the build excludes, and why the Hub would refuse them",
-    () =>
-      Effect.gen(function* () {
-        const seen = yield* Queue.unbounded<SeenEvent>();
-        const answer: { current: HubAnswer } = { current: () => [200, meAnswer()] };
-        const hub = yield* standInHub(answer);
-        const unserved = "this Peer Hub was built without Memory";
-        const core = yield* startedCore(
-          yield* seedState(signedInSeed(hub.url)),
-          [
-            fakePlugin({ id: "audit", commandNames: ["audit"] }, seen),
-            fakePlugin(
-              {
-                id: "memory",
-                available: false,
-                commandNames: ["memory", "remember"],
-                hubFeature: { id: "memory", revision: 1 },
-                unserved,
-              },
-              seen,
-            ),
-            fakePlugin({ id: "ask", available: false }, seen),
-          ],
-          "phs_test",
-        );
-        const refusals = core.plugins.excluded.pipe(
-          Effect.map((commands) => commands.map(({ name, refused }) => `${name} ${refused}`)),
-        );
-        // A Hub without a catalog serves memory, so it is only off here, and nothing of find's shows.
-        assert.deepStrictEqual(yield* core.plugins.excluded, [
-          { plugin: "memory", name: "memory", refused: "off", unserved },
-          { plugin: "memory", name: "remember", refused: "off", unserved },
-        ]);
-        answer.current = () => [200, meAnswer({ requests: 1 })];
-        yield* core.client.me;
-        assert.deepStrictEqual(yield* refusals, ["memory hub", "remember hub"]);
-        answer.current = () => [200, meAnswer({ memory: 1 })];
-        yield* core.client.me;
-        assert.deepStrictEqual(yield* refusals, ["memory off", "remember off"]);
-      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  );
-
-  it.effect("refuse to start while a plugin the build excludes names a command core has", () =>
+  it.effect("refuse to start while a plugin names a command core has", () =>
     Effect.gen(function* () {
       const seen = yield* Queue.unbounded<SeenEvent>();
       const core = yield* Layer.build(
         coreLayer(yield* seedState(), {
-          plugins: [fakePlugin({ id: "memory", available: false, commandNames: ["status"] }, seen)],
+          plugins: [fakePlugin({ id: "observe", commandNames: ["status"] }, seen)],
         }),
       );
       const started = yield* PeerPlugins.startPlugins.pipe(Effect.provide(core), Effect.exit);
@@ -284,7 +240,7 @@ describe("Peer plugins", () => {
       if (Exit.isFailure(started)) {
         assert.include(
           Cause.pretty(started.cause),
-          'Command "status" of plugin "memory" is already core\'s.',
+          'Command "status" of plugin "observe" is already core\'s.',
         );
       }
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

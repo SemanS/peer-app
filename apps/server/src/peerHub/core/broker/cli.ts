@@ -80,9 +80,7 @@ export function pluginCommand(
   | { readonly run: PeerCommand }
   | { readonly refusal: string; readonly next?: string }
   | undefined {
-  const found =
-    plugins.commands.find(({ command }) => command.name === name) ??
-    plugins.excluded.find((excluded) => excluded.name === name);
+  const found = plugins.commands.find(({ command }) => command.name === name);
   if (found === undefined) return undefined;
   if (found.refused === undefined) return { run: found.command };
   if (found.refused === "hub-unknown") {

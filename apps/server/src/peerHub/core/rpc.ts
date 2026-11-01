@@ -384,8 +384,8 @@ const pluginRpcLayer = (rpc: PeerRpcContribution, wrap: PeerRpcWrap): Layer.Laye
   ) as Layer.Layer<never>;
 
 /**
- * Refusals for the methods of `PeerRpcGroup` that no plugin of this build serves (memory's, in a
- * build without it), so a client of another build hears why rather than meeting an unknown method.
+ * Refusals for the methods of `PeerRpcGroup` that no plugin of this build serves, so a client of
+ * another build hears why rather than meeting an unknown method.
  * They go through ws.ts's wrappers like every method: the caller's scope is checked first, and the
  * call is traced.
  */

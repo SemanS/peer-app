@@ -6,8 +6,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { NO_PLUGINS } from "../broker/host.ts";
 import { brokerFixture } from "../broker/testkit.ts";
 
-// Peer Memory once took a keeper's working context over in memory mode; it no longer does
-// (extract-peer-memory-plugin, design decision 3), so these pin the working context core keeps.
+// These pin the working context core keeps.
 describe("a keeper's working context", () => {
   it("keeps one session for concurrent hooks, its own notes apart from the shared context it keeps, and its runtime generation", async () => {
     const uploaded: string[] = [];

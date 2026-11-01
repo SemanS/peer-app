@@ -52,7 +52,6 @@ import type * as RpcGroup from "effect/rpc/RpcGroup";
 import type * as ServerSecretStore from "../../auth/ServerSecretStore.ts";
 import type * as ServerConfig from "../../config.ts";
 import type * as ProjectionStore from "../../orchestration-v2/ProjectionStore.ts";
-import type * as ThreadManagement from "../../orchestration-v2/ThreadManagementService.ts";
 import type * as ProjectService from "../../project/ProjectService.ts";
 import type * as Settings from "../../serverSettings.ts";
 import type { AgentAwarenessRelay } from "../../relay/AgentAwarenessRelay.ts";
@@ -92,12 +91,6 @@ export type PeerCore =
   | ProjectService.ProjectService
   | ProjectionStore.ProjectionStoreV2;
 
-/**
- * What T3's MCP server gives a plugin's toolkit besides core: its threads. The calling runtime
- * (`McpInvocationContext`) reaches each call, not the toolkit.
- */
-export type PeerMcpHost = ThreadManagement.ThreadManagementService;
-
 /** What Settings, the status and the registry know of a plugin without building it. */
 export interface PeerPluginInfo {
   /** Kebab-case; its folder, contract files, web and mobile entries and Hub feature use it too. */
@@ -108,21 +101,10 @@ export interface PeerPluginInfo {
   readonly defaultEnabled: boolean;
   /** Environment policy, evaluated before the owner's saved choice; visible but cannot enable. */
   readonly forcedOff?: () => string | undefined;
-  /** False keeps it out of the catalog entirely (memory while frozen). */
-  readonly available?: boolean;
-  /**
-   * The `peer` commands it adds. A build that excludes the plugin refuses them in one line, as it
-   * does an inactive plugin's, instead of printing help as for a command nobody has.
-   */
+  /** The `peer` commands it adds, which no other plugin may take. */
   readonly commandNames?: ReadonlyArray<string>;
   /** The Hub feature it needs; the signed-in Hub must serve it at this revision or a later one. */
   readonly hubFeature?: { readonly id: string; readonly revision: number };
-  /**
-   * Why it is inactive while the signed-in Hub does not serve `hubFeature`, as a clause a refusal
-   * starts with ("this Peer Hub was built without Memory"). Without one, core says the plugin
-   * needs a newer Peer Hub, which is true of a feature every new Hub serves.
-   */
-  readonly unserved?: string;
 }
 
 /** One optional Peer feature. Listed once in `core/registry.ts`, bound by `bindPlugin`. */
@@ -221,12 +203,6 @@ export interface PeerContributions {
   /** A named, pure projection for clients that need a smaller status snapshot. */
   readonly statusViews?: Readonly<Record<string, (status: PeerHubStatus) => PeerHubStatus>>;
   readonly rpc?: PeerRpcContribution;
-  /**
-   * A toolkit T3's MCP server registers once, when it starts: its tools refuse calls while the
-   * plugin is inactive (`PeerPlugins.requireActive`). One that lists tools only while its plugin is
-   * on reads the choice then, so turning it on lists them after a restart.
-   */
-  readonly mcp?: Layer.Layer<never, never, PeerCore | PeerMcpHost>;
   /** Tools exposed by the lightweight Peer stdio server; calls reuse the command router. */
   readonly agentTools?: ReadonlyArray<PeerAgentTool>;
   /** Per-thread stdio servers, read synchronously by provider adapters while this plugin is active. */
@@ -255,8 +231,8 @@ export interface PeerContributions {
   readonly indexSource?: PeerIndexSource;
   readonly gitHost?: PeerGitHost;
   /**
-   * Adds sessions to a coordination report: memory's runtimes, herdr's observations. The plugin that
-   * fills `runtime` adds last, so it can fit its observations within the Hub's bound.
+   * Adds sessions to a coordination report: herdr's observations. The plugin that fills `runtime`
+   * adds last, so it can fit its observations within the Hub's bound.
    */
   readonly reportSessions?: (
     workspace: string,

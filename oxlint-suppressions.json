@@ -40,11 +40,6 @@
       "count": 1
     }
   },
-  "apps/mobile/src/features/peer/memory/MemorySettingsRow.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
   "apps/mobile/src/features/peer/needs-you/NeedsYouCards.tsx": {
     "t3code/no-ambiguous-detail-navigation": {
       "count": 1
@@ -1350,47 +1345,6 @@
       "count": 1
     }
   },
-  "apps/server/src/peerHub/plugins/memory/MemoryRuntime.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 7
-    }
-  },
-  "apps/server/src/peerHub/plugins/memory/MemoryTransport.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/memory/commands.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/memory/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/memory/mcp/PeerMemoryMcpService.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/memory/mcp/registration.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/memory/run.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/plugins/needs-you/service.ts": {
     "t3code/prefer-effect-fn": {
       "count": 1
@@ -2040,11 +1994,6 @@
   "apps/web/src/components/workspaces/knowledge/knowledge.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/memory/MemoryChangesNotice.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
     }
   },
   "apps/web/src/components/workspaces/ownership/AreasBoard.tsx": {

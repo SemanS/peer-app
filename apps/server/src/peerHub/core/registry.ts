@@ -24,7 +24,6 @@ import { GitHubPlugin } from "../plugins/github/index.ts";
 import { HerdrPlugin } from "../plugins/herdr/index.ts";
 import { JujutsuPlugin } from "../plugins/jujutsu/index.ts";
 import { KnowledgePlugin } from "../plugins/knowledge/index.ts";
-import { MemoryPlugin } from "../plugins/memory/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
 import { OwnershipPlugin } from "../plugins/ownership/index.ts";
 import { RolesPlugin } from "../plugins/roles/index.ts";
@@ -76,7 +75,6 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   ObservePlugin,
   KnowledgePlugin,
   AskPlugin,
-  MemoryPlugin,
 
   AuditPlugin,
   ToolTrustPlugin,

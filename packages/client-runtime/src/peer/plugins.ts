@@ -1,6 +1,5 @@
 import {
   AuthAccessWriteScope,
-  PEER_MEMORY_AVAILABLE,
   PEER_PLUGIN_REASONS,
   type AuthSessionState,
   type PeerHubStatus,
@@ -20,7 +19,6 @@ const PRE_PLUGIN_FEATURES: ReadonlySet<string> = new Set<PeerPluginId>([
   "observe",
   "knowledge",
   "ask",
-  "memory",
 ]);
 
 /** What these read of a status: its plugins, and whether someone is signed in, when known. */
@@ -32,12 +30,10 @@ export const pluginLockNote = (plugin: PeerPluginState) =>
 
 /**
  * Whether a client shows the plugin's UI: it is active on this environment. A status without a
- * plugin list, or with an empty one, counts the pre-plugin features as active. Memory stays hidden
- * while the build excludes it, whatever the environment says.
+ * plugin list, or with an empty one, counts the pre-plugin features as active.
  */
 export function activePlugin(status: StatusPlugins | null | undefined, id: string): boolean {
   if (status === null || status === undefined) return false;
-  if (id === "memory" && !PEER_MEMORY_AVAILABLE) return false;
   const plugins = status.plugins;
   if (plugins === undefined || plugins.length === 0) return PRE_PLUGIN_FEATURES.has(id);
   return plugins.some((plugin) => plugin.id === id && plugin.active);
@@ -50,16 +46,12 @@ export function activePlugin(status: StatusPlugins | null | undefined, id: strin
  */
 export type InactivePluginReason = "off" | "hub" | "waiting" | "missing" | "locked";
 
-/**
- * The reason a plugin is not active, or null while it is. Memory is never there to turn on while
- * the build excludes it, whatever the environment lists.
- */
+/** The reason a plugin is not active, or null while it is. */
 export function inactivePluginReason(
   status: StatusPlugins | null | undefined,
   id: string,
 ): InactivePluginReason | null {
   if (activePlugin(status, id)) return null;
-  if (id === "memory" && !PEER_MEMORY_AVAILABLE) return "missing";
   const state = status?.plugins?.find((plugin) => plugin.id === id);
   if (state === undefined) return "missing";
   if (state.locked === true) return "locked";
@@ -89,22 +81,6 @@ export function hubFeatureState(
   if (hub?.features !== undefined && (hub.features[id] ?? 0) >= revision) return "on";
   if (hub?.featuresOff?.includes(id) === true) return "off";
   return hub?.features === undefined || hub.featuresOff === undefined ? undefined : "newer";
-}
-
-/**
- * The features a Hub may be built without, and so may the app: Memory, while it is frozen. A Hub
- * that sends a catalog and neither serves one of them nor lists it as turned off was built without
- * it, which an update does not fix: a different build does.
- */
-const FEATURES_A_HUB_MAY_BE_BUILT_WITHOUT: ReadonlyArray<string> = ["memory"];
-
-/** The optional features the signed-in Hub was built without, by feature (and plugin) id. */
-export function featuresBuiltWithout(
-  status: Pick<PeerHubStatus, "hub"> | null | undefined,
-): ReadonlySet<string> {
-  return new Set(
-    FEATURES_A_HUB_MAY_BE_BUILT_WITHOUT.filter((id) => hubFeatureState(status, id) === "newer"),
-  );
 }
 
 /** Only an owner of the environment, a session with access-write, turns plugins on or off. */

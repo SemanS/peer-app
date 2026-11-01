@@ -13,22 +13,15 @@ vi.mock("../announcements/AnnouncementPreferences", () => ({
   AnnouncementPreferences: () => null,
 }));
 vi.mock("../resources/PeerHeldResources", () => ({ PeerHeldResources: () => null }));
-vi.mock("../memory/MemorySettingsRow", () => ({ MemorySettingsRow: () => null }));
 
 import { announcementsMobilePlugin } from "../announcements";
 import { knowledgeMobilePlugin } from "../knowledge";
-import { memoryMobilePlugin } from "../memory";
 import { resourcesMobilePlugin } from "../resources";
 import { selectPeerPlugins } from "../slots.logic";
 import { projectSignals } from "./signals";
 
 /** The plugins that fill `projectSignals`, as `PEER_MOBILE_PLUGINS` lists them. */
-const SLOT_USERS = [
-  knowledgeMobilePlugin,
-  memoryMobilePlugin,
-  announcementsMobilePlugin,
-  resourcesMobilePlugin,
-];
+const SLOT_USERS = [knowledgeMobilePlugin, announcementsMobilePlugin, resourcesMobilePlugin];
 
 const project = (id: string, name: string) => ({
   project: { id, name, role: "member", members: [] },
@@ -99,7 +92,7 @@ const projectNode = (from: PeerHubStatus, id: string) =>
   )!;
 
 describe("the projectSignals slot", () => {
-  it("is filled by knowledge, memory, announcements and resources, in registry order", () => {
+  it("is filled by knowledge, announcements and resources, in registry order", () => {
     expect(SLOT_USERS.every((plugin) => plugin.projectSignals !== undefined)).toBe(true);
     const ids = SLOT_USERS.map((plugin) => plugin.id);
     expect(ids).toEqual(PEER_PLUGIN_IDS.filter((id) => ids.includes(id)));
@@ -110,14 +103,12 @@ describe("the projectSignals slot", () => {
     expect(signals.map((signal) => [signal.label, signal.count, signal.tone])).toEqual([
       ["Overlaps", 1, "coordination"],
       ["Knowledge to keep", 3, "knowledge"],
-      ["Memory", null, "knowledge"],
       ["Announcements", 2, "team"],
       ["Held resources", 1, "coordination"],
     ]);
     expect(signals.map((signal) => signal.detail)).toEqual([
       "src/pay.ts",
       "3 findings to keep or dismiss",
-      "Findings, evidence, questions",
       "Every live agent gets them once",
       "Resource staging-db",
     ]);
@@ -128,7 +119,6 @@ describe("the projectSignals slot", () => {
     expect(signals.map((signal) => [signal.label, signal.count, signal.detail])).toEqual([
       ["Overlaps", 0, "No agents on the same file"],
       ["Knowledge to keep", 0, "Nothing proposed"],
-      ["Memory", null, "Findings, evidence, questions"],
       ["Announcements", 0, "None active"],
       ["Held resources", 0, "None held"],
     ]);

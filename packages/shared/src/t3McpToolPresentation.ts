@@ -66,7 +66,6 @@ export type T3McpToolSummaryAction =
   | "write-pr-guides"
   | "read-pr-guide"
   | "browser"
-  | "memory"
   | "device"
   | "html-preview"
   | "html-render";
@@ -90,23 +89,6 @@ function tool(
 const T3_MCP_SERVER_ALIASES = new Set(["t3-code", "t3_code", "t3code"]);
 
 const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
-  peer_memory_search: tool(["Search", "Searching", "Searched", "Peer memory"], "memory"),
-  peer_memory_read: tool(["Read", "Reading", "Read", "a Peer memory record"], "memory"),
-  peer_memory_changes: tool(["Read", "Reading", "Read", "Peer memory changes"], "memory"),
-  peer_memory_project: tool(
-    ["Project", "Projecting", "Projected", "selected Peer memory"],
-    "memory",
-  ),
-  peer_memory_remember: tool(
-    ["Remember", "Remembering", "Remembered", "a selected finding"],
-    "memory",
-  ),
-  peer_memory_command: tool(["Update", "Updating", "Updated", "Peer memory"], "memory"),
-  peer_memory_receipt: tool(
-    ["Acknowledge", "Acknowledging", "Acknowledged", "Peer memory versions"],
-    "memory",
-  ),
-  peer_memory_context: tool(["Read", "Reading", "Read", "private Peer context"], "memory"),
   link_pull_request: tool(
     ["Link", "Linking", "Linked", "a pull request"],
     "link-pr",

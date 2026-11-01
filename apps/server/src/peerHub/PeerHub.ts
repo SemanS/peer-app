@@ -17,8 +17,8 @@ import * as PeerLog from "./core/log/PeerLog.ts";
  * logins, and `hubPolicy` keeps hub-provisioned (shared) instances on their
  * own project and personal ones on projects that accept them.
  *
- * Peer's entry: `layer` builds core and the plugins and keeps them current, `rpcLayer` serves their
- * WebSocket methods, and `mcpLayer` their MCP tools.
+ * Peer's entry: `layer` builds core and the plugins and keeps them current, and `rpcLayer` serves
+ * their WebSocket methods.
  *
  * @module peerHub/PeerHub
  */
@@ -137,14 +137,3 @@ export const layer = Layer.effectDiscard(run).pipe(Layer.provideMerge(coreLayer)
 
 /** Peer's WebSocket RPC handlers, which `ws.ts` merges with T3's (`core/rpc.ts`). */
 export const rpcLayer = PeerRpc.layer;
-
-/**
- * Peer's MCP toolkits, registered when the server starts: each plugin's, whose tools refuse their
- * calls while the plugin is inactive.
- */
-export const mcpLayer = Layer.unwrap(
-  Effect.gen(function* () {
-    const toolkits = yield* (yield* PeerPlugins.PeerPlugins).toolkits;
-    return Layer.mergeAll(Layer.empty, ...toolkits);
-  }),
-);

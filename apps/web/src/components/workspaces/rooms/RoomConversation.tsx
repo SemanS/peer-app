@@ -1,3 +1,4 @@
+import ChatMarkdown from "../../ChatMarkdown";
 import {
   anchorState,
   anchorText,
@@ -264,9 +265,7 @@ function RoomMessage({
             {anchorState(anchor, head) === "earlier" ? <span>on an earlier version</span> : null}
           </p>
         )}
-        <p className="text-sm whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]">
-          {message.text}
-        </p>
+        <ChatMarkdown text={message.text} cwd={undefined} lineBreaks parseRawHtml={false} />
         {mentions.length === 0 ? null : (
           <p className="text-xs text-muted-foreground">
             To {mentions.map((target) => nameOf(target.email)).join(", ")}

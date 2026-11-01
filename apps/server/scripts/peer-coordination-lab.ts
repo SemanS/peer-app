@@ -108,7 +108,8 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   open run that committed goes on in its checkout, on its model, as one run; a run that ended gets a new one there; a
 //   run that left nothing starts over from the base. The room's diff shows the commit throughout. A task starts from
 //   what a teammate pushed, and the person's own checkout stays where it was. Peer remembers each checkout it made, once;
-//   closing a chat removes those that hold nothing and keeps the one with a commit no remote has.
+//   closing a chat removes those that hold nothing and keeps the one with a commit no remote has. Nobody syncs: the room
+//   says an agent stopped by itself, at its session's end and, for one killed outright, when its lease runs out.
 //   REAL_SCENARIO=rooms (peer-lab/rooms.ts) proves a task's room: Bob names Ana's agent and nothing reaches it until she
 //   passes it on, she declines and Bob's status moves with no new message, Bob withdraws, a hostile message stays
 //   fenced, an agent cannot name an agent, Bob's own agent answers from a review session on his computer after Ana's run
@@ -223,6 +224,7 @@ import {
   PEER_ACCEPTANCE_METHODS,
   PEER_FORECAST_METHODS,
   PEER_JUJUTSU_METHODS,
+  PEER_ROOM_SESSION_ENDED,
   PEER_ROOMS_METHODS,
   WS_METHODS,
   WsRpcGroup,
@@ -4874,6 +4876,7 @@ function writeClaudeWrapper(h: HerdrServer, computer: Computer) {
       "#!/bin/sh",
       `if [ "$1" = "--setting-sources" ]; then exec ${quoted(real)} "$@"; fi`,
       `printf '%s\\n' "$*" >> ${quoted(NodePath.join(h.base, "claude-args.log"))}`,
+      `printf '%s\\n' "$$" >> ${quoted(NodePath.join(h.base, "claude-pids.log"))}`,
       `exec ${quoted(real)} --setting-sources project --settings ${quoted(settings)} --strict-mcp-config --permission-mode acceptEdits --model ${quoted(process.env.LAB_CLAUDE_MODEL ?? "sonnet")} "$@"`,
       "",
     ].join("\n"),
@@ -7658,6 +7661,14 @@ const roomsRetryProgram = Effect.gen(function* () {
     await waitOn("the agent to leave", () => !agents().some((a) => a.pane_id === pane), 30_000);
     herdrText(herdr, "pane", "close", pane);
   };
+  /** Its agent dies at once, so no end hook comes. The wrapper's pid is the agent's: it execs. */
+  const crash = async (pane: string) => {
+    await waitOn("the agent to idle", () => idle(pane), 3 * 60_000);
+    const pids = NodeFS.readFileSync(NodePath.join(herdr.base, "claude-pids.log"), "utf8");
+    process.kill(Number(pids.trim().split("\n").at(-1)), "SIGKILL");
+    await waitOn("the agent to die", () => !agents().some((a) => a.pane_id === pane), 30_000);
+    herdrText(herdr, "pane", "close", pane);
+  };
   const started = () => agents()[0];
   const claudeArgs = () =>
     NodeFS.readFileSync(NodePath.join(herdr.base, "claude-args.log"), "utf8").trim().split("\n");
@@ -7686,6 +7697,7 @@ const roomsRetryProgram = Effect.gen(function* () {
     chosen: string | undefined,
     done: (cwd: string) => boolean,
     leave: (run: string) => Promise<void> = async () => undefined,
+    gone: (pane: string) => Promise<void> = agentGone,
   ) => {
     const created = await rpc(
       ana.client[WS_METHODS.peerHubCreateTask]({
@@ -7723,16 +7735,13 @@ const roomsRetryProgram = Effect.gen(function* () {
     );
     const run = (await delivery())?.run ?? "";
     await leave(run);
-    await agentGone(pane);
-    // Nothing reads the room when a session ends: the next ping or sync does, as here.
+    await gone(pane);
+    // Nobody syncs here: no ping comes on a quiet room, so only Peer can have read it.
     must(
       await waitOn(
         `${title}: the room says it stopped`,
-        async () => {
-          await rpc(ana.client[WS_METHODS.peerHubSync]({}));
-          return (await delivery())?.state === "failed";
-        },
-        4 * 60_000,
+        async () => (await delivery())?.state === "failed",
+        5 * 60_000,
       ),
       `${title}: the delivery failed once its session ended`,
     );
@@ -7892,8 +7901,40 @@ const roomsRetryProgram = Effect.gen(function* () {
       must(commitsIn(againC?.cwd ?? "", "refs/remotes/origin/main") === 0, "C: from the base");
       await agentGone(againC?.pane_id ?? "");
 
-      // A and B went on in their checkouts, so only C's retry made one more.
-      const made = [a.cwd, b.cwd, c.cwd, againC?.cwd ?? ""].map(realPath).toSorted();
+      // A crash sends no end hook: the session's lease runs out, and the room hears of that too.
+      let stilled = 0;
+      const d = await chatUntilStopped(
+        "D",
+        RETRY_NOTHING,
+        undefined,
+        () => {
+          stilled += 1;
+          return stilled > 8;
+        },
+        undefined,
+        crash,
+      );
+      must(
+        events(ana).some((entry) => entry.event === "session.expired"),
+        "D: its session expired, as no end hook came",
+      );
+      must(
+        (await d.delivery())?.reason === PEER_ROOM_SESSION_ENDED,
+        "D: the room says it stopped without answering",
+      );
+      await d.tryAgain();
+      must(
+        await waitOn("D: a new agent", () => agents().length > 0, 3 * 60_000),
+        "D: Try again started an agent",
+      );
+      const againD = started();
+      must(againD?.cwd !== d.cwd, `D: in a new checkout (${String(againD?.cwd)})`);
+      await agentGone(againD?.pane_id ?? "");
+
+      // A and B went on in their checkouts; C's and D's retries, with nothing to keep, made new ones.
+      const made = [a.cwd, b.cwd, c.cwd, againC?.cwd ?? "", d.cwd, againD?.cwd ?? ""]
+        .map(realPath)
+        .toSorted();
       const allKnown = await waitOn(
         "Peer to remember its checkouts",
         () => remembered().join() === made.join(),
@@ -7923,7 +7964,8 @@ const roomsRetryProgram = Effect.gen(function* () {
         "A: closing the chat kept the checkout with a commit no remote has",
       );
       must(
-        remembered().join() === [a.cwd, b.cwd].map(realPath).toSorted().join(),
+        remembered().join() ===
+          [a.cwd, b.cwd, d.cwd, againD?.cwd ?? ""].map(realPath).toSorted().join(),
         "Peer forgot only what it removed",
       );
     });

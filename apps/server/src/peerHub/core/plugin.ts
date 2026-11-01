@@ -733,10 +733,14 @@ export interface PeerTaskLauncher {
     }>;
     /** Folders it works in already, for a run that continues: no new checkout. */
     readonly dirs?: ReadonlyArray<string>;
+    /** The checkout it goes on in, one a run left work in: no new checkout is made. */
+    readonly reuse?: string | undefined;
     /** Provenance is returned only when this launch created a new worktree, never for reuse. */
   }) => Effect.Effect<
     PeerHubStartAgentResult & {
       readonly threadKey: string;
+      /** The checkout it runs in, new or reused. */
+      readonly root?: string;
       readonly worktree?: { readonly root: string; readonly identity: string };
       /** One for each of `also`, in its order. */
       readonly alsoTrees?: ReadonlyArray<{ readonly root: string; readonly identity: string }>;

@@ -121,6 +121,57 @@ describe("decide", () => {
     });
   });
 
+  describe("for a delivery its owner sent on again", () => {
+    const worked: HereRun = { id: "run_6", live: false, left: true };
+    const sentOn = delivery("passed", { by: BOB });
+    const onModel = delivery("passed", { by: BOB, model: "claude-opus-5-5" });
+
+    it("goes on with the run that left work, on the model it has, in no second run", () => {
+      assert.deepStrictEqual(decide(own(onModel), onModel, [worked], BOB, 0, true), {
+        do: "take-continue",
+        run: "run_6",
+      });
+      assert.deepStrictEqual(decide(own(onModel), onModel, [worked], BOB), {
+        do: "take-continue",
+        run: "run_6",
+      });
+    });
+
+    it("starts anew on the chosen model where no run left work", () => {
+      assert.deepStrictEqual(decide(own(onModel), onModel, [detached], BOB, 0, true), {
+        do: "take-start",
+      });
+      assert.deepStrictEqual(decide(own(onModel), onModel, [detached], BOB), {
+        do: "take-review",
+      });
+    });
+
+    it("leaves a first delivery on a chosen model to its new session", () => {
+      const first = delivery("passed", { model: "claude-opus-5-5" });
+      assert.deepStrictEqual(decide(own(first), first, [worked], BOB, 0, true), {
+        do: "take-start",
+      });
+    });
+
+    it("prefers the run that left work to a newer one that left none", () => {
+      assert.deepStrictEqual(decide(own(sentOn), sentOn, [detached, worked], BOB), {
+        do: "take-continue",
+        run: "run_6",
+      });
+      assert.deepStrictEqual(decide(passed(sentOn), sentOn, [detached, worked], BOB), {
+        do: "take-continue",
+        run: "run_6",
+      });
+    });
+
+    it("still gives it to a live session, which can hear it now", () => {
+      assert.deepStrictEqual(decide(own(sentOn), sentOn, [worked, live], BOB), {
+        do: "take-offer",
+        run: "run_1",
+      });
+    });
+  });
+
   it("after a crash, starts nothing for a taken delivery that recorded no run", () => {
     assert.deepStrictEqual(decide(passed(delivery("taken")), delivery("taken"), [live], BOB), {
       do: "nothing",

@@ -452,6 +452,8 @@ const make = Effect.gen(function* () {
           task: task.id,
           agent: input.harness,
           runtime: "herdr",
+          model: input.model,
+          effort: input.effort,
         },
         (env) =>
           launcher.launch({

@@ -25,6 +25,7 @@ import {
   TEST_ENVIRONMENT,
   type HubAnswer,
 } from "../../core/testkit.ts";
+import * as PeerRuns from "../../core/work/runs.ts";
 import { RoomsPlugin } from "./index.ts";
 
 export const BOB = "bob@acme.test";
@@ -174,7 +175,8 @@ export const roomPeer = (current: RoomHub, plugins: ReadonlyArray<PeerPluginEntr
         }),
         (fixture) => Effect.promise(() => fixture.dispose()),
       );
-      return { server, status, state, client, agents, plugins: peerPlugins, brokered };
+      const runs = yield* PeerRuns.PeerRuns;
+      return { server, status, state, client, agents, runs, plugins: peerPlugins, brokered };
     }).pipe(Effect.provide(core));
   });
 

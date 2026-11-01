@@ -1,11 +1,12 @@
 // @effect-diagnostics nodeBuiltinImport:off - the new task checkout's identity is read from the file system.
 /**
  * Starting an agent on a task in herdr (the plugin's task launcher): a git worktree of its own on
- * a new branch, the agent in a pane of Peer's own herdr workspace, then its first prompt once it is
- * ready for one. Core has checked the task, taken the team request it answers and created the run
- * the agent starts in; the run holds the agent's thread once it runs. A continued run's agent
- * resumes its last provider session where it is known. An agent stopped by its harness's question
- * whether to trust the new checkout keeps its prompt here until the person answers (`answered`).
+ * a new branch, or the checkout a run left work in, the agent in a pane of Peer's own herdr
+ * workspace, then its first prompt once it is ready for one. Core has checked the task, taken the
+ * team request it answers and created the run the agent starts in; the run holds the agent's thread
+ * once it runs. A continued run's agent resumes its last provider session where it is known. An
+ * agent stopped by its harness's question whether to trust the new checkout keeps its prompt here
+ * until the person answers (`answered`).
  *
  * @module peerHub/plugins/herdr/launcher
  */
@@ -17,6 +18,7 @@ import * as Result from "effect/Result";
 
 import type { PeerTaskLauncher } from "../../core/plugin.ts";
 import { projectsText } from "../../core/work/runRoots.ts";
+import { realDirectory, within } from "./client/checkouts.ts";
 import { HerdrClient } from "./client/HerdrClient.ts";
 import { trustQuestionOf } from "./client/trust.ts";
 import { prepareHerdrTaskWorktree } from "./client/worktree.ts";
@@ -59,6 +61,13 @@ export const makeLauncher = (agents: HerdrAgents) =>
     const agentIn = (terminal: string) =>
       agents.current()?.find((agent) => agent.terminalId === terminal);
 
+    const agentOpenIn = (folder: string) => {
+      const real = realDirectory(folder);
+      return (agents.current() ?? []).some(
+        (agent) => agent.cwd !== undefined && within(realDirectory(agent.cwd), real),
+      );
+    };
+
     /** Types the held prompt as soon as the agent takes one; herdr refuses until it is ready. */
     const promptOnceReady = (terminal: string) =>
       Effect.gen(function* () {
@@ -99,19 +108,28 @@ export const makeLauncher = (agents: HerdrAgents) =>
         const harness = input.harness;
         if (harness !== "claude" && harness !== "codex")
           return yield* hubError(`herdr cannot start a ${harness} agent.`);
-        const tree = yield* Effect.tryPromise({
-          try: () =>
-            prepareHerdrTaskWorktree({
-              checkout: input.checkout,
-              baseBranch: input.baseBranch,
-              worktrees: input.worktrees,
-              task: input.task.key ?? input.task.id,
-            }),
-          catch: (failure) =>
-            hubError(
-              `Could not prepare the task checkout: ${messageOf(failure) ?? "check the local repository branch."}`,
-            ),
-        });
+        const reused = input.reuse;
+        // herdr can list an agent long after its session ended, and two would share one tree.
+        if (reused !== undefined && agentOpenIn(reused))
+          return yield* hubError(
+            "An agent is still open in this task's checkout. Close it in herdr, then try again.",
+          );
+        const tree =
+          reused !== undefined
+            ? { cwd: reused }
+            : yield* Effect.tryPromise({
+                try: () =>
+                  prepareHerdrTaskWorktree({
+                    checkout: input.checkout,
+                    baseBranch: input.baseBranch,
+                    worktrees: input.worktrees,
+                    task: input.task.key ?? input.task.id,
+                  }),
+                catch: (failure) =>
+                  hubError(
+                    `Could not prepare the task checkout: ${messageOf(failure) ?? "check the local repository branch."}`,
+                  ),
+              });
         const also = yield* Effect.forEach(input.also ?? [], (other) =>
           Effect.tryPromise({
             try: async () => {
@@ -180,7 +198,10 @@ export const makeLauncher = (agents: HerdrAgents) =>
           terminalId: started.terminalId,
           ...(promptError === undefined ? {} : { promptError }),
           threadKey: agent === undefined ? `herdr:${started.terminalId}` : agents.keyOf(agent),
-          worktree: { root: tree.cwd, identity: `${identity.dev}:${identity.ino}` },
+          root: tree.cwd,
+          ...(reused !== undefined
+            ? {}
+            : { worktree: { root: tree.cwd, identity: `${identity.dev}:${identity.ino}` } }),
           alsoTrees: also.map(({ root, identity: made }) => ({ root, identity: made })),
         };
       }),

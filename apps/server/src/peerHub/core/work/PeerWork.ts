@@ -157,7 +157,15 @@ export class PeerWork extends Context.Service<
      * Starts an agent in a run Peer creates first (`launchInRun`): a plugin's start (a role's
      * agent) gets its run as `startAgent`'s does, and the run holds the agent's thread.
      */
-    readonly launchRun: <A extends { readonly threadKey: string; readonly paneId: string }, E, R>(
+    readonly launchRun: <
+      A extends {
+        readonly threadKey: string;
+        readonly paneId: string;
+        readonly root?: string | undefined;
+      },
+      E,
+      R,
+    >(
       input: CreateRun,
       launch: (env: RunEnv) => Effect.Effect<A, E, R>,
     ) => Effect.Effect<{ readonly run: string; readonly started: A }, E | PeerHubError, R>;

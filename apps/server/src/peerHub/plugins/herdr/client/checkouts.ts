@@ -55,7 +55,7 @@ export const realDirectory = (path: string) => {
   }
 };
 
-const within = (path: string, folder: string) =>
+export const within = (path: string, folder: string) =>
   path === folder || path.startsWith(`${folder}${NodePath.sep}`);
 
 /** herdr's list is read and says every agent's folder. */

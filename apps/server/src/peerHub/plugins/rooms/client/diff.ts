@@ -160,10 +160,12 @@ export async function changeToReview(cwd: string, refs: ReadonlyArray<string>) {
 
 /** The newest run that does the task's work here: a review run only reads it. */
 export function workRun(input: {
-  /** This computer's open runs on the task, newest first. */
+  /** This computer's runs on the task, the open ones first, each kind newest first. */
   readonly runs: ReadonlyArray<{
     readonly id: string;
     readonly keys: ReadonlyArray<string>;
+    /** The checkout a launch put it in, while that is still here. */
+    readonly root?: string | undefined;
   }>;
   readonly reviews: ReadonlySet<string>;
   /** The live sessions on the task. */
@@ -179,6 +181,7 @@ export function workRun(input: {
     if (input.reviews.has(run.id)) continue;
     const session = input.sessions.find((candidate) => candidate.run === run.id);
     if (session !== undefined) return { root: session.root, repository: session.repositoryId };
+    if (run.root !== undefined) return { root: run.root, repository: undefined };
     const branch = input.threads.find((thread) => run.keys.includes(thread.id))?.branch;
     if (branch !== undefined) return { branch };
   }

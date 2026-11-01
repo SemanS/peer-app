@@ -2474,7 +2474,7 @@ describe("ClaudeAdapterV2 native fork", () => {
                 return { sessionId: "forked-native-session" };
               }),
             subagentLaunchToolUseId: () => Effect.succeed(null),
-            sessionMessageIds: () => Effect.die("unused"),
+            sessionMessageIds: () => Effect.succeed([]),
             assertComplete: Effect.void,
           },
         });
@@ -6112,6 +6112,358 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       const { rewind } = yield* prepareRewind(() => chain);
       const rolledBack = yield* rewind;
       assert.equal(rolledBack.providerThread.nativeConversationHeadRef?.nativeId, REWIND_TARGET);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  // On the session's chain the boundary comes first, then the summary, the messages the compaction
+  // kept, the command and its stdout.
+  const COMPACT_BOUNDARY = "00000000-0000-4000-8000-000000000656";
+  const COMPACT_SUMMARY = "00000000-0000-4000-8000-000000000657";
+  const COMPACT_STDOUT = "00000000-0000-4000-8000-000000000658";
+  const RESTORED_FILE = "00000000-0000-4000-8000-00000000065d";
+  const RESTORED_TAIL = "00000000-0000-4000-8000-00000000065e";
+  const NEXT_PROMPT = "00000000-0000-4000-8000-00000000065f";
+
+  // What a real /compact leaves in the transcript: the file holds entries the stream never names.
+  const compactionTranscript = [
+    { type: "system", subtype: "compact_boundary", uuid: COMPACT_BOUNDARY, parentUuid: null },
+    {
+      type: "user",
+      message: { role: "user", content: "This session is being continued." },
+      uuid: COMPACT_SUMMARY,
+      parentUuid: COMPACT_BOUNDARY,
+    },
+    {
+      type: "user",
+      message: { role: "user", content: "<local-command-stdout>Compacted</local-command-stdout>" },
+      uuid: COMPACT_STDOUT,
+      parentUuid: COMPACT_SUMMARY,
+    },
+    {
+      type: "attachment",
+      attachment: { type: "file" },
+      uuid: RESTORED_FILE,
+      parentUuid: COMPACT_STDOUT,
+    },
+    {
+      type: "attachment",
+      attachment: { type: "hook_additional_context" },
+      uuid: RESTORED_TAIL,
+      parentUuid: RESTORED_FILE,
+    },
+    { type: "last-prompt", lastPrompt: "Continue.", leafUuid: RESTORED_TAIL },
+  ];
+  const nextPromptEntry = {
+    type: "user",
+    message: { role: "user", content: "Continue." },
+    uuid: NEXT_PROMPT,
+    parentUuid: RESTORED_TAIL,
+  };
+
+  const claudeHomeWithTranscript = (entries: ReadonlyArray<object>) =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const configDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-claude-rewind-",
+      });
+      const projectDir = path.join(configDir, "projects", "-workspace");
+      yield* fileSystem.makeDirectory(projectDir, { recursive: true });
+      yield* fileSystem.writeFileString(
+        path.join(projectDir, `${WAKE_NATIVE_SESSION}.jsonl`),
+        `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+      );
+      return { CLAUDE_CONFIG_DIR: configDir };
+    });
+
+  const localCommandStdoutFrame = (uuid: string) =>
+    claudeSdkFrame({
+      type: "user",
+      message: {
+        role: "user",
+        content: "<local-command-stdout>Compacted</local-command-stdout>",
+      },
+      parent_tool_use_id: null,
+      isReplay: true,
+      uuid,
+      session_id: WAKE_NATIVE_SESSION,
+    });
+  const compactionFrames = [
+    claudeSdkFrame({
+      type: "system",
+      subtype: "status",
+      status: "compacting",
+      uuid: "00000000-0000-4000-8000-000000000659",
+      session_id: WAKE_NATIVE_SESSION,
+    }),
+    claudeSdkFrame({
+      type: "system",
+      subtype: "status",
+      status: null,
+      compact_result: "success",
+      uuid: "00000000-0000-4000-8000-00000000065a",
+      session_id: WAKE_NATIVE_SESSION,
+    }),
+    claudeSdkFrame({
+      type: "system",
+      subtype: "compact_boundary",
+      compact_metadata: { trigger: "manual", pre_tokens: 1_000, post_tokens: 100 },
+      uuid: COMPACT_BOUNDARY,
+      session_id: WAKE_NATIVE_SESSION,
+    }),
+    claudeSdkFrame({
+      type: "user",
+      message: { role: "user", content: "This session is being continued." },
+      parent_tool_use_id: null,
+      isReplay: false,
+      isSynthetic: true,
+      uuid: COMPACT_SUMMARY,
+      session_id: WAKE_NATIVE_SESSION,
+    }),
+  ];
+  const compactionResultFrame = claudeSdkFrame({
+    ...makeResultFrame({
+      uuid: "00000000-0000-4000-8000-00000000065b",
+      result: "",
+      numTurns: 0,
+      terminalReason: null,
+    }),
+    local_command: "compact",
+  });
+
+  const runLocalCommandTurn = (input: {
+    readonly text: string;
+    readonly frames: ReadonlyArray<SDKMessage>;
+    readonly chain?: ReadonlyArray<string>;
+    readonly transcript?: ReadonlyArray<object>;
+    readonly forkSession?: ClaudeAdapterV2.ClaudeAgentSdkQueryRunnerShape["forkSession"];
+  }) =>
+    Effect.gen(function* () {
+      const harness = yield* makeWakeHarnessWithOptions({
+        close: (sdkMessages) => Queue.shutdown(sdkMessages),
+        freshQueueOnReopen: true,
+        sessionMessageIds: () =>
+          Effect.succeed(input.chain ?? [COMPACT_SUMMARY, COMPACT_STDOUT, NEXT_PROMPT]),
+        environment: yield* claudeHomeWithTranscript(input.transcript ?? []),
+        ...(input.forkSession === undefined ? {} : { forkSession: input.forkSession }),
+      });
+      const now = yield* DateTime.now;
+      yield* harness.runtime.startTurn(
+        makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now,
+          attemptId: RunAttemptId.make("attempt-claude-compact-rewind"),
+          text: input.text,
+          attachments: [],
+        }),
+      );
+      yield* Queue.offerAll(harness.sdkMessages, input.frames);
+      yield* Queue.take(harness.terminalReceipts);
+      const providerTurn = lastProviderTurn(harness.events);
+      return {
+        harness,
+        now,
+        providerTurn,
+        rollback: harness.runtime.rollbackThread({
+          providerThread: harness.providerThread,
+          target: {
+            type: "provider_turn",
+            checkpointId: CheckpointId.make("checkpoint-claude-compact-rewind"),
+            appRunOrdinal: 1,
+            providerTurn,
+          },
+          providerThreadTurns: [
+            providerTurn,
+            {
+              ...providerTurn,
+              id: ProviderTurnId.make("provider-turn-claude-after-compact"),
+              ordinal: 2,
+            },
+          ],
+        }),
+      };
+    });
+
+  const completedCompactionFrames = [
+    ...compactionFrames,
+    localCommandStdoutFrame(COMPACT_STDOUT),
+    compactionResultFrame,
+  ];
+
+  it.effect.each([{ text: "/compact" }, { text: "/compact keep the codes" }])(
+    "rewinds to '$text' past what it restored, where the next message hangs off",
+    ({ text }) =>
+      Effect.gen(function* () {
+        const { harness, now, providerTurn, rollback } = yield* runLocalCommandTurn({
+          text,
+          frames: completedCompactionFrames,
+          transcript: [...compactionTranscript, nextPromptEntry],
+        });
+        assert.equal(providerTurn.nativeTurnRef?.nativeId, COMPACT_STDOUT);
+
+        const rolledBack = yield* rollback;
+        assert.equal(rolledBack.providerThread.nativeConversationHeadRef?.nativeId, RESTORED_TAIL);
+
+        yield* harness.runtime.startTurn(
+          makeClaudeTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: rolledBack.providerThread,
+            now,
+            attemptId: RunAttemptId.make("attempt-claude-after-compact-rewind"),
+            text: "Continue.",
+            attachments: [],
+            providerTurnOrdinal: 2,
+          }),
+        );
+        assert.equal(harness.getOpenedOptions()?.resumeSessionAt, RESTORED_TAIL);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+  );
+
+  it.effect.each([
+    { kind: "the transcript cannot be found", transcript: [] },
+    { kind: "the next message is not in the transcript", transcript: compactionTranscript },
+    {
+      // A later compaction relinks what it keeps on load, so a parent in the file can be off the chain.
+      kind: "a later compaction may have relinked it",
+      transcript: [
+        ...compactionTranscript,
+        nextPromptEntry,
+        { type: "system", subtype: "compact_boundary", uuid: REWIND_TARGET, parentUuid: null },
+      ],
+    },
+  ])("rewinds a /compact to its stdout when $kind", ({ transcript }) =>
+    Effect.gen(function* () {
+      const { rollback } = yield* runLocalCommandTurn({
+        text: "/compact",
+        frames: completedCompactionFrames,
+        transcript,
+      });
+      const rolledBack = yield* rollback;
+      assert.equal(rolledBack.providerThread.nativeConversationHeadRef?.nativeId, COMPACT_STDOUT);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  it.effect("pins nothing when no message follows a /compact on the chain", () =>
+    Effect.gen(function* () {
+      const { rollback } = yield* runLocalCommandTurn({
+        text: "/compact",
+        frames: completedCompactionFrames,
+        chain: [COMPACT_SUMMARY, COMPACT_STDOUT],
+        transcript: compactionTranscript,
+      });
+      const rolledBack = yield* rollback;
+      assert.isNull(rolledBack.providerThread.nativeConversationHeadRef);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  it.effect("keeps an assistant cursor when entries follow it in the transcript", () =>
+    Effect.gen(function* () {
+      const { rollback } = yield* runLocalCommandTurn({
+        text: "Continue.",
+        frames: [
+          makeAssistantTextFrame({ uuid: REWIND_TARGET, text: "Working." }),
+          makeResultFrame({ uuid: "00000000-0000-4000-8000-000000000660", result: "Working." }),
+        ],
+        chain: [REWIND_TARGET, NEXT_PROMPT],
+        transcript: [
+          {
+            type: "assistant",
+            message: { role: "assistant", content: [{ type: "text", text: "Working." }] },
+            uuid: REWIND_TARGET,
+            parentUuid: null,
+          },
+          {
+            type: "attachment",
+            attachment: { type: "hook_success" },
+            uuid: RESTORED_TAIL,
+            parentUuid: REWIND_TARGET,
+          },
+          nextPromptEntry,
+        ],
+      });
+      const rolledBack = yield* rollback;
+      assert.equal(rolledBack.providerThread.nativeConversationHeadRef?.nativeId, REWIND_TARGET);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  it.effect("forks from a /compact with what it restored", () =>
+    Effect.gen(function* () {
+      const forkedAt: Array<string | undefined> = [];
+      const { harness, providerTurn } = yield* runLocalCommandTurn({
+        text: "/compact",
+        frames: completedCompactionFrames,
+        transcript: [...compactionTranscript, nextPromptEntry],
+        forkSession: (input) =>
+          Effect.sync(() => {
+            forkedAt.push(input.options?.upToMessageId);
+            return { sessionId: "forked-native-session" };
+          }),
+      });
+      yield* harness.runtime.forkThread({
+        sourceProviderThread: harness.providerThread,
+        sourceProviderTurns: [providerTurn],
+        providerTurnId: providerTurn.id,
+        targetThreadId: ThreadId.make("thread-claude-fork-from-compact"),
+      });
+      assert.deepEqual(forkedAt, [RESTORED_TAIL]);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  it.effect("never resumes at a compaction's boundary or summary, which would lose history", () =>
+    Effect.gen(function* () {
+      const { providerTurn, rollback } = yield* runLocalCommandTurn({
+        text: "/compact",
+        frames: [...compactionFrames, compactionResultFrame],
+      });
+      assert.include(providerTurn.nativeTurnRef?.nativeId, "turn:");
+
+      // A /compact recorded before its stdout became the cursor reads the same way.
+      const error = yield* rollback.pipe(Effect.flip);
+      assert.instanceOf(error, ProviderAdapter.ProviderAdapterRollbackThreadError);
+      assert.include(error.refusal, "left nothing to resume from");
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  it.effect("leaves the cursor on the reply when a turn without a compaction echoes stdout", () =>
+    Effect.gen(function* () {
+      const { providerTurn } = yield* runLocalCommandTurn({
+        text: "/context",
+        frames: [
+          makeAssistantTextFrame({ uuid: REWIND_TARGET, text: "Working." }),
+          localCommandStdoutFrame(COMPACT_STDOUT),
+          makeResultFrame({ uuid: "00000000-0000-4000-8000-00000000065c", result: "Working." }),
+        ],
+      });
+      assert.equal(providerTurn.nativeTurnRef?.nativeId, REWIND_TARGET);
     }).pipe(
       Effect.provide(
         Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),

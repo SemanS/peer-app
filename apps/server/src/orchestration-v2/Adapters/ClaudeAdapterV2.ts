@@ -50,6 +50,7 @@ import {
   type SDKRateLimitInfo,
   type SDKResultMessage,
   type SDKUserMessage,
+  type SDKUserMessageReplay,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
   AskUserQuestionInput,
@@ -1908,6 +1909,20 @@ function isClaudeGoalAcknowledgement(message: SDKMessage): boolean {
   return text.startsWith(CLAUDE_GOAL_SET_PREFIX) || text.startsWith("Goal cleared: ");
 }
 
+const CLAUDE_LOCAL_COMMAND_STDOUT = "<local-command-stdout>";
+
+/** The CLI writes a local command's output to the transcript as a replayed user message. */
+function isClaudeLocalCommandStdout(message: SDKMessage): message is SDKUserMessageReplay {
+  return (
+    message.type === "user" &&
+    "isReplay" in message &&
+    message.isReplay === true &&
+    message.parent_tool_use_id === null &&
+    typeof message.message.content === "string" &&
+    message.message.content.startsWith(CLAUDE_LOCAL_COMMAND_STDOUT)
+  );
+}
+
 const providerGoalsEqual = Schema.toEquivalence(Schema.NullOr(OrchestrationV2ProviderGoal));
 
 function normalizeClaudeResultText(text: string): string {
@@ -1979,6 +1994,12 @@ function makeProviderThread(input: {
 const decodeClaudeTranscriptLine = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ type: Schema.String })),
 );
+const decodeClaudeTranscriptParent = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ parentUuid: Schema.NullOr(Schema.String) })),
+);
+// Transcript lines are compact JSON, so these cannot match text quoted inside a message.
+const CLAUDE_STDOUT_ENTRY = `"content":"${CLAUDE_LOCAL_COMMAND_STDOUT}`;
+const CLAUDE_COMPACT_BOUNDARY_ENTRY = `"subtype":"compact_boundary"`;
 
 const isClaudeConversationLine = (line: string): boolean =>
   Option.match(decodeClaudeTranscriptLine(line), {
@@ -4131,6 +4152,7 @@ interface ActiveClaudeTurnContext {
   readonly toolCalls: Map<string, ActiveClaudeToolCall>;
   // A successful status can precede the boundary that supplies its token counts.
   compaction: Extract<OrchestrationV2TurnItem, { type: "compaction" }> | null;
+  compacted: boolean;
   readonly ignoredTaskIds: Set<string>;
   readonly announcedUsageLimits: Set<string>;
   authenticationFailureMessage: string | undefined;
@@ -8595,6 +8617,13 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             }
           }
 
+          // A /compact sends no assistant message, so its stdout is the last entry the stream names
+          // for the turn. The boundary sits before the summary and the summary before the messages
+          // the compaction kept, so resuming at either would lose them.
+          if (context.compacted && isClaudeLocalCommandStdout(message)) {
+            context.nativeMessageCursor = message.uuid;
+          }
+
           if (
             message.type === "system" &&
             message.subtype === "status" &&
@@ -8757,6 +8786,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               },
             });
             context.compaction = null;
+            context.compacted = true;
             return;
           }
 
@@ -10611,6 +10641,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               streamUsage: null,
               toolCalls: new Map(),
               compaction: null,
+              compacted: false,
               ignoredTaskIds: new Set(),
               announcedUsageLimits: new Set(),
               authenticationFailureMessage: undefined,
@@ -11119,8 +11150,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
         });
         yield* Effect.addFinalizer(() => closeSession());
 
-        // Metadata-only transcripts cannot be resumed or recreated; fail resumeThread to trigger a fresh session and handoff.
-        const hasEmptyClaudeTranscript = Effect.fn("ClaudeAdapterV2.hasEmptyClaudeTranscript")(
+        const claudeTranscriptCopies = Effect.fn("ClaudeAdapterV2.claudeTranscriptCopies")(
           function* (nativeThreadId: string) {
             const configuredDir = adapterOptions.environment.CLAUDE_CONFIG_DIR?.trim() ?? "";
             const projectsDir = path.join(
@@ -11129,16 +11159,26 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                 : path.join(yield* HostProcess.HomeDirectory, ".claude"),
               "projects",
             );
-            // Any message in any transcript copy means Claude may still resume it.
-            let found = false;
+            const copies: Array<string> = [];
             for (const project of yield* fileSystem.readDirectory(projectsDir)) {
               const transcriptPath = path.join(projectsDir, project, `${nativeThreadId}.jsonl`);
               // Stray files beside the project dirs fail with ENOTDIR.
               if (
-                !(yield* fileSystem.exists(transcriptPath).pipe(Effect.orElseSucceed(() => false)))
+                yield* fileSystem.exists(transcriptPath).pipe(Effect.orElseSucceed(() => false))
               ) {
-                continue;
+                copies.push(transcriptPath);
               }
+            }
+            return copies;
+          },
+        );
+
+        // Metadata-only transcripts cannot be resumed or recreated; fail resumeThread to trigger a fresh session and handoff.
+        const hasEmptyClaudeTranscript = Effect.fn("ClaudeAdapterV2.hasEmptyClaudeTranscript")(
+          function* (nativeThreadId: string) {
+            // Any message in any transcript copy means Claude may still resume it.
+            let found = false;
+            for (const transcriptPath of yield* claudeTranscriptCopies(nativeThreadId)) {
               const conversationLine = yield* fileSystem
                 .stream(transcriptPath)
                 .pipe(
@@ -11154,6 +11194,72 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             }
             return found;
           },
+        );
+
+        const readClaudeChain = (nativeThreadId: string) =>
+          queryRunner
+            .sessionMessageIds({
+              sessionId: nativeThreadId,
+              ...(input.runtimePolicy.cwd === null ? {} : { dir: input.runtimePolicy.cwd }),
+              environment: adapterOptions.environment,
+            })
+            .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+
+        /**
+         * A compaction restores files, skills and hook context after its stdout. Neither the stream
+         * nor the SDK's session read names those entries, but the next message on the chain hangs
+         * off the last one. Null means nothing follows, so nothing needs dropping.
+         */
+        const claudeResumePoint = Effect.fn("ClaudeAdapterV2.claudeResumePoint")(
+          function* ({
+            nativeThreadId,
+            messageId,
+            chain,
+          }: {
+            readonly nativeThreadId: string;
+            readonly messageId: string;
+            readonly chain: ReadonlyArray<string>;
+          }) {
+            const index = chain.indexOf(messageId);
+            if (index < 0) return messageId;
+            const target = `"uuid":"${messageId}"`;
+            const nextId = chain[index + 1];
+            const next = nextId === undefined ? undefined : `"uuid":"${nextId}"`;
+            for (const transcriptPath of yield* claudeTranscriptCopies(nativeThreadId)) {
+              const lines = yield* fileSystem.stream(transcriptPath).pipe(
+                Stream.decodeText,
+                Stream.splitLines,
+                Stream.filter(
+                  (line) =>
+                    line.includes(target) ||
+                    (next !== undefined && line.includes(next)) ||
+                    line.includes(CLAUDE_COMPACT_BOUNDARY_ENTRY),
+                ),
+                // Only a stdout needs the rest of the file.
+                Stream.takeUntil(
+                  (line) => line.includes(target) && !line.includes(CLAUDE_STDOUT_ENTRY),
+                ),
+                Stream.runCollect,
+              );
+              const targetLine = lines.find((line) => line.includes(target));
+              if (targetLine === undefined) continue;
+              if (!targetLine.includes(CLAUDE_STDOUT_ENTRY)) return messageId;
+              const after = lines.slice(lines.indexOf(targetLine) + 1);
+              // A later compaction relinks what it keeps on load, so a parent in the file can be off
+              // the chain, and a head off the chain fails every later turn.
+              if (after.some((line) => line.includes(CLAUDE_COMPACT_BOUNDARY_ENTRY))) {
+                return messageId;
+              }
+              if (next === undefined) return null;
+              const nextLine = after.find((line) => line.includes(next));
+              return nextLine === undefined
+                ? messageId
+                : (Option.getOrNull(decodeClaudeTranscriptParent(nextLine))?.parentUuid ??
+                    messageId);
+            }
+            return messageId;
+          },
+          (effect, { messageId }) => effect.pipe(Effect.orElseSucceed(() => messageId)),
         );
 
         const runtime: ProviderAdapter.ProviderAdapterV2SessionRuntime = {
@@ -11481,26 +11587,30 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
 
               const nativeThreadId = yield* getNativeThreadId(rollbackInput.providerThread);
               const resumeSessionAt = yield* resolveClaudeRollbackResumeSessionAt(rollbackInput);
-              if (resumeSessionAt !== null) {
-                // Claude resumes only at a message on the session's chain, and a compaction cuts
-                // older ones off it. A head pinned to one of those fails every later turn.
-                const chain = yield* queryRunner
-                  .sessionMessageIds({
-                    sessionId: nativeThreadId,
-                    ...(input.runtimePolicy.cwd === null ? {} : { dir: input.runtimePolicy.cwd }),
-                    environment: adapterOptions.environment,
-                  })
-                  .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
-                if (chain.length > 0 && !chain.includes(resumeSessionAt)) {
-                  return yield* new ProviderAdapter.ProviderAdapterRollbackThreadError({
-                    driver: CLAUDE_PROVIDER,
-                    providerThreadId: rollbackInput.providerThread.id,
-                    refusal: CLAUDE_REWIND_PAST_COMPACTION_REFUSAL,
-                    cause: `Cannot roll back Claude thread ${rollbackInput.providerThread.id}: message ${resumeSessionAt} is not on the chain of session ${nativeThreadId}.`,
-                  });
-                }
+              const chain = resumeSessionAt === null ? [] : yield* readClaudeChain(nativeThreadId);
+              // Claude resumes only at a message on the session's chain, and a compaction cuts
+              // older ones off it. A head pinned to one of those fails every later turn.
+              if (
+                resumeSessionAt !== null &&
+                chain.length > 0 &&
+                !chain.includes(resumeSessionAt)
+              ) {
+                return yield* new ProviderAdapter.ProviderAdapterRollbackThreadError({
+                  driver: CLAUDE_PROVIDER,
+                  providerThreadId: rollbackInput.providerThread.id,
+                  refusal: CLAUDE_REWIND_PAST_COMPACTION_REFUSAL,
+                  cause: `Cannot roll back Claude thread ${rollbackInput.providerThread.id}: message ${resumeSessionAt} is not on the chain of session ${nativeThreadId}.`,
+                });
               }
               yield* closeLiveQueryForNativeThread(nativeThreadId);
+              const conversationHead =
+                resumeSessionAt === null
+                  ? null
+                  : yield* claudeResumePoint({
+                      nativeThreadId,
+                      messageId: resumeSessionAt,
+                      chain,
+                    });
               const now = yield* DateTime.now;
 
               if (rollbackInput.target.type === "thread_start" && resumeSessionAt === null) {
@@ -11534,11 +11644,11 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                   ...rollbackInput.providerThread,
                   providerSessionId: input.providerSessionId,
                   nativeConversationHeadRef:
-                    resumeSessionAt === null
+                    conversationHead === null
                       ? null
                       : {
                           driver: CLAUDE_PROVIDER,
-                          nativeId: resumeSessionAt,
+                          nativeId: conversationHead,
                           strength: "weak" as const,
                         },
                   status: "idle" as const,
@@ -11576,9 +11686,17 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               const sourceNativeThreadId = yield* getNativeThreadId(forkInput.sourceProviderThread);
               yield* closeLiveQueryForNativeThread(sourceNativeThreadId);
               const upToMessageId = yield* resolveClaudeForkUpToMessageId(forkInput);
+              const forkPoint =
+                upToMessageId === undefined
+                  ? null
+                  : yield* claudeResumePoint({
+                      nativeThreadId: sourceNativeThreadId,
+                      messageId: upToMessageId,
+                      chain: yield* readClaudeChain(sourceNativeThreadId),
+                    });
               const forkOptions: ForkSessionOptions = {
                 ...(input.runtimePolicy.cwd === null ? {} : { dir: input.runtimePolicy.cwd }),
-                ...(upToMessageId === undefined ? {} : { upToMessageId }),
+                ...(forkPoint === null ? {} : { upToMessageId: forkPoint }),
               };
               const forked = yield* queryRunner.forkSession({
                 sessionId: sourceNativeThreadId,

@@ -1,8 +1,7 @@
 /**
  * The facts Settings › Overview and the navigation's "to finish" badge are told from, read from the
- * queries the settings pages already use (no request of its own): the Hub's status, Slack's admin
- * and member views, the webhooks, GitHub's checks, the gateway and the person's plans for the
- * workspace the area has open, and source control, the providers, the browser and device settings of
+ * queries the settings pages already use (no request of its own): the Hub's status, GitHub's
+ * checks, the gateway and the person's plans for the workspace the area has open, and source control, the providers, the browser and device settings of
  * this computer. Queries are only asked for what the person may see: an admin's for admins.
  */
 import { getAt, planLabel } from "@t3tools/client-runtime/peer-settings";

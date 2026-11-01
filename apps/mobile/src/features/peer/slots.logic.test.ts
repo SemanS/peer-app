@@ -126,17 +126,17 @@ it("keeps a plugin's task views out of older, disabled and forced-off environmen
 });
 
 it("keeps plans task views out of older, disabled and forced-off environments", () => {
-  const registry = [...REGISTRY, { id: "plans" }];
-  expect(ids(selectPeerPlugins(registry, status([plugin("plans")])))).toEqual(["plans"]);
+  const registry = [...REGISTRY, { id: "agreements" }];
+  expect(ids(selectPeerPlugins(registry, status([plugin("agreements")])))).toEqual(["agreements"]);
   for (const reason of ["off", "hub", "PEER_AGREEMENTS=off"]) {
     expect(
       ids(
         selectPeerPlugins(
           registry,
-          status([{ ...plugin("plans", false), enabled: reason === "hub", reason }]),
+          status([{ ...plugin("agreements", false), enabled: reason === "hub", reason }]),
         ),
       ),
-    ).not.toContain("plans");
+    ).not.toContain("agreements");
   }
-  expect(ids(selectPeerPlugins(registry, status()))).not.toContain("plans");
+  expect(ids(selectPeerPlugins(registry, status()))).not.toContain("agreements");
 });

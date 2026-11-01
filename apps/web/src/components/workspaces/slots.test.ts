@@ -30,7 +30,6 @@ describe("the web plugin registry", () => {
       "capacity",
       "requests",
       "observe",
-      "knowledge",
       "audit",
       "tool-trust",
       "mcp",

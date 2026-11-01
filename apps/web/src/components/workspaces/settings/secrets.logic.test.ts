@@ -150,47 +150,6 @@ describe("what a row says", () => {
   });
 });
 
-describe("the secrets Slack stores itself", () => {
-  const slack: PeerSettingsSecretsView = {
-    secrets: [
-      { name: "slack-bot-token", at: "2026-10-05T09:30:00Z", by: slavo, usedBy: [] },
-      { name: "slack-signing-secret", at: "2026-10-05T09:30:00Z", by: slavo, usedBy: [] },
-      { name: "OLD_JIRA_HOOK", at: "2026-08-12T08:00:00Z", by: null, usedBy: [] },
-    ],
-    missing: [],
-  };
-
-  it("are used by Slack although the Hub, which lists only what the settings name, says nothing", () => {
-    const rows = secretRows(slack, options);
-    expect(rows.map((row) => [row.name, row.uses])).toEqual([
-      ["slack-bot-token", ["Slack · bot token"]],
-      ["slack-signing-secret", ["Slack · signing secret"]],
-      ["OLD_JIRA_HOOK", []],
-    ]);
-  });
-
-  it("say that Slack stops when one goes, and ask for Delete anyway", () => {
-    const [token] = secretRows(slack, options);
-    expect(deleteWords({ name: token?.name ?? "", uses: token?.uses ?? [] }, "Acme")).toMatchObject(
-      {
-        nothing: null,
-        confirm: "Delete anyway",
-        impacts: [
-          { use: "Slack · bot token", impact: "Slack stops until its tokens are stored again." },
-        ],
-      },
-    );
-  });
-
-  it("keep what the Hub says when it names a use", () => {
-    const told: PeerSettingsSecretsView = {
-      secrets: [{ name: "slack-bot-token", at: null, usedBy: ["Slack conversations of Acme"] }],
-      missing: [],
-    };
-    expect(secretRows(told, options)[0]?.uses).toEqual(["Slack conversations of Acme"]);
-  });
-});
-
 describe("what stops when a secret goes", () => {
   it.each([
     [
@@ -198,12 +157,6 @@ describe("what stops when a secret goes", () => {
       "Shared capacity turns off for all of Acme until a new key is set.",
     ],
     ["GitHub PR checks", "GitHub’s deliveries will fail, so PR checks stop."],
-    ["Webhook “Ops” · signature", "Webhook “Ops” pauses until it has a signing key again."],
-    [
-      "Webhook “Teams alerts” · off until set",
-      "Webhook “Teams alerts” stops delivering until its URL is set again.",
-    ],
-    ["Slack · bot token", "Slack stops until its tokens are stored again."],
     ["The nightly export", "The nightly export stops working until the secret is set again."],
   ])("says of %j: %s", (use, impact) => {
     expect(impactOf(use, "Acme")).toBe(impact);
@@ -222,7 +175,7 @@ describe("what stops when a secret goes", () => {
     const words = deleteWords(
       {
         name: "ops-url",
-        uses: ["Webhook “Ops” · signature", "Webhook “Team Slack”"],
+        uses: ["Shared capacity · the gateway", "The nightly export"],
       },
       "Acme",
     );
@@ -231,12 +184,12 @@ describe("what stops when a secret goes", () => {
     expect(words.confirm).toBe("Delete anyway");
     expect(words.impacts).toEqual([
       {
-        use: "Webhook “Ops” · signature",
-        impact: "Webhook “Ops” pauses until it has a signing key again.",
+        use: "Shared capacity · the gateway",
+        impact: "Shared capacity turns off for all of Acme until a new key is set.",
       },
       {
-        use: "Webhook “Team Slack”",
-        impact: "Webhook “Team Slack” stops delivering until its URL is set again.",
+        use: "The nightly export",
+        impact: "The nightly export stops working until the secret is set again.",
       },
     ]);
   });

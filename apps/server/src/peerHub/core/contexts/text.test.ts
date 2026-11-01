@@ -353,7 +353,6 @@ describe("working context", () => {
   });
 
   it("tells the keeper of a closed task that it is done", () => {
-    // The project's guidance on what to mark is the knowledge plugin's (`projectGuidanceText`).
     assert.include(closeOutText("KRK-335 · DNS errors"), "KRK-335 · DNS errors is done");
   });
 

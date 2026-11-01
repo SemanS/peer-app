@@ -113,13 +113,6 @@ export function NameField({
   );
 }
 
-/** The knowledge store's three fields as the page shows them. */
-export interface KnowledgeFieldValues {
-  readonly repository: string;
-  readonly branch: string;
-  readonly store: string;
-}
-
 /**
  * The rows the shell moved here from the Workspaces page: what configuration is applied, where the
  * workspace's projects live on this computer, why the last refresh failed (if it did), the rows

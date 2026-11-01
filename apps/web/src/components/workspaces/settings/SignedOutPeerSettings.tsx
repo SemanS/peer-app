@@ -25,7 +25,7 @@ export function SignedOutPeerSettings({
         <SettingsRow
           id="connect-peer-hub"
           title="Connect Peer Hub"
-          description="See your organizations and invitations, and share projects, coordination and knowledge across your team’s computers. Hosted Hub is free for two people with unlimited interactions; larger teams need a Team entitlement."
+          description="See your organizations and invitations, and share projects and coordination across your team’s computers. Hosted Hub is free for two people with unlimited interactions; larger teams need a Team entitlement."
         >
           <div className="max-w-md pb-3">
             <WorkspaceSignIn environmentId={environmentId} status={status} />

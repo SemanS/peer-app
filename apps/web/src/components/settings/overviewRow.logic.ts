@@ -55,9 +55,9 @@ export interface OverviewAction {
 export interface OverviewRow {
   readonly id: string;
   readonly group: OverviewGroupId;
-  /** What the list calls it: "Slack conversations". */
+  /** What the list calls it: "GitHub PR checks". */
   readonly name: string;
-  /** What a sentence calls it: "Slack for Webinson". */
+  /** What a sentence calls it: "GitHub PR checks for Webinson". */
   readonly subject: string;
   readonly connection: ConnectionView;
   /** The account the detail is about (a hosting tool's), shown hidden until revealed. */

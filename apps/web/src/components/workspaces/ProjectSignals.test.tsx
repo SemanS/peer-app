@@ -36,7 +36,7 @@ function words(node: ReactTestInstance): string {
 
 async function show(
   activeThread: string | null,
-  plugins = [plugin("team", null), plugin("memory", null)],
+  plugins = [plugin("team", null), plugin("audit", null)],
 ) {
   await act(async () => {
     renderer = create(
@@ -69,7 +69,7 @@ describe("a project's signal tiles", () => {
   it("marks none while another page is open, or in another project", async () => {
     for (const open of [
       null,
-      "knowledge:acme:ordering",
+      "changes:acme:ordering",
       "team:acme:billing",
       "team:other:ordering",
     ]) {

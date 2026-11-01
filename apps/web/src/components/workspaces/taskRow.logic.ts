@@ -35,7 +35,7 @@ export function taskRowTarget(task: WorkTaskNode, scope: RowScope): TaskRowTarge
 
 /**
  * The route key a task's page highlights its row by, the way `useWorkData` names the routes the
- * sidebar highlights (`knowledge:…`, `context:…`).
+ * sidebar highlights (`team:…`, `context:…`).
  */
 export function taskRouteKey(scope: RowScope, taskId: string): string {
   return `task:${scope.workspace}:${scope.projectId}:${taskId}`;

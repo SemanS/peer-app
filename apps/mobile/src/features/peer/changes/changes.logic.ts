@@ -84,7 +84,7 @@ export interface PhoneChangeRow {
   readonly line: string;
 }
 
-/** The state words of a row. They state what is, never what a forecast expects. */
+/** The state words of a row. They state what is, never what may come. */
 const STATE_WORDS: Readonly<Record<string, string>> = {
   working: "working",
   review: "waits for your review",

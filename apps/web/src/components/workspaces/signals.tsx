@@ -5,8 +5,8 @@
  * - needs: waits on a person (approval, answer, request) — amber
  * - working: an agent runs — blue
  * - delivery: finished work, review, pull requests — green
- * - coordination: agent ↔ agent (overlaps, held resources, predicted conflicts) — orange
- * - knowledge: task context, knowledge to keep, memory — violet
+ * - coordination: agent ↔ agent (overlaps, held resources) — orange
+ * - knowledge: task context — violet
  * - team: team ↔ agents (announcements, requests, watching) — teal
  */
 import { projectColor } from "@t3tools/client-runtime/peer/work";

@@ -9,7 +9,7 @@
  * for such a Hub a row is only there where one of those says something true.
  *
  * Each feature is told in the status language (`ConnectionStatus`): the Hub serves it (Connected, or
- * what the workspace still has to do for Slack and GitHub's checks), its operator turned it off or
+ * what the workspace still has to do for GitHub's checks), its operator turned it off or
  * the Hub is too old (Not available), or this computer's owner turned its plugin off (Off).
  */
 import { getAt } from "@t3tools/client-runtime/peer-settings";
@@ -153,16 +153,6 @@ const FEATURES: ReadonlyArray<Feature> = [
     },
   },
   {
-    id: "knowledge",
-    name: "Knowledge",
-    without: "plugin",
-    words: {
-      on: "What agents find becomes knowledge the team reviews and keeps.",
-      off: "What agents find isn’t kept as team knowledge: this Hub doesn’t run it.",
-      newer: "What agents find isn’t kept as team knowledge until the Hub is updated.",
-    },
-  },
-  {
     id: "handoff",
     name: "Handoff for review",
     without: "plugin",
@@ -223,8 +213,8 @@ export type ConnectedFeature = "github";
 
 /**
  * What the workspace's own connection says of the features that have one, by the feature's id:
- * the status language's view of Slack and of GitHub's checks, as the Integrations page and
- * Settings › Overview tell them. A feature without an entry says only what the Hub does.
+ * the status language's view of GitHub's checks, as Settings › Overview tells it. A feature without
+ * an entry says only what the Hub does.
  */
 export type FeatureConnections = Readonly<Partial<Record<ConnectedFeature, ConnectionView>>>;
 
@@ -374,7 +364,7 @@ export function hubFeatureRows(input: {
   readonly flags: PeerSettingsView["features"] | null;
   /** The projects that have path rules, by name. */
   readonly pathRuleProjects: ReadonlyArray<string>;
-  /** What the workspace's own connection says of Slack and GitHub's checks, once read. */
+  /** What the workspace's own connection says of GitHub's checks, once read. */
   readonly connections?: FeatureConnections | undefined;
 }): ReadonlyArray<FeatureRow> {
   const plugins = input.plugins ?? [];

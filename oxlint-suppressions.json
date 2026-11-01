@@ -1581,9 +1581,6 @@
     }
   },
   "apps/web/src/components/settings/useOverviewFacts.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
     "t3code/no-unreasoned-state-sync": {
       "count": 1
     }
@@ -2208,7 +2205,7 @@
   },
   "apps/web/src/components/workspaces/settings/settingsView.logic.ts": {
     "t3code/no-low-value-comments": {
-      "count": 2
+      "count": 1
     }
   },
   "apps/web/src/components/workspaces/settings/shared.logic.ts": {

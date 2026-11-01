@@ -210,7 +210,7 @@ describe("the broker's hooks", () => {
         active: [
           {
             id: "observe",
-            title: "Knowledge",
+            title: "Observe",
             contributions: {
               hooks: { preCompact: () => Effect.succeed("Keep the price invariant.") },
             },

@@ -1473,7 +1473,7 @@ export interface PeerSearchItem {
   readonly id: string;
   readonly title: string;
   readonly directAction?: boolean;
-  /** Where it lives, as the result writes it: ["Workspace", "Integrations", "Slack"]. */
+  /** Where it lives, as the result writes it: ["Workspace", "General", "GitHub"]. */
   readonly path: ReadonlyArray<string>;
   readonly location: PeerSettingsLocation;
   /** The part of the page to scroll to. */
@@ -1491,7 +1491,7 @@ export type SettingsSearchEntry = SettingsSearchItem | PeerSearchItem;
 export const isPeerSearchItem = (entry: SettingsSearchEntry): entry is PeerSearchItem =>
   "location" in entry;
 
-/** Where an entry lives, as its result writes it: "Workspace › Integrations › Slack". */
+/** Where an entry lives, as its result writes it: "Workspace › General › GitHub". */
 export function searchEntryPath(entry: SettingsSearchEntry): string {
   return (isPeerSearchItem(entry) ? entry.path : settingsPagePath(entry.to)).join(" › ");
 }

@@ -144,7 +144,7 @@ export function PeerSettingsAccount({
           <PeerDialogHeader
             icon={UsersIcon}
             title="Join or create a workspace"
-            description="Workspaces share projects, tools, knowledge and AI capacity."
+            description="Workspaces share projects, tools and AI capacity."
           />
           <PeerDialogBody>
             <WorkspacePicker

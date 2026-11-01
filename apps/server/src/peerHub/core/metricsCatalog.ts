@@ -275,7 +275,6 @@ export const CATALOG = defineEvents({
   "jujutsu.undo": ev({ operations: "count", outcome: { enum: ["done", "refused", "conflict"] } }),
   // Changes: how many changes a report held, never which, whose or what they said.
   "changes.reported": ev({ changes: "count", ms: "ms" }),
-  // Forecast's Jujutsu sources: work shared as refs and the merge checks run on it, in counts.
   // Agreements: how much of an agreement an agent was told (its size, never its words), that one
   // fell due, and how one closed; never which one, between which tasks, or whose.
   "agreements.told": ev({ chars: "count" }),

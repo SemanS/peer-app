@@ -266,9 +266,9 @@ export function TaskBriefSection({ brief }: { readonly brief: TaskBrief }) {
 
 /**
  * What the work on this task learned: the context every agent on it reads and what they found for
- * it. Project-wide knowledge has the sidebar's Knowledge tab.
+ * it.
  */
-export function TaskKnowledgeSection({
+export function TaskContextSection({
   card,
   findings,
   onOpen,
@@ -278,8 +278,8 @@ export function TaskKnowledgeSection({
   readonly onOpen: () => void;
 }) {
   return (
-    <section aria-label="Knowledge" className="flex flex-col gap-2.5">
-      <PeerSectionLabel>Knowledge</PeerSectionLabel>
+    <section aria-label="Context" className="flex flex-col gap-2.5">
+      <PeerSectionLabel>Context</PeerSectionLabel>
       {findings.length === 0 ? null : (
         <ul className="flex flex-col gap-2">
           {findings.map((finding) => (

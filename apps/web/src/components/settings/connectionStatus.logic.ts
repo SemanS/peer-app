@@ -1,6 +1,6 @@
 /**
- * One status language for everything Peer connects to — the Hub and its features, Slack, GitHub
- * checks, webhooks, plugins, source control and providers. A connection answers three questions in
+ * One status language for everything Peer connects to — the Hub and its features, GitHub checks,
+ * plugins, source control and providers. A connection answers three questions in
  * order: is it available here, is it turned on, is it connected? Its state is the first question
  * without a yes, or a problem with something that used to work.
  */

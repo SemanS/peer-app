@@ -36,7 +36,7 @@ export interface NeedsYouSlotProps extends PeerSlotProps {
 
 export interface ProjectSlotProps extends PeerSlotProps {
   readonly project: WorkProjectNode;
-  /** The route the sidebar highlights, in `workTree` terms (`knowledge:<workspace>:<project>`). */
+  /** The route the sidebar highlights, in `workTree` terms (`team:<workspace>:<project>`). */
   readonly activeThread: string | null;
 }
 
@@ -185,7 +185,7 @@ export interface ProjectSignal {
   readonly navRow?: ProjectNavRow;
 }
 
-/** A navigation row a plugin adds to an open project, beside Knowledge, Activity and Pull requests. */
+/** A navigation row a plugin adds to an open project, beside Activity and Pull requests. */
 export interface ProjectNavRow {
   readonly label: string;
   readonly icon: LucideIcon;

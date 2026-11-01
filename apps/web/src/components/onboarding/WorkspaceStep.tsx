@@ -58,7 +58,7 @@ export function WorkspaceStep({
       <>
         <Heading
           title="Join your team"
-          description="Sign in with your work email to join your team’s workspace or create one. A workspace shares projects, agent tools, knowledge and API capacity."
+          description="Sign in with your work email to join your team’s workspace or create one. A workspace shares projects, agent tools and API capacity."
         />
         <div className="mt-5">
           <WorkspaceSignIn environmentId={environmentId} status={status} />
@@ -176,7 +176,7 @@ function ProjectsToOpen({
         description={[
           byDomain && !leads ? `Your @${domain} address got you in.` : null,
           candidates.length > 0
-            ? "Pick the projects to clone to this computer. They open in the sidebar with their tools and knowledge."
+            ? "Pick the projects to clone to this computer. They open in the sidebar with their tools."
             : leads
               ? "Add your first project next, then share it with your team."
               : "Your workspaces list no projects with repositories for you yet. A lead adds you to projects; they appear in Settings → Peer.",

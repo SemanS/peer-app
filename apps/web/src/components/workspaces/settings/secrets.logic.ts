@@ -12,17 +12,6 @@ export const SECRETS_DESCRIPTION =
 /** What a secret that nothing refers to says in the "Used by" column. */
 export const NOTHING_USES_IT = "Nothing uses it";
 
-/**
- * The two secrets the Hub's Slack feature stores itself, and the use the table names for each. The
- * Hub lists what the settings name a secret for, and the settings name neither, so it says nothing
- * of them while Slack stops without them: a deletion would read "nothing stops". What the Hub does
- * say of one of them is told as it is.
- */
-const SLACK_USES: Readonly<Record<string, string>> = {
-  "slack-bot-token": "Slack · bot token",
-  "slack-signing-secret": "Slack · signing secret",
-};
-
 /** The longest value the Hub seals. */
 export const SECRET_VALUE_MAX = 8_192;
 
@@ -39,11 +28,6 @@ export interface SecretRow {
 }
 
 const compareNames = (a: SecretRow, b: SecretRow) => a.name.localeCompare(b.name);
-
-const slackUse = (name: string): ReadonlyArray<string> => {
-  const use = SLACK_USES[name];
-  return use === undefined ? [] : [use];
-};
 
 /**
  * "2 Oct", and "2 Oct 2025" for another year than `now`'s, in English whatever the host's locale
@@ -92,7 +76,7 @@ export function secretRows(
   const stored: SecretRow[] = view.secrets.map((secret) => ({
     name: secret.name,
     stored: true,
-    uses: secret.usedBy.length > 0 ? secret.usedBy : slackUse(secret.name),
+    uses: secret.usedBy,
     when: storedDate(secret.at, {
       now,
       ...(options.timeZone === undefined ? {} : { timeZone: options.timeZone }),
@@ -148,14 +132,6 @@ export function impactOf(use: string, workspaceName: string): string {
     return `Shared capacity turns off for all of ${workspaceName} until a new key is set.`;
   }
   if (/^GitHub/i.test(use)) return "GitHub’s deliveries will fail, so PR checks stop.";
-  const webhook = /^Webhook [“"]([^”"]+)[”"]/.exec(use);
-  if (webhook !== null) {
-    const name = webhook[1] ?? "";
-    return /signature|signing/i.test(use)
-      ? `Webhook “${name}” pauses until it has a signing key again.`
-      : `Webhook “${name}” stops delivering until its URL is set again.`;
-  }
-  if (/^Slack/i.test(use)) return "Slack stops until its tokens are stored again.";
   return `${use} stops working until the secret is set again.`;
 }
 

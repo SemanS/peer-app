@@ -22,8 +22,8 @@ export interface ProposalPage {
 
 /**
  * The proposals a page shows: a project's pages those that touch the project, a workspace's own
- * pages those that touch the workspace, AI subscriptions those that touch the person. Keys, Slack
- * and the computer's pages have no settings to propose changes to.
+ * pages those that touch the workspace, AI subscriptions those that touch the person. Keys and the
+ * computer's pages have no settings to propose changes to.
  */
 export function proposalPageOf(
   location: PeerSettingsLocation | null,

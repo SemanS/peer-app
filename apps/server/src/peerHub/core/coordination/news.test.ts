@@ -191,7 +191,6 @@ describe("the project's other work", () => {
     assert.include(text, "Other work on this project:\n- KRK-812 · Split payments");
     assert.include(text, `peer ask <task> "<question>"`);
     assert.include(text, `peer index`);
-    assert.include(text, `peer knowledge [<id or words>]`);
     assert.notInclude(text, "You hold:");
     assert.notInclude(text, "Your task");
     const held = statusText({
@@ -235,7 +234,6 @@ describe("the project's other work", () => {
       "Choose relevant inputs yourself, even when your person did not mention another agent. Within your own task",
     );
     assert.include(start, "Ask an available agent through peer note;");
-    assert.notInclude(start, "peer knowledge");
     assert.notInclude(start, "peer ask");
     assert.notInclude(start, "Outcomes:");
     const status = statusText({

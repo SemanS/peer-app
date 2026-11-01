@@ -21,7 +21,7 @@ describe("the Changes row in a project's navigation", () => {
 
   it("is marked while the Changes page is open and not on another page", () => {
     expect(signal?.navRow?.active?.("changes:acme:ordering")).toBe(true);
-    expect(signal?.navRow?.active?.("knowledge:acme:ordering")).toBe(false);
+    expect(signal?.navRow?.active?.("team:acme:ordering")).toBe(false);
     expect(signal?.navRow?.active?.(null)).toBe(false);
   });
 

@@ -48,7 +48,7 @@ import {
   TaskBriefSection,
   TaskDetails,
   TaskItems,
-  TaskKnowledgeSection,
+  TaskContextSection,
   WaitsOnYou,
 } from "./TaskSections";
 import { hasBrief, taskBrief } from "./taskBrief.logic";
@@ -60,7 +60,7 @@ export const TASK_PAGE_SECTIONS: ReadonlySet<string> = new Set(["handoff", "depe
 /**
  * A task's page, which its title opens, and the one place for all that belongs to it: its state and
  * what waits on the person, its brief, its runs (and chats no run covers; a colleague's can only be
- * asked about), handoff, dependencies, tests, knowledge, what lately happened, and the details
+ * asked about), handoff, dependencies, tests, its context, what lately happened, and the details
  * behind a fold. The primary action follows the state. A task with items lists them, and an
  * agent started on a group (or a task worked by its parts) gets its open items; an item nobody
  * decided how to run asks that first and starts nothing.
@@ -490,7 +490,7 @@ function TaskBody({
             {plugins.map(({ id, taskSections: Section }) =>
               Section === undefined ? null : <Section key={id} {...slot} />,
             )}
-            <TaskKnowledgeSection
+            <TaskContextSection
               card={model.context}
               findings={taskNode.context?.reports ?? []}
               onOpen={openContext}

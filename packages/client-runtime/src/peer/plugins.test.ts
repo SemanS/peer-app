@@ -57,11 +57,11 @@ describe("activePlugin", () => {
     const listed = status([
       plugin("requests"),
       plugin("observe", { enabled: false, active: false, reason: "off" }),
-      plugin("knowledge", { active: false, reason: "hub" }),
+      plugin("roles", { active: false, reason: "hub" }),
     ]);
     expect(activePlugin(listed, "requests")).toBe(true);
     expect(activePlugin(listed, "observe")).toBe(false);
-    expect(activePlugin(listed, "knowledge")).toBe(false);
+    expect(activePlugin(listed, "roles")).toBe(false);
     // Not in the list: the environment does not have it.
     expect(activePlugin(listed, "herdr")).toBe(false);
   });
@@ -77,24 +77,24 @@ describe("inactivePluginReason", () => {
     const listed = status([
       plugin("requests"),
       plugin("observe", { enabled: false, active: false, reason: "off" }),
-      plugin("knowledge", { active: false, reason: "hub" }),
+      plugin("roles", { active: false, reason: "hub" }),
     ]);
     expect(inactivePluginReason(listed, "requests")).toBeNull();
     expect(inactivePluginReason(listed, "observe")).toBe("off");
-    expect(inactivePluginReason(listed, "knowledge")).toBe("hub");
+    expect(inactivePluginReason(listed, "roles")).toBe("hub");
     expect(inactivePluginReason(listed, "herdr")).toBe("missing");
     expect(inactivePluginReason(status(), "requests")).toBeNull();
   });
 
   it("waits for a Hub while none has answered, or while nobody is signed in", () => {
-    const unanswered = status([plugin("knowledge", { active: false, reason: "hub-unknown" })]);
-    expect(inactivePluginReason(unanswered, "knowledge")).toBe("waiting");
+    const unanswered = status([plugin("roles", { active: false, reason: "hub-unknown" })]);
+    expect(inactivePluginReason(unanswered, "roles")).toBe("waiting");
     // An environment from before `hub-unknown` says `hub` while signed out, when no Hub can say.
-    const older = status([plugin("knowledge", { active: false, reason: "hub" })]);
-    expect(inactivePluginReason({ ...older, signedIn: false }, "knowledge")).toBe("waiting");
-    expect(inactivePluginReason({ ...older, signedIn: true }, "knowledge")).toBe("hub");
-    const off = status([plugin("knowledge", { enabled: false, active: false, reason: "off" })]);
-    expect(inactivePluginReason({ ...off, signedIn: false }, "knowledge")).toBe("off");
+    const older = status([plugin("roles", { active: false, reason: "hub" })]);
+    expect(inactivePluginReason({ ...older, signedIn: false }, "roles")).toBe("waiting");
+    expect(inactivePluginReason({ ...older, signedIn: true }, "roles")).toBe("hub");
+    const off = status([plugin("roles", { enabled: false, active: false, reason: "off" })]);
+    expect(inactivePluginReason({ ...off, signedIn: false }, "roles")).toBe("off");
   });
 });
 

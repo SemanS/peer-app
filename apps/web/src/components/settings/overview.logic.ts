@@ -5,8 +5,7 @@
  * `overviewSummary` counts what needs attention and names the first thing to finish, for the
  * banner on the page and the badge in the navigation.
  *
- * Admin-only rows (Slack, webhooks, GitHub's checks, shared capacity) are listed for the workspace's
- * admins only, as the navigation lists their pages; a plugin turned off removes its rows.
+ * Admin-only rows (GitHub's checks, shared capacity) are listed for the workspace's admins only, as the navigation lists their pages; a plugin turned off removes its rows.
  */
 import { isWorkspaceAdmin } from "../workspaces/settings/peerSettings.logic";
 import { CHECKING, type ConnectionView } from "./connectionFacts";

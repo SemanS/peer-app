@@ -348,7 +348,7 @@ const SIGNAL_HUES = {
     light: "oklch(0.553 0.195 38.402)",
     dark: "oklch(0.75 0.183 55.934)",
   },
-  // violet: context and knowledge — task context, knowledge to keep, memory
+  // violet: context and knowledge — task context
   "peer-knowledge": {
     base: "oklch(0.606 0.25 292.717)",
     light: "oklch(0.491 0.27 292.581)",

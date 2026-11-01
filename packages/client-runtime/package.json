@@ -585,7 +585,6 @@
     "./peer/resources": "./src/peer/resources.ts",
     "./peer-resources": "./src/peer/resources.ts",
     "./peer/ownership": "./src/peer/ownership.ts",
-    "./peer/roles": "./src/peer/roles.ts",
     "./peer/rooms": "./src/peer/rooms.ts",
     "./peer/runs": "./src/peer/runs.ts"
   },

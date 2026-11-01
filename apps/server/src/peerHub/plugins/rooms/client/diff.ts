@@ -15,7 +15,6 @@ import { PEER_ROOM_DIFF_MAX_BYTES, type PeerRoomDiff } from "@t3tools/contracts"
 import * as Effect from "effect/Effect";
 
 import { run, runOutput, searchPath } from "../../../core/local.ts";
-import { checkoutKind } from "../../../core/vcs.ts";
 import { GIT_ALLOWED_PROTOCOLS, isSafeGitRef } from "../../../gitSafety.ts";
 import { plain } from "../../../peerText.ts";
 
@@ -133,27 +132,7 @@ export const pushedRefs = (threads: DiffInput["threads"], base: string) =>
     .flatMap((thread) => thread.branch ?? [])
     .filter((ref, at, all) => ref !== base && isSafeGitRef(ref) && all.indexOf(ref) === at);
 
-/**
- * The first ref that is on the remote, fetched for a session to start on: its remote branch for
- * git, its bookmark for jj, whose workspace takes a bookmark and fetches it itself.
- */
-export async function changeToReview(cwd: string, refs: ReadonlyArray<string>) {
-  const jj = (await checkoutKind(cwd).catch(() => null))?.kind === "jj";
-  for (const ref of refs) {
-    const fetched = await git(
-      cwd,
-      [...FETCH, `+refs/heads/${ref}:refs/remotes/origin/${ref}`],
-      FETCH_MS,
-    ).then(
-      () => true,
-      () => false,
-    );
-    if (fetched) return { ref, base: jj ? ref : `origin/${ref}` };
-  }
-  return undefined;
-}
-
-/** The newest run that does the task's work here: a review run only reads it. */
+/** The newest run that does the task's work here. */
 export function workRun(input: {
   /** This computer's runs on the task, the open ones first, each kind newest first. */
   readonly runs: ReadonlyArray<{
@@ -162,7 +141,6 @@ export function workRun(input: {
     /** The checkout a launch put it in, while that is still here. */
     readonly root?: string | undefined;
   }>;
-  readonly reviews: ReadonlySet<string>;
   /** The live sessions on the task. */
   readonly sessions: ReadonlyArray<{
     readonly run?: string | undefined;
@@ -173,7 +151,6 @@ export function workRun(input: {
   readonly threads: ReadonlyArray<{ readonly id: string; readonly branch?: string | undefined }>;
 }) {
   for (const run of input.runs) {
-    if (input.reviews.has(run.id)) continue;
     const session = input.sessions.find((candidate) => candidate.run === run.id);
     if (session !== undefined) return { root: session.root, repository: session.repositoryId };
     if (run.root !== undefined) return { root: run.root, repository: undefined };

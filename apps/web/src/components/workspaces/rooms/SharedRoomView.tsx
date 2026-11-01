@@ -249,7 +249,6 @@ export function NewSharedRoom({
         personalHarnesses={state.project.capacity.personalHarnesses}
         line={null}
         paths={null}
-        chat
         toOwnAgent
         prepare={prepare}
         placeholder="Write to your agents or anyone on the projects. @ names a person."

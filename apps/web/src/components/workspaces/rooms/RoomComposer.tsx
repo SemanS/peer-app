@@ -67,7 +67,6 @@ export function RoomComposer({
   paths,
   onDrafting,
   onSent,
-  chat = false,
   toOwnAgent = false,
   prepare,
   placeholder = "Write to the room. @ names a person.",
@@ -85,8 +84,6 @@ export function RoomComposer({
   /** Whether the draft sits on a line, so the diff keeps it lit. */
   readonly onDrafting: (drafting: boolean) => void;
   readonly onSent: (place: RoomPlace) => void;
-  /** The room is a chat: your own agent works there rather than reads. */
-  readonly chat?: boolean;
   /** A message with no one chosen goes to your agent, where this computer can start it. */
   readonly toOwnAgent?: boolean;
   /** Makes the room the first message goes to; fails with the words to show. */
@@ -137,7 +134,7 @@ export function RoomComposer({
     });
   });
 
-  const recipients = recipientsOf(choices, selected, draft.agent, chat, across);
+  const recipients = recipientsOf(choices, selected, draft.agent, across);
   const chosen = chosenKeys({ selected });
   const problem = draftProblem(draft.text, recipients.blocked);
   const ownAgent = choices.find((choice) => choice.kind === "own-agent");

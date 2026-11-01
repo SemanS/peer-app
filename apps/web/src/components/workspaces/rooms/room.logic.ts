@@ -193,7 +193,6 @@ export function recipientsOf(
   choices: ReadonlyArray<RoomTargetChoice>,
   selected: ReadonlyArray<string>,
   agent?: RoomAgentChoice,
-  chat = false,
   /** The projects of a room across a workspace, whose agent works in them all. */
   across: ReadonlyArray<string> = [],
 ): {
@@ -219,7 +218,7 @@ export function recipientsOf(
     notes: chosen.flatMap((choice) => {
       if (carries(choice) && agent !== undefined)
         return [
-          `This starts ${agent.label}${agent.effort === undefined ? "" : ` at ${agent.effort} effort`} on this computer, ${agentStartPlace(chat, across)}, on your capacity.`,
+          `This starts ${agent.label}${agent.effort === undefined ? "" : ` at ${agent.effort} effort`} on this computer, ${agentStartPlace(across)}, on your capacity.`,
         ];
       return choice.note === undefined ? [] : [choice.note];
     }),
@@ -378,20 +377,19 @@ export function withPaths(text: string, paths: ReadonlyArray<string>) {
 
 export interface RunActivity {
   readonly kind: "working" | "delivered" | "stopped";
-  /** "Claude · Implementation", "Codex · Review". */
+  /** "Claude", "Codex". */
   readonly title: string;
   readonly word: string;
   readonly detail: string;
   readonly link: string;
 }
 
-const activityTitle = (agent: string | undefined, review: boolean) =>
-  `${harnessName(agent) ?? agent ?? "Agent"} · ${review ? "Review" : "Implementation"}`;
+const activityTitle = (agent: string | undefined) => harnessName(agent) ?? agent ?? "Agent";
 
 /** A reply the agent went on from: that turn is over, whatever its run does now. */
-export const turnDone = (agent: string | undefined, review: boolean): RunActivity => ({
+export const turnDone = (agent: string | undefined): RunActivity => ({
   kind: "delivered",
-  title: activityTitle(agent, review),
+  title: activityTitle(agent),
   word: "Done",
   detail: "Replied",
   link: "View changes",
@@ -405,12 +403,11 @@ export const turnDone = (agent: string | undefined, review: boolean): RunActivit
 export function runActivity(
   run: Pick<PeerRun, "agent" | "state" | "outcome">,
   input: {
-    readonly review: boolean;
     readonly jujutsu: boolean;
     readonly threadWorking?: boolean | undefined;
   },
 ): RunActivity {
-  const title = activityTitle(run.agent, input.review);
+  const title = activityTitle(run.agent);
   if (run.state === "running" && input.threadWorking === false) {
     return {
       kind: "delivered",
@@ -434,7 +431,7 @@ export function runActivity(
       kind: "delivered",
       title,
       word: "Delivered",
-      detail: input.review ? "Review ready" : "Ready for review",
+      detail: "Ready for review",
       link: "View delivered diff",
     };
   }

@@ -21,7 +21,6 @@ import { HerdrPlugin } from "../plugins/herdr/index.ts";
 import { JujutsuPlugin } from "../plugins/jujutsu/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
 import { OwnershipPlugin } from "../plugins/ownership/index.ts";
-import { RolesPlugin } from "../plugins/roles/index.ts";
 import { RoomsPlugin } from "../plugins/rooms/index.ts";
 import { ToolTrustPlugin } from "../plugins/tool-trust/index.ts";
 import { RequestsPlugin } from "../plugins/requests/index.ts";
@@ -75,7 +74,6 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   OwnershipPlugin,
   AgreementsPlugin,
   ChangesPlugin,
-  RolesPlugin,
   RoomsPlugin,
   SettingsPlugin,
 ];

@@ -148,7 +148,6 @@ function NewChat({
               personalHarnesses={project.capacity.personalHarnesses}
               line={null}
               paths={null}
-              chat
               toOwnAgent
               prepare={prepare}
               placeholder="Write to your agent or anyone on the project. @ names a person."

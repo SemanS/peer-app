@@ -51,7 +51,6 @@ export const KERNEL_FEATURES_OFF = [
   "ownership",
   "requests",
   "resources",
-  "roles",
 ] as const;
 
 /** The plugins outside the kernel that need no Hub feature and have no operator's switch: turned off at each computer. */
@@ -62,7 +61,6 @@ export const KERNEL_PLUGINS_OFF = [
   "github",
   "needs-you",
   "resources",
-  "roles",
   "settle",
 ] as const;
 

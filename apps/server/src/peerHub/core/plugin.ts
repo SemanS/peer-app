@@ -207,7 +207,6 @@ export interface PeerContributions {
   readonly threadReport?: (threadKey: string) => { readonly observable?: boolean };
   readonly taskLauncher?: PeerTaskLauncher;
   readonly requestAcceptor?: PeerRequestAcceptor;
-  readonly reviewStarter?: import("./plugins/PeerReviewStarter.ts").PeerReviewStarter;
   /** Whether this person shares unfinished work on origin: nothing else may push it there. */
   readonly wipSharing?: { readonly on: Effect.Effect<boolean> };
 }

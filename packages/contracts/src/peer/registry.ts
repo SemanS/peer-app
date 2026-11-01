@@ -19,12 +19,10 @@ import * as SchemaValues from "effect/Schema";
 import { PeerNeedsYouStatus } from "./needs-you.ts";
 import { PeerSettleStatus } from "./settle.ts";
 import { PeerSettingsStatus } from "./settings.ts";
-import { PeerRolesStatus } from "./roles.ts";
 import { PeerRoomsStatus } from "./rooms.ts";
 /** The schemas of these plugins reach the package index through here. */
 export * from "./changes.ts";
 export * from "./jujutsu.ts";
-export * from "./roles.ts";
 export * from "./rooms.ts";
 
 export const peerPluginStatusFields = {
@@ -40,6 +38,5 @@ export const peerPluginStatusFields = {
   jujutsu: SchemaValues.optional(JujutsuState),
   ownership: SchemaValues.optional(PeerOwnershipStatus),
   settings: SchemaValues.optional(PeerSettingsStatus),
-  roles: SchemaValues.optional(PeerRolesStatus),
   rooms: SchemaValues.optional(PeerRoomsStatus),
 } satisfies Schema.Struct.Fields;

@@ -55,7 +55,7 @@ import { runKeys } from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import { checkoutKind, holdsWork } from "../../core/vcs.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
-import { changeToReview, pushedRefs, roomDiff, workRun, worktreeOf } from "./client/diff.ts";
+import { roomDiff, workRun, worktreeOf } from "./client/diff.ts";
 import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/steps.ts";
 import { workSharing } from "./client/sharing.ts";
 import { fetchPins, pinnedRoot, readPin, storeOf } from "./client/snapshots.ts";
@@ -153,13 +153,6 @@ const make = Effect.gen(function* () {
       Effect.orElseSucceed(() => undefined),
     );
 
-  /** The project's runs that only read the work, as the review starter knows them. */
-  const reviewsOf = (place: PeerRoomsPlace) =>
-    plugins.require("reviewStarter").pipe(
-      Effect.flatMap((starter) => starter.reviewRuns(place.workspace, place.project)),
-      Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
-    );
-
   const runsHere = (workspace: string, item: PeerRoomInboxItem, delivery: PeerRoomTarget) =>
     Effect.gen(function* () {
       // A delivery may name a run on another task: the agent that asked from there.
@@ -181,7 +174,6 @@ const make = Effect.gen(function* () {
       const read = (yield* work.latestPass) !== null;
       // Reading a checkout costs git or jj, so only a delivery `decide` would use it on pays for one.
       const sentOn = delivery.state === "passed" && delivery.by !== undefined;
-      const reviews = sentOn ? yield* reviewsOf(placeOf(workspace, item)) : new Set<string>();
       const base = sentOn ? yield* baseHere(workspace, item.project) : undefined;
       return yield* Effect.forEach(
         [...new Set([...open.map((run) => run.id), ...live])],
@@ -192,7 +184,7 @@ const make = Effect.gen(function* () {
               : undefined;
             const run = open.find((candidate) => candidate.id === id);
             const running = run?.sessions.some((session) => session.to === undefined) === true;
-            const quiet = run !== undefined && !running && !live.has(id) && !reviews.has(id);
+            const quiet = run !== undefined && !running && !live.has(id);
             return {
               id,
               live: live.has(id),
@@ -283,8 +275,6 @@ const make = Effect.gen(function* () {
 
   const workHere = (place: PeerRoomsPlace, checkout: string | undefined, only?: string) =>
     Effect.gen(function* () {
-      // A run asked for by name is shown whatever it does, a review's checkout too.
-      const reviews = only === undefined ? yield* reviewsOf(place) : new Set<string>();
       const sessions = (yield* agents.sessions).filter(
         (session) =>
           session.workspace === place.workspace &&
@@ -307,7 +297,6 @@ const make = Effect.gen(function* () {
               (root) => ({ id: run.id, keys: runKeys(run), root }),
             ),
         ),
-        reviews,
         sessions,
         threads: (yield* work.localThreads).get(place.workspace) ?? [],
       });
@@ -379,11 +368,6 @@ const make = Effect.gen(function* () {
   const followDeps = (workspace: string, me: string): FollowDeps => ({
     me,
     runsHere: (item, delivery) => runsHere(workspace, item, delivery),
-    isChat: (item) =>
-      work.tasks(workspace, item.project).pipe(
-        Effect.map((tasks) => tasks.some((task) => task.id === item.task && task.chat === true)),
-        Effect.orElseSucceed(() => false),
-      ),
     take: (item, run) =>
       hub
         .move(placeOf(workspace, item), item.message.seq, me, {
@@ -440,18 +424,6 @@ const make = Effect.gen(function* () {
         agents.continueRun({ workspace, projectId: item.project, runId: run }),
         (result) => (result.started ? null : (result.reason ?? "Peer could not continue the run.")),
       ),
-    review: (item) =>
-      Effect.gen(function* () {
-        const heard = yield* heardOf(workspace, item, "own", me);
-        const place = placeOf(workspace, item);
-        const { base, checkout, threads } = yield* workOf(place);
-        const refs = pushedRefs(threads, base);
-        const change =
-          checkout === undefined
-            ? undefined
-            : yield* Effect.promise(() => changeToReview(checkout.path, refs));
-        return yield* starts.review(workspace, item, me, heard, change);
-      }),
     start: (item) =>
       Effect.flatMap(heardOf(workspace, item, kindOf(item, me), me), (heard) =>
         starts.work(workspace, item, me, heard),
@@ -524,7 +496,6 @@ const make = Effect.gen(function* () {
         ...answer,
         hasCheckout: (yield* checkoutOf(state, place.workspace, project)) !== undefined,
         capacities,
-        reviewRuns: [...(yield* reviewsOf(place))],
         ...roomReach(
           Option.getOrUndefined(yield* runRootsData(state).read),
           tasks.find((task) => task.id === place.task)?.group,

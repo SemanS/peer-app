@@ -24,7 +24,6 @@ export const PEER_PLUGIN_IDS = [
   "ownership",
   "agreements",
   "changes",
-  "roles",
   "rooms",
   "settings",
 ] as const;

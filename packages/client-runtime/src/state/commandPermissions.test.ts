@@ -69,17 +69,15 @@ const setup = Effect.gen(function* () {
 
 describe("command permissions", () => {
   it.effect(
-    "requires the destination operate grant to change a session role or start a review",
+    "requires the destination operate grant to act in a room, and leaves reading it open",
     () =>
       Effect.scoped(
         Effect.gen(function* () {
           const registry = yield* setup;
-          const guarded = [
-            WS_METHODS.peerRolesSet,
-            WS_METHODS.peerRolesClear,
-            WS_METHODS.peerRolesStartReview,
-          ].map((method) => createCommandPermissions(runtime, method));
-          const list = createCommandPermissions(runtime, WS_METHODS.peerRolesList);
+          const guarded = [WS_METHODS.peerRoomsPost, WS_METHODS.peerRoomsPass].map((method) =>
+            createCommandPermissions(runtime, method),
+          );
+          const list = createCommandPermissions(runtime, WS_METHODS.peerRoomsRead);
           registry.set(sessions(env), AsyncResult.success(grant(false)));
           for (const command of guarded) {
             expect(registry.get(command.permissionAtom(env))).toBe(false);

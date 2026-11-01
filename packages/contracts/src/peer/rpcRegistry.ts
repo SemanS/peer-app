@@ -101,14 +101,12 @@ import { PeerHubSetPluginInput } from "./plugin.ts";
 import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
 import { OwnershipRpcGroup, OwnershipRpcScopes, PEER_OWNERSHIP_METHODS } from "./ownership.rpc.ts";
 import { PEER_SETTINGS_METHODS, SettingsRpcGroup, SettingsRpcScopes } from "./settings.rpc.ts";
-import { PEER_ROLES_METHODS, RolesRpcGroup, RolesRpcScopes } from "./roles.rpc.ts";
 import { PEER_ROOMS_METHODS, RoomsRpcGroup, RoomsRpcScopes } from "./rooms.rpc.ts";
 import { CardRpcGroup, CardRpcScopes, PEER_CARD_METHODS } from "./card.rpc.ts";
 import { PEER_RUNS_METHODS, RunsRpcGroup, RunsRpcScopes } from "./runs.rpc.ts";
 
 export * from "./changes.rpc.ts";
 export * from "./jujutsu.rpc.ts";
-export * from "./roles.rpc.ts";
 export * from "./rooms.rpc.ts";
 
 /** Core's methods. */
@@ -578,7 +576,6 @@ export const PEER_WS_METHODS = {
   ...PEER_SETTLE_METHODS,
   ...PEER_OWNERSHIP_METHODS,
   ...PEER_SETTINGS_METHODS,
-  ...PEER_ROLES_METHODS,
   ...PEER_ROOMS_METHODS,
   ...PEER_CARD_METHODS,
   ...PEER_RUNS_METHODS,
@@ -603,7 +600,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   SettleRpcGroup,
   OwnershipRpcGroup,
   SettingsRpcGroup,
-  RolesRpcGroup,
   RoomsRpcGroup,
   CardRpcGroup,
   RunsRpcGroup,
@@ -630,7 +626,6 @@ export const PEER_RPC_SCOPES = {
   ...SettleRpcScopes,
   ...OwnershipRpcScopes,
   ...SettingsRpcScopes,
-  ...RolesRpcScopes,
   ...RoomsRpcScopes,
   ...CardRpcScopes,
   ...RunsRpcScopes,

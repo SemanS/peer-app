@@ -239,7 +239,7 @@ describe("targetsFor", () => {
 
   it("says what naming your agent does, in the same words on web and the phone", () => {
     expect(targetsFor(project, task, [], BOB)[1]?.note).toBe(
-      "This starts your agent on this computer, read-only, on your capacity.",
+      "This starts your agent on this computer, in its own checkout, on your capacity.",
     );
     expect(targetsFor(project, task, runs, ANA)[1]?.note).toBe(
       "Your agent on this task reads this at its next step.",

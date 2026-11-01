@@ -35,7 +35,6 @@ describe("the web plugin registry", () => {
       "resources",
       "agreements",
       "changes",
-      "roles",
       "rooms",
       "settings",
     ]);

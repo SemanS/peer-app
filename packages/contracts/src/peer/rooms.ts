@@ -151,8 +151,6 @@ export const PeerRoomRead = Schema.Struct({
   hasCheckout: Schema.optional(Schema.Boolean),
   /** This computer's word too: what carries its person's runs on the task, by run. */
   capacities: Schema.optional(Schema.Record(Schema.String, PeerRoomCapacity)),
-  /** This computer's word too: the project's runs that only review. */
-  reviewRuns: Schema.optional(Schema.Array(Schema.String)),
   /** This computer's word too: where a run across projects works besides this one, by run. */
   runProjects: Schema.optional(Schema.Record(Schema.String, Schema.Array(Schema.String))),
   /** This computer's word too: projects no Hub workspace shares that the room's agent works in. */

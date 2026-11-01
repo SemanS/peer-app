@@ -69,7 +69,7 @@ describe("decide, for a person's agent writing to their other agent", () => {
 describe("decide", () => {
   it("starts a new session on the model its author chose, even beside a live run", () => {
     const target = delivery("passed", { model: "claude-opus-5-5" });
-    assert.deepStrictEqual(decide(own(target), target, [live], BOB), { do: "take-review" });
+    assert.deepStrictEqual(decide(own(target), target, [live], BOB), { do: "take-start" });
   });
 
   it("gives a passed delivery to a live session of the owner's run", () => {
@@ -98,9 +98,9 @@ describe("decide", () => {
     });
   });
 
-  it("starts a review session for the person's own message with no usable run", () => {
+  it("starts a run for the person's own message with no usable run", () => {
     assert.deepStrictEqual(decide(own(delivery("passed")), delivery("passed"), [], BOB), {
-      do: "take-review",
+      do: "take-start",
     });
   });
 
@@ -151,10 +151,10 @@ describe("decide", () => {
     });
   });
 
-  it("gives an own message a review session when its only run cannot continue here", () => {
+  it("starts a run for an own message when its only run cannot continue here", () => {
     const terminal: HereRun = { id: "run_5", live: false, staysPut: true };
     assert.deepStrictEqual(decide(own(delivery("passed")), delivery("passed"), [terminal], BOB), {
-      do: "take-review",
+      do: "take-start",
     });
   });
 
@@ -164,10 +164,6 @@ describe("decide", () => {
     const onModel = delivery("passed", { by: BOB, model: "claude-opus-5-5" });
 
     it("goes on with the run that left work, on the model it has, in no second run", () => {
-      assert.deepStrictEqual(decide(own(onModel), onModel, [worked], BOB, 0, true), {
-        do: "take-continue",
-        run: "run_6",
-      });
       assert.deepStrictEqual(decide(own(onModel), onModel, [worked], BOB), {
         do: "take-continue",
         run: "run_6",
@@ -175,17 +171,14 @@ describe("decide", () => {
     });
 
     it("starts anew on the chosen model where no run left work", () => {
-      assert.deepStrictEqual(decide(own(onModel), onModel, [detached], BOB, 0, true), {
-        do: "take-start",
-      });
       assert.deepStrictEqual(decide(own(onModel), onModel, [detached], BOB), {
-        do: "take-review",
+        do: "take-start",
       });
     });
 
     it("leaves a first delivery on a chosen model to its new session", () => {
       const first = delivery("passed", { model: "claude-opus-5-5" });
-      assert.deepStrictEqual(decide(own(first), first, [worked], BOB, 0, true), {
+      assert.deepStrictEqual(decide(own(first), first, [worked], BOB), {
         do: "take-start",
       });
     });
@@ -257,7 +250,7 @@ describe("decide", () => {
 
     it("reads an own delivery as own, though it has no `by` either", () => {
       assert.deepStrictEqual(decide(own(delivery("passed")), delivery("passed"), [], BOB), {
-        do: "take-review",
+        do: "take-start",
       });
     });
   });
@@ -287,7 +280,6 @@ const depsOf = (over: Partial<FollowDeps> & { readonly runs?: ReadonlyArray<Here
   const deps: FollowDeps = {
     me: BOB,
     runsHere: () => Effect.succeed(over.runs ?? []),
-    isChat: () => Effect.succeed(false),
     take: (_item, run) => note(`take ${run ?? "-"}`),
     fail: (_item, reason) => note(`fail ${reason}`),
     record: (_item, run) => note(`record ${run}`),
@@ -300,7 +292,6 @@ const depsOf = (over: Partial<FollowDeps> & { readonly runs?: ReadonlyArray<Here
     unqueue: (_item, run) => note(`unqueue ${run}`),
     wake: note("wake"),
     continueRun: (_item, run) => Effect.as(note(`continue ${run}`), null),
-    review: () => Effect.as(note("review"), { run: "run_9", typed: true }),
     start: () => Effect.as(note("start"), { run: "run_8", typed: true }),
     ...over,
   };
@@ -346,11 +337,11 @@ describe("act", () => {
     }),
   );
 
-  it.effect("starts a review session and records its run, but a typed prompt is not heard", () =>
+  it.effect("starts a run and records it, but a typed prompt is not heard", () =>
     Effect.gen(function* () {
       const { deps, log } = depsOf();
       yield* act(deps, itemOf(own(delivery("passed"))));
-      assert.deepStrictEqual(log, ["take -", "review", "prompted run_9 own", "record run_9"]);
+      assert.deepStrictEqual(log, ["take -", "start", "prompted run_8 own", "record run_8"]);
     }),
   );
 
@@ -370,15 +361,13 @@ describe("act", () => {
     }),
   );
 
-  it.effect("fails saying why a review session cannot start: no checkout, no plugin", () =>
+  it.effect("fails saying why an agent cannot start", () =>
     Effect.gen(function* () {
-      for (const reason of [NO_CHECKOUT, "Review sessions is turned off on this environment."]) {
-        const { deps, log } = depsOf({
-          review: () => Effect.fail(new PeerHubError({ detail: reason })),
-        });
-        yield* act(deps, itemOf(own(delivery("passed"))));
-        assert.deepStrictEqual(log, ["take -", `fail ${reason}`]);
-      }
+      const { deps, log } = depsOf({
+        start: () => Effect.fail(new PeerHubError({ detail: NO_CHECKOUT })),
+      });
+      yield* act(deps, itemOf(own(delivery("passed"))));
+      assert.deepStrictEqual(log, ["take -", `fail ${NO_CHECKOUT}`]);
     }),
   );
 
@@ -479,7 +468,7 @@ describe("act", () => {
       const { deps, log } = depsOf();
       yield* act(deps, itemOf(own(delivery("passed"))));
       yield* act(deps, itemOf(own(delivery("taken"))));
-      assert.deepStrictEqual(log, ["take -", "review", "prompted run_9 own", "record run_9"]);
+      assert.deepStrictEqual(log, ["take -", "start", "prompted run_8 own", "record run_8"]);
     }),
   );
 
@@ -496,7 +485,7 @@ describe("act", () => {
 
     it.effect("keeps the delivery taken with its run, and queues the message for that run", () =>
       Effect.gen(function* () {
-        const { deps, log } = depsOf({ review: () => Effect.succeed(unread) });
+        const { deps, log } = depsOf({ start: () => Effect.succeed(unread) });
         yield* act(deps, itemOf(own(delivery("passed"))));
         assert.deepStrictEqual(log, ["take -", "queue run_9 own", "record run_9", "wake"]);
       }),
@@ -547,26 +536,4 @@ describe("act", () => {
       assert.deepStrictEqual(log, []);
     }),
   );
-});
-
-describe("decide in a chat", () => {
-  const own = {
-    seq: 1,
-    task: "chat-1",
-    at: "2026-10-31T00:00:00Z",
-    author: { email: "ana@acme.test" },
-    text: "hi",
-    to: [],
-  };
-  const delivery = { kind: "agent", email: "ana@acme.test", state: "passed" };
-
-  it("starts a working run where a task's room starts a review", () => {
-    assert.strictEqual(decide(own, delivery, [], "ana@acme.test").do, "take-review");
-    assert.strictEqual(decide(own, delivery, [], "ana@acme.test", 0, true).do, "take-start");
-  });
-
-  it("starts one on the model its author chose", () => {
-    const chosen = { ...delivery, model: "claude-opus-5-5" };
-    assert.strictEqual(decide(own, chosen, [], "ana@acme.test", 0, true).do, "take-start");
-  });
 });

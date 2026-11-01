@@ -1,8 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off - whether a checkout exists here, and where a run's own checkout goes.
 /**
- * Starting an agent for a delivery (design D6): a review session through the `reviewStarter` slot
- * for a person's own question, or a working run through `taskLauncher` for a message its owner
- * passed on. What cannot start fails with the words the room shows.
+ * Starting an agent for a delivery (design D6): a working run through `taskLauncher`. What cannot
+ * start fails with the words the room shows.
  *
  * @module peerHub/plugins/rooms/client/start
  */
@@ -28,12 +27,10 @@ import type * as PeerWork from "../../../core/work/PeerWork.ts";
 import { foldersBeyond, runRootsData, type RunRoot } from "../../../core/work/runRoots.ts";
 import { run } from "../../../core/local.ts";
 import { NO_CHECKOUT } from "../follow.ts";
-import { chatRunPrompt, passedRunPrompt, reviewRoomPrompt, type Heard } from "../text.ts";
+import { chatRunPrompt, passedRunPrompt, type Heard } from "../text.ts";
 
 const isHarness = Schema.is(PeerHarness);
 const refusal = (detail: string) => new PeerHubError({ detail, refused: true });
-const isReview = (harness: string): harness is "claude" | "codex" =>
-  harness === "claude" || harness === "codex";
 
 /**
  * The harness of a start: the one its author named when the turn is theirs, else the first the
@@ -49,7 +46,7 @@ export const harnessOf = (
   const named = mine(item.message.author.email)
     ? item.message.to.find((target) => target.kind === "agent" && mine(target.email))?.harness
     : undefined;
-  return named ?? project.capacity.personalHarnesses.find(isReview) ?? "claude";
+  return named ?? project.capacity.personalHarnesses[0] ?? "claude";
 };
 
 /** What its author chose, and only theirs: it ends up on the agent's command line. */
@@ -157,7 +154,6 @@ export const rootHere = (run: Pick<PersistedRun, "root">) =>
  */
 const checkoutLeft = (
   state: PeerState.PeerState["Service"],
-  plugins: PeerPlugins.PeerPlugins["Service"],
   place: { readonly workspace: string; readonly project: string; readonly task: string },
   item: PeerRoomInboxItem,
   me: string,
@@ -169,13 +165,7 @@ const checkoutLeft = (
       (target) => target.kind === "agent" && mine(target.email),
     );
     if (delivery?.by === undefined) return undefined;
-    const reviews = yield* plugins.require("reviewStarter").pipe(
-      Effect.flatMap((starter) => starter.reviewRuns(place.workspace, place.project)),
-      Effect.orElseSucceed((): ReadonlySet<string> => new Set()),
-    );
-    const newest = (yield* taskRuns(state, place)).find(
-      (run) => mine(run.email) && !reviews.has(run.id),
-    );
+    const newest = (yield* taskRuns(state, place)).find((run) => mine(run.email));
     if (newest?.endedAt === undefined) return undefined;
     return yield* Effect.promise(async () => {
       const root = await rootHere(newest);
@@ -265,44 +255,7 @@ export const roomStarts = (
       return { project, task, checkout };
     });
   return {
-    /** A session with role `review` on the person's capacity. */
-    review: (
-      workspace: string,
-      item: PeerRoomInboxItem,
-      me: string,
-      heard: Heard,
-      /** The change it reads, fetched, so it does not answer from the base branch. */
-      change: { readonly ref: string; readonly base: string } | undefined,
-    ) =>
-      Effect.gen(function* () {
-        const { project, task, checkout } = yield* placeOf(workspace, item);
-        const harness = harnessOf(item, me, project);
-        if (!isReview(harness))
-          return yield* refusal("Peer starts a review session with Claude Code or Codex only.");
-        const { model, effort } = choiceOf(item, me);
-        if (
-          (model !== undefined && !isModelName(model)) ||
-          (effort !== undefined && !isEffort(effort))
-        )
-          return yield* refusal("Peer cannot start that model.");
-        const starter = yield* plugins.require("reviewStarter");
-        const started = yield* starter.start({
-          workspace,
-          projectId: project.id,
-          taskId: task.id,
-          repositoryId: checkout.repository.id,
-          harness,
-          ...(model === undefined ? {} : { model }),
-          ...(effort === undefined ? {} : { effort }),
-          ...(change === undefined ? {} : { baseBranch: change.base }),
-          prompt: reviewRoomPrompt(heard, change?.ref),
-        });
-        return {
-          run: started.run ?? started.thread,
-          typed: started.promptError === undefined,
-        };
-      }),
-    /** A working run its owner's Pass on starts. */
+    /** A working run for a message no agent of the person carries. */
     work: (workspace: string, item: PeerRoomInboxItem, me: string, heard: Heard) =>
       Effect.gen(function* () {
         const { project, task, checkout } = yield* placeOf(workspace, item);
@@ -327,7 +280,6 @@ export const roomStarts = (
         if (unavailable !== null) return yield* refusal(unavailable);
         const reuse = yield* checkoutLeft(
           state,
-          plugins,
           { workspace, project: project.id, task: task.id },
           item,
           me,

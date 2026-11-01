@@ -1145,53 +1145,6 @@
       "count": 5
     }
   },
-  "apps/server/src/peerHub/plugins/roles/Roles.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 5
-    }
-  },
-  "apps/server/src/peerHub/plugins/roles/cli.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/roles/hub.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/roles/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/roles/tell.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/roles/text.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/roles/verdicts.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/plugins/rooms/Rooms.test.ts": {
     "t3code/no-polling-loop-in-tests": {
       "count": 1
@@ -1205,7 +1158,7 @@
       "count": 1
     },
     "t3code/prefer-effect-fn": {
-      "count": 18
+      "count": 17
     }
   },
   "apps/server/src/peerHub/plugins/rooms/cli.ts": {
@@ -1236,7 +1189,7 @@
   },
   "apps/server/src/peerHub/plugins/rooms/client/start.ts": {
     "t3code/prefer-effect-fn": {
-      "count": 8
+      "count": 7
     }
   },
   "apps/server/src/peerHub/plugins/rooms/follow.ts": {
@@ -1910,11 +1863,6 @@
       "count": 1
     }
   },
-  "packages/client-runtime/src/peer/roles.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "packages/client-runtime/src/peer/rooms.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1966,11 +1914,6 @@
   "packages/contracts/src/peer/ownership.ts": {
     "t3code/no-low-value-comments": {
       "count": 2
-    }
-  },
-  "packages/contracts/src/peer/roles.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
     }
   },
   "packages/contracts/src/peer/rooms.ts": {

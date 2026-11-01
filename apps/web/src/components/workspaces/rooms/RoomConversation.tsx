@@ -88,7 +88,6 @@ export function RoomConversation({
   loading,
   now,
   runs,
-  reviewRuns,
   jujutsu,
   threadWorking,
   selected,
@@ -112,7 +111,6 @@ export function RoomConversation({
   /** The time a delivery's words are read at. */
   readonly now: number;
   readonly runs: ReadonlyArray<PeerRun>;
-  readonly reviewRuns: ReadonlyArray<string>;
   /** The checkout is on Jujutsu. */
   readonly jujutsu: boolean;
   /** Whether a run's agent works now, where a thread of it is known here. */
@@ -130,12 +128,11 @@ export function RoomConversation({
   const activityOf = (message: PeerRoomMessage) => {
     const id = message.author.run;
     if (id === undefined) return undefined;
-    const review = reviewRuns.includes(id);
     const run = runs.find((candidate) => candidate.id === id);
     if (run === undefined || lastOf.get(id) !== message.seq) {
-      return { id, ...turnDone(message.author.agent, review) };
+      return { id, ...turnDone(message.author.agent) };
     }
-    return { id, ...runActivity(run, { review, jujutsu, threadWorking: threadWorking(run) }) };
+    return { id, ...runActivity(run, { jujutsu, threadWorking: threadWorking(run) }) };
   };
   const scroller = useRef<HTMLDivElement>(null);
   // Seqs are per room, so a shared room's newest message can have a smaller one than the last.

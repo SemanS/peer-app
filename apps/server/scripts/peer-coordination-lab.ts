@@ -190,7 +190,6 @@ import {
   ROOMS_REAL_OWN,
   ROOMS_REAL_QUESTION,
   ROOMS_TASK,
-  TOUCHED,
   deliveryOf,
   runRooms,
   standInHerdr,
@@ -5815,7 +5814,7 @@ const roomsRetryProgram = Effect.gen(function* () {
 }).pipe(Effect.scoped);
 
 /**
- * REAL_SCENARIO=rooms REAL_AGENTS=1: real Claude Code on both computers. Peer starts Bob's review session in his real
+ * REAL_SCENARIO=rooms REAL_AGENTS=1: real Claude Code on both computers. Peer starts Bob's agent in his real
  * herdr, so its pane runs the lab's `claude` wrapper. What agents do is observed and reported, never failed on, except
  * what the arm cannot go on without.
  */
@@ -6001,7 +6000,7 @@ const roomsRealProgram = Effect.gen(function* () {
     must(answered, "her agent answered with --reply and the Hub says `answered`");
     say("the room", yield* Effect.promise(() => shown(300)));
 
-    // Her run ends; Bob's own question starts a review session on the change.
+    // Her run ends; Bob's own question starts a run on his computer.
     const anaCount = herdrAgents(anaHerdr).length;
     yield* Effect.promise(() =>
       rpc(
@@ -6039,43 +6038,19 @@ const roomsRealProgram = Effect.gen(function* () {
       ),
     );
     must(startedBob, "Peer started a Claude Code on Bob's computer");
-    const reviewPane = herdrAgents(bobHerdr).find((one) => one.agent === "claude");
-    if (reviewPane !== undefined) {
-      live.push({ computer: bob, h: bobHerdr, pane: reviewPane.pane_id, label: "bob-review" });
-      say("Bob's review pane", JSON.stringify(reviewPane));
+    const bobPane = herdrAgents(bobHerdr).find((one) => one.agent === "claude");
+    if (bobPane !== undefined) {
+      live.push({ computer: bob, h: bobHerdr, pane: bobPane.pane_id, label: "bob" });
+      say("Bob's pane", JSON.stringify(bobPane));
     }
     const answeredOwn = yield* Effect.promise(() =>
       waitOn(
-        "Bob's review session's answer",
+        "Bob's agent's answer",
         async () => (await delivery(own.seq, "bob@acme.test"))?.state === "answered",
         8 * 60_000,
       ),
     );
     must(answeredOwn, "its answer is in the room and the Hub says `answered`");
-    const denied = events(bob).filter((entry) => entry.event === "roles.denied");
-    say("roles.denied on Bob's computer", JSON.stringify(denied));
-    const refusals = events(bob).flatMap((entry) => {
-      const output = (entry.answer as { hookSpecificOutput?: Record<string, string> } | undefined)
-        ?.hookSpecificOutput;
-      return entry.event === "hook" && output?.permissionDecision === "deny"
-        ? [{ tool: entry.tool, reason: output.permissionDecisionReason }]
-        : [];
-    });
-    say("what Peer denied Bob's agent", JSON.stringify(refusals));
-    must(
-      refusals.some((one) => one.tool === "Edit"),
-      "its Edit attempt was denied",
-    );
-    must(
-      refusals.some((one) => one.tool === "Bash"),
-      "its shell append was denied before it ran",
-    );
-    must(
-      !events(ana)
-        .concat(events(bob))
-        .some((entry) => entry.event === "overlap.opened"),
-      "no overlap opened on either computer",
-    );
     const hubRuns = yield* Effect.promise(runs);
     say("the task's runs", JSON.stringify(hubRuns));
     observe(
@@ -6097,12 +6072,6 @@ const roomsRealProgram = Effect.gen(function* () {
           .map((entry) => [entry.t, entry.event, entry.hookEvent ?? ""]),
       ),
     );
-    const cwd = reviewPane?.cwd;
-    if (cwd !== undefined && NodeFS.existsSync(NodePath.join(cwd, "src/pricing.ts"))) {
-      const text = NodeFS.readFileSync(NodePath.join(cwd, "src/pricing.ts"), "utf8");
-      must(text.includes("integer cents"), `the review checkout ${cwd} has Ana's change`);
-      observe(!text.includes("reviewed by Bob"), "its file is unedited");
-    } else observe(false, `the review checkout can be read (${String(cwd)})`);
     say("the room at the end", yield* Effect.promise(() => shown(600)));
     check(missed.length === 0, `the real arm showed all it must (missing: ${missed.join("; ")})`);
   } finally {
@@ -6219,32 +6188,8 @@ const roomsProgram = Effect.gen(function* () {
   const kit: RoomsKit = {
     ana: person(ana, "ana@acme.test", anaHerdr),
     bob: person(bob, "bob@acme.test", bobHerdr),
-    anaNeighbour: async () => {
-      await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
-        method: "POST",
-        session: hubSession,
-        body: { title: "Another task", key: "KRK-2" },
-      });
-      await until("Ana's Peer knows KRK-2", async () => {
-        const synced = await Effect.runPromise(ana.client[WS_METHODS.peerHubSync]({}));
-        return (
-          synced.workspaces[0]?.projects
-            .find((p) => p.project.id === "lab")
-            ?.work.tasks.some((one) => one.key === "KRK-2") === true
-        );
-      });
-      const tree = NodePath.join(NodeFS.realpathSync(ana.home), "workspace/krk-2-another");
-      git(ana.checkout, "worktree", "add", "--quiet", "-b", "krk-2-another", tree);
-      const neighbour = agent(ana, "room-ana-2", "w31:p1", {}, tree) as RoomsAgent;
-      neighbour.start();
-      neighbour.edit("PreToolUse", "src/pricing.ts");
-      neighbour.edit("PostToolUse", "src/pricing.ts");
-      return neighbour;
-    },
-    touch: (cwd, path) => NodeFS.appendFileSync(NodePath.join(cwd, path), TOUCHED),
-    untouch: (cwd, path) => git(cwd, "checkout", "--", path),
     anaAgent: agent(ana, "room-ana", "w30:p1") as RoomsAgent,
-    agentOf: (start, session = "room-review") =>
+    agentOf: (start, session = "room-bob") =>
       agent(
         bob,
         session,

@@ -233,12 +233,10 @@ export const namesInWords = (names: ReadonlyArray<string>) =>
     : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 
 /** Where a start puts an agent, for the line said before sending. */
-export const agentStartPlace = (chat: boolean, across: ReadonlyArray<string> = []) =>
+export const agentStartPlace = (across: ReadonlyArray<string> = []) =>
   across.length > 1
     ? `across ${namesInWords(across)}, in its own checkout of each`
-    : chat
-      ? "in its own checkout"
-      : "read-only";
+    : "in its own checkout";
 
 /**
  * The To row: Team first, which is the default; your agent; then each person on the task with
@@ -254,7 +252,7 @@ export function targetsFor(
     readonly hasCheckout?: boolean;
     readonly reaches?: ReadonlyArray<PeerRoomReach>;
     readonly nameOf?: NameOf;
-    /** A chat: anyone on the project can be named, and your agent works in its own checkout. */
+    /** A chat: anyone on the project can be named. */
     readonly chat?: boolean;
     /** The projects a room across a workspace's projects works in, names in order. */
     readonly across?: ReadonlyArray<string>;
@@ -291,7 +289,7 @@ export function targetsFor(
         ? {
             note: ownRun
               ? "Your agent on this task reads this at its next step."
-              : `This starts your agent on this computer, ${agentStartPlace(options.chat === true, options.across)}, on your capacity.`,
+              : `This starts your agent on this computer, ${agentStartPlace(options.across)}, on your capacity.`,
           }
         : { disabled: "This computer has no checkout of the project." }),
     },

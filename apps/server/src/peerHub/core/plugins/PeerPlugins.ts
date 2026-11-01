@@ -47,7 +47,6 @@ export type CapabilitySlot =
   | "gitHost"
   | "taskLauncher"
   | "requestAcceptor"
-  | "reviewStarter"
   | "wipSharing";
 
 /** The first of `providers` (see `contributions`) that fills `slot`, if any does. */

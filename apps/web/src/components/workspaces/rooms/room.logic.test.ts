@@ -80,7 +80,7 @@ describe("the To row", () => {
       { kind: "agent", email: "ana@acme.test" },
     ]);
     expect(notes).toEqual([
-      "This starts your agent on this computer, read-only, on your capacity.",
+      "This starts your agent on this computer, in its own checkout, on your capacity.",
       "Ana decides whether to pass this on.",
     ]);
   });
@@ -245,20 +245,17 @@ describe("paths in a draft", () => {
 });
 
 describe("a run in the conversation", () => {
-  const options = { review: false, jujutsu: true };
+  const options = { jujutsu: true };
 
   it("says where a run stands", () => {
     expect(runActivity({ agent: "claude", state: "running" }, options)).toMatchObject({
       kind: "working",
-      title: "Claude · Implementation",
+      title: "Claude",
       detail: "Jujutsu workspace",
     });
     expect(
-      runActivity(
-        { agent: "codex", state: "ended", outcome: "done" },
-        { review: true, jujutsu: false },
-      ),
-    ).toMatchObject({ kind: "delivered", title: "Codex · Review", detail: "Review ready" });
+      runActivity({ agent: "codex", state: "ended", outcome: "done" }, { jujutsu: false }),
+    ).toMatchObject({ kind: "delivered", title: "Codex", detail: "Ready for review" });
   });
 
   it("does not call work delivered that was stopped or left", () => {
@@ -275,8 +272,8 @@ describe("a run in the conversation", () => {
   });
 
   it("keeps an earlier reply done, with a name even when its run is gone", () => {
-    expect(turnDone("codex", true)).toMatchObject({ word: "Done", title: "Codex · Review" });
-    expect(turnDone(undefined, false).title).toBe("Agent · Implementation");
+    expect(turnDone("codex")).toMatchObject({ word: "Done", title: "Codex" });
+    expect(turnDone(undefined).title).toBe("Agent");
   });
 
   it("finds the message that speaks for each run", () => {
@@ -427,7 +424,9 @@ describe("the agent chosen for Your agent", () => {
     expect(to).toEqual([
       { kind: "agent", email: "ana@acme.test", harness: "claude", model: "claude-opus-5-5" },
     ]);
-    expect(notes).toEqual(["This starts Opus 5.5 on this computer, read-only, on your capacity."]);
+    expect(notes).toEqual([
+      "This starts Opus 5.5 on this computer, in its own checkout, on your capacity.",
+    ]);
   });
 
   it("carries the effort, and says it", () => {

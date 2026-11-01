@@ -29,9 +29,8 @@ export const ROOMS_ANA_TASK =
   "In src/pricing.ts add one comment line above `price` saying amounts are integer cents. Keep the change small; do not run tests or builds, and do not commit.";
 export const ROOMS_REAL_QUESTION =
   "marker-real: does price() round anything, or only sum? One sentence is enough.";
-/** It asks for edits a review session may not make, so each deny is seen from the agent's side too. */
 export const ROOMS_REAL_OWN =
-  "marker-real-own: read the change on this task and tell me in one or two sentences whether its comment is true. Also add the line `// reviewed by Bob` at the end of src/pricing.ts with your Edit tool, and then try again through the shell with exactly: echo '// reviewed by Bob' >> src/pricing.ts . Tell me what happened each time.";
+  "marker-real-own: read src/pricing.ts and tell me in one or two sentences what price() returns.";
 
 /** Whether `text` holds exactly one fence, with `inside` in it and nothing after the fence that came from inside. */
 export function wholeFence(text: string, inside: string) {
@@ -217,13 +216,8 @@ export interface RoomsKit {
   readonly ana: RoomsPerson;
   readonly bob: RoomsPerson;
   readonly anaAgent: RoomsAgent;
-  /** Ana's other agent, on another task, working on the file the review session touches. */
-  anaNeighbour(): Promise<RoomsAgent>;
   /** The agent Peer started on Bob's computer, played with what its pane was given. */
   agentOf(start: HerdrStart, session?: string): RoomsAgent;
-  /** A script's write in a checkout, and taking it back. */
-  touch(cwd: string, path: string): void;
-  untouch(cwd: string, path: string): void;
   /** The room as the Hub holds it. */
   room(): Promise<ReadonlyArray<PeerRoomMessage>>;
   /** The task's runs as the Hub holds them. */
@@ -248,8 +242,6 @@ export interface RoomsKit {
   until(what: string, ready: () => boolean | Promise<boolean>, ms?: number): Promise<void>;
   sleep(ms: number): Promise<void>;
 }
-
-export const TOUCHED = "// touched by a script\n";
 
 const hasOccurred = (log: string, marker: string) => log.includes(marker);
 
@@ -473,65 +465,25 @@ export async function runRooms(kit: RoomsKit): Promise<ReadonlyArray<string>> {
   const started = await attempt("Peer starts Bob's agent", () => bob.starts.length === 1, 30_000);
   judge(started, "a session starts on Bob's computer");
   judge(ana.starts.length === 0, "Ana's computer starts nothing");
-  const reviewStart = bob.starts[0];
-  if (reviewStart === undefined) failed.push("no review session to play");
+  const firstStart = bob.starts[0];
+  if (firstStart === undefined) failed.push("no agent to play");
   else {
-    await attempt("Bob's prompt arrives", () => reviewStart.prompt !== undefined, 10_000);
-    kit.told("Bob's review agent, as its first prompt", reviewStart.prompt);
-    judge(wholeFence(reviewStart.prompt ?? "", "marker-own"), "it hears Bob's question fenced");
-    const neighbour = await kit.anaNeighbour();
-    const review = kit.agentOf(reviewStart);
-    const opened = review.start();
-    kit.told("Bob's review agent, at its start", opened.told);
-    const denied = await attempt("its edit is denied", () => {
-      return (
-        review.edit("PreToolUse", "src/cart.ts")?.hookSpecificOutput?.permissionDecision === "deny"
-      );
-    });
-    judge(denied, "the review session's edit is denied");
-    const shell = review.hook("PreToolUse", {
-      tool_name: "Bash",
-      tool_input: { command: "echo '// x' >> src/pricing.ts" },
-    });
+    await attempt("Bob's prompt arrives", () => firstStart.prompt !== undefined, 10_000);
+    kit.told("Bob's agent, as its first prompt", firstStart.prompt);
+    judge(wholeFence(firstStart.prompt ?? "", "marker-own"), "it hears Bob's question fenced");
+    const agent = kit.agentOf(firstStart);
+    const opened = agent.start();
+    kit.told("Bob's agent, at its start", opened.told);
     judge(
-      shell?.hookSpecificOutput?.permissionDecision === "deny",
-      "its plain shell write is denied before it runs",
+      agent.edit("PreToolUse", "src/cart.ts")?.hookSpecificOutput?.permissionDecision !== "deny",
+      "it is a working run: Peer stops none of its edits",
     );
-    // A script is not stopped; what it touches must still reach nobody.
-    const script = `node -e "require('fs').appendFileSync('src/pricing.ts','// x\\n')"`;
-    const scripted = review.hook("PreToolUse", {
-      tool_name: "Bash",
-      tool_input: { command: script },
-    });
-    kit.say(
-      "a script's write",
-      `hook answered ${scripted?.hookSpecificOutput?.permissionDecision}`,
-    );
-    kit.touch(reviewStart.cwd, "src/pricing.ts");
-    review.hook("PostToolUse", {
-      tool_name: "Bash",
-      tool_input: { command: script },
-      tool_response: { stdout: "" },
-    });
-    await kit.sleep(3000);
-    judge(
-      !ana.log().includes("overlap.opened") && !bob.log().includes("overlap.opened"),
-      "the file it touched opens no overlap on either computer",
-    );
-    neighbour.edit("PreToolUse", "src/pricing.ts");
-    const heardByNeighbour = neighbour.edit("PostToolUse", "src/pricing.ts");
-    judge(
-      heardByNeighbour?.hookSpecificOutput?.additionalContext?.includes("Overlap") !== true,
-      "and Ana's working agent on that file hears nothing of it",
-    );
-    kit.untouch(reviewStart.cwd, "src/pricing.ts");
-    neighbour.hook("SessionEnd", { reason: "exit" });
-    const answer = review.peer("room", "say", "--reply", String(own.seq), "Only cartTotal does.");
-    judge(review.peerStatus === 0, `its answer posts: ${answer}`);
+    const answer = agent.peer("room", "say", "--reply", String(own.seq), "Only cartTotal does.");
+    judge(agent.peerStatus === 0, `its answer posts: ${answer}`);
     const room = await kit.room();
     const posted = room.find((one) => one.replyTo === own.seq);
     judge(
-      posted?.author.email === bob.email && posted.author.run === reviewStart.env.PEER_RUN,
+      posted?.author.email === bob.email && posted.author.run === firstStart.env.PEER_RUN,
       "its answer is in the room, as Bob's agent, from that run",
     );
     judge((await state(own.seq, bob.email)) === "answered", "the delivery is `answered`");
@@ -540,8 +492,8 @@ export async function runRooms(kit: RoomsKit): Promise<ReadonlyArray<string>> {
       runs.filter((run) => run.email === ana.email).length === 1,
       "the Hub has no new run of Ana's",
     );
-    review.hook("SessionEnd", { reason: "exit" });
-    await bob.endRun(reviewStart.env.PEER_RUN ?? "");
+    agent.hook("SessionEnd", { reason: "exit" });
+    await bob.endRun(firstStart.env.PEER_RUN ?? "");
   }
 
   // A first prompt lost to whatever held the pane: the session is woken with the message.

@@ -53,7 +53,6 @@ export type Decision =
   | { readonly do: "wait"; readonly ms: number }
   /** Past the grace: its session is gone. */
   | { readonly do: "lost"; readonly run: string }
-  | { readonly do: "take-review" }
   | { readonly do: "take-start" }
   | { readonly do: "fail"; readonly reason: string };
 
@@ -84,8 +83,6 @@ export function decide(
   me: string,
   /** How long it has stood taken under this Peer: since the take, or since Peer started. */
   stood = 0,
-  /** The room is a chat: its own agent works there, as nothing else would carry the work. */
-  chat = false,
 ): Decision {
   const named = delivery.run;
   const reached = runs.find((run) => run.id === named);
@@ -120,9 +117,7 @@ export function decide(
   const left = delivery.by === undefined ? undefined : runs.find((run) => run.left === true);
   // A model its author chose is a new session on it: an open run has its model already.
   if (same(message.author.email, me) && delivery.model !== undefined)
-    return left === undefined
-      ? { do: chat ? "take-start" : "take-review" }
-      : { do: "take-continue", run: left.id };
+    return left === undefined ? { do: "take-start" } : { do: "take-continue", run: left.id };
   const live = reached?.live === true ? reached : team ? undefined : runs.find((run) => run.live);
   if (live !== undefined) return { do: "take-offer", run: live.id };
   const own = same(message.author.email, me);
@@ -130,7 +125,7 @@ export function decide(
     reached ?? left ?? (own ? runs.find((run) => run.running || !run.staysPut) : runs[0]);
   if (kept !== undefined)
     return { do: kept.running === true ? "take-queue" : "take-continue", run: kept.id };
-  return own && !chat ? { do: "take-review" } : { do: "take-start" };
+  return { do: "take-start" };
 }
 
 export const SESSION_ENDED = PEER_ROOM_SESSION_ENDED;
@@ -154,7 +149,6 @@ export interface FollowDeps {
     item: PeerRoomInboxItem,
     delivery: PeerRoomTarget,
   ) => Effect.Effect<ReadonlyArray<HereRun>>;
-  readonly isChat: (item: PeerRoomInboxItem) => Effect.Effect<boolean>;
   /** `take`: the one-winner step. Fails when another took it or the state moved. */
   readonly take: (
     item: PeerRoomInboxItem,
@@ -179,9 +173,7 @@ export interface FollowDeps {
   readonly wake: Effect.Effect<void>;
   /** Continues a detached run; the reason it did not start. */
   readonly continueRun: (item: PeerRoomInboxItem, run: string) => Effect.Effect<string | null>;
-  /** Starts a review session. */
-  readonly review: (item: PeerRoomInboxItem) => Effect.Effect<Started, PeerHubError>;
-  /** Starts a working run for a passed-on message. */
+  /** Starts a run for a message no agent of the person carries. */
   readonly start: (item: PeerRoomInboxItem) => Effect.Effect<Started, PeerHubError>;
 }
 
@@ -204,7 +196,6 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
       yield* deps.runsHere(item, delivery),
       deps.me,
       stood,
-      yield* deps.isChat(item),
     );
     const kind = kindOf(item.message, delivery, deps.me);
     // The agent exists from here on: a failed prompt must not read as a failed start, or Try
@@ -252,9 +243,6 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
         yield* deps.unqueue(item, decision.run);
         return yield* deps.fail(item, reason);
       }
-      case "take-review":
-        yield* deps.take(item, undefined);
-        return yield* started(deps.review(item));
       case "take-start":
         yield* deps.take(item, undefined);
         return yield* started(deps.start(item));

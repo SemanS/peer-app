@@ -60,9 +60,6 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.scheduledTasksRunNow]: AuthOrchestrationOperateScope,
   [WS_METHODS.scheduledTasksRotateWebhookToken]: AuthOrchestrationOperateScope,
   // A role changes what an agent may do; starting a review runs an agent on this environment.
-  [WS_METHODS.peerRolesSet]: AuthOrchestrationOperateScope,
-  [WS_METHODS.peerRolesClear]: AuthOrchestrationOperateScope,
-  [WS_METHODS.peerRolesStartReview]: AuthOrchestrationOperateScope,
   // A room's message may start an agent, on this environment or a colleague's.
   [WS_METHODS.peerRoomsPost]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRoomsSeen]: AuthOrchestrationOperateScope,

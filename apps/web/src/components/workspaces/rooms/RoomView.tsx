@@ -64,7 +64,6 @@ import {
 } from "./sharedRoom.logic";
 import { useRoom, useRoomDiff, useRoomMoves, useRoomRead } from "./useRoom";
 
-const NO_RUNS: ReadonlyArray<string> = [];
 const NO_CHATS: ReadonlyArray<RoomChat> = [];
 const NO_CLOSED: ReadonlyArray<ClosedChat> = [];
 const NO_RUN_RECORDS: ReadonlyArray<PeerRun> = [];
@@ -116,7 +115,6 @@ export interface RoomAcross {
 interface ChatRead {
   readonly messages: ReadonlyArray<PeerRoomMessage>;
   readonly runs: ReadonlyArray<PeerRun>;
-  readonly reviewRuns: ReadonlyArray<string>;
   readonly seq: number;
   readonly refresh: () => void;
   readonly now: number;
@@ -504,10 +502,6 @@ export function RoomBody({
             loading={read.room === null}
             now={Math.max(read.now, ...otherReads.map((other) => other.now))}
             runs={allRuns}
-            reviewRuns={[
-              ...(read.room?.reviewRuns ?? NO_RUNS),
-              ...otherReads.flatMap((other) => other.reviewRuns),
-            ]}
             jujutsu={onJujutsu}
             threadWorking={threadWorking}
             selected={run === null ? null : { run: run.id, seq: run.seq }}
@@ -566,7 +560,6 @@ export function RoomBody({
               paths={paths}
               onDrafting={setDrafting}
               onSent={() => read.refresh()}
-              chat={hubTask.chat === true}
               toOwnAgent={chatIsYours(hubTask, runs.runs, me)}
               {...(across === undefined
                 ? {}
@@ -782,7 +775,6 @@ function ClosedChatRead({
     report({
       messages: read.messages,
       runs: NO_RUN_RECORDS,
-      reviewRuns: NO_RUNS,
       seq,
       refresh: read.refresh,
       now: read.now,
@@ -840,19 +832,17 @@ function OtherChat({
   const read = useRoom({ environmentId, status, place, revision });
   const diff = useRoomDiff({ environmentId, place, revision });
   const report = useEffectEvent(onRead);
-  const reviewRuns = read.room?.reviewRuns ?? NO_RUNS;
   const seq = read.room?.seq ?? 0;
   useEffect(() => {
     report({
       messages: read.messages,
       runs: runs.runs,
-      reviewRuns,
       seq,
       refresh: read.refresh,
       now: read.now,
       error: read.error,
     });
-  }, [read.error, read.messages, read.now, read.refresh, reviewRuns, runs.runs, seq]);
+  }, [read.error, read.messages, read.now, read.refresh, runs.runs, seq]);
   return (
     <ProjectColumn name={project} colorKey={scopeOfPlace(place)} shown={shown} onDrag={onDrag}>
       <RoomProjectPanes

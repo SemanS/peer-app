@@ -4,7 +4,6 @@ import { describe, expect, it } from "vite-plus/test";
 import { AuthOrchestrationOperateScope, AuthOrchestrationReadScope } from "../auth.ts";
 import { CLIENT_GUARDED_RPC_SCOPES } from "../clientRpcPermissions.ts";
 import { PeerHubStatus } from "../peerHub.ts";
-import { PEER_PLUGIN_IDS } from "./plugin.ts";
 import { PEER_ROOMS_METHODS as methods, RoomsRpcScopes } from "./rooms.rpc.ts";
 import {
   PEER_ROOM_DELIVERY_STATES,
@@ -105,10 +104,6 @@ describe("room inputs", () => {
 });
 
 describe("the rooms plugin's place", () => {
-  it("comes right after roles", () => {
-    expect(PEER_PLUGIN_IDS[PEER_PLUGIN_IDS.indexOf("roles") + 1]).toBe("rooms");
-  });
-
   it("guards what acts and leaves reading open", () => {
     for (const method of [
       methods.peerRoomsPost,

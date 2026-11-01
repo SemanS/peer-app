@@ -65,15 +65,3 @@ export function projectActionItems(
       .map((action) => ({ key: `${plugin.id}/${action.id}`, action })),
   );
 }
-
-/** A fact on the Team page with the plugin that adds it: two plugins may use the same id. */
-export interface TeamTaskFactItem {
-  readonly key: string;
-  readonly fact: TeamTaskFact;
-}
-
-/** A signal on the Team page with the plugin that adds it. */
-export interface TeamPluginSignalItem {
-  readonly key: string;
-  readonly signal: TeamPluginSignal;
-}

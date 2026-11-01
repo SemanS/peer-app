@@ -8,7 +8,6 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
 import {
-  changeToReview,
   type DiffInput,
   pushedRefs,
   readPatch,
@@ -66,28 +65,12 @@ const pushedBranch = (origin: string, dir: string) => {
 };
 
 describe("the run a diff reads", () => {
-  const sessions = [{ run: "run_review", root: "/review", repositoryId: "api" }];
-
-  it("passes over a review run, newest or not", () => {
-    assert.deepStrictEqual(
-      workRun({
-        runs: [
-          { id: "run_review", keys: [] },
-          { id: "run_work", keys: [] },
-        ],
-        reviews: new Set(["run_review"]),
-        sessions: [...sessions, { run: "run_work", root: "/work", repositoryId: "web" }],
-        threads: [],
-      }),
-      { root: "/work", repository: "web" },
-    );
-  });
+  const sessions = [{ run: "run_work", root: "/work", repositoryId: "api" }];
 
   it("finds a detached run by its thread's branch", () => {
     assert.deepStrictEqual(
       workRun({
         runs: [{ id: "run_work", keys: ["herdr:t1"] }],
-        reviews: new Set(),
         sessions: [],
         threads: [{ id: "herdr:t1", branch: "ana/tax" }],
       }),
@@ -99,7 +82,6 @@ describe("the run a diff reads", () => {
     assert.deepStrictEqual(
       workRun({
         runs: [{ id: "run_work", keys: ["herdr:t1"], root: "/tree" }],
-        reviews: new Set(),
         sessions: [],
         threads: [{ id: "herdr:t1", branch: "ana/tax" }],
       }),
@@ -110,12 +92,11 @@ describe("the run a diff reads", () => {
   it("gives a live session's checkout before the one a run was started in", () => {
     assert.deepStrictEqual(
       workRun({
-        runs: [{ id: "run_review", keys: [], root: "/started" }],
-        reviews: new Set(),
+        runs: [{ id: "run_work", keys: [], root: "/started" }],
         sessions,
         threads: [],
       }),
-      { root: "/review", repository: "api" },
+      { root: "/work", repository: "api" },
     );
   });
 
@@ -133,28 +114,7 @@ describe("the run a diff reads", () => {
   );
 });
 
-describe("the change a review session starts on", () => {
-  it.effect("is the first ref on the remote, fetched as its remote branch", () =>
-    scoped(
-      Effect.gen(function* () {
-        const { dir, origin, work } = yield* repositories;
-        const head = pushedBranch(origin, dir);
-        const change = yield* Effect.promise(() => changeToReview(work, ["gone", "ana/tax"]));
-        assert.deepStrictEqual(change, { ref: "ana/tax", base: "origin/ana/tax" });
-        assert.strictEqual(git(work, "rev-parse", "origin/ana/tax"), head);
-      }),
-    ),
-  );
-
-  it.effect("is nothing when no ref is on the remote", () =>
-    scoped(
-      Effect.gen(function* () {
-        const { work } = yield* repositories;
-        assert.isUndefined(yield* Effect.promise(() => changeToReview(work, ["gone"])));
-      }),
-    ),
-  );
-
+describe("the branches of a task", () => {
   it("takes the task's branches once each, and never the base", () => {
     assert.deepStrictEqual(
       pushedRefs(

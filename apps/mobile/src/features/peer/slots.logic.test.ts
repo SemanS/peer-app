@@ -4,7 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { PeerMobilePlugin } from "./slotTypes";
 import { alwaysWorkspaceSectionsAt, selectPeerPlugins, workspaceSectionsAt } from "./slots.logic";
 
-const REGISTRY = ["herdr", "requests", "roles"].map((id) => ({ id }));
+const REGISTRY = ["herdr", "requests", "rooms"].map((id) => ({ id }));
 
 const plugin = (id: string, active = true): PeerPluginState => ({
   id,

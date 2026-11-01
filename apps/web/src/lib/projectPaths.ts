@@ -14,4 +14,5 @@ export {
   normalizeProjectPathForComparison,
   normalizeProjectPathForDispatch,
   resolveProjectPathForDispatch,
+  withoutHomePrefixBeforeAbsolutePath,
 } from "@t3tools/client-runtime/state/projects";

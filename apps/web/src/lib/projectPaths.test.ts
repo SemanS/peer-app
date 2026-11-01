@@ -15,9 +15,17 @@ import {
   normalizeProjectPathForDispatch,
   isUnsupportedWindowsProjectPath,
   resolveProjectPathForDispatch,
+  withoutHomePrefixBeforeAbsolutePath,
 } from "./projectPaths";
 
 describe("projectPaths", () => {
+  it("reads an absolute path typed after the field's home prefix as that path", () => {
+    expect(withoutHomePrefixBeforeAbsolutePath("~//Users/ana/app")).toBe("/Users/ana/app");
+    expect(withoutHomePrefixBeforeAbsolutePath("~/C:\\Work\\app")).toBe("C:\\Work\\app");
+    expect(withoutHomePrefixBeforeAbsolutePath("~/Documents/app")).toBe("~/Documents/app");
+    expect(withoutHomePrefixBeforeAbsolutePath("/Users/ana/app")).toBe("/Users/ana/app");
+  });
+
   it("normalizes trailing separators for dispatch and comparison", () => {
     expect(normalizeProjectPathForDispatch(" /repo/app/ ")).toBe("/repo/app");
     expect(normalizeProjectPathForComparison("/repo/app/")).toBe("/repo/app");

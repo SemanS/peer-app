@@ -107,7 +107,8 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   REAL_SCENARIO=rooms LAB_RETRY=1 REAL_AGENTS=1 (LAB_VCS=jj for Jujutsu) proves Try again on real agents in chats: an
 //   open run that committed goes on in its checkout, on its model, as one run; a run that ended gets a new one there; a
 //   run that left nothing starts over from the base. The room's diff shows the commit throughout. A task starts from
-//   what a teammate pushed, and the person's own checkout stays where it was.
+//   what a teammate pushed, and the person's own checkout stays where it was. Peer remembers each checkout it made, once;
+//   closing a chat removes those that hold nothing and keeps the one with a commit no remote has.
 //   REAL_SCENARIO=rooms (peer-lab/rooms.ts) proves a task's room: Bob names Ana's agent and nothing reaches it until she
 //   passes it on, she declines and Bob's status moves with no new message, Bob withdraws, a hostile message stays
 //   fenced, an agent cannot name an agent, Bob's own agent answers from a review session on his computer after Ana's run
@@ -7660,6 +7661,23 @@ const roomsRetryProgram = Effect.gen(function* () {
   const started = () => agents()[0];
   const claudeArgs = () =>
     NodeFS.readFileSync(NodePath.join(herdr.base, "claude-args.log"), "utf8").trim().split("\n");
+  const realPath = (path: string) => (NodeFS.existsSync(path) ? NodeFS.realpathSync(path) : path);
+  /** The checkouts Peer means to remove once their task is done, sorted. */
+  const remembered = (): ReadonlyArray<string> => {
+    const file = (NodeFS.readdirSync(ana.home, { recursive: true }) as string[]).find(
+      (entry) => NodePath.basename(entry) === "peer-hub.json",
+    );
+    try {
+      const persisted = JSON.parse(
+        NodeFS.readFileSync(NodePath.join(ana.home, file ?? ""), "utf8"),
+      );
+      return Object.keys(persisted.pluginData?.herdr?.checkouts ?? {})
+        .map(realPath)
+        .toSorted();
+    } catch {
+      return [];
+    }
+  };
 
   /** Ana's message in a new chat, until its agent is done with it and `leave` has let it go. */
   const chatUntilStopped = async (
@@ -7742,7 +7760,7 @@ const roomsRetryProgram = Effect.gen(function* () {
           expect: "failed",
         }),
       );
-    return { cwd, delivery, openRuns, run, shows, tryAgain };
+    return { cwd, delivery, openRuns, run, shows, task: place.task, tryAgain };
   };
 
   try {
@@ -7873,6 +7891,41 @@ const roomsRetryProgram = Effect.gen(function* () {
       // Not local main: a fetch moves neither Git's nor a jj bookmark that tracks nothing.
       must(commitsIn(againC?.cwd ?? "", "refs/remotes/origin/main") === 0, "C: from the base");
       await agentGone(againC?.pane_id ?? "");
+
+      // A and B went on in their checkouts, so only C's retry made one more.
+      const made = [a.cwd, b.cwd, c.cwd, againC?.cwd ?? ""].map(realPath).toSorted();
+      const allKnown = await waitOn(
+        "Peer to remember its checkouts",
+        () => remembered().join() === made.join(),
+        30_000,
+      );
+      say("the checkouts Peer remembers", remembered().join(" "));
+      must(allKnown, "Peer remembers each checkout a chat's run made, once");
+
+      for (const task of [a.task, c.task])
+        await hubCall(`/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(task)}`, {
+          method: "PATCH",
+          session: hubSession,
+          body: { status: "done" },
+        });
+      const gone = await waitOn(
+        "closed chats' checkouts to go",
+        async () => {
+          await rpc(ana.client[WS_METHODS.peerHubSync]({}));
+          return !NodeFS.existsSync(c.cwd) && !NodeFS.existsSync(againC?.cwd ?? "");
+        },
+        3 * 60_000,
+      );
+      say("the checkouts Peer remembers once closed", remembered().join(" "));
+      must(gone, "C: closing the chat removed both checkouts, which held nothing");
+      must(
+        NodeFS.existsSync(a.cwd) && remembered().includes(realPath(a.cwd)),
+        "A: closing the chat kept the checkout with a commit no remote has",
+      );
+      must(
+        remembered().join() === [a.cwd, b.cwd].map(realPath).toSorted().join(),
+        "Peer forgot only what it removed",
+      );
     });
     check(missed.length === 0, `Try again kept the work (missing: ${missed.join("; ")})`);
   } finally {

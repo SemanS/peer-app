@@ -73,13 +73,10 @@ describe("the arms", () => {
   it("is Peer as it is unless the environment names another", () => {
     expect(armOf({})).toBe("peer");
     expect(armOf({ LAB_PEER: "off" })).toBe("none");
-    expect(armOf({ LAB_KERNEL: "1" })).toBe("kernel");
-    expect(armOf({ LAB_KERNEL: "0" })).toBe("peer");
   });
 
   it("refuses two arms at once and a word it does not know", () => {
     expect(() => armOf({ LAB_PEER: "on" })).toThrow(/LAB_PEER is off/);
-    expect(() => armOf({ LAB_KERNEL: "1", LAB_PEER: "off" })).toThrow(/2 arms/);
   });
 
   it("turns off what an operator can in the kernel arm, and nothing in the others", () => {

@@ -1,4 +1,3 @@
-import { kontextEnvironment } from "./bundledKontext.ts";
 import * as NodeOS from "node:os";
 
 import { parsePersistedServerObservabilitySettings } from "@t3tools/shared/serverSettings";
@@ -531,7 +530,6 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
     input: SharedBootstrapInput & {
       readonly resourceMonitorPath: Option.Option<string>;
       readonly herdrPath: Option.Option<string>;
-      readonly kontextEnv: Readonly<Record<string, string>>;
       readonly cliPath: Option.Option<string>;
       readonly shellEnvironmentPrepared: boolean;
     },
@@ -579,7 +577,6 @@ const resolvePrimaryStartConfig = Effect.fn("desktop.backendConfiguration.resolv
       cwd: environment.backendCwd,
       env: {
         ...backendChildEnvPatch(),
-        ...input.kontextEnv,
         ELECTRON_RUN_AS_NODE: "1",
         // The server's herdr plugin runs this binary as Peer's own herdr. The
         // WSL backend never gets it: herdr is not bundled for that runtime.
@@ -838,17 +835,6 @@ export const make = Effect.gen(function* () {
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
     );
-    const kontextPath = environment.path.join(
-      environment.resourcesPath,
-      "kontext",
-      environment.platform === "win32" ? "kontext.exe" : "kontext",
-    );
-    const kontextEnv = kontextEnvironment({
-      explicit: process.env.KONTEXT_BIN,
-      packaged: environment.isPackaged,
-      resourcePath: kontextPath,
-      exists: yield* fileSystem.exists(kontextPath).pipe(Effect.orElseSucceed(() => false)),
-    });
     const cliPath = yield* DesktopCliShim.install.pipe(
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(DesktopEnvironment.DesktopEnvironment, environment),
@@ -858,7 +844,6 @@ export const make = Effect.gen(function* () {
       ...shared,
       resourceMonitorPath,
       herdrPath,
-      kontextEnv,
       cliPath,
       shellEnvironmentPrepared,
     }).pipe(

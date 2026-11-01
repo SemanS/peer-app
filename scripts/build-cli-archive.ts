@@ -29,7 +29,6 @@ import {
 } from "./build-desktop-artifact.ts";
 import { assertLinuxArm64PageCompatibility } from "./lib/linux-arm64-sea.ts";
 import { selectCliRuntimeExternalDependencies } from "./lib/cli-external-packages.ts";
-import { stageKontextResource } from "./lib/kontext-resource.ts";
 import { signWithJsign } from "./lib/windows-jsign.ts";
 import { windowsSystemTar } from "./lib/windows-tar.ts";
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
@@ -354,8 +353,7 @@ const signMacArchiveContents = Effect.fn("signMacArchiveContents")(function* (in
         entry.endsWith(".node") ||
         entry.endsWith(".dylib") ||
         entry.endsWith("spawn-helper") ||
-        entry.endsWith("t3-resource-monitor") ||
-        entry.replaceAll("\\", "/").endsWith("kontext/kontext"),
+        entry.endsWith("t3-resource-monitor"),
     )
     .map((entry) => path.join(input.contentDir, entry));
 
@@ -387,7 +385,7 @@ const signMacArchiveContents = Effect.fn("signMacArchiveContents")(function* (in
     return;
   }
   // notarytool only accepts archives, and a bare executable cannot be stapled,
-  // so notarize the complete runtime, including kontext, and rely on online ticket lookup.
+  // so notarize the complete runtime and rely on online ticket lookup.
   const notarizeZip = path.join(path.dirname(input.contentDir), ".notarize-t3.zip");
   yield* runCommand(
     ChildProcess.make("ditto", ["-c", "-k", "--keepParent", input.contentDir, notarizeZip]),
@@ -537,20 +535,6 @@ const buildCliArchive = Effect.fn("buildCliArchive")(function* (input: {
 
   yield* Effect.log(`[cli-archive] Staging ${stem}...`);
   yield* fs.copyFile(builtExecutable, path.join(contentDir, executableName));
-  // kontext/ holds the knowledge engine, next to client/ and resource-monitor/; WSL uses it too.
-  const engineHostArch = yield* HostProcess.Architecture;
-  yield* Effect.tryPromise(() =>
-    stageKontextResource({
-      binaryPath: process.env.T3CODE_KONTEXT_BIN,
-      manifestPath: process.env.T3CODE_KONTEXT_MANIFEST,
-      resourcesDirectory: contentDir,
-      platform: input.platform,
-      arch: input.arch,
-      hostPlatform,
-      hostArch: engineHostArch,
-      required: true,
-    }),
-  );
   yield* stageWebClient(webClient, path.join(contentDir, "client"));
   yield* fs.copy(resourceMonitorDir, path.join(contentDir, "resource-monitor"));
   yield* stageRuntimeExternals({

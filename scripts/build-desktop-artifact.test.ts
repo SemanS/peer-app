@@ -28,7 +28,6 @@ import {
   DESKTOP_FILE_EXCLUSIONS,
   DESKTOP_EXTRA_RESOURCES,
   HERDR_EXTRA_RESOURCES,
-  KONTEXT_EXTRA_RESOURCES,
   HerdrFetchFailedError,
   HerdrSkipRefusedError,
   assertHerdrSkipAllowed,
@@ -664,8 +663,6 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       "!apps/desktop/prod-resources/windows-server/**/*",
       "!apps/desktop/prod-resources/wsl-runtime.tar.gz",
       "!apps/desktop/prod-resources/wsl-runtime.tar.gz.sha256",
-      "!apps/desktop/prod-resources/kontext",
-      "!apps/desktop/prod-resources/kontext/**/*",
       "!apps/desktop/prod-resources/herdr",
       "!apps/desktop/prod-resources/herdr/**/*",
       "!apps/desktop/gnome-extension",
@@ -735,25 +732,21 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
       ]);
       assert.deepStrictEqual(mac.extraResources, [
         ...DESKTOP_EXTRA_RESOURCES,
-        ...KONTEXT_EXTRA_RESOURCES,
         ...HERDR_EXTRA_RESOURCES,
       ]);
       assert.deepStrictEqual(linux.extraResources, [
         ...DESKTOP_EXTRA_RESOURCES,
-        ...KONTEXT_EXTRA_RESOURCES,
         ...HERDR_EXTRA_RESOURCES,
         ...LINUX_CAPTURE_EXTRA_RESOURCES,
         { from: "apps/desktop/prod-resources/browser-secret", to: "browser-secret" },
       ]);
       assert.deepStrictEqual(win.extraResources, [
         ...DESKTOP_EXTRA_RESOURCES,
-        ...KONTEXT_EXTRA_RESOURCES,
         ...WINDOWS_SERVER_EXTRA_RESOURCES,
         ...WSL_RUNTIME_EXTRA_RESOURCES,
       ]);
       assert.deepStrictEqual(winWithoutWslRuntime.extraResources, [
         ...DESKTOP_EXTRA_RESOURCES,
-        ...KONTEXT_EXTRA_RESOURCES,
         ...WINDOWS_SERVER_EXTRA_RESOURCES,
       ]);
       assert.deepStrictEqual(win.nsis, {

@@ -112,16 +112,16 @@ describe("the Hub's change pings", () => {
       assert.deepStrictEqual(yield* nextHeard(heard, 12), [
         "requests resync acme - ",
         "knowledge resync acme - ",
-        "ask resync acme - ",
+        "observe resync acme - ",
         "memory resync acme - ",
         "requests requests acme bob-laptop ",
         "memory plans acme bob-laptop q4",
         "knowledge knowledge.changed acme ana-laptop pay,2",
         "requests resync acme - ",
         "knowledge resync acme - ",
-        "ask resync acme - ",
+        "observe resync acme - ",
         "memory resync acme - ",
-        "ask done acme - ",
+        "observe done acme - ",
       ]);
       assert.strictEqual(yield* Queue.size(heard), 0);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
@@ -134,12 +134,12 @@ describe("the Hub's change pings", () => {
         listening("memory", { changes: ["plans"] }, heard),
       ]);
       assert.deepStrictEqual(yield* nextHeard(heard, 6), [
-        "ask resync acme - ",
+        "observe resync acme - ",
         "memory resync acme - ",
         "memory plans acme bob-laptop q4",
-        "ask resync acme - ",
+        "observe resync acme - ",
         "memory resync acme - ",
-        "ask done acme - ",
+        "observe done acme - ",
       ]);
       // Its own `work` ping read nothing; bob's `coord` and the resync did.
       assert.deepStrictEqual(yield* Queue.takeAll(reacted), ["coord", "coord", "projects"]);

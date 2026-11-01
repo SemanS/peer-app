@@ -10,14 +10,16 @@
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 
-import type {
-  PeerHookContext,
-  PeerHookText,
-  PeerHooks,
-  PeerSessionView,
+import {
+  isLanding,
+  type PeerHookContext,
+  type PeerHookText,
+  type PeerHooks,
+  type PeerSessionView,
+  type PeerToolContext,
 } from "../../core/plugin.ts";
 import type { Rooms } from "./Rooms.ts";
-import { reminderText, START_LINE, stepText } from "./text.ts";
+import { reminderText, roomLinesText, START_LINE, stepText } from "./text.ts";
 
 /** An agent still booting is idle too: its typed prompt gets this long to arrive before a wake. */
 const PROMPT_SETTLES_MS = 30_000;
@@ -45,6 +47,8 @@ export interface Local {
   readonly overlaps: Set<string>;
   /** Notes on lines since `peer ready`; absent before it. */
   readyNotes?: number;
+  /** How far a landing step of this session has read its room. */
+  landingRead: number;
 }
 
 export const localOf = (session: PeerSessionView) =>
@@ -56,6 +60,7 @@ export const localOf = (session: PeerSessionView) =>
     told: new Set(),
     agentWakes: [],
     overlaps: new Set(),
+    landingRead: 0,
   }));
 
 const toldOf = (session: PeerSessionView) => session.told?.("rooms") ?? localOf(session).told;
@@ -117,15 +122,34 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
     const own = localOf(session);
     own.offering.delete(ref);
     toldOf(session).add(ref);
-    own.unanswered.add(ref);
+    // A colleague's words may go unanswered: only its person's yes would make it answer, so no
+    // reminder wakes it for them.
+    const quiet = rooms.waiting(session.run).some((one) => one.ref === ref && one.quiet === true);
+    if (!quiet) own.unanswered.add(ref);
     rooms.settled(session.run, ref);
   };
+  /** Before work lands, what its room says that this session never heard, once. */
+  const beforeLanding = Effect.fn("RoomHooks.beforeLanding")(function* (
+    ctx: PeerHookContext | PeerToolContext,
+  ) {
+    const { session } = ctx;
+    const command = "command" in ctx ? ctx.command : undefined;
+    if (command === undefined || !isLanding(command) || session.task === undefined) return null;
+    const own = localOf(session);
+    const told = toldOf(session);
+    const { seq, unread } = yield* rooms.unread(session, own.landingRead);
+    own.landingRead = seq;
+    return roomLinesText(unread.filter((line) => !told.has(line.ref)));
+  });
   return {
     startLine: Effect.succeed(START_LINE),
     sessionStart: (ctx) => offer(ctx.session, false),
     sessionEnd: left,
     sessionExpired: left,
-    notices: [{ wakes: true, landing: true, read: notice }],
+    notices: [
+      { wakes: true, landing: true, read: notice },
+      { wakes: false, landing: true, read: beforeLanding },
+    ],
     delivery: ({ session, refs, state }) =>
       Effect.gen(function* () {
         const own = localOf(session);

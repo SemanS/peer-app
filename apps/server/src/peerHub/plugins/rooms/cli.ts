@@ -47,6 +47,8 @@ const REPEAT = "repeat the same command now; its operation id makes a second sen
 const SHOWN = 20;
 const SAY_FLAGS = new Set(["--reply", "--to", "--agent", "--in", "--at"]);
 const READY_WORDS = "Ready to look at.";
+/** The most a message names on the Hub. */
+const MAX_NAMED = 8;
 
 /** Who an agent's post reaches, in words: it should know whether anyone will hear it. */
 const reachedText = (message: PeerRoomMessage, nameOf: (email: string) => string) =>
@@ -286,9 +288,9 @@ export const roomCommands = (
       (other) =>
         other.project === session.project && other.task === target.id && other.id !== session.id,
     );
-    const to = [...new Set(others.map((other) => other.email))].map(
-      (email): PeerRoomTargetInput => ({ kind: "agent", email }),
-    );
+    const to = [...new Set(others.map((other) => other.email))]
+      .slice(0, MAX_NAMED)
+      .map((email): PeerRoomTargetInput => ({ kind: "agent", email }));
     const op = yield* opOf(run, target.id, question);
     const message = yield* posted(
       session,
@@ -302,8 +304,12 @@ export const roomCommands = (
       : `Asked in the room of ${target.key ?? target.title} (#${message.seq}). ${reached} Their answer reaches you as a room message.`;
   });
 
+  /**
+   * Words for the agents that share this one's files sit in their rooms: that is where those agents
+   * answer, and where whoever lands that work reads them. With nobody to tell they stay in its own.
+   */
   const note = Effect.fn("PeerRoomCli.note")(function* (asked: PeerSessionView, text: string) {
-    const { session, run } = yield* withRoom(asked);
+    const { session, run, task } = yield* withRoom(asked);
     const view = yield* agents.view(session.workspace);
     const mine = view.overlaps.filter(
       (overlap) => overlap.state === "open" && overlap.sessions.includes(session.id),
@@ -312,13 +318,27 @@ export const roomCommands = (
       (other) =>
         other.id !== session.id && mine.some((overlap) => overlap.sessions.includes(other.id)),
     );
-    const to = [...new Set(others.map((other) => other.email))].map(
-      (email): PeerRoomTargetInput => ({ kind: "agent", email }),
+    const targets = new Map<string, Set<string>>();
+    for (const other of others) {
+      const room = other.task ?? task;
+      targets.set(room, (targets.get(room) ?? new Set()).add(other.email));
+    }
+    if (targets.size === 0) targets.set(task, new Set());
+    const said: string[] = [];
+    for (const [room, emails] of targets) {
+      const to = [...emails].map((email): PeerRoomTargetInput => ({ kind: "agent", email }));
+      const op = yield* opOf(run, room, text);
+      const message = yield* posted(
+        session,
+        run,
+        { op, text, to },
+        room === task ? undefined : room,
+      );
+      said.push(reachedText(message, nameOf(session)));
+    }
+    return ["Posted. Everyone on the project reads it.", ...said.filter((one) => one !== "")].join(
+      " ",
     );
-    const op = yield* opOf(run, text);
-    const message = yield* posted(session, run, { op, text, to });
-    const reached = reachedText(message, nameOf(session));
-    return `Posted #${message.seq} in the room. Everyone on the project reads it.${reached === "" ? "" : ` ${reached}`}`;
   });
 
   const roomCommand: PeerCommand = {

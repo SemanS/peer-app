@@ -64,6 +64,7 @@ import { changeToReview, pushedRefs, roomDiff, workRun, worktreeOf } from "./cli
 import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/steps.ts";
 import { fetchPins, newestHandoff, pinnedRoot, readPin, storeOf } from "./client/snapshots.ts";
 import { hearsWhileWaiting, runQueues, tellable } from "./client/queue.ts";
+import { withheld } from "./client/render.ts";
 import { statusOf } from "./client/status.ts";
 import { projectsText, roomReach, runRootsData } from "../../core/work/runRoots.ts";
 import {
@@ -602,6 +603,27 @@ const make = Effect.gen(function* () {
         }
         return message;
       }),
+    /** What the session's room said after `after`, by anyone but this run, as far as it may hear. */
+    unread: Effect.fn("Rooms.unread")(
+      function* (session: PeerSessionView, after: number) {
+        const me = (yield* state.email) ?? "";
+        const { messages, seq } = yield* hub.read(
+          { workspace: session.workspace, project: session.project, task: session.task ?? "" },
+          { after, limit: 50 },
+        );
+        const unread = messages
+          .filter((message) => message.author.run !== session.run && !withheld(message, me))
+          .map((message) => ({
+            ref: refOf(message.task, message.seq),
+            seq: message.seq,
+            author: `${state.nameOf(session.workspace, message.author.email)}${message.author.run === undefined ? "" : "'s agent"}`,
+            text: message.text,
+          }));
+        return { seq, unread };
+      },
+      (effect, _session, after) =>
+        effect.pipe(Effect.orElseSucceed(() => ({ seq: after, unread: [] }))),
+    ),
     /** Says once in the session's room that it touches what another agent touches. */
     overlapLines: Effect.fn("Rooms.overlapLines")(function* (
       session: PeerSessionView,
@@ -633,7 +655,7 @@ const make = Effect.gen(function* () {
             mark: "overlap",
             environment: state.environmentId,
           },
-        ).pipe(Effect.ignore);
+        ).pipe(Effect.ignore, Effect.forkIn(scope));
       }
     }),
     // What was read leaves Needs you: the Hub's list changes, and no ping says so.

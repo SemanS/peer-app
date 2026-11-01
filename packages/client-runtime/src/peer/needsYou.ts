@@ -219,5 +219,3 @@ export const peerAgentIsBlocked = (status: PeerWorkStatus): boolean => status ==
 export const peerAgentIsGone = (
   agent: { readonly status?: PeerWorkStatus; readonly gone?: boolean } | null | undefined,
 ): boolean => agent == null || agent.gone === true;
-
-export * from "./needsYouControls.ts";

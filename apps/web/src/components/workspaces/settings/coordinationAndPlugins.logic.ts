@@ -5,21 +5,16 @@
  * from. Pure, so the page only draws it. The Hub decides what a project's agents follow
  * (`effectivePolicy` is how this computer works it out); the plugins' state is the environment's.
  */
-import { effectivePolicy, getAt } from "@t3tools/client-runtime/peer-settings";
+import { effectivePolicy } from "@t3tools/client-runtime/peer-settings";
 import type {
   PeerCoordinationPolicy,
   PeerCoordinationState,
   PeerHubInfo,
   PeerPluginState,
-  PeerSettingsView,
 } from "@t3tools/contracts";
 
 import type { ConnectionState } from "../../settings/connectionStatus.logic";
 import { pluginRows } from "../PeerPluginsSettings.logic";
-
-type Mapping = Readonly<Record<string, unknown>>;
-const isMapping = (value: unknown): value is Mapping =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
  * The policies a person picks for their computer, with what each says of their agents. `exclusive`
@@ -143,7 +138,6 @@ export interface PluginView {
   /** A line under the title: what forces it off, or what the Hub needs. */
   readonly note: string | null;
   /** What stops applying while the Hub keeps its feature off; the page words it with what it knows. */
-  readonly consequence: "path-rules" | null;
   /** What its last cleanup, or its background work, failed with. */
   readonly error: string | null;
   /** The switch shows what is true now, not what its owner once chose, where the Hub or an operator decides. */
@@ -154,18 +148,12 @@ export interface PluginView {
 
 /**
  * The plugins whose Hub feature the signed-in Hub has turned off, by plugin id (a plugin's id is its
- * Hub feature's). A Hub lists the features its operator turned off in what it says of itself
- * (`featuresOff`). An older Hub does not; one that serves settings still says so for what the
- * settings document holds a part of (`features` of its view): path rules, the resources plugin's.
+ * Hub feature's): what it lists as turned off by its operator (`featuresOff`).
  */
 export function hubOffPlugins(
   hub: Pick<PeerHubInfo, "featuresOff"> | undefined,
-  features: PeerSettingsView["features"] | null,
 ): ReadonlySet<string> {
-  if (hub?.featuresOff !== undefined) return new Set(hub.featuresOff);
-  const off = new Set<string>();
-  if (features?.pathRules === false) off.add("resources");
-  return off;
+  return new Set(hub?.featuresOff ?? []);
 }
 
 /**
@@ -190,7 +178,6 @@ export function pluginViews(
       id: row.id,
       title: row.title,
       note: row.note,
-      consequence: null,
       error: row.error,
       busy: row.busy,
     } as const;
@@ -218,7 +205,6 @@ export function pluginViews(
         ...base,
         ...decided,
         note: null,
-        consequence: row.id === "resources" ? "path-rules" : null,
         status: "unavailable",
         source: "turned off on this Hub",
       };
@@ -241,34 +227,3 @@ export function pluginViews(
     };
   });
 }
-
-/**
- * The names of the projects of a settings document that have path rules, among those whose ids it
- * is given (the projects the person is on: an admin's document holds every project of the workspace).
- */
-export function projectsWithPathRules(
-  document: unknown,
-  ids: ReadonlySet<string>,
-): ReadonlyArray<string> {
-  const projects = getAt(document, ["projects"]);
-  if (!isMapping(projects)) return [];
-  return Object.entries(projects).flatMap(([id, project]) => {
-    if (!ids.has(id)) return [];
-    const paths = getAt(project, ["coordination", "paths"]);
-    if (!isMapping(paths) || Object.keys(paths).length === 0) return [];
-    const name = getAt(project, ["name"]);
-    return [typeof name === "string" && name !== "" ? name : id];
-  });
-}
-
-/** `Booking’s`, `Booking’s and Peer Hub’s`, `Booking’s, Peer Hub’s and Camp-bot’s`. */
-function possessives(names: ReadonlyArray<string>): string {
-  const owned = names.map((name) => `${name}’s`);
-  return owned.length <= 1
-    ? (owned[0] ?? "")
-    : `${owned.slice(0, -1).join(", ")} and ${owned.at(-1)}`;
-}
-
-/** What stops applying while path rules are off on the Hub: the projects that have them. */
-export const pathRulesNote = (names: ReadonlyArray<string>): string =>
-  `${possessives(names)} path rules don’t apply while this is off.`;

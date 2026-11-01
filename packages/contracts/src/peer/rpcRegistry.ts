@@ -4,10 +4,6 @@ import {
   PeerContextArchive,
   PeerContextArchiveInput,
 } from "./contextView.ts";
-import { PEER_RESOURCES_METHODS, ResourcesRpcGroup, ResourcesRpcScopes } from "./resources.rpc.ts";
-import { PeerHubSubscribeInput } from "./needs-you.ts";
-import { PEER_NEEDS_YOU_METHODS, NeedsYouRpcGroup, NeedsYouRpcScopes } from "./needs-you.rpc.ts";
-import { PEER_SETTLE_METHODS, SettleRpcGroup, SettleRpcScopes } from "./settle.rpc.ts";
 import { PEER_TOOL_TRUST_METHODS, PeerToolTrustRpcs, ToolTrustRpcScopes } from "./toolTrust.rpc.ts";
 /**
  * Peer's WebSocket RPCs. Core's group and each plugin's group merge into `PeerRpcGroup`, which
@@ -53,6 +49,7 @@ import {
   PeerHubUseJujutsuInput,
   PeerHubStartSignInInput,
   PeerHubStatus,
+  PeerHubSubscribeInput,
   PeerHubWorkspaceInput,
   PeerWorkspaceMembers,
   PeerRemovalPlan,
@@ -545,7 +542,6 @@ const PeerCoreRpcScopes = {
 
 /** Every Peer method, as `WS_METHODS` spreads them. */
 export const PEER_WS_METHODS = {
-  ...PEER_RESOURCES_METHODS,
   ...PEER_CHANGES_METHODS,
   ...PEER_CORE_METHODS,
   ...PEER_HERDR_METHODS,
@@ -557,8 +553,6 @@ export const PEER_WS_METHODS = {
 
   ...PEER_AUDIT_METHODS,
   ...PEER_TOOL_TRUST_METHODS,
-  ...PEER_NEEDS_YOU_METHODS,
-  ...PEER_SETTLE_METHODS,
   ...PEER_SETTINGS_METHODS,
   ...PEER_ROOMS_METHODS,
   ...PEER_CARD_METHODS,
@@ -566,7 +560,6 @@ export const PEER_WS_METHODS = {
 } as const;
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
-  ResourcesRpcGroup,
   ChangesRpcGroup,
   HerdrRpcGroup,
   JujutsuRpcGroup,
@@ -577,8 +570,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
 
   AuditRpcGroup,
   PeerToolTrustRpcs,
-  NeedsYouRpcGroup,
-  SettleRpcGroup,
   SettingsRpcGroup,
   RoomsRpcGroup,
   CardRpcGroup,
@@ -587,7 +578,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
 
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
 export const PEER_RPC_SCOPES = {
-  ...ResourcesRpcScopes,
   ...ChangesRpcScopes,
   ...PeerCoreRpcScopes,
   ...HerdrRpcScopes,
@@ -599,8 +589,6 @@ export const PEER_RPC_SCOPES = {
 
   ...AuditRpcScopes,
   ...ToolTrustRpcScopes,
-  ...NeedsYouRpcScopes,
-  ...SettleRpcScopes,
   ...SettingsRpcScopes,
   ...RoomsRpcScopes,
   ...CardRpcScopes,

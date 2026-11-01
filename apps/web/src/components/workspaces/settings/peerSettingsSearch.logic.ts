@@ -1,7 +1,7 @@
 /**
  * What settings search knows of Peer's own pages: each page of the Workspace, the person's Projects,
  * Me and This computer, the sections on them and their key fields, with the words people remember
- * them by (master key, pools, path rules…). Peer's pages
+ * them by (master key, pools…). Peer's pages
  * live at addresses that name a workspace and a project, so the catalog is built for the ones the
  * person has open (`peerSearchItems`); a result carries where it lives, so it can say so.
  *
@@ -185,27 +185,13 @@ const COMPUTER_ENTRIES: ReadonlyArray<Entry> = [
     id: "peer-plugins",
     title: "Peer plugins",
     place: c("coordination"),
-    terms: "plugin plugins turn on off herdr github observe settle",
+    terms: "plugin plugins turn on off herdr github observe",
   },
   {
     id: "agent-coordination",
     title: "Agent coordination",
     place: c("coordination"),
     terms: "coordination hooks claude mod codex trust experimental",
-  },
-  {
-    id: "phone-alerts",
-    title: "Phone alerts",
-    place: c("coordination"),
-    terms: "phone alerts mobile push notifications needs you",
-    plugin: "needs-you",
-  },
-  {
-    id: "settle-resume",
-    title: "Resume an ended agent to settle its overlaps",
-    place: c("coordination"),
-    terms: "settle overlap resume ended agent handover close leave it to me",
-    plugin: "settle",
   },
   {
     id: "tool-trust",
@@ -266,18 +252,6 @@ const PROJECT_ENTRIES: ReadonlyArray<Entry> = [
     title: "Coordination policy",
     place: p("coordination"),
     terms: "policy notify coordinate ask exclusive coordination agents overlap",
-  },
-  {
-    id: "path-rules",
-    title: "Path rules",
-    place: p("coordination"),
-    terms: "path rule rules glob pattern exception folder file",
-  },
-  {
-    id: "test-a-path",
-    title: "Test a path",
-    place: p("coordination"),
-    terms: "path test rule which mode decides",
   },
   {
     id: "project-history",

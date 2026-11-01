@@ -1,11 +1,13 @@
 import type { PeerHubStatus } from "@t3tools/contracts";
 
-/** Keep the shared contract so older computers and the task launcher use the same data. */
+/**
+ * The light status a phone follows (`scope: "needs-you"`): the contract's shape, with what its rooms
+ * and the task launcher read, so a phone stays on it whatever churns on the computer.
+ */
 export function needsYouView(status: PeerHubStatus): PeerHubStatus {
-  const ids = new Set([
-    ...status.coordination.overlaps.filter((o) => o.state === "open").flatMap((o) => o.sessions),
-    ...(status.needsYou?.staleInputs.map((s) => s.session) ?? []),
-  ]);
+  const ids = new Set(
+    status.coordination.overlaps.filter((o) => o.state === "open").flatMap((o) => o.sessions),
+  );
   return {
     ...status,
     pendingSignIn: null,

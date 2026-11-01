@@ -113,7 +113,7 @@ export function deleteConsequences(
         }, with their task context and coordination history`;
   return [
     tasks,
-    `${project.name}’s settings: people, tools, path rules and allocations`,
+    `${project.name}’s settings: people, tools and allocations`,
     `${project.name} leaves Work for ${count(facts.people, "person", "people")}. Threads on their computers stay, without the project.`,
     ...(facts.gatewayTeam
       ? [`The gateway team “${project.id}” stays, with its usage. Remove it there if you want.`]

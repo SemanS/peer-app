@@ -58,10 +58,6 @@ const herdrRuntime = {
   },
 } as const;
 export const CATALOG = defineEvents({
-  "resource.claim": ev({}),
-  "resource.refused": ev({}),
-  "resource.release": ev({}),
-  "resource.lost": ev({}),
   "ask.unopened": ev({}),
   ask: ev({}),
   "ask.dropped": ev({ ms: "ms" }),

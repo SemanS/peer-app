@@ -25,7 +25,6 @@ import {
   withoutOutputTrim,
 } from "../coordination/edits.ts";
 import type { PeerToolContext } from "../plugin.ts";
-import { endingOverlaps } from "./endingOverlaps.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import { runClaimOf } from "./runs.ts";
 import { carriedText, injectedChars } from "./delivery.ts";
@@ -574,7 +573,6 @@ export async function answerHook(
       // Plugins hear of it as it was, after core let it go.
       const ending = step();
       await checkpointInputs(this, session);
-      await handlers(ending, "session-ending", endingOverlaps(this, session));
       for (const queued of session.pending.splice(0))
         if (typeof queued !== "string") await notifyDeliveries(queued.deliveries, "dropped");
       void this.release(session);

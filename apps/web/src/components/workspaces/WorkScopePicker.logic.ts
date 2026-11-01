@@ -8,7 +8,7 @@ import type {
 } from "@t3tools/contracts";
 
 import { getLocalFileManagerName } from "../../lib/utils";
-import { pathRulesText, projectPolicyLine } from "./DecisionChip.logic";
+import { projectPolicyLine } from "./DecisionChip.logic";
 import {
   isLocalScope,
   LOCAL_SCOPE_PREFIX,
@@ -183,7 +183,7 @@ export function projectButtonLines(
 export interface CoordinationRow {
   /** "Coordination: notify". */
   readonly title: string;
-  /** "Your default on this computer · 2 path rules", "Set by the project". */
+  /** "Your default on this computer", "Set by the project". */
   readonly detail: string;
   readonly action: {
     readonly label: "Change…" | "Settings";
@@ -223,7 +223,7 @@ export type ProjectMenuActions =
  * computer's default does; Remove from workspace… is for those who may take the project out.
  */
 export function workspaceProjectActions(input: {
-  readonly status: Pick<PeerHubStatus, "coordination" | "resources" | "email">;
+  readonly status: Pick<PeerHubStatus, "coordination" | "email">;
   readonly workspace: {
     readonly slug: string;
     readonly name: string;
@@ -246,12 +246,7 @@ export function workspaceProjectActions(input: {
         ? null
         : {
             title: `Coordination: ${line.chip.policy}`,
-            detail: [
-              fromProject ? "Set by the project" : "Your default on this computer",
-              line.rules === 0 ? undefined : pathRulesText(line.rules),
-            ]
-              .filter((part) => part !== undefined)
-              .join(" · "),
+            detail: fromProject ? "Set by the project" : "Your default on this computer",
             action: fromProject
               ? {
                   label: "Settings",
@@ -318,7 +313,7 @@ export function actionsForScope(
   scope: string,
   known: {
     readonly status:
-      | (Pick<PeerHubStatus, "coordination" | "resources" | "email"> & {
+      | (Pick<PeerHubStatus, "coordination" | "email"> & {
           readonly workspaces: ReadonlyArray<
             Pick<PeerWorkspaceState, "slug" | "name" | "role" | "projects">
           >;

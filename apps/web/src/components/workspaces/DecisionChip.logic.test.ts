@@ -5,7 +5,6 @@ import {
   decisionChip,
   eventChip,
   overlapChip,
-  pathRulesText,
   projectDecision,
   projectPolicyLine,
 } from "./DecisionChip.logic";
@@ -19,11 +18,10 @@ const coordination = (extra: Partial<Coordination> = {}): Coordination => ({
   ...extra,
 });
 
-const statusOf = (extra: { coordination?: Partial<Coordination>; resources?: object } = {}) =>
+const statusOf = (extra: { coordination?: Partial<Coordination> } = {}) =>
   ({
     coordination: coordination(extra.coordination),
-    ...(extra.resources === undefined ? {} : { resources: extra.resources }),
-  }) as unknown as Pick<PeerHubStatus, "coordination" | "resources">;
+  }) as unknown as Pick<PeerHubStatus, "coordination">;
 
 describe("what decided a request, as a chip", () => {
   it("says the project's policy, a path rule and this computer's default in the design's words", () => {
@@ -153,17 +151,10 @@ describe("a project's policy line in Work", () => {
   const booking = { id: "booking", name: "Booking" };
   const camp = { id: "camp", name: "Camp-bot" };
 
-  it("says the project's policy and sends its Settings, with its path rules counted", () => {
-    const line = projectPolicyLine(
-      statusOf({
-        resources: { held: [], pathRules: [{ workspace: "acme", project: "booking", count: 3 }] },
-      }),
-      "acme",
-      booking,
-    );
+  it("says the project's policy and sends its Settings", () => {
+    const line = projectPolicyLine(statusOf(), "acme", booking);
     expect(line).toEqual({
       chip: { policy: "coordinate", source: "from Booking", warn: false, by: "project" },
-      rules: 3,
       change: { label: "Settings", page: "project" },
     });
   });
@@ -171,13 +162,11 @@ describe("a project's policy line in Work", () => {
   it("says this computer's default and sends its Change when the project sets none", () => {
     expect(projectPolicyLine(statusOf(), "acme", camp)).toEqual({
       chip: { policy: "ask", source: "from your computer", warn: false, by: "computer" },
-      rules: 0,
       change: { label: "Change", page: "computer" },
     });
   });
 
-  it("counts no rules while resources says nothing of them, and shows nothing it does not know", () => {
-    expect(projectPolicyLine(statusOf(), "acme", booking)?.rules).toBe(0);
+  it("shows nothing it does not know", () => {
     // Coordination off here: the policy does not apply to this computer's agents.
     expect(
       projectPolicyLine(statusOf({ coordination: { enabled: false } }), "acme", booking),
@@ -187,10 +176,5 @@ describe("a project's policy line in Work", () => {
       projectPolicyLine(statusOf({ coordination: { policies: undefined } }), "acme", booking),
     ).toBeNull();
     expect(projectPolicyLine(statusOf(), "elsewhere", booking)).toBeNull();
-  });
-
-  it("counts path rules in words", () => {
-    expect(pathRulesText(1)).toBe("1 path rule");
-    expect(pathRulesText(3)).toBe("3 path rules");
   });
 });

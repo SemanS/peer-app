@@ -1,4 +1,3 @@
-import { pathRuleCount } from "@t3tools/client-runtime/peer/resources";
 import {
   decisionParts,
   effectivePolicy,
@@ -101,11 +100,9 @@ export function eventChip(
   return decision === undefined ? null : decisionChip(decision, projectName, computerPolicy);
 }
 
-/** The policy line of a project in Work: its chip, its path rules, and where to change it. */
+/** The policy line of a project in Work: its chip, and where to change it. */
 export interface ProjectPolicyLine {
   readonly chip: DecisionChipModel;
-  /** How many path rules the project has; 0 while none, or the Hub does not say. */
-  readonly rules: number;
   /** The page that changes it: the project's coordination page, or this computer's. */
   readonly change: { readonly label: "Settings" | "Change"; readonly page: "project" | "computer" };
 }
@@ -116,7 +113,7 @@ export interface ProjectPolicyLine {
  * off on this computer) or the Hub's view of the workspace is not known.
  */
 export function projectPolicyLine(
-  status: Pick<PeerHubStatus, "coordination" | "resources">,
+  status: Pick<PeerHubStatus, "coordination">,
   workspace: string,
   project: { readonly id: string; readonly name: string },
 ): ProjectPolicyLine | null {
@@ -131,13 +128,8 @@ export function projectPolicyLine(
       warn: false,
       by: fromProject ? "project" : "computer",
     },
-    rules: pathRuleCount(status, workspace, project.id),
     change: fromProject
       ? { label: "Settings", page: "project" }
       : { label: "Change", page: "computer" },
   };
 }
-
-/** The count of a project's path rules in words. */
-export const pathRulesText = (count: number): string =>
-  `${count} path ${count === 1 ? "rule" : "rules"}`;

@@ -17,10 +17,8 @@ import * as Effect from "effect/Effect";
 import { cutText } from "../../peerText.ts";
 import { contestKey, type EditAnswer } from "../coordination/edits.ts";
 import type {
-  PeerEndingOverlap,
   PeerHookContext,
   PeerHookText,
-  PeerSessionEndingContext,
   PeerSessionView,
   PeerToolContext,
   PeerVerdict,
@@ -365,24 +363,20 @@ export function compactText(step: PipelineStep): Promise<PipelineText | null> {
 /** Runs the active plugins' handlers of an event that answers nothing, by the hook's deadline. */
 export async function handlers(
   step: PipelineStep,
-  event: "stop" | "session-ending" | "session-end" | "session-expired",
-  overlaps: ReadonlyArray<PeerEndingOverlap> = [],
+  event: "stop" | "session-end" | "session-expired",
 ): Promise<void> {
   const ctx = {
     session: step.session,
     event: event === "stop" ? event : "session-end",
     remainingMs: remainingMs(step),
-    overlaps,
-  } satisfies PeerSessionEndingContext;
+  } satisfies PeerHookContext;
   const running = step.plugins.active.flatMap((plugin) => {
     const handle =
       event === "stop"
         ? plugin.contributions.hooks?.stop
-        : event === "session-ending"
-          ? plugin.contributions.hooks?.sessionEnding
-          : event === "session-expired"
-            ? plugin.contributions.hooks?.sessionExpired
-            : plugin.contributions.hooks?.sessionEnd;
+        : event === "session-expired"
+          ? plugin.contributions.hooks?.sessionExpired
+          : plugin.contributions.hooks?.sessionEnd;
     return handle === undefined
       ? []
       : [

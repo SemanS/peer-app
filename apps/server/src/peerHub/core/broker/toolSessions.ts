@@ -209,7 +209,6 @@ export async function endTools(this: CoordinationBroker, id: string) {
   const session = this.sessions.get(id);
   if (session?.adapter !== "mcp") return;
   const step = this.pipelineStep(session, await this.plugins(), Date.now() + 2500);
-  await handlers(step, "session-ending");
   for (const pending of session.pending.splice(0))
     if (typeof pending !== "string") await notifyDeliveries(pending.deliveries, "dropped");
   await this.readTeamLines(session);

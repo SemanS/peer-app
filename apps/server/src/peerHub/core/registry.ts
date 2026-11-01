@@ -1,7 +1,4 @@
-import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
-import { SettlePlugin } from "../plugins/settle/index.ts";
 import { ChangesPlugin } from "../plugins/changes/index.ts";
-import { ResourcesPlugin } from "../plugins/resources/index.ts";
 /**
  * The registry of Peer's plugins: every plugin of this build, in the order that fixes the order of
  * their text for agents and of their UI. Adding a plugin is one line in `peerPlugins`.
@@ -62,9 +59,6 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   AuditPlugin,
   ToolTrustPlugin,
   McpPlugin,
-  NeedsYouPlugin,
-  SettlePlugin,
-  ResourcesPlugin,
   ChangesPlugin,
   RoomsPlugin,
   SettingsPlugin,

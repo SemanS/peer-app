@@ -13,7 +13,6 @@ import {
   hubAddress,
   hubBuild,
   hubFeatureRows,
-  projectsWithPathRules,
 } from "../hubStatus.logic";
 import { githubFactConnection } from "../integrations.logic";
 import { useGitHubChecksStatus } from "../IntegrationsGitHub";
@@ -57,7 +56,6 @@ export function HubStatus({ environmentId, status, workspace }: WorkspacePagePro
     plugins: status.plugins,
     hub: status.hub,
     flags: view.features,
-    pathRuleProjects: projectsWithPathRules(view.document),
     connections: githubOn ? { github: githubFactConnection(github.fact) } : {},
   });
   const build = hubBuild(status.hub);

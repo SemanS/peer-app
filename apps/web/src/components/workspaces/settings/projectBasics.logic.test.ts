@@ -84,7 +84,7 @@ describe("deleting a project", () => {
       deleteConsequences(booking, { tasks: 14, areas: 3, people: 5, gatewayTeam: true }),
     ).toEqual([
       "14 tasks in 3 areas, with their task context and coordination history",
-      "Booking’s settings: people, tools, path rules and allocations",
+      "Booking’s settings: people, tools and allocations",
       "Booking leaves Work for 5 people. Threads on their computers stay, without the project.",
       "The gateway team “booking” stays, with its usage. Remove it there if you want.",
     ]);
@@ -99,7 +99,7 @@ describe("deleting a project", () => {
     });
     expect(lines).toEqual([
       "2 tasks, with their task context and coordination history",
-      "Booking’s settings: people, tools, path rules and allocations",
+      "Booking’s settings: people, tools and allocations",
       "Booking leaves Work for 1 person. Threads on their computers stay, without the project.",
     ]);
   });

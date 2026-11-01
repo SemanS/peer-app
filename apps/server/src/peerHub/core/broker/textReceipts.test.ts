@@ -58,14 +58,10 @@ describe("complete plugin text receipts", () => {
       await fixture.dispose();
     }
   });
-  it("flushes ownership-bound reports before releasing a session and keeps end callbacks after removal", async () => {
+  it("keeps end callbacks after a session is removed", async () => {
     const seen: boolean[] = [];
     const contributions: PeerContributions = {
       hooks: {
-        sessionEnding: () =>
-          Effect.sync(() => {
-            seen.push(fixture.broker.sessionViews().some((session) => session.id === "claude:one"));
-          }),
         sessionEnd: () =>
           Effect.sync(() => {
             seen.push(fixture.broker.sessionViews().some((session) => session.id === "claude:one"));
@@ -84,7 +80,7 @@ describe("complete plugin text receipts", () => {
         { session_id: "one", cwd: fixture.root, hook_event_name: "SessionEnd" },
         {},
       );
-      expect(seen).toEqual([true, false]);
+      expect(seen).toEqual([false]);
     } finally {
       await fixture.dispose();
     }

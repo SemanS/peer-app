@@ -230,11 +230,7 @@ describe("projectButtonLines", () => {
 });
 
 describe("the menu's actions on a workspace project", () => {
-  const status = (
-    coordination: object = {},
-    email: string | null = "ana@webinson.test",
-    pathRules = 2,
-  ) =>
+  const status = (coordination: object = {}, email: string | null = "ana@webinson.test") =>
     ({
       email,
       coordination: {
@@ -243,11 +239,7 @@ describe("the menu's actions on a workspace project", () => {
         policies: { webinson: { ordering: "coordinate", receipts: undefined } },
         ...coordination,
       },
-      resources: {
-        held: [],
-        pathRules: [{ workspace: "webinson", project: "receipts", count: pathRules }],
-      },
-    }) as unknown as Pick<PeerHubStatus, "coordination" | "resources" | "email">;
+    }) as unknown as Pick<PeerHubStatus, "coordination" | "email">;
   const state = (id: string, extra: object = {}, repositories: ReadonlyArray<object> = []) =>
     ({
       project: { id, name: id === "ordering" ? "Ordering demo" : "Receipt printer", ...extra },
@@ -255,7 +247,7 @@ describe("the menu's actions on a workspace project", () => {
     }) as unknown as Pick<PeerProjectState, "project" | "repositories">;
   const workspace = (role: PeerWorkspaceRole) => ({ slug: "webinson", name: "Webinson", role });
 
-  it("says this computer's default, with the path rules, and offers Change…", () => {
+  it("says this computer's default, and offers Change…", () => {
     const actions = workspaceProjectActions({
       status: status(),
       workspace: workspace("member"),
@@ -266,7 +258,7 @@ describe("the menu's actions on a workspace project", () => {
       name: "Receipt printer",
       coordination: {
         title: "Coordination: notify",
-        detail: "Your default on this computer · 2 path rules",
+        detail: "Your default on this computer",
         action: { label: "Change…", location: { kind: "computer", section: "coordination" } },
       },
     });
@@ -274,7 +266,7 @@ describe("the menu's actions on a workspace project", () => {
 
   it("says the project decides, and offers its Settings", () => {
     const actions = workspaceProjectActions({
-      status: status({}, "ana@webinson.test", 0),
+      status: status({}, "ana@webinson.test"),
       workspace: workspace("member"),
       state: state("ordering"),
     });
@@ -393,7 +385,6 @@ describe("actionsForScope", () => {
   const status = {
     email: "ana@webinson.test",
     coordination: { enabled: true, policy: "notify", policies: { webinson: {} } },
-    resources: undefined,
     workspaces: [
       {
         slug: "webinson",

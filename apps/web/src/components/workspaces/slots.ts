@@ -1,8 +1,5 @@
 import { changesWebPlugin } from "./changes";
 
-import { needsYouWebPlugin } from "./needs-you";
-import { settleWebPlugin } from "./settle";
-import { resourcesWebPlugin } from "./resources";
 import { roomsWebPlugin } from "./rooms";
 /**
  * Slots for Peer plugins in the web UI. Core views (Work, Needs you, the context pages, Settings →
@@ -41,9 +38,6 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   auditWebPlugin,
   toolTrustWebPlugin,
   mcpWebPlugin,
-  needsYouWebPlugin,
-  settleWebPlugin,
-  resourcesWebPlugin,
 
   changesWebPlugin,
   roomsWebPlugin,

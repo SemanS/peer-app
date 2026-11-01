@@ -166,17 +166,6 @@ export interface PeerBrokerHost {
    * it). False when Codex could not take it.
    */
   readonly queueCodex: (session: string, text: string, thread?: string) => Promise<boolean>;
-  /**
-   * Runs an ended Claude Code or Codex conversation once more, headless, with `text` as its prompt,
-   * and waits for the process to end. The host keeps process handling; a plugin cannot spawn CLIs.
-   */
-  readonly resumeNative?: (
-    agent: "claude" | "codex",
-    nativeId: string,
-    cwd: string,
-    text: string,
-    options: { readonly timeoutMs: number },
-  ) => Promise<NativeResumeOutcome>;
 
   readonly nameOf: (workspace: string, email: string) => string;
   readonly email: () => string | null;

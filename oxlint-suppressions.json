@@ -303,7 +303,7 @@
   },
   "apps/server/src/peerHub/core/broker/hooks.test.ts": {
     "t3code/no-wall-clock-in-tests": {
-      "count": 4
+      "count": 3
     }
   },
   "apps/server/src/peerHub/core/broker/hooks.ts": {
@@ -962,27 +962,12 @@
       "count": 1
     }
   },
-  "apps/server/src/peerHub/plugins/needs-you/service.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/plugins/observe/Observe.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     },
     "t3code/prefer-effect-fn": {
       "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/resources/index.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/resources/service.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 5
     }
   },
   "apps/server/src/peerHub/plugins/rooms/Rooms.test.ts": {
@@ -1072,24 +1057,6 @@
     },
     "t3code/prefer-effect-fn": {
       "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/settle/register.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/settle/service.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/settle/service.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 7
     }
   },
   "apps/server/src/peerHub/plugins/tool-trust/trustStore.ts": {
@@ -1464,11 +1431,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/settings/pages/ProjectCoordination.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/pages/ProjectRepositories.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1523,11 +1485,6 @@
   "apps/web/src/components/workspaces/settings/projectCapacity.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/settings/projectCoordination.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
     }
   },
   "apps/web/src/components/workspaces/settings/projectPeople.logic.ts": {
@@ -1649,11 +1606,6 @@
       "count": 1
     },
     "t3code/no-low-value-comments": {
-      "count": 2
-    }
-  },
-  "packages/client-runtime/src/peerSettings.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
       "count": 2
     }
   },

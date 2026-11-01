@@ -145,10 +145,7 @@ export const PeerSettingsView = Schema.Struct({
   rights: PeerSettingsRights,
   /** An open JSON object: read its parts with the narrow schemas below. */
   document: Schema.Record(Schema.String, Schema.Unknown),
-  features: Schema.Struct({
-    pathRules: Schema.Boolean,
-    github: Schema.Boolean,
-  }),
+  features: Schema.Struct({ github: Schema.Boolean }),
   people: Schema.Array(Schema.Struct({ ...PeerSettingsPerson.fields, role: Role })),
 });
 export type PeerSettingsView = typeof PeerSettingsView.Type;

@@ -33,8 +33,7 @@ import { CliError, hubRead, hubWrite, refused, uncertain, usage } from "./cliCon
 import { PUBLIC_COMMANDS, publicCli } from "./publicCli.ts";
 import { headerOf } from "./server.ts";
 import { inRepository, type LocalSession, unsupportedCheckout } from "./sessions.ts";
-import { newOp, within, TIMED_OUT } from "./sync.ts";
-import { claimSchemes, claimTargets, runClaimSchemes } from "./claimSchemes.ts";
+import { newOp } from "./sync.ts";
 import { sessionTaskName, TASK_FLAGS, TASK_SWITCHES, taskCommand } from "./tasks.ts";
 import { SHARE_FLAGS, shareCommand, UNSHARED } from "./share.ts";
 import { helpText } from "./help.ts";
@@ -120,13 +119,23 @@ const CORE_FLAGS: Readonly<Record<string, ReadonlyArray<string>>> = {
 const CORE_SWITCHES: Readonly<Record<string, ReadonlyArray<string>>> = { task: TASK_SWITCHES };
 
 /** Validate core flags before selecting a caller or changing its claims. Plugins decode their own. */
-function validateCoreArguments(
-  command: string,
-  args: ReadonlyArray<string>,
-  schemeFlags: ReadonlyArray<string> = [],
-) {
-  const flags: ReadonlyArray<string> =
-    command === "claim" ? ["--intent", ...schemeFlags] : (CORE_FLAGS[command] ?? []);
+/** The files a claim or a release names, each inside this repository. */
+const claimedFiles = (
+  plain: ReadonlyArray<string>,
+  relative: (path: string) => string | null,
+): ReadonlyArray<string> =>
+  plain.map((path) => {
+    const normalized = /^[a-z][a-z0-9-]*:/.test(path) ? null : relative(path);
+    if (normalized === null)
+      throw usage(
+        "name files or directories (ending in /) inside this repository",
+        "run peer claim src/pay.ts.",
+      );
+    return path.endsWith("/") && !normalized.endsWith("/") ? `${normalized}/` : normalized;
+  });
+
+function validateCoreArguments(command: string, args: ReadonlyArray<string>) {
+  const flags: ReadonlyArray<string> = CORE_FLAGS[command] ?? [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
     if (!arg.startsWith("--") || CORE_SWITCHES[command]?.includes(arg)) continue;
@@ -249,12 +258,7 @@ export async function runCli(
       "command arguments exceed the limit",
       `use at most 200 arguments of at most 20000 characters; run peer ${command} --help for its form.`,
     );
-  if (owned === undefined)
-    validateCoreArguments(
-      command,
-      args,
-      claimSchemes(plugins).flatMap((s) => s.flags),
-    );
+  if (owned === undefined) validateCoreArguments(command, args);
   const publicCommand = plugins.commands.find((entry) => entry.command.name === command)?.command
     .public;
   // Sharing explicitly enrolls a local repository in a team workspace.
@@ -344,22 +348,8 @@ export async function runCli(
         on: commandsOn(plugins),
         unsupported: await unsupportedCheckout(session),
       });
-      const blocks = await Promise.all(
-        plugins.active.map(async ({ contributions }) => {
-          if (!contributions.statusBlock) return null;
-          const text = await within(
-            this.host.run(
-              contributions
-                .statusBlock(this.sessionView(session))
-                .pipe(Effect.orElseSucceed(() => null)),
-            ),
-            100,
-          );
-          return text === TIMED_OUT || text === null ? null : cutText(text, 2000);
-        }),
-      );
       this.markSeen(session);
-      return [out, ...blocks.filter((block) => block)].join("\n");
+      return out;
     }
     case "resolve": {
       if (text === "")
@@ -398,19 +388,9 @@ export async function runCli(
     }
     case "claim": {
       const cwd = headerOf(headers, "x-peer-cwd") ?? session.cwd;
-      const input = {
-        ...parsed,
-        session: this.sessionView(session),
-        cwd: headerOf(headers, "x-peer-cwd"),
-      };
-      const { files: claimed, delegated } = claimTargets(
-        "claim",
-        claimSchemes(plugins),
-        input,
-        (path) => inRepository({ ...session, cwd }, path),
-      );
-      const extra = await runClaimSchemes(this, "claim", input, delegated);
-      if (claimed.length === 0) return extra.join("\n");
+      if (plain.length === 0)
+        throw usage("name at least one claim target", "run peer claim src/pay.ts.");
+      const claimed = claimedFiles(plain, (path) => inRepository({ ...session, cwd }, path));
       session.claims = [...new Set([...session.claims, ...claimed])];
       const intent = flag("--intent");
       if (intent !== undefined) session.intent = clip(intent, 300);
@@ -422,9 +402,8 @@ export async function runCli(
         intent: session.intent,
         contested: answers.flatMap(({ answer }) => answer.with),
       });
-      return [
-        ...extra,
-        ...claimed.map((path) => {
+      return claimed
+        .map((path) => {
           if (generatedFile(path)) return `${neutral(path)}: not coordinated — generated file.`;
           const resolved =
             answers.find(({ file }) => file === path) ??
@@ -447,20 +426,12 @@ export async function runCli(
               ? "The Hub could not verify this claim; notify fallback applies."
               : "No other agent holds this path.");
           return `${neutral(path)}: ${verdict} — ${neutral(clip(reason.replace(", so it did not run.", ". This advisory claim cannot stop an edit."), 600))}`;
-        }),
-      ].join("\n");
+        })
+        .join("\n");
     }
     case "release": {
-      const input = {
-        ...parsed,
-        session: this.sessionView(session),
-        cwd: headerOf(headers, "x-peer-cwd"),
-      };
-      const { files, delegated } = claimTargets("release", claimSchemes(plugins), input, (path) =>
-        inRepository({ ...session, cwd: input.cwd ?? session.cwd }, path),
-      );
-      const extra = await runClaimSchemes(this, "release", input, delegated);
-      if (plain.length > 0 && files.length === 0) return extra.join("\n");
+      const cwd = headerOf(headers, "x-peer-cwd") ?? session.cwd;
+      const files = claimedFiles(plain, (path) => inRepository({ ...session, cwd }, path));
       session.claims =
         plain.length === 0
           ? []
@@ -476,7 +447,6 @@ export async function runCli(
           plain.length === 0 || plain.some((named) => path === named || path.endsWith(named)),
       );
       return [
-        ...extra,
         text,
         ...held.map((path) => `${neutral(path)}: held until this session ends (Hub path intents).`),
       ].join("\n");

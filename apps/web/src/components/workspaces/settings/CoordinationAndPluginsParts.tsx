@@ -4,12 +4,7 @@
  * each one's state comes from. They draw what `coordinationAndPlugins.logic` works out; the
  * choices they offer go through the environment's own commands (the ones the old rows used).
  */
-import type {
-  EnvironmentId,
-  PeerCoordinationPolicy,
-  PeerHubStatus,
-  PeerWorkspaceState,
-} from "@t3tools/contracts";
+import type { EnvironmentId, PeerCoordinationPolicy, PeerHubStatus } from "@t3tools/contracts";
 import { useState, type ReactNode } from "react";
 
 import { serverEnvironment } from "../../../state/server";
@@ -28,15 +23,12 @@ import {
   defaultPolicyHint,
   hubOffPlugins,
   isDefaultPolicy,
-  pathRulesNote,
   pluginViews,
-  projectsWithPathRules,
   splitByDefault,
   type DefaultSplit,
   type PluginView,
   type ProjectRef,
 } from "./coordinationAndPlugins.logic";
-import { useSettingsView } from "./useSettingsView";
 import { ValueSource } from "./ValueSource";
 import { withFinally } from "~/lib/withFinally";
 
@@ -210,31 +202,6 @@ export function DefaultPolicy({
   );
 }
 
-/**
- * What stops applying in a workspace's projects while the Hub keeps path rules off: the projects of
- * the person that have some, from the settings the Hub shows them. Nothing where none has.
- */
-function WorkspacePathRules({
-  workspace,
-  named,
-}: {
-  readonly workspace: PeerWorkspaceState;
-  readonly named: boolean;
-}) {
-  const view = useSettingsView(workspace.slug);
-  const names = projectsWithPathRules(
-    view.document,
-    new Set(workspace.projects.map(({ project }) => project.id)),
-  );
-  if (names.length === 0) return null;
-  return (
-    <span className="text-xs text-warning-foreground">
-      {named ? `In ${workspace.name}: ` : ""}
-      {pathRulesNote(names)}
-    </span>
-  );
-}
-
 /** A plugin's status in the one language every connection speaks, and where it comes from. */
 function PluginChip({ view }: { readonly view: PluginView }) {
   return (
@@ -257,14 +224,11 @@ function PeerPlugins({
   environmentId,
   status,
   hubOff,
-  pathRules,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
   /** The plugins whose Hub feature the Hub turned off. */
   readonly hubOff: ReadonlySet<string>;
-  /** What stops applying while the Hub keeps path rules off. */
-  readonly pathRules: ReactNode;
 }) {
   const { owner, change } = usePeerPluginControl(environmentId);
   const [pending, setPending] = useState<string | null>(null);
@@ -303,7 +267,6 @@ function PeerPlugins({
               {view.note === null ? null : (
                 <span className="text-xs text-muted-foreground">{view.note}</span>
               )}
-              {view.consequence === "path-rules" ? pathRules : null}
               {view.error === null ? null : (
                 <span className="text-xs text-destructive-foreground">{view.error}</span>
               )}
@@ -332,42 +295,7 @@ function PeerPlugins({
   );
 }
 
-/**
- * The plugins, told which features the Hub turned off by what it says of itself, and for an older
- * Hub by the first workspace's settings.
- */
-function PeerPluginsOfHub({
-  environmentId,
-  status,
-  workspace,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly status: PeerHubStatus;
-  readonly workspace: PeerWorkspaceState;
-}) {
-  // The features are the Hub's, the same in every workspace of it.
-  const view = useSettingsView(workspace.slug);
-  return (
-    <PeerPlugins
-      environmentId={environmentId}
-      status={status}
-      hubOff={hubOffPlugins(status.hub, view.features)}
-      pathRules={status.workspaces.map((candidate) => (
-        <WorkspacePathRules
-          key={candidate.slug}
-          workspace={candidate}
-          named={status.workspaces.length > 1}
-        />
-      ))}
-    />
-  );
-}
-
-/**
- * The "Peer plugins" section. A Hub lists the features it turned off; for one that does not, the
- * settings it shows say so (a workspace is needed to read them), and a plugin it does not serve
- * otherwise reads as needing a newer Hub.
- */
+/** The "Peer plugins" section: the Hub lists the features it turned off. */
 export function PeerPluginsSection({
   environmentId,
   status,
@@ -375,15 +303,7 @@ export function PeerPluginsSection({
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
 }) {
-  const first = status.workspaces[0];
-  return first === undefined ? (
-    <PeerPlugins
-      environmentId={environmentId}
-      status={status}
-      hubOff={hubOffPlugins(status.hub, null)}
-      pathRules={null}
-    />
-  ) : (
-    <PeerPluginsOfHub environmentId={environmentId} status={status} workspace={first} />
+  return (
+    <PeerPlugins environmentId={environmentId} status={status} hubOff={hubOffPlugins(status.hub)} />
   );
 }

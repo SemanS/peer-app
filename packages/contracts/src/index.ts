@@ -89,16 +89,8 @@ export * from "./peer/toolTrust.ts";
 export * from "./peer/toolTrust.rpc.ts";
 export { deliveryBadge, pullRequestRows, taskDelivery } from "./peer/github.logic.ts";
 
-export * from "./peer/needs-you.ts";
-export * from "./peer/needs-you.rpc.ts";
-export * from "./peer/settle.ts";
-export * from "./peer/settle.rpc.ts";
-
 export * from "./peer/mcp.ts";
 export * from "./peer/mcp.rpc.ts";
-
-export * from "./peer/resources.ts";
-export * from "./peer/resources.rpc.ts";
 
 export * from "./peer/runs.ts";
 export * from "./peer/runs.rpc.ts";

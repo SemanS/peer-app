@@ -63,9 +63,7 @@ import { socketPathFits } from "../broker/server.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
 import * as PeerIndex from "../index/PeerIndex.ts";
 import { run } from "../local.ts";
-import { resumeNative } from "./resumeNative.ts";
 import { threadAgentOf, threadOfNative } from "./threadLookup.ts";
-export { resumeNative };
 import { currentRef } from "../vcs.ts";
 import { readCommittedSince, readGitStatus } from "./edits.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
@@ -381,7 +379,6 @@ const make = Effect.gen(function* () {
         () => false,
       );
     },
-    resumeNative,
     nameOf: state.nameOf,
     email: () => current().persisted.email,
     policy: () => current().persisted.coordination?.policy ?? "coordinate",

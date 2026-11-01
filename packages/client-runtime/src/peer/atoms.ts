@@ -3,7 +3,6 @@ import { createPeerJujutsuAtoms } from "./jujutsu.ts";
 import type { Atom } from "effect/reactivity";
 
 import type * as EnvironmentRegistry from "../connection/registry.ts";
-import { createResourcesEnvironmentAtoms } from "./resources.ts";
 import { createPeerAuditAtoms } from "./audit.ts";
 import { createPeerToolTrustAtoms } from "../peerToolTrust.ts";
 import { createPeerCapacityAtoms } from "./capacity.ts";
@@ -23,7 +22,6 @@ export function createPeerPluginAtoms<R, ER>(
   runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | R, ER>,
 ) {
   return {
-    peerResources: createResourcesEnvironmentAtoms(runtime),
     ...createPeerHerdrAtoms(runtime),
     ...createPeerJujutsuAtoms(runtime),
     ...createPeerChangesAtoms(runtime),

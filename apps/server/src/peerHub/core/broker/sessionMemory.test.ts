@@ -670,7 +670,7 @@ describe("what else an agent was told, across a Peer restart", () => {
     const fixture = await brokerFixture();
     try {
       const before = await meet(fixture.broker, fixture.root, team());
-      const told = fixture.broker.sessionView(before).told!("resources");
+      const told = fixture.broker.sessionView(before).told!("audit");
       told.add("free:resource:cache");
       await fixture.broker.saveMemories();
       // Told again once it is free again; meanwhile a note waits for its next step.
@@ -678,7 +678,7 @@ describe("what else an agent was told, across a Peer restart", () => {
       before.pending.push("Peer: a note that waits for its next step");
       const again = await restart(fixture.broker);
       const after = await meet(again, fixture.root, team());
-      expect(again.sessionView(after).told!("resources").has("free:resource:cache")).toBe(false);
+      expect(again.sessionView(after).told!("audit").has("free:resource:cache")).toBe(false);
       await again.stop();
     } finally {
       await fixture.dispose();

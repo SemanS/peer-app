@@ -130,11 +130,6 @@ export class PeerAgents extends Context.Service<
      * lately, B through its hooks, C not at all.
      */
     readonly level: (session: string) => "A" | "B" | "C";
-    /**
-     * A settle nudge a session not in the broker was given another way (a resumed conversation's
-     * prompt): core says it no more once the session starts again.
-     */
-    readonly markSettled?: (session: string, overlap: string, notes: number) => void;
     /** Reports a workspace's sessions and reads its view again, waiting at most `budgetMs`. */
     readonly sync: (workspace: string, budgetMs: number) => Effect.Effect<void>;
     /**
@@ -317,12 +312,6 @@ const make = Effect.gen(function* () {
     asking: (pane) => Effect.map(tailEntries(pane), AgentTranscript.waitingWords),
     inPane: (pane) => broker?.sessionInPane(pane),
     level: (session) => broker?.coordinationLevel(session) ?? "C",
-    markSettled: (session, overlap, notes) => {
-      if (broker === null) return;
-      const keys = broker.presettled.get(session) ?? new Set<string>();
-      keys.add(`${overlap}:${notes}`);
-      broker.presettled.set(session, keys);
-    },
     sync: (workspace, budgetMs) => {
       const running = broker;
       return running === null

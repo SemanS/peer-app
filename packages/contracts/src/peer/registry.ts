@@ -1,4 +1,3 @@
-import { PeerResourcesState } from "./resources.ts";
 import { PeerChangesStatus } from "./changes.ts";
 import { JujutsuState } from "./jujutsu.ts";
 import type * as Schema from "effect/Schema";
@@ -13,8 +12,6 @@ import { PeerToolTrustStatus } from "./toolTrust.ts";
 import { PeerMcpStatus } from "./mcp.ts";
 import { PeerHerdrStatus } from "./herdr.ts";
 import * as SchemaValues from "effect/Schema";
-import { PeerNeedsYouStatus } from "./needs-you.ts";
-import { PeerSettleStatus } from "./settle.ts";
 import { PeerSettingsStatus } from "./settings.ts";
 import { PeerRoomsStatus } from "./rooms.ts";
 /** The schemas of these plugins reach the package index through here. */
@@ -24,9 +21,6 @@ export * from "./rooms.ts";
 
 export const peerPluginStatusFields = {
   changes: SchemaValues.optional(PeerChangesStatus),
-  resources: SchemaValues.optional(PeerResourcesState),
-  needsYou: SchemaValues.optional(PeerNeedsYouStatus),
-  settle: SchemaValues.optional(PeerSettleStatus),
   toolTrust: SchemaValues.optional(PeerToolTrustStatus),
   mcp: SchemaValues.optional(PeerMcpStatus),
   herdr: SchemaValues.optional(PeerHerdrStatus),

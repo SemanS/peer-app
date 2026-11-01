@@ -1,5 +1,4 @@
 import { PeerHubEdition } from "./peer/editions.ts";
-import { PeerIntentHold } from "./peer/resources.ts";
 import * as Schema from "effect/Schema";
 
 import { ProjectId, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -422,7 +421,6 @@ export const PeerIntentVerdict = Schema.Struct({
   holder: Schema.optional(Schema.String),
   pattern: Schema.optional(Schema.String),
   policy: Schema.optional(PeerProjectPolicy),
-  hold: Schema.optional(PeerIntentHold),
 });
 export type PeerIntentVerdict = typeof PeerIntentVerdict.Type;
 
@@ -765,6 +763,12 @@ export const PeerFoundWorkspace = Schema.Struct({
   allowedDomains: Schema.Array(Schema.String),
 });
 export type PeerFoundWorkspace = typeof PeerFoundWorkspace.Type;
+
+/** What a client follows of the status: everything, or the light view its phone reads. */
+export const PeerHubSubscribeInput = Schema.Struct({
+  scope: Schema.optional(Schema.Literal("needs-you")),
+});
+export type PeerHubSubscribeInput = typeof PeerHubSubscribeInput.Type;
 
 export const PeerHubInviteInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,

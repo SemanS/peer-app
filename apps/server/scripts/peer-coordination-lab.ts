@@ -96,11 +96,6 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   scripted stand-ins play every session: Bob's asks KRK-1 and says there, in words that defer the change,
 //   what whoever lands both has to do, the integrator divides by a hundred only if Peer told it so, and the
 //   dry run checks that the arms differ as they should.
-//   LAB_VERSION_MIX=hub-off runs only the version-mix check against a Hub started with
-//   PEERHUB_FEATURES_OFF=resources (the lab's hub inherits it): `peer claim resource:x` says the Hub
-//   does not support it and file edits are still decided. LAB_VERSION_MIX=app-off turns the
-//   resources plugin off on both computers against a Hub with path patterns: clear, held, notify,
-//   ask and deny still stop and ask as the Hub decided.
 //
 // The computers run apps/server/dist/bin.mjs: build it (`vp pack` in apps/server) after changing the
 // broker, or the lab tests the build it finds. LAB_SERVER_BIN=<dir>/bin.mjs runs a private build
@@ -171,7 +166,6 @@ import {
   type HookGroup,
 } from "../src/peerHub/core/adapters/scripts.ts";
 
-import { resourceLab } from "./peer-lab/resources.ts";
 import {
   ROOMS_ANA_TASK,
   ROOMS_REAL_OWN,
@@ -1215,136 +1209,6 @@ async function sameMomentEdits(ana: Computer, bob: Computer, runs: number) {
 }
 
 /**
- * Version mixes of the resources feature (`LAB_VERSION_MIX`). `hub-off`: a Hub that does not serve
- * resources (PEERHUB_FEATURES_OFF=resources) refuses a resource claim and still decides edits.
- * `app-off`: computers with the resources plugin off, against a Hub that plans paths by pattern,
- * act on each of the five verdicts the Hub gives (its extra pattern fields are not read).
- */
-async function versionMixStep(ana: Computer, bob: Computer, mode: string) {
-  const status = async (path: string) => {
-    const response = await fetch(`${hubUrl}${path}`, {
-      headers: { authorization: `Bearer ${hubSession}` },
-    });
-    await response.arrayBuffer();
-    return response.status;
-  };
-  const anas = agent(ana, "mix-ana", "w10:p1");
-  const bobs = agent(bob, "mix-bob", "w10:p2");
-  const sessions = ["claude:mix-ana", "claude:mix-bob"];
-  const first = (computer: Computer, path: string) =>
-    hubVerdicts(computer, sessions).get(path)?.at(-1) ?? "(none)";
-  /** Ana's agent edits `path` first, then Bob's agent asks for `bobPath`; returns Bob's hook answer. */
-  const race = async (path: string, bobPath = path) => {
-    const mine = anas.edit("PreToolUse", path);
-    check(decision(mine) === undefined, `${path}: the first agent may edit`);
-    anas.edit("PostToolUse", path);
-    await sleep(1500);
-    const theirs = bobs.edit("PreToolUse", bobPath);
-    told(`${bobs.name} (${bobPath})`, reason(theirs) ?? context(theirs));
-    await sleep(300);
-    return { mine: first(ana, path), theirs, verdict: first(bob, bobPath) };
-  };
-  if (mode === "hub-off") {
-    check(
-      (await status("/v1/workspaces/acme/resources")) === 404,
-      "this Hub does not serve resources (PEERHUB_FEATURES_OFF=resources)",
-    );
-    anas.start();
-    bobs.start();
-    // The hub knows the sessions its computers reported: let both be.
-    await sleep(1500);
-    const claimed = anas.peer("claim", "resource:x");
-    told(`${anas.name} (peer claim resource:x)`, claimed);
-    check(
-      anas.peerStatus !== 0 && claimed.includes("This Hub does not support resource claims yet."),
-      "a resource claim on a Hub without the feature says it is unsupported",
-    );
-    const pricing = await race("src/pricing.ts");
-    check(
-      pricing.mine === "clear" && pricing.verdict === "deny" && decision(pricing.theirs) === "deny",
-      "file edits are still decided by the Hub: the second agent on a file is stopped",
-    );
-    check(
-      anas.peer("claim", "src/cart.ts").length > 0 && anas.peerStatus === 0,
-      "a file claim still works",
-    );
-  } else if (mode === "app-off") {
-    for (const computer of [ana, bob])
-      await Effect.runPromise(
-        computer.client[WS_METHODS.peerHubSetPlugin]({ id: "resources", enabled: false }),
-      );
-    check(
-      (await status("/v1/workspaces/acme/resources")) === 200,
-      "this Hub serves resources and path patterns",
-    );
-    const current = await hubCall("/v1/workspaces/acme/config", { session: hubSession });
-    const config = current.config as { projects: Record<string, unknown> };
-    await hubCall("/v1/workspaces/acme/config", {
-      method: "PUT",
-      session: hubSession,
-      body: {
-        config: {
-          ...config,
-          projects: {
-            ...config.projects,
-            lab: {
-              ...(config.projects.lab as object),
-              coordination: {
-                policy: "coordinate",
-                paths: {
-                  "docs/**": "notify",
-                  "src/payments/**": "ask",
-                  "migrations/**": "exclusive",
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-    for (const computer of [ana, bob])
-      await Effect.runPromise(computer.client[WS_METHODS.peerHubSync]({}));
-    anas.start();
-    bobs.start();
-    // The hub knows the sessions its computers reported: let both be.
-    await sleep(1500);
-    const claimed = anas.peer("claim", "resource:x");
-    told(`${anas.name} (peer claim resource:x, plugin off)`, claimed);
-    check(anas.peerStatus !== 0, "with the plugin off, resource: is not a claim target");
-    const held = await race("migrations/0019_a.sql", "migrations/0019_b.sql");
-    check(held.mine === "clear", "clear: the first file of an exclusive pattern is let through");
-    check(
-      held.verdict === "held" &&
-        decision(held.theirs) === "deny" &&
-        reason(held.theirs)?.includes("Ana's agent") === true,
-      "held: another file of the exclusive pattern stops the second agent and names the holder",
-    );
-    const notify = await race("docs/guide.md");
-    check(
-      notify.verdict === "notify" &&
-        decision(notify.theirs) === undefined &&
-        context(notify.theirs)?.includes("Ana's agent") === true,
-      "notify: the second agent may edit and is told who else is there",
-    );
-    const ask = await race("src/payments/refund.ts");
-    check(
-      ask.verdict === "ask" && decision(ask.theirs) === "ask",
-      "ask: the person is asked under an ask pattern",
-    );
-    const deny = await race("src/mix.ts");
-    check(
-      deny.verdict === "deny" &&
-        decision(deny.theirs) === "deny" &&
-        reason(deny.theirs)?.includes("note") === true,
-      "deny: the project's coordinate stops the second agent until it writes a note",
-    );
-  } else {
-    throw new Error(`LAB_VERSION_MIX must be hub-off or app-off, not ${mode}`);
-  }
-  for (const one of [anas, bobs]) one.hook("SessionEnd", { reason: "exit" });
-}
-
-/**
  * Step 19's app half: the settings calls Peer's Settings make, through each computer's own Peer
  * against the real Hub, so a Hub answer the app's contracts cannot read fails here and not in a
  * person's Settings. Ana is the admin, Bob a member.
@@ -1696,11 +1560,6 @@ const program = Effect.gen(function* () {
     yield* Effect.promise(() =>
       runJujutsuSteps(jujutsuKit(ana, bob), chosenJujutsuSteps(process.env.LAB_JJ_STEPS)),
     );
-    return;
-  }
-  if (process.env.LAB_VERSION_MIX !== undefined) {
-    const mode = process.env.LAB_VERSION_MIX;
-    yield* Effect.promise(() => versionMixStep(ana, bob, mode));
     return;
   }
   const anas = agent(ana, "lab-ana", "w1:p1");
@@ -2812,38 +2671,6 @@ const program = Effect.gen(function* () {
       "step 17 (two computers edit one file at the same moment) was not run: this hub has no /intent (PEERHUB_BIN is from before the hub decides edits)",
     );
   }
-
-  // Leased resources and grouped exclusive patterns, through the real generated shim.
-  yield* Effect.promise(() =>
-    resourceLab({
-      agents: [agent(ana, "lab-resource-ana", "w9:p1"), agent(bob, "lab-resource-bob", "w9:p1")],
-      check,
-      pause: sleep,
-      say,
-      configurePatterns: async () => {
-        const current = await hubCall("/v1/workspaces/acme/config", { session: hubSession });
-        const config = current.config as { projects: Record<string, unknown> };
-        await hubCall("/v1/workspaces/acme/config", {
-          method: "PUT",
-          session: hubSession,
-          body: {
-            config: {
-              ...config,
-              projects: {
-                ...config.projects,
-                lab: {
-                  ...(config.projects.lab as object),
-                  coordination: { policy: "coordinate", paths: { "migrations/**": "exclusive" } },
-                },
-              },
-            },
-          },
-        });
-        await Effect.runPromise(ana.client[WS_METHODS.peerHubSync]({}));
-        await Effect.runPromise(bob.client[WS_METHODS.peerHubSync]({}));
-      },
-    }),
-  );
 
   // 19. Settings are files an agent edits (after arXiv:2609.37725): Bob's agent proposes making
   // schema/ exclusive (step 17 made migrations/ so); Ana, an admin, saves it as hers, and the rule

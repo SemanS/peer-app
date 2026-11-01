@@ -8,13 +8,11 @@ import {
   PeerOverlap,
   PeerOverlapRecord,
 } from "../peerHub.ts";
-import { PeerResourcesState } from "./resources.ts";
 
 const decodeDecision = Schema.decodeUnknownSync(PeerDecision);
 const decodeOverlap = Schema.decodeUnknownSync(PeerOverlap);
 const decodeRecord = Schema.decodeUnknownSync(PeerOverlapRecord);
 const decodeEvent = Schema.decodeUnknownSync(PeerCoordEvent);
-const decodeResources = Schema.decodeUnknownSync(PeerResourcesState);
 
 const record = {
   id: "abc123def456",
@@ -93,11 +91,5 @@ describe("what the coordination status says of policies and path rules", () => {
     const named = { acme: { booking: "coordinate" }, other: {} };
     expect(decode({ ...coordination, policies: named }).policies).toEqual(named);
     expect(withoutPolicies({ ...coordination, policies: named })).not.toHaveProperty("policies");
-  });
-
-  it("counts path rules by project in the resources slice, and reads a slice without counts", () => {
-    expect(decodeResources({ held: [] }).pathRules).toBeUndefined();
-    const counted = { held: [], pathRules: [{ workspace: "acme", project: "booking", count: 3 }] };
-    expect(decodeResources(counted)).toEqual(counted);
   });
 });

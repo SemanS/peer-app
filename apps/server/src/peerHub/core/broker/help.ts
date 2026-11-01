@@ -4,7 +4,6 @@
  * @module peerHub/core/broker/help
  */
 import { CORE_COMMANDS } from "../registry.ts";
-import { claimSchemes } from "./claimSchemes.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
 import { SHARE_HELP } from "./share.ts";
 import { TASK_HELP } from "./tasks.ts";
@@ -102,7 +101,6 @@ export function helpText(cli: string, plugins: PeerBrokerPlugins): string {
     ...CORE_COMMANDS.flatMap((name) => (name === "help" ? [] : [CORE_HELP[name]])).map((line) =>
       helpLine(cli, line),
     ),
-    ...claimSchemes(plugins).flatMap((scheme) => scheme.help.map((line) => `  ${cli} ${line}`)),
     ...plugins.commands.flatMap(({ command, refused }) =>
       refused === undefined ? [helpLine(cli, command)] : [],
     ),

@@ -107,7 +107,7 @@ export function ProjectRepositories({ environmentId, status, workspace, state }:
             ) : null}
           </div>
           <p className="text-sm text-muted-foreground">
-            Agents clone these on each computer. Path rules and PR checks follow them.
+            Agents clone these on each computer. PR checks follow them.
           </p>
           {!view.hubHasSettings ? (
             <SettingsUnavailableNote />

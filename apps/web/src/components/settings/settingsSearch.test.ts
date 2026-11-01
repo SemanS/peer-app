@@ -409,9 +409,12 @@ describe("every page of the app's settings", () => {
 });
 
 describe("searching Peer's pages", () => {
-  const PLUGINS = ["github", "capacity", "audit", "tool-trust", "needs-you", "settle"].map(
-    (id) => ({ id, title: id, enabled: true, active: true }),
-  );
+  const PLUGINS = ["github", "capacity", "audit", "tool-trust"].map((id) => ({
+    id,
+    title: id,
+    enabled: true,
+    active: true,
+  }));
 
   const acme = (role: PeerNavWorkspace["role"]): PeerNavWorkspace => ({
     slug: "acme",
@@ -450,8 +453,6 @@ describe("searching Peer's pages", () => {
       ).toContain(title);
     found("github checks", "GitHub PR checks");
     found("coordination", "Coordination policy");
-    found("path rules", "Path rules");
-    found("test a path", "Test a path");
     found("tool trust", "Tool trust");
     found("catalog", "Tools catalog");
     found("capacity", "Shared capacity");
@@ -460,22 +461,21 @@ describe("searching Peer's pages", () => {
     found("pools", "Model pools");
     found("secrets", "Hub secrets");
     found("ai subscriptions", "AI subscriptions");
-    found("phone alerts", "Phone alerts");
-    found("resume ended agent", "Resume an ended agent to settle its overlaps");
     found("people", "People and roles");
     found("domains", "Email domains");
     found("history", "Settings history");
     found("herdr", "Peer plugins");
-    found("ownership", "Peer plugins");
     found("dns", "Email domains");
   });
 
   it("finds a project's pages once for each project the person is on", () => {
-    expect(find("path rules")).toEqual([
-      ["Path rules", "Projects › Booking › Coordination"],
-      ["Path rules", "Projects › Peer Hub › Coordination"],
+    expect(find("coordination policy").filter(([name]) => name === "Coordination policy")).toEqual([
+      ["Coordination policy", "Projects › Booking › Coordination"],
+      ["Coordination policy", "Projects › Peer Hub › Coordination"],
     ]);
-    const [booking] = searchSettingsEntries("path rules", entries());
+    const [booking] = searchSettingsEntries("coordination policy", entries()).filter(
+      (entry) => entry.title === "Coordination policy",
+    );
     expect(booking).toMatchObject({
       location: { kind: "project", workspace: "acme", projectId: "booking", tab: "coordination" },
     });

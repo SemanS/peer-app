@@ -16,6 +16,7 @@ import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import { roomCommands } from "./cli.ts";
 import { roomsRpc, roomTools } from "./client/transport.ts";
 import { roomHooks } from "./hooks.ts";
+import { needsYouView } from "./needsYouView.ts";
 import * as Rooms from "./Rooms.ts";
 
 export const RoomsPlugin = bindPlugin({
@@ -32,6 +33,7 @@ export const RoomsPlugin = bindPlugin({
       commands: roomCommands(rooms, work, state, agents),
       agentTools: roomTools,
       hooks: roomHooks(rooms),
+      statusViews: { "needs-you": needsYouView },
       hubChanges: {
         changes: ["rooms"],
         // A pass made here is work for this computer too.

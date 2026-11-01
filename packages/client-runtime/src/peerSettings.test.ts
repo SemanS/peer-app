@@ -3,24 +3,18 @@ import { describe, expect, it } from "@effect/vitest";
 
 import {
   allocationOf,
-  comparePatterns,
   decisionParts,
   decisionText,
   effectivePolicy,
   getAt,
   harnessLabel,
   jsonEqual,
-  matchesPattern,
-  pathRuleFor,
   planClass,
   planLabel,
   policiesOf,
-  rankedPathRules,
   readDocument,
-  repositoryPath,
   setAt,
   setsFor,
-  validatePathPattern,
   whereUsable,
 } from "./peerSettings.ts";
 
@@ -242,187 +236,6 @@ describe("where a value comes from", () => {
       decisionParts({ policy: "coordinate", source: "project", pathRulesOff: true }, "Booking")
         .pathRulesOff,
     ).toBe(true);
-  });
-});
-
-// Twin of the Hub's server/src/coord/rules/matching.rs and grammar.rs, and of the app's
-// plugins/resources/pathRules.test.ts: change the tables together.
-const VECTORS = [
-  ["migrations/**", "migrations/0019_a.sql", true],
-  ["migrations/**", "migrations/legacy/0001.sql", true],
-  ["migrations/**", "src/migrations/x.sql", false],
-  ["docs/*.md", "docs/a.md", true],
-  ["docs/*.md", "docs/api/a.md", false],
-  ["**/*.sql", "x.sql", true],
-  ["**/*.sql", "db/x.sql", true],
-  ["package.json", "package.json", true],
-  ["package.json", "apps/web/package.json", false],
-  ["src/*/index.ts", "src/a/index.ts", true],
-  ["src/*/index.ts", "src/a/b/index.ts", false],
-  ["migrations/**", "migrations", true],
-  ["migrations/**", "migrations/", true],
-  ["migrations/**", "migrationsx/a.sql", false],
-  ["**", "a/b/c.ts", true],
-  ["**", "README.md", true],
-  ["a/**/b", "a/b", true],
-  ["a/**/b", "a/x/y/b", true],
-  ["a/**/b", "a/x/b/c", false],
-  ["**/index.ts", "index.ts", true],
-  ["**/index.ts", "a/index.tsx", false],
-  ["*", "file.ts", true],
-  ["*", "dir/file.ts", false],
-  ["docs/*.md", "docs/.md", true],
-  ["docs/*.md", "docs/a.mdx", false],
-  ["*a*", "bab", true],
-  ["*a*", "bbb", false],
-  ["src/*.test.ts", "src/pay.test.ts", true],
-  ["src/*.test.ts", "src/pay.ts", false],
-  ["Migrations/**", "migrations/x.sql", false],
-  ["with space/*.md", "with space/a b.md", true],
-  ["čaj/*.md", "čaj/x.md", true],
-] as const;
-const BEST = [
-  [["src/**", "src/payments/**"], "src/payments/pay.ts", "src/payments/**"],
-  [["src/**", "src/payments/**"], "src/util.ts", "src/**"],
-  [["**/*.sql", "migrations/**"], "migrations/x.sql", "migrations/**"],
-  [["docs/**", "docs/*.md"], "docs/a.md", "docs/*.md"],
-  [["**", "package.json"], "package.json", "package.json"],
-  [["a/**", "a/*"], "a/b", "a/*"],
-  [["*a*", "a*"], "ab", "a*"],
-  [["a/*", "*/b"], "a/b", "*/b"],
-] as const;
-
-describe("which path rule decides", () => {
-  it("matches the Hub's whole table of patterns and paths", () => {
-    for (const [glob, path, expected] of VECTORS) {
-      expect(validatePathPattern(glob), glob).toBeNull();
-      expect(matchesPattern(glob, path), `${glob} against ${path}`).toBe(expected);
-    }
-  });
-
-  it("picks the most specific pattern that matches, whatever the order they are listed in", () => {
-    for (const [patterns, path, winner] of BEST) {
-      const rules = patterns.map((pattern) => ({ pattern, policy: "notify" }));
-      expect(pathRuleFor(path, rules)?.pattern, `${patterns} on ${path}`).toBe(winner);
-      expect(pathRuleFor(path, rules.toReversed())?.pattern, "in any order").toBe(winner);
-      expect(pathRuleFor(path, Object.fromEntries(patterns.map((p) => [p, "ask"])))?.pattern).toBe(
-        winner,
-      );
-    }
-    expect(pathRuleFor("src/a.ts", [{ pattern: "docs/**", policy: "ask" }])).toBeUndefined();
-    expect(pathRuleFor("src/a.ts", [])).toBeUndefined();
-  });
-
-  it("ranks patterns by literal characters, then fewer **, then fewer *, then by name", () => {
-    expect(comparePatterns("src/payments/**", "src/**")).toBeLessThan(0);
-    expect(comparePatterns("a/*", "a/**")).toBeLessThan(0);
-    expect(comparePatterns("a/b", "a/b")).toBe(0);
-    expect(comparePatterns("abc", "abd")).toBeLessThan(0);
-    expect(comparePatterns("a😀", "a￿")).toBeGreaterThan(0);
-    expect(
-      rankedPathRules({
-        "**": "notify",
-        "src/**": "ask",
-        "src/payments/**": "exclusive",
-        "src/payments/README.md": "ask",
-      }).map((rule) => rule.pattern),
-    ).toEqual(["src/payments/README.md", "src/payments/**", "src/**", "**"]);
-  });
-
-  it("decides the way the Hub plans a path, with its policy and a path as the Hub reads one", () => {
-    const rules = {
-      "migrations/**": "exclusive",
-      "docs/**": "notify",
-      "src/**": "notify",
-      "src/payments/**": "exclusive",
-      "src/payments/README.md": "ask",
-    };
-    expect(pathRuleFor("migrations/0019_a.sql", rules)).toEqual({
-      pattern: "migrations/**",
-      policy: "exclusive",
-    });
-    expect(pathRuleFor("migrations/", rules)?.pattern).toBe("migrations/**");
-    expect(pathRuleFor("src/payments/pay.ts", rules)?.pattern).toBe("src/payments/**");
-    expect(pathRuleFor("src/payments/README.md", rules)).toEqual({
-      pattern: "src/payments/README.md",
-      policy: "ask",
-    });
-    expect(pathRuleFor("./src//util.ts", rules)?.pattern).toBe("src/**");
-    expect(pathRuleFor("docs\\guide.md", rules)?.pattern).toBe("docs/**");
-    expect(pathRuleFor("web/form.tsx", rules)).toBeUndefined();
-    // Not a path inside the repository, so no rule decides it.
-    for (const outside of ["", "/etc/passwd", "../x", "a/../b", "c:/x", "a\tb"]) {
-      expect(pathRuleFor(outside, rules), outside).toBeUndefined();
-    }
-    expect(repositoryPath("./web//form.tsx")).toBe("web/form.tsx");
-    expect(repositoryPath("dir//sub/")).toBe("dir/sub/");
-    expect(repositoryPath("./")).toBeUndefined();
-  });
-
-  it("does not let a pattern that is no pattern decide", () => {
-    expect(pathRuleFor("src/a.ts", [{ pattern: "src/[ab].ts", policy: "ask" }])).toBeUndefined();
-    expect(
-      pathRuleFor("a.ts", [
-        { pattern: "**b", policy: "ask" },
-        { pattern: "*.ts", policy: "notify" },
-      ]),
-    ).toEqual({
-      pattern: "*.ts",
-      policy: "notify",
-    });
-  });
-
-  it("accepts the Hub's patterns and names each class of mistake as it does", () => {
-    for (const glob of [
-      "migrations/**",
-      "docs/**",
-      "docs/*.md",
-      "**/*.sql",
-      "package.json",
-      "src/*/index.ts",
-      "src/payments/**",
-      "src/**",
-      "**",
-      "a/**/b",
-      "*",
-      "*.lock",
-      "with space/x.md",
-      "unicode/čaj.md",
-      "a".repeat(200),
-    ]) {
-      expect(validatePathPattern(glob), glob).toBeNull();
-    }
-    for (const [glob, named] of [
-      ["", "not empty"],
-      ["a".repeat(201), "at most 200 characters"],
-      ["/etc/**", "no leading `/`"],
-      ["docs/", "no trailing `/`"],
-      ["docs\\*.md", "not `\\`"],
-      ["c:/x", "no `:`"],
-      ["a\tb", "control characters"],
-      ["a\u0007", "control characters"],
-      ["src/?.ts", "`?` is not supported"],
-      ["src/[ab].ts", "`[` is not supported"],
-      ["src/a].ts", "`]` is not supported"],
-      ["src/{a,b}/**", "`{` is not supported"],
-      ["src/a}.ts", "`}` is not supported"],
-      ["!src/**", "`!` is not supported"],
-      ["./src/**", "no `.` or `..` segment"],
-      ["src/../x", "no `.` or `..` segment"],
-      ["src/**.ts", "`**` is a whole segment"],
-      ["**b", "`**` is a whole segment"],
-      ["a/***", "`**` is a whole segment"],
-      ["a//b", "no empty segment"],
-    ] as const) {
-      expect(validatePathPattern(glob), glob).toContain(named);
-    }
-  });
-
-  it("stays cheap on a long path against many wildcards", () => {
-    const started = Date.now();
-    expect(matchesPattern(`${"**/".repeat(60)}c`, `${"a/".repeat(140)}b`)).toBe(false);
-    expect(matchesPattern("*a".repeat(60), `${"a".repeat(250)}b`)).toBe(false);
-    expect(Date.now() - started).toBeLessThan(1_000);
   });
 });
 

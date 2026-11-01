@@ -1,4 +1,3 @@
-import * as Effect from "effect/Effect";
 import { fallbackAnswers } from "../broker/fallbackPolicies.ts";
 // @effect-diagnostics globalDate:off - intent deadlines and quiet overlaps in wall-clock time.
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
@@ -304,13 +303,7 @@ export async function decideEdits(
     settings,
   );
   // One answer for the edit as a whole: nothing here tells one of its files from another.
-  const grouped = fallbackAnswers(
-    await this.host.plugins(),
-    this.sessionView(session),
-    checked,
-    policy,
-    session.memory,
-  );
+  const grouped = fallbackAnswers(checked, policy, session.memory);
   for (const group of grouped)
     if (group.answer.decision === undefined) {
       // Let go on the policy's word: its files reach the next report, so the hub finds the overlaps afterwards.
@@ -445,23 +438,6 @@ export async function askHub(
       overlaps: [...new Map(decided.flatMap((one) => one.overlaps).map((o) => [o.id, o])).values()],
     };
     // Texts, news and `peer status` see what the hub recorded at once, not at the next sync.
-    const plugins = await this.host.plugins();
-    await within(
-      Promise.all(
-        plugins.active.flatMap(({ contributions }) =>
-          contributions.intentResult
-            ? [
-                this.host.run(
-                  contributions
-                    .intentResult(this.sessionView(session), answer)
-                    .pipe(Effect.ignoreCause()),
-                ),
-              ]
-            : [],
-        ),
-      ),
-      100,
-    );
     this.mergeIntent(workspace, project, answer);
     this.record("intent", {
       fileCount: files.length,
@@ -494,7 +470,6 @@ export async function askHub(
               ? unverifiedAnswer({ policy: answer.policy, files: [file], memory: session.memory })
               : answerForVerdict({
                   verdict,
-                  at: answer.at,
                   me,
                   sessions,
                   overlaps: answer.overlaps,

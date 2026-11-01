@@ -2,14 +2,7 @@ import type { PeerHubInfo, PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { CHECKING, type ConnectionView } from "../../settings/connectionFacts";
-import {
-  featuresFootnote,
-  hubAddress,
-  hubBuild,
-  hubFeatureRows,
-  pathRulesOffEffect,
-  projectsWithPathRules,
-} from "./hubStatus.logic";
+import { featuresFootnote, hubAddress, hubBuild, hubFeatureRows } from "./hubStatus.logic";
 
 const plugin = (id: string, overrides: Partial<PeerPluginState> = {}): PeerPluginState => ({
   id,
@@ -22,10 +15,10 @@ const plugin = (id: string, overrides: Partial<PeerPluginState> = {}): PeerPlugi
 /** A Hub that serves everything: every plugin that needs a feature is active. */
 const everything = ["settings", "observe"].map((id) => plugin(id));
 
-const flags = { pathRules: true, github: true };
+const flags = { github: true };
 
 /** Every feature of the Hub this app has words for. */
-const ALL = ["settings", "resources", "github", "audit", "observe"];
+const ALL = ["settings", "github", "audit", "observe"];
 
 /** What a Hub with the catalog says: it serves `serves`, and its operator turned `off` off. */
 const catalog = (serves: ReadonlyArray<string>, off: ReadonlyArray<string> = []): PeerHubInfo => ({
@@ -40,7 +33,6 @@ const rows = (input: Partial<Parameters<typeof hubFeatureRows>[0]> = {}) =>
     plugins: everything,
     hub: undefined,
     flags,
-    pathRuleProjects: [],
     ...input,
   });
 
@@ -52,7 +44,6 @@ describe("the features of a Hub that serves them all", () => {
     expect(list.map((row) => row.id)).toEqual([
       "coordination",
       "settings",
-      "resources",
       "github",
       "audit",
       "observe",
@@ -69,7 +60,6 @@ describe("the features of a Hub that serves them all", () => {
 
   it("names the features as the design does", () => {
     const list = rows({ hub: catalog(ALL) });
-    expect(byId(list, "resources")?.name).toBe("Path rules");
     expect(byId(list, "audit")).toMatchObject({
       name: "Audit log",
       effect: "Every settings change is recorded with who, what, from and to.",
@@ -81,18 +71,16 @@ describe("a feature a Hub with a catalog does not serve", () => {
   it("is off on this Hub when its operator turned it off, and says what that means", () => {
     const list = rows({
       hub: catalog(
-        ALL.filter((id) => id !== "resources"),
-        ["resources"],
+        ALL.filter((id) => id !== "github"),
+        ["github"],
       ),
-      pathRuleProjects: ["Booking", "Peer Hub"],
     });
-    expect(byId(list, "resources")).toMatchObject({
+    expect(byId(list, "github")).toMatchObject({
       state: "off-hub",
       label: "Not available",
       effect:
-        "Booking’s and Peer Hub’s path rules are saved but don’t apply. Agents get each project’s policy.",
+        "Pull requests count as their agents report them: this Hub doesn’t check them with GitHub.",
     });
-    expect(byId(list, "settings")?.state).toBe("on");
   });
 
   it("needs a newer Hub when it neither serves it nor turned it off", () => {
@@ -195,13 +183,7 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
 
   it("lists coordination and every feature the app can tell, each on", () => {
     const list = rows();
-    expect(list.map((row) => row.id)).toEqual([
-      "coordination",
-      "settings",
-      "resources",
-      "github",
-      "observe",
-    ]);
+    expect(list.map((row) => row.id)).toEqual(["coordination", "settings", "github", "observe"]);
     expect(list.every((row) => row.state === "on" && row.label === "Connected")).toBe(true);
   });
 
@@ -229,18 +211,6 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
     expect(byId(list, "settings")?.state).toBe("on");
   });
 
-  it("says what path rules turned off do, naming the projects that have them", () => {
-    const list = rows({
-      flags: { ...flags, pathRules: false },
-      pathRuleProjects: ["Booking", "Peer Hub"],
-    });
-    expect(byId(list, "resources")).toMatchObject({
-      state: "off-hub",
-      effect:
-        "Booking’s and Peer Hub’s path rules are saved but don’t apply. Agents get each project’s policy.",
-    });
-  });
-
   it("says GitHub's checks are not served when the settings say so", () => {
     const list = rows({ flags: { ...flags, github: false } });
     expect(byId(list, "github")).toMatchObject({ state: "off-hub", label: "Not available" });
@@ -248,9 +218,8 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
 });
 
 describe("what the app cannot tell", () => {
-  it("leaves out path rules and GitHub where the settings cannot be read", () => {
+  it("leaves out GitHub where the settings cannot be read", () => {
     const list = rows({ flags: null });
-    expect(byId(list, "resources")).toBeUndefined();
     expect(byId(list, "github")).toBeUndefined();
   });
 
@@ -289,42 +258,6 @@ describe("what the app cannot tell", () => {
         : entry,
     );
     expect(byId(rows({ plugins: locked }), "observe")?.effect).toBe("Forced off by the operator.");
-  });
-});
-
-describe("the path rules a Hub saves without applying", () => {
-  it("names the projects that have them, by name", () => {
-    expect(
-      projectsWithPathRules({
-        projects: {
-          peer: {
-            name: "Peer Hub",
-            coordination: { policy: "notify", paths: { "src/**": "ask" } },
-          },
-          booking: {
-            name: "Booking",
-            coordination: { policy: "coordinate", paths: { "migrations/**": "exclusive" } },
-          },
-          camp: { name: "Camp-bot", coordination: { policy: "notify", paths: {} } },
-          plain: { name: "Plain" },
-          nameless: { coordination: { paths: { "a/**": "ask" } } },
-        },
-      }),
-    ).toEqual(["Booking", "nameless", "Peer Hub"]);
-  });
-
-  it("are none without a document", () => {
-    expect(projectsWithPathRules(null)).toEqual([]);
-    expect(projectsWithPathRules({})).toEqual([]);
-  });
-
-  it("says it plainly when no project has any yet", () => {
-    expect(pathRulesOffEffect([])).toBe(
-      "Path rules are saved but don’t apply. Agents get each project’s policy.",
-    );
-    expect(pathRulesOffEffect(["Booking"])).toBe(
-      "Booking’s path rules are saved but don’t apply. Agents get each project’s policy.",
-    );
   });
 });
 
@@ -368,12 +301,12 @@ describe("a feature in the status language", () => {
   it("maps what the Hub does onto Connected, Not available and Off", () => {
     const list = rows({
       hub: catalog(
-        ALL.filter((id) => id !== "resources" && id !== "observe"),
-        ["resources"],
+        ALL.filter((id) => id !== "github" && id !== "observe"),
+        ["github"],
       ),
     });
     expect(byId(list, "settings")).toMatchObject({ connection: "connected", label: "Connected" });
-    expect(byId(list, "resources")).toMatchObject({
+    expect(byId(list, "github")).toMatchObject({
       connection: "unavailable",
       label: "Not available",
     });

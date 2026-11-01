@@ -108,11 +108,9 @@ export function newsFor(input: {
     // Whether they changed the shared files already or only said they are about to.
     const changed = other?.files.some((file) => files.includes(file)) ?? false;
     const state = fresh
-      ? files.every((file) => file.startsWith("resource:") || file.startsWith("pattern:"))
-        ? " (they hold it)"
-        : changed
-          ? " (they changed it too)"
-          : " (they are about to change it)"
+      ? changed
+        ? " (they changed it too)"
+        : " (they are about to change it)"
       : "";
     blocks.push(
       `Overlap ${shortId(overlap.id)} with ${who} on ${overlapSubject(overlap.files, taskName)}${state}${tail}`,
@@ -298,21 +296,4 @@ export function settleNudge(
   if (input.otherEnded === true)
     return `Peer: ${about}: the other agent ended and will not answer. Close it with what you will do: ${input.cli} resolve "<agreement>". If something is still open, write it: ${input.cli} note "<text>".`;
   return `Peer: ${about} has been quiet for ${input.minutes} min since you both wrote. If you agree, close it now: ${input.cli} resolve "<agreement>". If not, write what is still open: ${input.cli} note "<text>".`;
-}
-
-/**
- * Which ended session of an overlap Peer resumes to settle it (design D2): the lexically first of
- * its sessions that ended, so every Peer picks the same one; none while the other agent never
- * wrote, since a resumed agent would have nothing to answer.
- */
-export function settleCandidate(
-  overlap: Pick<HubOverlap, "sessions" | "notes">,
-  endedSessions: ReadonlyArray<string>,
-): string | undefined {
-  const candidate = overlap.sessions.filter((id) => endedSessions.includes(id)).toSorted()[0];
-  if (candidate === undefined) return undefined;
-  const otherWrote = overlap.notes.some(
-    (note) => note.session !== undefined && note.session !== candidate,
-  );
-  return otherWrote ? candidate : undefined;
 }

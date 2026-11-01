@@ -7,9 +7,7 @@ import {
   defaultPolicyHint,
   hubOffPlugins,
   isDefaultPolicy,
-  pathRulesNote,
   pluginViews,
-  projectsWithPathRules,
   splitByDefault,
   type PluginView,
 } from "./coordinationAndPlugins.logic";
@@ -164,13 +162,12 @@ const only = (
 
 describe("the plugins and where each comes from", () => {
   it("shows a plugin its owner left on as Connected, by them, with a switch they can change", () => {
-    expect(only([plugin("handoff")])).toMatchObject({
+    expect(only([plugin("changes")])).toMatchObject({
       status: "connected",
       source: "by you",
       checked: true,
       disabled: false,
       note: null,
-      consequence: null,
     });
   });
 
@@ -207,21 +204,6 @@ describe("the plugins and where each comes from", () => {
       source: "turned off on this Hub",
       checked: false,
       disabled: true,
-      consequence: null,
-    });
-  });
-
-  it("says what stops applying where the Hub turned path rules off", () => {
-    expect(
-      only([plugin("resources", { title: "Resource claims" })], {
-        ...OWNER,
-        hubOff: new Set(["resources"]),
-      }),
-    ).toMatchObject({
-      title: "Resource claims",
-      status: "unavailable",
-      source: "turned off on this Hub",
-      consequence: "path-rules",
     });
   });
 
@@ -231,7 +213,7 @@ describe("the plugins and where each comes from", () => {
         ...OWNER,
         hubOff: new Set(["changes"]),
       }),
-    ).toMatchObject({ status: "off", source: "by you", consequence: null });
+    ).toMatchObject({ status: "off", source: "by you" });
   });
 
   it("shows a plugin a Hub too old to have it cannot run as Not available, and says the Hub must be updated", () => {
@@ -276,7 +258,7 @@ describe("the plugins and where each comes from", () => {
   it("never reads On, Enabled or Authenticated as a status", () => {
     const statuses = pluginViews(
       [
-        plugin("handoff"),
+        plugin("changes"),
         plugin("find", { enabled: false, active: false, reason: "off" }),
         plugin("changes", { active: false, reason: "hub" }),
       ],
@@ -287,7 +269,7 @@ describe("the plugins and where each comes from", () => {
 
   it("shows everyone but the owner what is so, with the switch off their hands and the owner named", () => {
     const reader = { owner: false, pending: null, hubOff: NO_HUB_OFF } as const;
-    expect(only([plugin("handoff")], reader)).toMatchObject({
+    expect(only([plugin("changes")], reader)).toMatchObject({
       status: "connected",
       source: "by this computer’s owner",
       checked: true,
@@ -329,67 +311,9 @@ describe("the plugins and where each comes from", () => {
   });
 
   it("knows which plugins a Hub that lists them says its operator turned off", () => {
-    expect(hubOffPlugins({ featuresOff: [] }, null)).toEqual(new Set());
-    expect(hubOffPlugins({ featuresOff: ["resources", "audit"] }, null)).toEqual(
-      new Set(["resources", "audit"]),
+    expect(hubOffPlugins({ featuresOff: [] })).toEqual(new Set());
+    expect(hubOffPlugins({ featuresOff: ["github", "audit"] })).toEqual(
+      new Set(["github", "audit"]),
     );
-  });
-
-  it("believes the Hub's list over the flags of the settings it shows", () => {
-    // A Hub that lists nothing off is not contradicted by flags that say otherwise.
-    expect(hubOffPlugins({ featuresOff: [] }, { pathRules: false, github: true })).toEqual(
-      new Set(),
-    );
-    expect(hubOffPlugins({ featuresOff: ["changes"] }, { pathRules: true, github: true })).toEqual(
-      new Set(["changes"]),
-    );
-  });
-
-  it("falls back to the settings a Hub that serves them shows, where it lists nothing", () => {
-    expect(hubOffPlugins(undefined, null)).toEqual(new Set());
-    expect(hubOffPlugins({}, { pathRules: true, github: true })).toEqual(new Set());
-    expect(hubOffPlugins({}, { pathRules: false, github: false })).toEqual(new Set(["resources"]));
-    expect(hubOffPlugins(undefined, { pathRules: false, github: true })).toEqual(
-      new Set(["resources"]),
-    );
-  });
-});
-
-describe("what stops applying while path rules are off", () => {
-  it("names the projects that have path rules, as the design does", () => {
-    expect(pathRulesNote(["Booking"])).toBe("Booking’s path rules don’t apply while this is off.");
-    expect(pathRulesNote(["Booking", "Peer Hub"])).toBe(
-      "Booking’s and Peer Hub’s path rules don’t apply while this is off.",
-    );
-    expect(pathRulesNote(["Booking", "Peer Hub", "Camp-bot"])).toBe(
-      "Booking’s, Peer Hub’s and Camp-bot’s path rules don’t apply while this is off.",
-    );
-  });
-
-  it("finds the projects of a settings document that have path rules, among those the person is on", () => {
-    const document = {
-      projects: {
-        booking: {
-          name: "Booking",
-          coordination: { policy: "coordinate", paths: { "migrations/**": "exclusive" } },
-        },
-        "peer-hub": { name: "Peer Hub", coordination: { paths: { "docs/**": "notify" } } },
-        "camp-bot": { name: "Camp-bot", coordination: { policy: "ask", paths: {} } },
-        city: { name: "City-bot", coordination: { policy: "notify" } },
-        nameless: { coordination: { paths: { "a/**": "ask" } } },
-        elsewhere: { name: "Elsewhere", coordination: { paths: { "x/**": "ask" } } },
-      },
-    };
-    const mine = new Set(["booking", "peer-hub", "camp-bot", "city", "nameless"]);
-    expect(projectsWithPathRules(document, mine)).toEqual(["Booking", "Peer Hub", "nameless"]);
-    expect(projectsWithPathRules(document, new Set(["elsewhere"]))).toEqual(["Elsewhere"]);
-    expect(projectsWithPathRules(document, new Set())).toEqual([]);
-  });
-
-  it("finds none in a document without projects, or before it is read", () => {
-    const mine = new Set(["booking"]);
-    expect(projectsWithPathRules(undefined, mine)).toEqual([]);
-    expect(projectsWithPathRules({}, mine)).toEqual([]);
-    expect(projectsWithPathRules({ projects: [] }, mine)).toEqual([]);
   });
 });

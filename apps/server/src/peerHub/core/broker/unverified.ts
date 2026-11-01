@@ -60,13 +60,7 @@ export function unverifiedTool(
           const path = inRepository(session, file);
           return path === null ? [] : [path];
         });
-  const answers = fallbackAnswers(
-    plugins,
-    session === undefined ? undefined : this.sessionView(session),
-    relative,
-    policy,
-    memory,
-  );
+  const answers = fallbackAnswers(relative, policy, memory);
   const hook = editHookAnswer(agent, [...answers.map((a) => a.answer), ...asks]);
   for (const key of hook?.acknowledge ?? []) memory.acknowledged.add(key);
   this.record("intent.unverified", {

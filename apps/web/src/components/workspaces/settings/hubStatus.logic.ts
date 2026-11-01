@@ -12,7 +12,6 @@
  * what the workspace still has to do for GitHub's checks), its operator turned it off or
  * the Hub is too old (Not available), or this computer's owner turned its plugin off (Off).
  */
-import { getAt } from "@t3tools/client-runtime/peer-settings";
 import { hubFeatureState, pluginLockNote } from "@t3tools/client-runtime/peer/plugins";
 import type { PeerHubInfo, PeerPluginState, PeerSettingsView } from "@t3tools/contracts";
 
@@ -22,8 +21,6 @@ import {
   connectionDetail,
   type ConnectionState,
 } from "../../settings/connectionStatus.logic";
-import { joinNames } from "./reviewChanges.logic";
-import type { SettingsDocument } from "./settingsView.logic";
 
 export const HUB_DESCRIPTION = "Read only. The Hub’s operator changes these, not the app.";
 
@@ -91,17 +88,6 @@ const FEATURES: ReadonlyArray<Feature> = [
     },
   },
   {
-    id: "resources",
-    name: "Path rules",
-    without: "flags",
-    words: {
-      on: "A project’s path rules decide what agents do for the files they name.",
-      // Said with the projects that have path rules: `pathRulesOffEffect`.
-      off: "",
-      newer: "Path rules can’t apply until the Hub is updated.",
-    },
-  },
-  {
     id: "github",
     name: "GitHub PR checks",
     without: "flags",
@@ -148,34 +134,6 @@ export type ConnectedFeature = "github";
  */
 export type FeatureConnections = Readonly<Partial<Record<ConnectedFeature, ConnectionView>>>;
 
-const isMapping = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-/** The names of the projects that have path rules, which the Hub saves whether or not it applies them. */
-export function projectsWithPathRules(document: SettingsDocument | null): ReadonlyArray<string> {
-  const projects = document === null ? undefined : getAt(document, ["projects"]);
-  if (!isMapping(projects)) return [];
-  return Object.entries(projects)
-    .filter(([, project]) => {
-      const paths = getAt(project, ["coordination", "paths"]);
-      return isMapping(paths) && Object.keys(paths).length > 0;
-    })
-    .map(([id, project]) => {
-      const name = getAt(project, ["name"]);
-      return typeof name === "string" && name !== "" ? name : id;
-    })
-    .toSorted((a, b) => a.localeCompare(b));
-}
-
-/** What path rules that are saved and not applied say: whose they are, and what agents get instead. */
-export function pathRulesOffEffect(projectNames: ReadonlyArray<string>): string {
-  const whose =
-    projectNames.length === 0
-      ? "Path rules"
-      : `${joinNames(projectNames.map((name) => `${name}’s`))} path rules`;
-  return `${whose} are saved but don’t apply. Agents get each project’s policy.`;
-}
-
 interface Context {
   readonly plugins: ReadonlyArray<PeerPluginState>;
   readonly hub: PeerHubInfo | undefined;
@@ -207,8 +165,7 @@ function stateOf(feature: Feature, context: Context): FeatureState | undefined {
       return "off-here";
     case "flags": {
       if (!context.settingsServed || context.flags === null) return undefined;
-      const served = feature.id === "resources" ? context.flags.pathRules : context.flags.github;
-      return served ? "on" : "off-hub";
+      return context.flags.github ? "on" : "off-hub";
     }
     case "nothing":
       return undefined;
@@ -218,10 +175,7 @@ function stateOf(feature: Feature, context: Context): FeatureState | undefined {
 function effectOf(
   feature: Feature,
   state: FeatureState,
-  input: {
-    readonly plugin: PeerPluginState | undefined;
-    readonly pathRuleProjects: ReadonlyArray<string>;
-  },
+  plugin: PeerPluginState | undefined,
 ): string {
   switch (state) {
     case "on":
@@ -229,11 +183,9 @@ function effectOf(
     case "newer":
       return feature.words.newer;
     case "off-hub":
-      return feature.id === "resources"
-        ? pathRulesOffEffect(input.pathRuleProjects)
-        : feature.words.off;
+      return feature.words.off;
     case "off-here":
-      return (input.plugin === undefined ? null : pluginLockNote(input.plugin)) ?? OFF_HERE;
+      return (plugin === undefined ? null : pluginLockNote(plugin)) ?? OFF_HERE;
   }
 }
 
@@ -293,7 +245,6 @@ export function hubFeatureRows(input: {
   /** `GET /settings`' `features`; null while the settings cannot be read. */
   readonly flags: PeerSettingsView["features"] | null;
   /** The projects that have path rules, by name. */
-  readonly pathRuleProjects: ReadonlyArray<string>;
   /** What the workspace's own connection says of GitHub's checks, once read. */
   readonly connections?: FeatureConnections | undefined;
 }): ReadonlyArray<FeatureRow> {
@@ -328,7 +279,7 @@ export function hubFeatureRows(input: {
         ? {
             connection: CONNECTION[state],
             label: CONNECTION_STATE_LABEL[CONNECTION[state]],
-            effect: effectOf(feature, state, { plugin, pathRuleProjects: input.pathRuleProjects }),
+            effect: effectOf(feature, state, plugin),
           }
         : connectedRow(feature, view)),
     });

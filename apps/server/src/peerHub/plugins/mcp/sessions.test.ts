@@ -300,8 +300,8 @@ describe("coordination tool sessions", () => {
                 wakes: false,
                 read: () =>
                   Effect.succeed({
-                    text: "A complete offered announcement.",
-                    refs: ["announcement-1"],
+                    text: "A complete offered notice.",
+                    refs: ["notice-1"],
                   }),
               },
             ],
@@ -309,9 +309,9 @@ describe("coordination tool sessions", () => {
               Effect.sync(() => {
                 states.push(state);
               }),
-            sessionEnding: () =>
+            sessionEnd: () =>
               Effect.sync(() => {
-                states.push("session-ending");
+                states.push("session-end");
               }),
           },
         }),
@@ -321,10 +321,10 @@ describe("coordination tool sessions", () => {
           Effect.gen(function* () {
             const command = yield* commandOf(plugins);
             const answer = JSON.parse(yield* command.stdio!({ line: status, headers }));
-            assert.include(answer.result.content[0].text, "A complete offered announcement.");
+            assert.include(answer.result.content[0].text, "A complete offered notice.");
             assert.deepEqual(states, ["offered"]);
             yield* command.stdio!({ line: "--end", headers });
-            assert.deepEqual(states, ["offered", "session-ending"]);
+            assert.deepEqual(states, ["offered", "session-end"]);
           }),
         [extra],
       );
@@ -483,9 +483,9 @@ describe("coordination tool sessions", () => {
   );
   it.effect("removes the tools of a plugin that was turned off", () => {
     const extra = bindPlugin({
-      id: "needs-you",
+      id: "audit",
       layer: Layer.empty,
-      title: "Needs you",
+      title: "Audit",
       summary: "test",
       defaultEnabled: true,
       make: Effect.succeed({
@@ -504,7 +504,7 @@ describe("coordination tool sessions", () => {
       (_fixture, plugins) =>
         Effect.gen(function* () {
           const command = yield* commandOf(plugins);
-          yield* plugins.setPlugin({ id: "needs-you", enabled: false });
+          yield* plugins.setPlugin({ id: "audit", enabled: false });
           const catalog = JSON.parse(
             yield* command.stdio!({
               line: '{"jsonrpc":"2.0","id":3,"method":"tools/list"}',

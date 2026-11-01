@@ -94,6 +94,8 @@ describe("the arms", () => {
     expect(armOf({ LAB_IMPACT_ONLY: "1" })).toBe("impact");
     expect(armOf({ LAB_IMPACT_ONLY: "0" })).toBe("plans");
     expect(armOf({ LAB_PEER: "off" })).toBe("none");
+    expect(armOf({ LAB_KERNEL: "1" })).toBe("kernel");
+    expect(armOf({ LAB_KERNEL: "0" })).toBe("plans");
   });
 
   it("names the arm that turns agreements off, and takes agreements on to be what Peer does anyway", () => {

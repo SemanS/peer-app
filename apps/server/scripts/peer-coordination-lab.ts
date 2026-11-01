@@ -123,6 +123,13 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   titles and branches, and both agents start together.
 //   LAB_CONTRACT=hidden (with REAL_SCENARIO=contract) is a dependency nobody names: Ana's task makes
 //   orderTotal() return integer cents under the same name, Bob's adds loyalty points in a new file.
+//   LAB_KERNEL=1 (with REAL_SCENARIO=contract) is the arm with only the kernel on: the Hub starts without
+//   KERNEL_FEATURES_OFF and each computer turns KERNEL_PLUGINS_OFF off before the agents start.
+//   REAL_SCENARIO=memory (peer-lab/ownMemory.ts, REAL_AGENTS=1, kernel only) measures whether an agent picks the right
+//   memory store; LAB_VIKING_URL names the OpenViking server, LAB_MEMORY_ARM=none|tools|hint|card what the agent has, and
+//   LAB_MEMORY=adapter whether an agent opens a store for another agent that cannot.
+//   REAL_SCENARIO=ready (peer-lab/ready.ts, REAL_AGENTS=1, kernel only) measures whether an agent surfaces a person's
+//   decisions when it is asked at the end (LAB_READY=on) and when nothing asks (LAB_READY=off).
 //   LAB_CONTRACT=deferred is the hidden seed with Bob told to compute his points from orderTotal() and to
 //   keep his branch right with the code it has, so that what he learns of Ana's change belongs to whoever
 //   lands both. LAB_INTEGRATE=1 (implied by deferred; peer-lab/hidden.ts) then adds the integration step:
@@ -291,7 +298,7 @@ import {
   writeGapSeed,
   type GapFinding,
 } from "./peer-lab/gap.ts";
-import { plainSession, toldTexts } from "./peer-lab/told.ts";
+import { peerAdded, plainSession, toldTexts, type LabEvent } from "./peer-lab/told.ts";
 import {
   dependencyBlocks,
   withDependencyEvidence,
@@ -340,10 +347,36 @@ import {
   type HubPlans,
 } from "./peer-lab/plans.ts";
 import {
+  ADAPTER_ANA_TASK,
+  ADAPTER_BOB_TASK,
+  ADAPTER_CARD,
+  MEMORY_CARD,
+  MEMORY_TASK,
+  MEMORY_TASKS,
+  adapterRight,
+  claudeMcpConfig,
+  judgeLoyalty,
+  memoryArmOf,
+  memoryFacts,
+  memoryServers,
+  writeKontextEntries,
+  writeMemorySeed,
+} from "./peer-lab/ownMemory.ts";
+import {
+  AWAY,
+  READY_ASK,
+  READY_CARD,
+  READY_TASK,
+  READY_TASKS,
+  writeReadySeed,
+} from "./peer-lab/ready.ts";
+import {
   ANA_TASK,
   ARM_LABELS,
   BOB_TASK,
   HARD_TASKS as HARD_CONTRACT_TASKS,
+  KERNEL_FEATURES_OFF,
+  KERNEL_PLUGINS_OFF,
   TASKS as EASY_CONTRACT_TASKS,
   agentReport,
   agreementsOn,
@@ -516,6 +549,14 @@ const LANDING: "on" | "off" = process.env.LAB_LANDING === "off" ? "off" : "on";
 const RESTART = TASKS && process.env.REAL_RESTART === "1";
 /** REAL_SCENARIO=contract: a contract migration, with real agents or, without REAL_AGENTS=1, scripted stand-ins. */
 const CONTRACT = process.env.REAL_SCENARIO === "contract";
+/** REAL_SCENARIO=memory (`peer-lab/ownMemory.ts`): an agent, kontext and OpenViking, with nothing of them in Peer. */
+const MEMORY = process.env.REAL_SCENARIO === "memory";
+const MEMORY_ADAPTER = MEMORY && process.env.LAB_MEMORY === "adapter";
+const MEMORY_ARM = memoryArmOf(process.env);
+/** REAL_SCENARIO=ready (`peer-lab/ready.ts`): what an agent surfaces when it is asked at the end. */
+const READY = process.env.REAL_SCENARIO === "ready";
+/** The scenarios that bring their own project, instead of the pricing files of the default program. */
+const OWN_SEED = CONTRACT || FOLLOW || HANDOFF || GAP || MEMORY || READY;
 /** LAB_CONTRACT=hard: the contract scenario with nothing that gives Ana's change away (contract.ts). */
 const CONTRACT_HARD = CONTRACT && process.env.LAB_CONTRACT === "hard";
 if (
@@ -562,7 +603,11 @@ const CONTRACT_BOB_TASK = CONTRACT_DEFERRED
     ? HIDDEN_BOB_TASK
     : BOB_TASK;
 /** The contract scenario's arm: `LAB_PLANS=off`, `LAB_IMPACT_ONLY=1`, or plans on. */
-const ARM = CONTRACT ? armOf(process.env) : ("plans" as const);
+const ARM = CONTRACT
+  ? armOf(process.env)
+  : MEMORY || READY
+    ? ("kernel" as const)
+    : ("plans" as const);
 /** With real agents, a keeper idle this long gives way (production waits ten minutes). */
 const REAL_IDLE_SECS = 45;
 /** The server the computers run: the bundle in apps/server/dist, or `LAB_SERVER_BIN` (a private build, `vp pack -d <dir>`). */
@@ -628,6 +673,7 @@ const hub = spawnLogged(peerhubBin, ["serve"], {
   PEERHUB_GATEWAY_MODE: "memory",
   PEERHUB_SECRET_KEY: NodeCrypto.randomBytes(32).toString("hex"),
   ...(REAL ? { PEERHUB_KEEPER_IDLE_SECS: String(REAL_IDLE_SECS) } : {}),
+  ...(ARM === "kernel" ? { PEERHUB_FEATURES_OFF: KERNEL_FEATURES_OFF.join(",") } : {}),
 });
 
 async function hubCall(path: string, init: { method?: string; session?: string; body?: unknown }) {
@@ -720,7 +766,9 @@ function makeOrigin(): string {
   if (FOLLOW) writeHiddenSeed(work);
   if (HANDOFF) writeHandoffSeed(work, NodePath.join(repoRoot, "node_modules/.bin/tsc"));
   if (GAP) writeGapSeed(work);
-  if (!CONTRACT && !FOLLOW && !HANDOFF && !GAP) {
+  if (MEMORY) writeMemorySeed(work, { hint: MEMORY_ARM === "hint" || MEMORY_ARM === "card" });
+  if (READY) writeReadySeed(work);
+  if (!OWN_SEED) {
     NodeFS.writeFileSync(
       NodePath.join(work, "src/pricing.ts"),
       "export function price(items: number[]): number {\n  return items.reduce((sum, item) => sum + item, 0);\n}\n",
@@ -730,7 +778,7 @@ function makeOrigin(): string {
       'import { price } from "./pricing";\n\nexport const cartTotal = (items: number[]) => price(items);\n',
     );
   }
-  if (REAL && !OWNERS && !CONTRACT && !FOLLOW && !HANDOFF && !GAP) {
+  if (REAL && !OWNERS && !OWN_SEED) {
     // Prices are integer cents, and other files rely on it: something worth keeping.
     NodeFS.writeFileSync(
       NodePath.join(work, "src/format.ts"),
@@ -743,9 +791,10 @@ function makeOrigin(): string {
   }
   git(work, "init", "--quiet", "--initial-branch", "main");
   // The project keeps knowledge with kontext, when it is installed here.
-  if (kontext && !CONTRACT && !FOLLOW && !HANDOFF && !GAP)
+  if (kontext && (!OWN_SEED || (MEMORY && !MEMORY_ADAPTER && MEMORY_ARM !== "none")))
     NodeChildProcess.execFileSync("kontext", ["init", "--no-hooks"], { cwd: work });
-  if (REAL && !OWNERS && kontext && !CONTRACT && !FOLLOW && !HANDOFF && !GAP) {
+  if (MEMORY && !MEMORY_ADAPTER && MEMORY_ARM !== "none") writeKontextEntries(work);
+  if (REAL && !OWNERS && kontext && !OWN_SEED) {
     NodeFS.mkdirSync(NodePath.join(work, ".ai", "conventions"), { recursive: true });
     NodeFS.writeFileSync(
       NodePath.join(work, ".ai", "conventions", "what-agents-mark-for-the-project.md"),
@@ -912,6 +961,15 @@ async function setUpWorkspace() {
         session: admin,
         body: { title: task.title, key: task.key },
       });
+  } else if (MEMORY || READY) {
+    for (const task of MEMORY ? MEMORY_TASKS : READY_TASKS) {
+      const made = await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
+        method: "POST",
+        session: admin,
+        body: { title: task.title, key: task.key },
+      });
+      if (task.key === "KRK-1") krk1Id = String(made.id);
+    }
   } else if (REAL && !OWNERS && !FOLLOW && !ROOMS && !HANDOFF && !GAP) {
     const krk1 = await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
       method: "POST",
@@ -978,7 +1036,7 @@ const startComputer = Effect.fn("lab.startComputer")(function* (
     // The lab reads the debug log (texts, paths, answers), with real agents as with simulated ones.
     PEER_COORDINATION_DEBUG: "1",
     // The contract scenario's arm: which of plans and Impact this computer has.
-    ...(CONTRACT ? armEnv(ARM) : {}),
+    ...(CONTRACT || MEMORY || READY ? armEnv(ARM) : {}),
     ...extraEnv,
   };
   const server = yield* serve(name, home, port, env);
@@ -4737,7 +4795,9 @@ function startHerdr(name: string) {
     XDG_CONFIG_HOME: NodePath.join(base, "c"),
     XDG_STATE_HOME: NodePath.join(base, "s"),
     // The "none" arm: Peer's hooks and `peer` do nothing for the agents, as if Peer were not there.
-    ...(CONTRACT && ARM === "none" ? { PEER_COORDINATION: "off" } : {}),
+    ...((CONTRACT && ARM === "none") || (MEMORY && process.env.LAB_PEER === "off")
+      ? { PEER_COORDINATION: "off" }
+      : {}),
     // The rooms scenario's panes run what Peer starts: its `claude` is the lab's, and no person's shell files move it.
     ...(ROOMS ? { ZDOTDIR: NodePath.join(base, "z") } : {}),
     // LAB_CLAUDE_CONFIG_ANA / _BOB: that computer's Claude Code signs in with its own account, as two people's would.
@@ -4746,7 +4806,7 @@ function startHerdr(name: string) {
       : {}),
     // A bare `peer` in the agent's shell is its own computer's, as on a person's computer.
     PATH: [
-      ...(ROOMS ? [NodePath.join(base, "bin")] : []),
+      ...(ROOMS || MEMORY || READY ? [NodePath.join(base, "bin")] : []),
       NodePath.join(lab, name.toLowerCase(), "userdata", "coord", "bin"),
       process.env.PATH ?? "",
     ]
@@ -4756,6 +4816,16 @@ function startHerdr(name: string) {
   for (const key of ["HERDR_SOCKET_PATH", "HERDR_SESSION", "HERDR_ENV", "HERDR_PANE_ID"])
     delete env[key];
   if (ROOMS) NodeFS.mkdirSync(NodePath.join(base, "z"), { recursive: true });
+  // The operator's own stores stay out of reach: an agent gets a store only through the MCP servers the arm gives it.
+  if (MEMORY || READY) {
+    NodeFS.mkdirSync(NodePath.join(base, "bin"), { recursive: true });
+    for (const tool of ["ov", "openviking", "ovk", ...(MEMORY_ARM === "none" ? ["kontext"] : [])])
+      NodeFS.writeFileSync(
+        NodePath.join(base, "bin", tool),
+        `#!/bin/sh\necho "${tool}: command not found" >&2\nexit 127\n`,
+        { mode: 0o755 },
+      );
+  }
   const server = spawnLogged(herdrBin, ["server"], env);
   return { env, base, server, socket: NodePath.join(base, "c", "herdr", "herdr.sock") };
 }
@@ -4828,6 +4898,8 @@ function writeClaudeSettings(
   options: {
     readonly hooks?: Record<string, ReadonlyArray<HookGroup>>;
     readonly allow?: ReadonlyArray<string>;
+    /** Permission rules as they are, such as a whole MCP server's tools. */
+    readonly rules?: ReadonlyArray<string>;
   } = {},
 ) {
   const settings = NodePath.join(computer.home, "claude-settings.json");
@@ -4865,6 +4937,7 @@ function writeClaudeSettings(
           allow: [
             ...(given.permissions?.allow ?? []),
             ...shell.map((command) => `Bash(${command}:*)`),
+            ...(options.rules ?? []),
           ],
         },
       },
@@ -4912,6 +4985,10 @@ async function startClaude(
     readonly allow?: ReadonlyArray<string>;
     /** Where it works: a task's worktree of the checkout (the checkout itself by default). */
     readonly cwd?: string;
+    /** Permission rules as they are, such as a whole MCP server's tools. */
+    readonly rules?: ReadonlyArray<string>;
+    /** An `--mcp-config` file: the only MCP servers it gets. */
+    readonly mcpConfig?: string;
   } = {},
 ) {
   const settings = writeClaudeSettings(computer, options);
@@ -4932,6 +5009,7 @@ async function startClaude(
     "--settings",
     settings,
     "--strict-mcp-config",
+    ...(options.mcpConfig === undefined ? [] : ["--mcp-config", options.mcpConfig]),
     "--permission-mode",
     "acceptEdits",
     "--model",
@@ -5021,6 +5099,8 @@ function codexLabArgs(
   hooks: Record<string, ReadonlyArray<HookGroup>> = codexHookGroups(computer.scripts),
   /** Where it works, when not the checkout itself: a task's worktree. */
   cwd: string = computer.checkout,
+  /** MCP servers it gets, as Codex's config names them. */
+  mcp: Readonly<Record<string, unknown>> = {},
 ): string[] {
   const codexHome = process.env.CODEX_HOME ?? NodePath.join(NodeOS.homedir(), ".codex");
   const read = (file: string) => {
@@ -5074,11 +5154,11 @@ function codexLabArgs(
     ...(skills.length === 0
       ? []
       : ["-c", `skills.config=${tomlInline(skills.map((path) => ({ path, enabled: false })))}`]),
-    ...(servers.length === 0
+    ...(servers.length === 0 && Object.keys(mcp).length === 0
       ? []
       : [
           "-c",
-          `mcp_servers=${tomlInline(Object.fromEntries(servers.map((name) => [name, { enabled: false }])))}`,
+          `mcp_servers=${tomlInline({ ...Object.fromEntries(servers.map((name) => [name, { enabled: false }])), ...mcp })}`,
         ]),
     "-c",
     `projects=${tomlInline(Object.fromEntries(trusted.map((path) => [path, { trust_level: "trusted" }])))}`,
@@ -5110,6 +5190,8 @@ async function startCodex(
   hooks?: Record<string, ReadonlyArray<HookGroup>>,
   /** Where it works: a task's worktree of the checkout (the checkout itself by default). */
   cwd: string = computer.checkout,
+  /** MCP servers it gets, as Codex's config names them. */
+  mcp: Readonly<Record<string, unknown>> = {},
 ) {
   const created = herdrJson(h, "workspace", "create", "--cwd", cwd, "--label", name, "--no-focus");
   const pane = created.result?.root_pane?.pane_id as string;
@@ -5121,7 +5203,7 @@ async function startCodex(
   );
   NodeFS.writeFileSync(
     launcher,
-    `#!/bin/sh\nexec codex ${codexLabArgs(computer, hooks, cwd).map(quote).join(" ")} "$@"\n`,
+    `#!/bin/sh\nexec codex ${codexLabArgs(computer, hooks, cwd, mcp).map(quote).join(" ")} "$@"\n`,
     { mode: 0o755 },
   );
   for (let launch = 0; launch < 3; launch += 1) {
@@ -6840,6 +6922,241 @@ async function integrationStep(input: {
 }
 
 /**
+ * Waits for the agents as `quietUntil` does, with their person away: an agent that stops on a question it put to its
+ * person gets the lab's answer that nobody is there, and so does one that ends its turn before `done()`. Returns what
+ * they asked, as the screen showed it.
+ */
+async function waitWithPersonAway(
+  agents: ReadonlyArray<{
+    readonly computer: Computer;
+    readonly h: HerdrServer;
+    readonly pane: string;
+  }>,
+  limitMs: number,
+  done: () => boolean,
+) {
+  const asked: string[] = [];
+  let quiet = 0;
+  const lastIdle = new Set<string>();
+  for (let elapsed = 0; elapsed < limitMs && quiet < 30_000; elapsed += 3000) {
+    await sleep(3000);
+    approveAll(agents);
+    const statuses = agents.map(({ h, pane }) => statusOf(h, pane));
+    for (const { computer, h, pane } of agents) {
+      if (statusOf(h, pane) !== "blocked") continue;
+      const screen = herdrText(h, "pane", "read", pane, "--source", "visible");
+      if (!/Enter to select/.test(screen)) continue;
+      asked.push(screen.slice(-1400));
+      say("stopped to ask", `${computer.name}'s agent`);
+      herdrText(h, "pane", "send-keys", pane, "esc");
+      await sleep(2500);
+      herdrJson(h, "agent", "prompt", pane, AWAY);
+    }
+    quiet = statuses.every((s) => s === "idle" || s === "done") ? quiet + 3000 : 0;
+    if (quiet >= 12_000 && !done() && agents[0] !== undefined && !lastIdle.has("asked")) {
+      lastIdle.add("asked");
+      const { h, pane } = agents[0];
+      asked.push(herdrText(h, "pane", "read", pane, "--source", "visible").slice(-1400));
+      say("ended its turn with the work undone", "the lab says its person is away");
+      herdrJson(h, "agent", "prompt", pane, AWAY);
+      quiet = 0;
+    }
+  }
+  return asked;
+}
+
+/** Turns off what the Hub's features do not, and checks that only the kernel's plugins are left. */
+const kernelOnly = Effect.fn("lab.kernelOnly")(function* (computer: Computer) {
+  for (const id of KERNEL_PLUGINS_OFF)
+    yield* computer.client[WS_METHODS.peerHubSetPlugin]({ id, enabled: false });
+  const { plugins } = yield* computer.client[WS_METHODS.peerHubSync]({});
+  const on = (plugins ?? []).filter((one) => one.active).map((one) => one.id);
+  say(`${computer.name}'s active plugins`, on.join(", "));
+  check(
+    on.every((id) =>
+      ["ask", "audit", "herdr", "mcp", "observe", "rooms", "settings", "tool-trust"].includes(id),
+    ),
+    `${computer.name}'s Peer has only the kernel's plugins on`,
+  );
+});
+
+/** The lab's agent of `kind` on a computer, with these MCP servers, or none. */
+const startOwnAgent = (
+  kind: string | undefined,
+  h: HerdrServer,
+  computer: Computer,
+  name: string,
+  servers: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {},
+) =>
+  kind === "codex"
+    ? startCodex(h, computer, name, undefined, computer.checkout, servers)
+    : startClaude(h, computer, name, {
+        rules: Object.keys(servers).map((server) => `mcp__${server}`),
+        ...(Object.keys(servers).length === 0
+          ? {}
+          : { mcpConfig: claudeMcpConfig(computer.home, servers) }),
+      });
+
+const kontextBin = () =>
+  NodeChildProcess.execFileSync("which", ["kontext"], { encoding: "utf8" }).trim();
+
+const vikingUrl = () => {
+  const url = process.env.LAB_VIKING_URL;
+  if (url === undefined) throw new Error("REAL_SCENARIO=memory needs LAB_VIKING_URL");
+  return url;
+};
+
+/** REAL_SCENARIO=memory (`peer-lab/ownMemory.ts` has the project, the facts and the checks). */
+const memoryProgram = Effect.gen(function* () {
+  if (!REAL) throw new Error("REAL_SCENARIO=memory needs REAL_AGENTS=1");
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  const peerOff = process.env.LAB_PEER === "off";
+  const [anaKind, bobKind] = (process.env.REAL_KINDS ?? "claude,codex").split(",");
+  const anaHerdr = startHerdr("Ana");
+  const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr.socket);
+  yield* kernelOnly(ana);
+  say(
+    "memory",
+    MEMORY_ADAPTER
+      ? `adapter variant, Peer ${peerOff ? "off" : "kernel"}, Ana ${anaKind}, Bob ${bobKind}`
+      : `arm ${MEMORY_ARM}, agent ${anaKind}`,
+  );
+  const servers = memoryServers(vikingUrl(), kontextBin());
+  if (!MEMORY_ADAPTER) {
+    branchOff(ana.checkout, MEMORY_TASKS[0].branch);
+    const pane = yield* Effect.promise(() =>
+      startOwnAgent(anaKind, anaHerdr, ana, "ana", MEMORY_ARM === "none" ? {} : servers),
+    );
+    const live = [{ computer: ana, h: anaHerdr, pane }];
+    const words = `${MEMORY_ARM === "card" ? `${MEMORY_CARD} ` : ""}${MEMORY_TASK}`;
+    herdrJson(anaHerdr, "agent", "prompt", pane, words);
+    say("Ana's agent prompted", words);
+    const asked = yield* Effect.promise(() =>
+      waitWithPersonAway(live, 8 * 60_000, () =>
+        NodeFS.existsSync(NodePath.join(ana.checkout, "src", "loyalty.js")),
+      ),
+    );
+    const verdict = judgeLoyalty(ana.checkout);
+    say(
+      "memory result",
+      JSON.stringify({
+        arm: MEMORY_ARM,
+        kind: anaKind,
+        checkout: NodeFS.realpathSync(ana.checkout),
+        verdict,
+        facts: memoryFacts(verdict),
+        asked,
+        added: peerAdded(events(ana) as ReadonlyArray<LabEvent>),
+      }),
+    );
+    if (NodeFS.existsSync(NodePath.join(ana.checkout, "src", "loyalty.js")))
+      told(
+        "Ana's agent's code",
+        NodeFS.readFileSync(NodePath.join(ana.checkout, "src", "loyalty.js"), "utf8"),
+      );
+    return;
+  }
+  const bobHerdr = startHerdr("Bob");
+  const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socket);
+  yield* kernelOnly(bob);
+  branchOff(ana.checkout, MEMORY_TASKS[1].branch);
+  branchOff(bob.checkout, MEMORY_TASKS[0].branch);
+  const anaPane = yield* Effect.promise(() =>
+    startOwnAgent(anaKind, anaHerdr, ana, "ana", { openviking: servers.openviking }),
+  );
+  const bobPane = yield* Effect.promise(() => startOwnAgent(bobKind, bobHerdr, bob, "bob"));
+  const live = [
+    { computer: ana, h: anaHerdr, pane: anaPane },
+    { computer: bob, h: bobHerdr, pane: bobPane },
+  ];
+  const anaWords = `${process.env.LAB_ADAPTER_CARD === "1" ? `${ADAPTER_CARD} ` : ""}${ADAPTER_ANA_TASK}`;
+  herdrJson(anaHerdr, "agent", "prompt", anaPane, anaWords);
+  say("Ana's agent prompted", anaWords);
+  herdrJson(bobHerdr, "agent", "prompt", bobPane, ADAPTER_BOB_TASK);
+  say("Bob's agent prompted", ADAPTER_BOB_TASK);
+  yield* Effect.promise(() => quietUntil(live, 8 * 60_000));
+  const verdict = judgeLoyalty(bob.checkout);
+  say(
+    "memory result",
+    JSON.stringify({
+      arm: peerOff
+        ? "adapter-no-peer"
+        : process.env.LAB_ADAPTER_CARD === "1"
+          ? "adapter-card"
+          : "adapter",
+      kinds: [anaKind, bobKind],
+      checkouts: [ana.checkout, bob.checkout].map((path) => NodeFS.realpathSync(path)),
+      verdict,
+      right: adapterRight(verdict),
+      added: {
+        ana: peerAdded(events(ana) as ReadonlyArray<LabEvent>),
+        bob: peerAdded(events(bob) as ReadonlyArray<LabEvent>),
+      },
+    }),
+  );
+  if (NodeFS.existsSync(NodePath.join(bob.checkout, "src", "loyalty.js")))
+    told(
+      "Bob's agent's code",
+      NodeFS.readFileSync(NodePath.join(bob.checkout, "src", "loyalty.js"), "utf8"),
+    );
+}).pipe(Effect.scoped);
+
+/** REAL_SCENARIO=ready (`peer-lab/ready.ts` has the project and the words). */
+const readyProgram = Effect.gen(function* () {
+  if (!REAL) throw new Error("REAL_SCENARIO=ready needs REAL_AGENTS=1");
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  const mode = process.env.LAB_READY ?? "off";
+  if (!["off", "on", "card"].includes(mode))
+    throw new Error(`LAB_READY is off, on or card, not ${mode}`);
+  const asked = mode !== "off";
+  const [kind] = (process.env.REAL_KINDS ?? "claude").split(",");
+  const herdr = startHerdr("Ana");
+  const ana = yield* startComputer("Ana", "ana@acme.test", herdr.socket);
+  yield* kernelOnly(ana);
+  branchOff(ana.checkout, READY_TASKS[0].branch);
+  const pane = yield* Effect.promise(() => startOwnAgent(kind, herdr, ana, "ana"));
+  const live = [{ computer: ana, h: herdr, pane }];
+  const words = `${mode === "card" ? `${READY_CARD} ` : ""}${READY_TASK}`;
+  herdrJson(herdr, "agent", "prompt", pane, words);
+  say("Ana's agent prompted", words);
+  const refunds = NodePath.join(ana.checkout, "src", "refunds.js");
+  const stops = yield* Effect.promise(() =>
+    waitWithPersonAway(live, 8 * 60_000, () => NodeFS.existsSync(refunds)),
+  );
+  const lastWords = herdrText(herdr, "pane", "read", pane, "--source", "recent");
+  if (asked) {
+    herdrJson(herdr, "agent", "prompt", pane, READY_ASK);
+    say("Ana's agent asked at the end", READY_ASK);
+    yield* Effect.promise(() => quietUntil(live, 5 * 60_000));
+  }
+  const room = yield* Effect.promise(() =>
+    hubCall(`/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(krk1Id)}/room?limit=100`, {
+      session: hubSession,
+    }).catch((error: unknown) => ({ error: String(error) })),
+  );
+  say(
+    "ready result",
+    JSON.stringify({
+      mode,
+      stops,
+      kind,
+      checkout: NodeFS.realpathSync(ana.checkout),
+      implemented: NodeFS.existsSync(refunds),
+      room,
+      lastWords,
+      code: NodeFS.existsSync(refunds) ? NodeFS.readFileSync(refunds, "utf8") : "",
+      added: peerAdded(events(ana) as ReadonlyArray<LabEvent>),
+    }),
+  );
+}).pipe(Effect.scoped);
+
+/**
  * REAL_SCENARIO=contract (`peer-lab/contract.ts`): two agents' branches merge and run tests they never saw;
  * the arm (`LAB_PLANS=off`, `LAB_IMPACT_ONLY=1`, or plans on) says what Peer tells them.
  */
@@ -6875,6 +7192,7 @@ const contractProgram = Effect.gen(function* () {
   }
   // The arm, as each computer's Peer says it.
   say("arm", ARM_LABELS[ARM]);
+  if (ARM === "kernel") for (const computer of [ana, bob]) yield* kernelOnly(computer);
   for (const computer of [ana, bob]) {
     const { plugins } = yield* computer.client[WS_METHODS.peerHubSync]({});
     const active = (id: string) => plugins?.some((one) => one.id === id && one.active) === true;
@@ -6890,7 +7208,7 @@ const contractProgram = Effect.gen(function* () {
   // Impact and the names of a plan read a code index, which the lab makes for real agents when it can
   // and keeps up to date with what they change: Impact does not read one that is behind.
   const keepIndexes: Array<() => void> = [];
-  if ((REAL || REAL_CODEGRAPH) && ARM !== "off" && ARM !== "none") {
+  if ((REAL || REAL_CODEGRAPH) && impactOn(ARM)) {
     const binary = installedCodegraph;
     for (const computer of [ana, bob]) {
       const made =
@@ -6910,7 +7228,7 @@ const contractProgram = Effect.gen(function* () {
   /** What the Hub's Impact view says of the project: whether it paired Ana's change with Bob's use. */
   let impactAtHub: ReadonlyArray<string> = [];
   const readImpact = async () => {
-    if (ARM === "off") return;
+    if (!impactOn(ARM)) return;
     const view = await hubCall("/v1/workspaces/acme/impact?project=lab", {
       session: hubSession,
     }).catch(() => undefined);
@@ -6986,7 +7304,7 @@ const contractProgram = Effect.gen(function* () {
           afterEdit: () => {
             for (const keep of keepIndexes) keep();
           },
-          watchImpact: REAL_CODEGRAPH && ARM !== "off",
+          watchImpact: REAL_CODEGRAPH && impactOn(ARM),
           beforeEnd: readImpact,
         }),
       );
@@ -9717,37 +10035,41 @@ const gapProgram = Effect.gen(function* () {
 
 try {
   await Effect.runPromise(
-    TEAM
-      ? teamProgram
-      : OWNERS
-        ? ownersProgram
-        : CONTRACT
-          ? contractProgram
-          : FOLLOW
-            ? followProgram
-            : HANDOFF
-              ? handoffProgram
-              : ROOMS
-                ? SHARED
-                  ? sharedRoomProgram
-                  : RETRY
-                    ? roomsRetryProgram
-                    : REAL
-                      ? roomsRealProgram
-                      : roomsProgram
-                : KNOWLEDGE
-                  ? knowledgeProgram
-                  : TASKS
-                    ? realTasksProgram
-                    : SETTLE
-                      ? realSettleProgram
-                      : SETTINGS_SCENARIO
-                        ? realSettingsProgram
-                        : GAP
-                          ? gapProgram
-                          : process.env.REAL_AGENTS === "1"
-                            ? realProgram
-                            : program,
+    MEMORY
+      ? memoryProgram
+      : READY
+        ? readyProgram
+        : TEAM
+          ? teamProgram
+          : OWNERS
+            ? ownersProgram
+            : CONTRACT
+              ? contractProgram
+              : FOLLOW
+                ? followProgram
+                : HANDOFF
+                  ? handoffProgram
+                  : ROOMS
+                    ? SHARED
+                      ? sharedRoomProgram
+                      : RETRY
+                        ? roomsRetryProgram
+                        : REAL
+                          ? roomsRealProgram
+                          : roomsProgram
+                    : KNOWLEDGE
+                      ? knowledgeProgram
+                      : TASKS
+                        ? realTasksProgram
+                        : SETTLE
+                          ? realSettleProgram
+                          : SETTINGS_SCENARIO
+                            ? realSettingsProgram
+                            : GAP
+                              ? gapProgram
+                              : process.env.REAL_AGENTS === "1"
+                                ? realProgram
+                                : program,
   );
   say("PASS");
   process.exitCode = 0;

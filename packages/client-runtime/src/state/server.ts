@@ -1351,39 +1351,6 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.peerHubCoordEvents,
       staleTimeMs: 0,
     }),
-    peerHubStaleReads: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:stale-reads",
-      tag: WS_METHODS.peerHubStaleReads,
-      staleTimeMs: 0,
-    }),
-    /** A task's shared context with its text; the version in its input reads a newer one. */
-    peerHubContextView: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:context-view",
-      tag: WS_METHODS.peerHubContextView,
-      staleTimeMs: 0,
-    }),
-    peerHubContextArchive: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:context-archive",
-      tag: WS_METHODS.peerHubContextArchive,
-      staleTimeMs: 0,
-    }),
-    peerHubReadContext: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:read-context",
-      tag: WS_METHODS.peerHubReadContext,
-    }),
-    /** The versions of a shared context the hub keeps; its current version in the input reads them again. */
-    peerHubContextVersions: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:context-versions",
-      tag: WS_METHODS.peerHubContextVersions,
-    }),
-    peerHubReadContextVersion: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:read-context-version",
-      tag: WS_METHODS.peerHubReadContextVersion,
-    }),
-    peerHubRestoreContext: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:restore-context",
-      tag: WS_METHODS.peerHubRestoreContext,
-    }),
     peerHubShareProject: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:share-project",
       tag: WS_METHODS.peerHubShareProject,

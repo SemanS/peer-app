@@ -83,27 +83,6 @@ const record = {
 } satisfies CoordApi.HubOverlap;
 
 describe("deciding an edit at the hub", () => {
-  it.effect("reads version-bound publication inputs without an active reader session", () =>
-    Effect.gen(function* () {
-      const evidence = { fresh: true, recovery: "complete" as const, reads: [], stale: [] };
-      const hub = yield* recordingHub((_request, response) => json(response, 200, evidence));
-      const api = yield* HubApi.make;
-      assert.deepStrictEqual(
-        yield* api.publishedInputs(hub.url, "phs_test", "acme", "app", "task:build", 7),
-        evidence,
-      );
-      assert.deepStrictEqual(
-        hub.requests.map(({ method, url, body }) => ({ method, url, body })),
-        [
-          {
-            method: "GET",
-            url: "/v1/workspaces/acme/coord/app/stale?scope=task%3Abuild&version=7",
-            body: undefined,
-          },
-        ],
-      );
-    }).pipe(Effect.provide(FetchHttpClient.layer), Effect.scoped),
-  );
   const request = {
     environment: "ana-laptop",
     session: "claude:bob",
@@ -322,54 +301,18 @@ describe("deciding an edit at the hub", () => {
 });
 
 describe("hub events", () => {
-  it.effect("reads version receipts and the filtered committed coordination history", () =>
+  it.effect("reads the filtered committed coordination history", () =>
     Effect.gen(function* () {
-      const receipt = {
-        project: "app",
-        scope: "task:build",
-        session: "claude:ana",
-        environment: "laptop",
-        version: 3,
-        at: "2026-10-06T10:00:00Z",
-      };
       const event = {
         id: "one",
-        kind: "context-read",
+        kind: "claim",
         project: "app",
-        at: receipt.at,
-        paths: [],
-        participants: [receipt.session],
-        version: 3,
+        at: "2026-10-06T10:00:00Z",
+        paths: ["src/a b.ts"],
+        participants: ["claude:ana"],
       };
-      const hub = yield* recordingHub((request, response) => {
-        if (request.url?.includes("/read")) json(response, 200, receipt);
-        else if (request.url?.includes("/stale"))
-          json(response, 200, {
-            fresh: false,
-            stale: [
-              {
-                project: "app",
-                scope: "task:build",
-                readVersion: 3,
-                currentVersion: 4,
-                at: receipt.at,
-                updatedAt: receipt.at,
-              },
-            ],
-          });
-        else json(response, 200, [event]);
-      });
+      const hub = yield* recordingHub((_request, response) => json(response, 200, [event]));
       const api = yield* HubApi.make;
-      assert.deepStrictEqual(
-        yield* api.contextRead(hub.url, "phs_test", "acme", "app", receipt.scope, {
-          session: receipt.session,
-          environment: receipt.environment,
-          version: 3,
-          op: "read-one",
-        }),
-        receipt,
-      );
-      assert.isFalse((yield* api.staleReads(hub.url, "phs_test", "acme", "app", receipt)).fresh);
       assert.deepStrictEqual(
         yield* api.coordEvents(hub.url, "phs_test", "acme", "app", {
           task: "build",
@@ -378,35 +321,8 @@ describe("hub events", () => {
         }),
         [event],
       );
-      // An event the hub tells the decision of keeps it; one from before decisions has none.
-      const decided = {
-        ...event,
-        id: "two",
-        kind: "claim",
-        decision: { policy: "notify", source: "client" },
-      };
-      const history = yield* recordingHub((_request, response) =>
-        json(response, 200, [decided, event]),
-      );
-      const events = yield* api.coordEvents(history.url, "phs_test", "acme", "app");
-      assert.deepStrictEqual(events[0]?.decision, decided.decision);
-      assert.isUndefined(events[1]?.decision);
       assert.strictEqual(
         hub.requests[0]?.url,
-        "/v1/workspaces/acme/contexts/app/task%3Abuild/read",
-      );
-      assert.deepStrictEqual(hub.requests[0]?.body, {
-        session: receipt.session,
-        environment: receipt.environment,
-        version: 3,
-        op: "read-one",
-      });
-      assert.strictEqual(
-        hub.requests[1]?.url,
-        "/v1/workspaces/acme/coord/app/stale?session=claude%3Aana&environment=laptop",
-      );
-      assert.strictEqual(
-        hub.requests[2]?.url,
         "/v1/workspaces/acme/coord/app/events?task=build&path=src%2Fa%20b.ts&limit=20",
       );
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),

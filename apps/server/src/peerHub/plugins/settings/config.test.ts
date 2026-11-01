@@ -117,8 +117,6 @@ const started = Effect.gen(function* () {
         logPath: "/tmp/config-test",
         sessions: [],
         overlaps: [],
-        findings: [],
-        contexts: [],
       }),
     );
     yield* (yield* PeerHubClient).me;

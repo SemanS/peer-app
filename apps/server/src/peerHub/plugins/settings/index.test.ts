@@ -37,8 +37,6 @@ const coordination: PeerHubStatus["coordination"] = {
   logPath: "/tmp/settings-test",
   sessions: [],
   overlaps: [],
-  findings: [],
-  contexts: [],
 };
 
 const WS = "/v1/workspaces/acme";

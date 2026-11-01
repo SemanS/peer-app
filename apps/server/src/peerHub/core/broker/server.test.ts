@@ -156,7 +156,7 @@ describe("the broker's socket", () => {
     try {
       await fixture.register("another-agent");
       await fixture.broker.start();
-      for (const command of ["status", "claim", "context"]) {
+      for (const command of ["status", "claim", "index"]) {
         const answer = await new Promise<{ status: number; text: string }>((resolve, reject) => {
           const request = NodeHttp.request(
             {

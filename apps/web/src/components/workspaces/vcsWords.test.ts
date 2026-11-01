@@ -36,7 +36,6 @@ function thread(overrides: Partial<WorkThreadNode> & Pick<WorkThreadNode, "key">
     observable: false,
     agent: undefined,
     activeAt: undefined,
-    keepsContext: false,
     ...overrides,
   };
 }
@@ -53,7 +52,6 @@ function project(
     name: projectId,
     areas: [],
     unsorted: threads,
-    context: undefined,
     tasks: [],
     ...(vcs === undefined ? {} : { vcs }),
   };

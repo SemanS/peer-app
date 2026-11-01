@@ -171,8 +171,6 @@ function status(project: PeerProjectState, role: "owner" | "member" = "owner"): 
       logPath: "",
       sessions: [],
       overlaps: [],
-      findings: [],
-      contexts: [],
     },
     sharedThreads: ["peer:t1"],
     syncing: false,

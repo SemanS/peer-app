@@ -77,8 +77,6 @@ export interface WorkThreadNode {
   readonly agent: WorkAgent | undefined;
   /** When it was last active, for threads on this computer. */
   readonly activeAt: string | undefined;
-  /** Its agent keeps the shared context of the work it is on. */
-  readonly keepsContext: boolean;
 }
 
 export interface WorkTaskNode {
@@ -93,8 +91,6 @@ export interface WorkTaskNode {
   readonly threads: ReadonlyArray<WorkThreadNode>;
   /** Its creator, the project's leads and the workspace's admins may remove it. */
   readonly removable: boolean;
-  /** Its shared context, once an agent on it started one. */
-  readonly context: WorkContextNode | undefined;
   /**
    * The task it sits under. The work tree fills this and the tree's fields below; a node without
    * them is a root task that runs as one, as every task of an older Hub is.
@@ -117,48 +113,6 @@ export interface WorkTaskNode {
     | undefined;
 }
 
-/**
- * A task's shared context (or a project's, for work on no task): kept by one
- * agent session at a time, read by the other agents on it and by people.
- */
-export interface WorkContextNode {
-  readonly workspace: string;
-  readonly project: string;
-  /** `task:<id>`, or `project`. */
-  readonly scope: string;
-  readonly version: number;
-  /** Where the work stands, in a line, as its keeper put it. */
-  readonly gist: string | undefined;
-  /** About how many tokens its text takes. */
-  readonly tokens: number;
-  /** The agent keeping it, while that agent reports. */
-  readonly keeper:
-    | {
-        readonly person: string;
-        readonly mine: boolean;
-        readonly session: string;
-        /** What its session is called: the thread's title or the agent's first prompt. */
-        readonly label: string | undefined;
-        readonly since: string;
-      }
-    | undefined;
-  readonly updatedAt: string;
-  /** Who wrote the version there is: the keeper's person, or the person who brought an older one back. */
-  readonly updatedBy: string | undefined;
-  /** The older version a person brought back, when that is what the version there is. */
-  readonly restoredFrom: number | undefined;
-  /**
-   * What the work's agents found that its keeper has not decided yet (incorporated or dismissed),
-   * however old: a later version does not settle a finding it left out.
-   */
-  readonly reports: ReadonlyArray<{
-    readonly id: string;
-    readonly person: string;
-    readonly text: string;
-    readonly at: string;
-  }>;
-}
-
 export interface WorkAreaNode {
   /** Null for tasks without an area. */
   readonly name: string | null;
@@ -173,8 +127,6 @@ export interface WorkProjectNode {
   readonly areas: ReadonlyArray<WorkAreaNode>;
   /** Threads on no task yet. */
   readonly unsorted: ReadonlyArray<WorkThreadNode>;
-  /** The shared context of the project's work on no task. */
-  readonly context: WorkContextNode | undefined;
   readonly tasks: ReadonlyArray<PeerTask>;
   /** Open rooms bound to no work item, newest first; none of them is among `areas` or `tasks`. */
   readonly chats?: ReadonlyArray<WorkTaskNode>;
@@ -293,60 +245,6 @@ export function taskState(
   return state(task.threads.length > 0 ? "paused" : "new");
 }
 
-/** A shared context as the tree shows it, with the findings on its work its keeper has not decided. */
-function contextNode(
-  status: PeerHubStatus,
-  workspace: string,
-  state: PeerProjectState,
-  scope: string,
-): WorkContextNode | undefined {
-  const project = state.project.id;
-  const context = status.coordination.contexts.find(
-    (c) => c.workspace === workspace && c.project === project && c.scope === scope,
-  );
-  if (context === undefined) return undefined;
-  const keeper = context.keeper;
-  const keeping =
-    keeper === undefined
-      ? undefined
-      : status.coordination.sessions.find((session) => session.id === keeper.session);
-  return {
-    workspace,
-    project,
-    scope,
-    version: context.version,
-    gist: context.gist,
-    tokens: Math.round(context.bytes / 4),
-    keeper:
-      keeper === undefined || keeping === undefined
-        ? undefined
-        : {
-            person: personName(state, keeper.email),
-            mine: keeper.email === status.email,
-            session: keeper.session,
-            label: keeping.label,
-            since: keeper.since,
-          },
-    updatedAt: context.updatedAt,
-    updatedBy: context.updatedBy === undefined ? undefined : personName(state, context.updatedBy),
-    restoredFrom: context.restoredFrom,
-    reports: status.coordination.findings
-      .filter(
-        (finding) =>
-          finding.workspace === workspace &&
-          finding.project === project &&
-          (finding.task === undefined ? "project" : `task:${finding.task}`) === scope &&
-          finding.decision === undefined,
-      )
-      .map((finding) => ({
-        id: finding.id,
-        person: personName(state, finding.email),
-        text: finding.text,
-        at: finding.at,
-      })),
-  };
-}
-
 /**
  * A project's tasks as a tree. A task whose parent is not among them, or that sits in a cycle, is
  * a root, so every task is listed exactly once whatever the Hub sends.
@@ -462,7 +360,6 @@ function projectTree(input: {
           model: thread.modelSelection.model,
         },
         activeAt: thread.latestUserMessageAt ?? thread.updatedAt,
-        keepsContext: false,
       },
     });
   }
@@ -503,7 +400,6 @@ function projectTree(input: {
         observable: shared.has(agent.id),
         agent: agent.agent === undefined ? undefined : { harness: agent.agent },
         activeAt: undefined,
-        keepsContext: false,
       },
     });
   }
@@ -573,26 +469,17 @@ function projectTree(input: {
         observable: watchable,
         agent: thread.harness === undefined ? undefined : { harness: thread.harness },
         activeAt: undefined,
-        keepsContext: false,
       },
     });
   }
 
-  // A herdr agent's thread is known by its session (`herdr:claude:<id>`, after its computer for a
-  // colleague's), the keeper by the session alone.
-  const keeping = (context: WorkContextNode | undefined) => (node: WorkThreadNode) =>
-    context?.keeper !== undefined &&
-    /(?:^|:)herdr:(.+)$/.exec(node.key)?.[1] === context.keeper.session
-      ? { ...node, keepsContext: true }
-      : node;
   const items = work.tasks.filter((task) => task.chat !== true);
   const tree = taskTree(items);
   const taskNodes = new Map<string, WorkTaskNode>();
   for (const task of work.tasks) {
-    const context = contextNode(status, workspace.slug, state, `task:${task.id}`);
     const threads = placed
       .filter((entry) => entry.task === task.id)
-      .map((entry) => keeping(context)(entry.node))
+      .map((entry) => entry.node)
       .sort(byActivity);
     taskNodes.set(task.id, {
       id: task.id,
@@ -604,7 +491,6 @@ function projectTree(input: {
       threads,
       removable:
         task.createdBy === me || state.project.role === "lead" || workspace.role !== "member",
-      context,
       parent: tree.parentOf.get(task.id),
       depth: tree.depthOf.get(task.id) ?? 0,
       kind: taskKind(task),
@@ -615,7 +501,6 @@ function projectTree(input: {
       runs: task.runs,
     });
   }
-  const projectContext = contextNode(status, workspace.slug, state, "project");
   // Areas the project declares come first, in its order; then those tasks name; then no area. An
   // item is listed with its root, whatever its own area.
   const areaNames = [...work.areas];
@@ -640,9 +525,8 @@ function projectTree(input: {
     areas,
     unsorted: placed
       .filter((entry) => entry.task === null)
-      .map((entry) => keeping(projectContext)(entry.node))
+      .map((entry) => entry.node)
       .sort(byActivity),
-    context: projectContext,
     tasks: items,
     chats: work.tasks
       .filter((task) => task.chat === true && task.status !== "done")
@@ -806,8 +690,6 @@ export function openKey(open: WorkOpen): string {
       return `agent:${open.agentId}`;
     case "observe":
       return `observe:${open.workspace}:${open.environment}:${open.thread}`;
-    case "context":
-      return `context:${open.workspace}:${open.project}:${open.scope}`;
   }
   const unreachable: never = open;
   return unreachable;

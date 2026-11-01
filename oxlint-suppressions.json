@@ -1,20 +1,4 @@
 {
-  "apps/mobile/src/features/peer/CurrentContextReport.test.tsx": {
-    "t3code/no-dom-test-environment": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/CurrentContextReport.tsx": {
-    "react/exhaustive-effect-dependencies": {
-      "count": 1
-    },
-    "t3code/no-ambiguous-detail-navigation": {
-      "count": 1
-    },
-    "t3code/no-unreasoned-state-sync": {
-      "count": 3
-    }
-  },
   "apps/mobile/src/features/peer/rooms/useRoom.ts": {
     "t3code/no-unreasoned-state-sync": {
       "count": 3
@@ -298,7 +282,7 @@
   },
   "apps/server/src/peerHub/core/broker/hooks.test.ts": {
     "t3code/no-wall-clock-in-tests": {
-      "count": 3
+      "count": 2
     }
   },
   "apps/server/src/peerHub/core/broker/hooks.ts": {
@@ -309,11 +293,6 @@
   "apps/server/src/peerHub/core/broker/host.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
-    }
-  },
-  "apps/server/src/peerHub/core/broker/inputCheckpoints.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 2
     }
   },
   "apps/server/src/peerHub/core/broker/landing.test.ts": {
@@ -370,26 +349,6 @@
     }
   },
   "apps/server/src/peerHub/core/broker/toolSessions.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/core/contexts/contextCli.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 5
-    }
-  },
-  "apps/server/src/peerHub/core/contexts/contexts.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 5
-    }
-  },
-  "apps/server/src/peerHub/core/contexts/contexts.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/core/contexts/text.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -477,32 +436,14 @@
       "count": 1
     }
   },
-  "apps/server/src/peerHub/core/index/PeerIndex.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/core/index/board.test.ts": {
     "t3code/no-wall-clock-in-tests": {
-      "count": 8
-    }
-  },
-  "apps/server/src/peerHub/core/index/board.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
+      "count": 6
     }
   },
   "apps/server/src/peerHub/core/index/text.ts": {
     "t3code/no-em-dash-copy": {
-      "count": 2
-    },
-    "t3code/no-low-value-comments": {
-      "count": 3
-    }
-  },
-  "apps/server/src/peerHub/core/localCoordination/LocalAuthority.scale.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 8
+      "count": 1
     }
   },
   "apps/server/src/peerHub/core/plugin.ts": {

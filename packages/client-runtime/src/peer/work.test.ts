@@ -2,7 +2,6 @@ import {
   EnvironmentId,
   ProjectId,
   ThreadId,
-  type PeerFindingDecision,
   type PeerHubStatus,
   type PeerProjectState,
   type PeerTask,
@@ -183,8 +182,6 @@ function status(project: PeerProjectState, role: "owner" | "member" = "owner"): 
       logPath: "",
       sessions: [],
       overlaps: [],
-      findings: [],
-      contexts: [],
     },
     sharedThreads: ["peer:t1"],
     syncing: false,
@@ -347,7 +344,7 @@ describe("buildWorkTree", () => {
   });
 });
 
-describe("shared contexts", () => {
+describe("why a thread concerns you", () => {
   const session = (id: string, email: string) => ({
     id,
     workspace: "acme",
@@ -358,114 +355,6 @@ describe("shared contexts", () => {
     files: ["src/pay.ts"],
     claims: [],
     local: email === "slavo@acme.test",
-  });
-
-  it("gives a task its context: who keeps it while at work, and the findings its keeper has not decided", () => {
-    const project = kirkwood();
-    const yevAgent = {
-      id: "herdr:claude:s-yev",
-      task: "krk-812",
-      title: "Webhook retries",
-      email: "yev@acme.test",
-      status: "working" as const,
-      source: "herdr" as const,
-      environment: "yev-laptop",
-      seenAt: "2026-10-03T11:59:30Z",
-    };
-    const base = status({
-      ...project,
-      work: { ...project.work, threads: [...project.work.threads, yevAgent] },
-    });
-    const finding = (
-      id: string,
-      text: string,
-      at: string,
-      task?: string,
-      decision?: PeerFindingDecision,
-    ) => ({
-      id,
-      ...(decision === undefined ? {} : { decision }),
-      workspace: "acme",
-      project: "kirkwood",
-      ...(task === undefined ? {} : { task }),
-      text,
-      email: "chino@acme.test",
-      at,
-    });
-    const keeper = (session: string, email: string) => ({
-      session,
-      email,
-      environment: "laptop",
-      since: "2026-10-03T10:00:00Z",
-    });
-    const [tree] = buildWorkTree({
-      status: {
-        ...base,
-        coordination: {
-          ...base.coordination,
-          sessions: [session("claude:s-yev", "yev@acme.test")],
-          findings: [
-            finding("f1", "Stripe retries webhooks for 3 days", "2026-10-03T11:50:00Z", "krk-812"),
-            // Older than version 4, yet its keeper never decided it: it still waits.
-            finding("f2", "Left out of version 4", "2026-10-03T11:00:00Z", "krk-812"),
-            finding("f4", "Folded in already", "2026-10-03T11:52:00Z", "krk-812", {
-              status: "incorporated",
-              reason: "in Provides",
-              actor: "yev@acme.test",
-              contextScope: "task:krk-812",
-              contextVersion: 4,
-              at: "2026-10-03T11:53:00Z",
-            }),
-            finding("f3", "Work outside tasks", "2026-10-03T11:55:00Z"),
-          ],
-          contexts: [
-            {
-              workspace: "acme",
-              project: "kirkwood",
-              scope: "task:krk-812",
-              version: 4,
-              keeper: keeper("claude:s-yev", "yev@acme.test"),
-              updatedAt: "2026-10-03T11:30:00Z",
-              updatedBy: "yev@acme.test",
-              updatedSession: "claude:s-yev",
-              gist: "Stripe webhooks retry; we dedupe by event id",
-              bytes: 8_400,
-            },
-            {
-              workspace: "acme",
-              project: "kirkwood",
-              scope: "project",
-              version: 0,
-              keeper: keeper("claude:ended", "chino@acme.test"),
-              updatedAt: "2026-10-03T09:00:00Z",
-              bytes: 0,
-            },
-          ],
-        },
-      },
-      localThreads: LOCAL,
-      now: NOW,
-    });
-    const task = tree?.areas[0]?.tasks[0];
-    expect([task?.id, task?.context?.keeper?.person, task?.context?.updatedBy]).toEqual([
-      "krk-812",
-      "Yev",
-      "Yev",
-    ]);
-    expect([task?.context?.gist, task?.context?.tokens]).toEqual([
-      "Stripe webhooks retry; we dedupe by event id",
-      2_100,
-    ]);
-    expect(task?.threads.filter((t) => t.keepsContext).map((t) => t.title)).toEqual([
-      "Webhook retries",
-    ]);
-    expect(task?.context?.reports.map((r) => r.text)).toEqual([
-      "Stripe retries webhooks for 3 days",
-      "Left out of version 4",
-    ]);
-    expect(tree?.context?.keeper).toBeUndefined();
-    expect(tree?.context?.reports.map((r) => r.text)).toEqual(["Work outside tasks"]);
-    expect(tree?.areas[0]?.tasks[1]?.context).toBeUndefined();
   });
 
   it("says why a colleague's thread concerns you", () => {

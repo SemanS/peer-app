@@ -162,7 +162,6 @@ describe("the session that stops building on a change", () => {
     observable: false,
     agent: undefined,
     activeAt: undefined,
-    keepsContext: false,
     ...overrides,
   });
   const env = "environment-1" as never;

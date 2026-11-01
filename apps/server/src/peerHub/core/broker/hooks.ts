@@ -4,9 +4,9 @@
  * Agents' hooks: each answered within the time its script waits, what comes later queued for
  * the agent's next step and a tool call not decided in time given its explicit fallback (G7);
  * Peer Mod's signatures and runtime generations; and each event's answer, core's text first and
- * then the active plugins'. A shell command that publishes work needs fresh inputs, one that lands
- * work first gives the agent what it has not read (`landing.ts`) and is judged by the plugins
- * whatever it names, and Peer's own command runs unasked.
+ * then the active plugins'. A shell command that lands work first gives the agent what it has not
+ * read (`landing.ts`) and is judged by the plugins whatever it names, and Peer's own command runs
+ * unasked.
  *
  * @module peerHub/core/broker/hooks
  */
@@ -30,12 +30,9 @@ import { runClaimOf } from "./runs.ts";
 import { carriedText, injectedChars } from "./delivery.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
 import { isLanding } from "./landing.ts";
-import { checkpointInputs } from "./inputCheckpoints.ts";
 import {
-  compactText,
   handlers,
   MOD_VERDICT_BUDGET_MS,
-  ownPaths,
   type PipelineStep,
   type PreparedDelivery,
   notifyDeliveries,
@@ -87,12 +84,12 @@ export async function hookInTime(
     timer = setTimeout(() => {
       late.passed = true;
       if (body.hook_event_name === "SessionStart") {
-        // Startup may still be fetching shared context. Always deliver the local entry
-        // point while the full context is queued for the next step by hook().
+        // Startup may still be asking the Hub. Always deliver the local entry point while the full
+        // text is queued for the next step by hook().
         resolve({
           hookSpecificOutput: {
             hookEventName: "SessionStart",
-            additionalContext: `Peer is still connecting to the team's shared context. Use ${this.scripts.peer} status to check coordination and ${this.scripts.peer} context to read the current context. If your session is not registered yet, retry after the next step. Shared context will arrive when ready.`,
+            additionalContext: `Peer is still connecting to your team's Hub. Use ${this.scripts.peer} status to see who works on what. If your session is not registered yet, retry after the next step.`,
           },
         });
       } else if (body.hook_event_name !== "PreToolUse") {
@@ -155,7 +152,7 @@ export async function hook(
   }
   if (event === "PreToolUse" || event === "PostToolUse") {
     const elsewhere = this.editedPaths(session, body).find(
-      (path) => inRepository(session, path) === null && !this.keptBy(session, path),
+      (path) => inRepository(session, path) === null,
     );
     const companion = elsewhere === undefined ? null : await this.companionAt(session, elsewhere);
     if (companion !== null) return this.hook(companionBody(body, companion), headers, late, timing);
@@ -281,7 +278,7 @@ export async function hook(
     }
     return {
       ...out,
-      peerStatus: `Peer · ${session.project} · ${session.status} · ${session.keeps ? "keeps shared context" : "private context"}`,
+      peerStatus: `Peer · ${session.project} · ${session.status}`,
       ...(id === undefined
         ? {}
         : { peerDelivery: { id, text, chars: typeof text === "string" ? text.length : 0 } }),
@@ -330,10 +327,6 @@ export async function answerHook(
   session.adapter = "hooks";
   const due = adapter?.due ?? Date.now() + HOOK_DEADLINE_MS;
   if (event === "SessionStart") {
-    if (session.agent !== "codex" || body.source !== "compact") {
-      for (const queued of session.pending.splice(0))
-        if (typeof queued !== "string") await notifyDeliveries(queued.deliveries, "dropped");
-    }
     // A resumed process may keep its native session id after a crash. Its old receipts
     // expire before any asynchronous work; compact continues the same process.
     if (body.source !== "compact") {
@@ -357,10 +350,6 @@ export async function answerHook(
     session.workspace,
   );
   const step = () => this.pipelineStep(session, plugins, due, adapter?.deliveries);
-  // What the plugins give its index (the project's `.ai`) is read before the steps that name it.
-  if (["UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure"].includes(event)) {
-    session.index = this.indexOf(plugins);
-  }
   switch (event) {
     case "SessionStart": {
       this.touch(session);
@@ -369,15 +358,10 @@ export async function answerHook(
       const source = typeof body.source === "string" ? body.source : "startup";
       // Plugins' blocks are read while core gathers its start text, and follow it.
       const blocks = startBlocks(step(), source);
-      // startedContext replaces pending news with fresh state; pre-compaction plugin context
-      // has no other source, and Codex accepts it only at this subsequent SessionStart.
-      const restorePending = session.agent === "codex" && source === "compact";
-      const pending = restorePending ? session.pending.splice(0) : [];
+      // What it would be told at its next step is in what it hears now.
       const start = await this.startContextFor(session, source, plugins);
-      session.pending.unshift(...pending);
       const news = this.news(session, {
-        team: restorePending,
-        discovery: false,
+        pending: false,
         deliveries: adapter?.deliveries,
         plugins,
       });
@@ -410,26 +394,8 @@ export async function answerHook(
       session.branch =
         (await this.host.branchOf(session.root).catch(() => undefined)) ?? session.branch;
       this.markDirty();
-      // One discovery batch per boundary. Tool steps use the same delta state, so late arrivals
-      // do not depend on another human prompt and the news cannot duplicate this batch.
-      const news = this.news(session, {
-        discovery: false,
-        deliveries: adapter?.deliveries,
-        plugins,
-      });
-      const index = this.advise(
-        session,
-        "index",
-        () => this.discoveryFor(session, askedByPerson(fullPrompt)),
-        null,
-      );
-      return context(
-        event,
-        withPluginText(
-          [news, index].filter((part) => part !== null).join("\n\n") || null,
-          await notices,
-        ),
-      );
+      const news = this.news(session, { deliveries: adapter?.deliveries, plugins });
+      return context(event, withPluginText(news, await notices));
     }
     case "PreToolUse":
       this.touch(session);
@@ -474,25 +440,9 @@ export async function answerHook(
         finishing,
         this.toolContext(session, body, "post-tool", remainingMs(finishing)),
       );
-      let file: string | null = null;
-      let contextEdited = false;
       for (const path of this.editedPaths(session, body)) {
-        if (this.samePath(path, session.ownContextPath)) {
-          await this.readTeamLines(session);
-          contextEdited = true;
-          continue;
-        }
-        if (
-          session.keeps &&
-          this.samePath(path, this.mirrorOf(session)?.path ?? session.contextPath)
-        ) {
-          await this.saveShared(session);
-          contextEdited = true;
-          continue;
-        }
         const changed = inRepository(session, path);
         if (changed === null) continue;
-        file = changed;
         session.dirty.add(changed);
         session.files = [...session.files.filter((f) => f !== changed), changed].slice(-MAX_FILES);
         const asked = session.asked.get(changed);
@@ -507,19 +457,10 @@ export async function answerHook(
         this.markDirty();
       }
       const news = this.news(session, { deliveries: adapter?.deliveries, plugins });
-      if (contextEdited && file === null)
-        return context(event, withPluginText(news, await notices));
-      const nudge = this.nudge(session, file);
-      return context(
-        event,
-        withPluginText(
-          [news, nudge].filter((part) => part !== null).join("\n\n") || null,
-          await notices,
-        ),
-      );
+      return context(event, withPluginText(news, await notices));
     }
     case "Notification": {
-      // Waiting for its person's permission: not at work, so it neither keeps nor takes a context.
+      // Waiting for its person's permission: not at work.
       const message = typeof body.message === "string" ? body.message : "";
       if (/permission|approv/i.test(message)) {
         session.status = "blocked";
@@ -529,10 +470,9 @@ export async function answerHook(
       return null;
     }
     case "PermissionRequest": {
-      // Codex asks its person. Peer's own command and the agent's own contexts, and the files
-      // plugins keep for it, are Peer's to let through; for anything else the agent waits for
-      // its person, so it does not work meanwhile.
-      if (this.isPeerWork(session, body) || this.pluginsOwn(session, body, plugins)) {
+      // Codex asks its person. Peer's own command is Peer's to let through; for anything else the
+      // agent waits for its person, so it does not work meanwhile.
+      if (this.isPeerWork(body)) {
         this.record("permission.allowed", { session: session.id, tool: body.tool_name });
         return {
           hookSpecificOutput: {
@@ -553,29 +493,13 @@ export async function answerHook(
       // What it changed in ways Peer's hooks did not see (a patch through the shell) is its too.
       await this.readShellChanges(session);
       this.markDirty();
-      if (event === "Stop") {
-        await checkpointInputs(this, session);
-        await handlers(step(), "stop");
-      }
+      if (event === "Stop") await handlers(step(), "stop");
       return null;
-    case "PreCompact": {
-      const compacting = compactText(step());
-      await this.checkpointPrivate(session);
-      await checkpointInputs(this, session);
-      const text = withPluginText(null, await compacting);
-      if (session.agent === "codex") {
-        if (text !== null) session.pending.push(text);
-        return null;
-      }
-      return context(event, text);
-    }
     case "SessionEnd": {
       // Plugins hear of it as it was, after core let it go.
       const ending = step();
-      await checkpointInputs(this, session);
       for (const queued of session.pending.splice(0))
         if (typeof queued !== "string") await notifyDeliveries(queued.deliveries, "dropped");
-      void this.release(session);
       this.leaveRun(session);
       this.sessions.delete(session.id);
       this.record("session.ended", {
@@ -636,39 +560,16 @@ export function toolContext(
   };
 }
 
-/** Whether every file a call edits is one the active plugins keep for the session. */
-export function pluginsOwn(
-  this: CoordinationBroker,
-  session: LocalSession,
-  body: Record<string, unknown>,
-  plugins: PeerBrokerPlugins,
-): boolean {
-  const own = ownPaths(plugins, this.sessionView(session));
-  const paths = this.editedPaths(session, body);
+/** A permission Codex asks for that is Peer's own business: its command. */
+export function isPeerWork(this: CoordinationBroker, body: Record<string, unknown>): boolean {
+  if (body.tool_name !== "Bash") return false;
+  const input = body.tool_input as Record<string, unknown> | null;
+  const command = typeof input?.command === "string" ? input.command : "";
   return (
-    own.length > 0 &&
-    paths.length > 0 &&
-    paths.every((path) => own.some((kept) => this.samePath(kept, path)))
+    isPlainCliCall(command, this.scripts.peer) ||
+    isPlainCliCall(command, hookCommand(this.scripts.peer)) ||
+    isPlainCliCall(command, this.cli)
   );
-}
-
-/** A permission Codex asks for that is Peer's own business: its command, or the agent's contexts. */
-export function isPeerWork(
-  this: CoordinationBroker,
-  session: LocalSession,
-  body: Record<string, unknown>,
-): boolean {
-  if (body.tool_name === "Bash") {
-    const input = body.tool_input as Record<string, unknown> | null;
-    const command = typeof input?.command === "string" ? input.command : "";
-    return (
-      isPlainCliCall(command, this.scripts.peer) ||
-      isPlainCliCall(command, hookCommand(this.scripts.peer)) ||
-      isPlainCliCall(command, this.cli)
-    );
-  }
-  const paths = this.editedPaths(session, body);
-  return paths.length > 0 && paths.every((path) => this.keptBy(session, path));
 }
 
 /** The agent running Peer's own CLI: let it through its trusted hook. */

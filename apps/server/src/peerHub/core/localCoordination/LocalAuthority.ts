@@ -1,15 +1,7 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off - one environment's private durable coordination state.
 import * as NodeCrypto from "node:crypto";
+import type { PeerCoordEvent } from "@t3tools/contracts";
 import {
-  type PeerCoordEvent,
-  contextGist,
-  type PeerFindingDecisionInput,
-  type PeerStaleReads,
-} from "@t3tools/contracts";
-import {
-  type HubContextText,
-  type ContextRefusal,
-  type HubContextVersion,
   type HubCoordSession,
   type HubCoordView,
   type HubIntentAnswer,
@@ -17,19 +9,10 @@ import {
   type HubOverlap,
   type ReportedSession,
 } from "../hub/coordApi.ts";
-import {
-  checkInputReads,
-  capturePublishedInputs,
-  publishedInputReads,
-  recordInputRead,
-  recoverInputManifest,
-} from "./localInputs.ts";
-import { validateFindingDecisions } from "./localFindings.ts";
 import { decodeStored, empty } from "./localStore.ts";
 import { LocalStateStorage } from "./LocalStateStorage.ts";
 import { generatedFile, touches } from "../coordination/edits.ts";
 
-const keyOf = (project: string, scope: string) => JSON.stringify([project, scope]);
 const localEmail = "local";
 const live = (session: HubCoordSession) => session.status !== "done";
 const paths = (session: HubCoordSession) =>
@@ -58,17 +41,9 @@ export class LocalAuthority {
     const stored = await this.storage.load(decodeStored);
     if (stored === null) return;
     this.state = stored;
-    // A previous process cannot retain a lease. Epochs fence its delayed writes after a restart.
+    // A previous process cannot retain a lease.
     this.state = {
       ...this.state,
-      version: 2,
-      reads: this.state.reads ?? [],
-      manifests: this.state.manifests ?? {},
-      legacyEvidenceLost:
-        this.state.version === 1 ||
-        this.state.reads === undefined ||
-        this.state.manifests === undefined ||
-        this.state.legacyEvidenceLost === true,
       overlaps: this.state.overlaps.map((overlap) =>
         overlap.state === "open"
           ? {
@@ -78,12 +53,6 @@ export class LocalAuthority {
               updatedAt: this.now(),
             }
           : overlap,
-      ),
-      contexts: Object.fromEntries(
-        Object.entries(this.state.contexts).map(([key, context]) => {
-          const { keeper: _keeper, ...rest } = context;
-          return [key, { ...rest, epoch: (context.epoch ?? 0) + 1 }];
-        }),
       ),
     };
   }
@@ -272,26 +241,12 @@ export class LocalAuthority {
         participants: overlap.sessions,
       });
     }
-    for (const [key, context] of Object.entries(this.state.contexts)) {
-      if (
-        context.keeper === undefined ||
-        sessions.some((s) => s.id === context.keeper?.session && s.project === context.project)
-      )
-        continue;
-      const { keeper: _keeper, ...rest } = context;
-      this.state = {
-        ...this.state,
-        contexts: { ...this.state.contexts, [key]: { ...rest, epoch: (context.epoch ?? 0) + 1 } },
-      };
-    }
   }
 
   private snapshot(): HubCoordView {
     return {
       sessions: this.sessions,
       overlaps: this.state.overlaps,
-      contexts: Object.values(this.state.contexts),
-      findings: this.state.findings,
       at: this.now(),
     };
   }
@@ -328,32 +283,6 @@ export class LocalAuthority {
       this.agreements = this.agreements.filter(
         (id) => !this.state.overlaps.find((o) => o.id === id)?.sessions.some((s) => retired.has(s)),
       );
-      for (const context of Object.values(this.state.contexts)) {
-        if (context.keeper !== undefined && retired.has(context.keeper.session)) {
-          const { keeper: _keeper, ...rest } = context;
-          this.saveContext({ ...rest, epoch: (context.epoch ?? 0) + 1 });
-        }
-      }
-      // Runtime retirement releases claims and leases, never the work's declared inputs.
-      this.state = {
-        ...this.state,
-        manifests: {
-          ...this.state.manifests,
-          ...Object.fromEntries(
-            reported.map((s) => {
-              const key = keyOf(s.project, s.id);
-              return [
-                key,
-                this.state.manifests?.[key] ?? {
-                  status: this.state.legacyEvidenceLost ? "revalidation-required" : "complete",
-                  pendingScopes: [],
-                  requiredScopes: [],
-                },
-              ];
-            }),
-          ),
-        },
-      };
       // Automatic intents belong to a live runtime, not to its heartbeat payload.
       this.intents = new Map([...this.intents].filter(([id]) => !retired.has(id)));
       this.sessions = reported.map((s) => ({
@@ -363,31 +292,6 @@ export class LocalAuthority {
         environment: this.environment,
         seenAt: at,
       }));
-      for (const session of reported)
-        for (const text of session.findings ?? []) {
-          if (
-            this.state.findings.some(
-              (f) => f.project === session.project && f.task === session.task && f.text === text,
-            )
-          )
-            continue;
-          this.state = {
-            ...this.state,
-            findings: [
-              ...this.state.findings,
-              {
-                id: NodeCrypto.randomUUID(),
-                project: session.project,
-                ...(session.task === undefined ? {} : { task: session.task }),
-                text,
-                email: localEmail,
-                session: session.id,
-                environment: this.environment,
-                at,
-              },
-            ],
-          };
-        }
       this.reconcile();
       return this.snapshot();
     }, true);
@@ -507,271 +411,6 @@ export class LocalAuthority {
       if (filesAt !== undefined && filesAt !== overlap.filesAt) return overlap;
       return this.saveOverlap({ ...overlap, acks: { ...overlap.acks, [session]: this.now() } });
     }, true);
-
-  readContext = (project: string, scope: string) =>
-    this.access(() => this.state.contexts[keyOf(project, scope)] ?? null);
-  private context(project: string, scope: string): HubContextText {
-    return (
-      this.state.contexts[keyOf(project, scope)] ?? {
-        project,
-        scope,
-        version: 0,
-        epoch: 0,
-        updatedAt: this.now(),
-        text: "",
-      }
-    );
-  }
-  private saveContext(context: HubContextText) {
-    this.state = {
-      ...this.state,
-      contexts: { ...this.state.contexts, [keyOf(context.project, context.scope)]: context },
-    };
-    return context;
-  }
-
-  keepContext = (
-    project: string,
-    scope: string,
-    session: string,
-    release: boolean,
-    epoch?: number,
-    _op?: string,
-  ): Promise<HubContextText | ContextRefusal> =>
-    this.access(() => {
-      if (!release) this.session(project, session);
-      const current = this.context(project, scope);
-      if (
-        current.keeper !== undefined &&
-        (current.keeper.session !== session || (epoch !== undefined && current.epoch !== epoch))
-      )
-        return { refused: "kept", keeper: current.keeper };
-      if (release) {
-        const { keeper: _keeper, ...rest } = current;
-        return this.saveContext({ ...rest, epoch: (current.epoch ?? 0) + 1 });
-      }
-      if (current.keeper !== undefined) return current;
-      const nextEpoch = (current.epoch ?? 0) + 1;
-      return this.saveContext({
-        ...current,
-        epoch: nextEpoch,
-        keeper: {
-          session,
-          email: localEmail,
-          environment: this.environment,
-          since: this.now(),
-          epoch: nextEpoch,
-        },
-      });
-    }, true);
-
-  writeContext = (
-    project: string,
-    scope: string,
-    session: string,
-    baseVersion: number,
-    text: string,
-    epoch?: number,
-    op?: string,
-    findingDecisions: readonly PeerFindingDecisionInput[] = [],
-  ): Promise<HubContextText | ContextRefusal> =>
-    this.access(() => {
-      this.session(project, session);
-      if (findingDecisions.length > 0 && op === undefined)
-        throw new Error("Finding decisions require an operation id.");
-      const current = this.context(project, scope);
-      if (current.keeper?.session !== session || epoch !== current.epoch)
-        return { refused: "kept", keeper: current.keeper };
-      return this.once(
-        "context",
-        [project, scope, session, epoch],
-        op,
-        [baseVersion, text, findingDecisions],
-        () => {
-          if (current.version !== baseVersion) return { refused: "stale" as const, current };
-          if (Buffer.byteLength(text) > 256_000)
-            throw new Error("Local contexts are limited to 256 KB.");
-          validateFindingDecisions(this.state.findings, project, scope, findingDecisions);
-          const saved = this.appendContext(current, text, session);
-          const decisions = new Map(findingDecisions.map((decision) => [decision.id, decision]));
-          this.state = {
-            ...this.state,
-            findings: this.state.findings.map((finding) => {
-              const decision = decisions.get(finding.id);
-              return decision === undefined
-                ? finding
-                : {
-                    ...finding,
-                    decision: {
-                      status: decision.status,
-                      reason: decision.reason.trim(),
-                      actor: localEmail,
-                      session,
-                      contextScope: scope,
-                      contextVersion: saved.version,
-                      at: saved.updatedAt,
-                    },
-                  };
-            }),
-          };
-          this.state = {
-            ...this.state,
-            reads: (this.state.reads ?? []).map((read) =>
-              read.project === project && read.scope === scope && read.session === session
-                ? { ...read, version: saved.version, at: saved.updatedAt }
-                : read,
-            ),
-          };
-          this.state = capturePublishedInputs(this.state, project, scope, saved.version, session);
-          return saved;
-        },
-      );
-    }, true);
-
-  private appendContext(
-    current: HubContextText,
-    text: string,
-    session?: string,
-    restoredFrom?: number,
-  ) {
-    const at = this.now();
-    const version = current.version + 1;
-    const previous = current.text.split("\n");
-    const next = text.split("\n");
-    const { updatedSession: _session, restoredFrom: _restoredFrom, ...base } = current;
-    const saved = this.saveContext({
-      ...base,
-      version,
-      text,
-      bytes: Buffer.byteLength(text),
-      gist: contextGist(text),
-      updatedAt: at,
-      updatedBy: localEmail,
-      ...(session === undefined ? {} : { updatedSession: session }),
-      ...(restoredFrom === undefined ? {} : { restoredFrom }),
-    });
-    const key = keyOf(current.project, current.scope);
-    this.state = {
-      ...this.state,
-      versions: {
-        ...this.state.versions,
-        [key]: [
-          ...(this.state.versions[key] ?? []),
-          {
-            version,
-            at,
-            by: localEmail,
-            ...(session === undefined ? {} : { session }),
-            ...(restoredFrom === undefined ? {} : { restoredFrom }),
-            added: next.filter((s) => !previous.includes(s)),
-            dropped: previous.filter((s) => !next.includes(s)),
-            text,
-          },
-        ],
-      },
-    };
-    this.event(current.project, "context.written", {
-      scope: current.scope,
-      version,
-      ...(session === undefined ? {} : { session }),
-    });
-    return saved;
-  }
-
-  contextVersions = (project: string, scope: string): Promise<readonly HubContextVersion[]> =>
-    this.access(() =>
-      [...(this.state.versions[keyOf(project, scope)] ?? [])]
-        .toReversed()
-        .map(({ text, added, dropped, ...rest }) => ({
-          ...rest,
-          bytes: Buffer.byteLength(text),
-          added: added.length,
-          dropped: dropped.length,
-        })),
-    );
-  readContextVersion = (project: string, scope: string, version: number) =>
-    this.access(
-      () => this.state.versions[keyOf(project, scope)]?.find((v) => v.version === version) ?? null,
-    );
-  restoreContext = (project: string, scope: string, version: number) =>
-    this.access(() => {
-      const previous = this.state.versions[keyOf(project, scope)]?.find(
-        (v) => v.version === version,
-      );
-      if (previous === undefined) throw new Error("This context version no longer exists.");
-      return this.appendContext(this.context(project, scope), previous.text, undefined, version);
-    }, true);
-  contextRead = (project: string, scope: string, session: string, version: number, op: string) =>
-    this.access(() => {
-      this.session(project, session);
-      return this.once("context.read", [project, session], op, [scope, version], () => {
-        const recorded = recordInputRead(
-          this.state,
-          project,
-          scope,
-          session,
-          version,
-          this.environment,
-          this.now(),
-        );
-        this.state = recorded.state;
-        return recorded.read;
-      });
-    }, true);
-
-  recoverInputs = (
-    project: string,
-    session: string,
-    reason: string,
-    reads: readonly { readonly scope: string; readonly version: number }[],
-    coverage: "reconstructed" | "new-work" | "transferred" | "unavailable",
-    op?: string,
-  ): Promise<PeerStaleReads> =>
-    this.access(() => {
-      this.session(project, session);
-      this.once("inputs", [project, session], op, [reason, reads, coverage], () => {
-        this.state = recoverInputManifest(
-          this.state,
-          project,
-          session,
-          reason,
-          reads,
-          coverage,
-          this.environment,
-          this.now(),
-        );
-        this.event(project, "context.inputs.recovered", { session });
-        return true;
-      });
-      return checkInputReads(this.state, project, session);
-    }, true);
-
-  staleReads = (project: string, session: string): Promise<PeerStaleReads> =>
-    this.access(() => checkInputReads(this.state, project, session));
-
-  publishedInputs = (project: string, scope: string, version: number): Promise<PeerStaleReads> =>
-    this.access(() => publishedInputReads(this.state, project, scope, version));
-
-  pendingFindings = (project: string, scope?: string, cursor?: string, limit = 50) =>
-    this.access(() => {
-      const pending = this.state.findings
-        .filter(
-          (finding) =>
-            finding.project === project &&
-            finding.decision === undefined &&
-            (scope === undefined ||
-              (finding.task === undefined ? "project" : `task:${finding.task}`) === scope) &&
-            (cursor === undefined || finding.id > cursor),
-        )
-        .toSorted((a, b) => a.id.localeCompare(b.id));
-      const size = Math.max(1, Math.min(200, Number.isFinite(limit) ? Math.floor(limit) : 50));
-      const findings = pending.slice(0, size);
-      return {
-        findings,
-        omittedCount: Math.max(0, pending.length - findings.length),
-        ...(pending.length > findings.length ? { nextCursor: findings.at(-1)?.id } : {}),
-      };
-    });
 
   coordEvents = (
     project: string,

@@ -448,8 +448,6 @@ it.effect(
           logPath: "/tmp/test-coordination",
           sessions: [],
           overlaps: [],
-          findings: [],
-          contexts: [],
         }),
       );
       const result = yield* work.createTask({
@@ -491,8 +489,6 @@ it.effect("sends a task's place in the tree to the Hub as it was given", () =>
         logPath: "/tmp/test-coordination",
         sessions: [],
         overlaps: [],
-        findings: [],
-        contexts: [],
       }),
     );
     yield* work.createTask({
@@ -546,8 +542,6 @@ it.effect("puts a Peer thread on a task through a peer run, and moves or ends th
         logPath: "/tmp/test-coordination",
         sessions: [],
         overlaps: [],
-        findings: [],
-        contexts: [],
       }),
     );
     const place = { workspace: "acme", projectId: "pay", thread: "peer:thread-2" };
@@ -621,8 +615,6 @@ it.effect(
           logPath: "/tmp/test-coordination",
           sessions: [],
           overlaps: [],
-          findings: [],
-          contexts: [],
         }),
       );
       yield* work.assignThread({

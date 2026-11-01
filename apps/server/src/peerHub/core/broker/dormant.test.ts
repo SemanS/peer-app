@@ -1,6 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off globalDate:off - a stopped provider's saved context and delivery memory in a temporary checkout.
-import * as NodeFSP from "node:fs/promises";
-import * as NodePath from "node:path";
+// @effect-diagnostics globalDate:off - a stopped provider's delivery memory in a temporary checkout.
 
 import type { PeerWorkStatus } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
@@ -11,7 +9,6 @@ import { brokerFixture, wakingNotices } from "./testkit.ts";
 
 const NATIVE_ID = "native-one";
 const THREAD = "peer:original-thread";
-const PRIVATE_CONTEXT = "Coupon calculation stays in integer cents; keep the original rounding.";
 const NEW_MESSAGE = "The human discussion is finished: apply the coupon before loyalty.";
 
 async function dormantFixture(agent: "claude" | "codex") {
@@ -85,10 +82,8 @@ async function dormantFixture(agent: "claude" | "codex") {
     undefined,
   );
   expect(session).not.toBeNull();
-  await NodeFSP.mkdir(NodePath.dirname(session!.ownContextPath), { recursive: true });
-  await NodeFSP.writeFile(session!.ownContextPath, `# Private context\n\n${PRIVATE_CONTEXT}\n`);
   // It heard the overlap at a step and what woke it, before it went idle.
-  expect(fixture.broker.news(session!, { team: false })).toContain("waiting for the humans");
+  expect(fixture.broker.news(session!, { pending: false })).toContain("waiting for the humans");
   expect(await fixture.broker.wakingNews(session!, notices.plugins)).toContain(
     "waiting for the humans",
   );
@@ -131,7 +126,6 @@ async function dormantFixture(agent: "claude" | "codex") {
     overlap,
     admitted,
     independentQueues: () => independentQueues,
-    contextPath: session!.ownContextPath,
     setOverlaps,
     newNote,
     newNotice,
@@ -412,7 +406,7 @@ describe("native Peer agents after idle process release", () => {
         expect(live?.thread).toBe(THREAD);
         // A later real input makes this live object's memory change and therefore get
         // written; an unchanged stale snapshot would leave the newer disk file untouched.
-        live!.heard.add("another-input-read-after-resume");
+        live!.memory.notified.add("another-overlap-shown-after-resume");
         await broker.saveMemories();
         await broker.stop();
         broker = new CoordinationBroker(fixture.broker.host);
@@ -460,7 +454,6 @@ describe("native Peer agents after idle process release", () => {
 
         const answer = await fixture.resume(fixture.broker);
         expect(JSON.stringify(answer)).toContain(NEW_MESSAGE);
-        expect(JSON.stringify(answer)).toContain(PRIVATE_CONTEXT);
         expect(fixture.broker.sessions.get(fixture.sessionId)?.thread).toBe(THREAD);
       } finally {
         admission.resolve(false);
@@ -547,10 +540,8 @@ describe("native Peer agents after idle process release", () => {
         expect(fixture.independentQueues()).toBe(0);
         expect(fixture.broker.reportFor("acme")).toEqual([]);
 
-        const answer = await fixture.resume(fixture.broker);
-        expect(JSON.stringify(answer)).toContain(PRIVATE_CONTEXT);
+        await fixture.resume(fixture.broker);
         expect(fixture.broker.sessions.get(fixture.sessionId)?.thread).toBe(THREAD);
-        expect(await NodeFSP.readFile(fixture.contextPath, "utf8")).toContain(PRIVATE_CONTEXT);
       } finally {
         await fixture.dispose();
       }
@@ -618,7 +609,6 @@ describe("native Peer agents after idle process release", () => {
         await fixture.broker.saveMemories();
         const answer = await fixture.resume(fixture.broker);
         expect(JSON.stringify(answer)).toContain(NEW_MESSAGE);
-        expect(JSON.stringify(answer)).toContain(PRIVATE_CONTEXT);
         expect(fixture.broker.sessions.get(fixture.sessionId)?.thread).toBe(THREAD);
       } finally {
         await fixture.dispose();

@@ -149,7 +149,6 @@ export function sessionIn(
     thread: undefined,
     pane: undefined,
     status: "working",
-    keeps: false,
     files: [],
     claims: [],
     local: <S>(plugin: string, init: () => S) => {

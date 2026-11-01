@@ -6,7 +6,6 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import { afterEach, describe, expect, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
 import { vi } from "vite-plus/test";
 
 import { NO_PLUGINS } from "./host.ts";
@@ -201,86 +200,6 @@ describe("the broker's hooks", () => {
     }
   });
 
-  it("delivers Codex pre-compaction plugin context exactly once through compact SessionStart", async () => {
-    const fixture = await brokerFixture(() => ({
-      plugins: async () => ({
-        ...NO_PLUGINS,
-        active: [
-          {
-            id: "observe",
-            title: "Observe",
-            contributions: {
-              hooks: { preCompact: () => Effect.succeed("Keep the price invariant.") },
-            },
-          },
-        ],
-      }),
-    }));
-    try {
-      const body = { session_id: "compact", cwd: fixture.root };
-      const headers = { "x-peer-agent": "codex" };
-      await fixture.broker["hook"]({ ...body, hook_event_name: "SessionStart" }, headers);
-      expect(
-        await fixture.broker["hook"]({ ...body, hook_event_name: "PreCompact" }, headers),
-      ).toBeNull();
-      const resumed = await fixture.broker["hook"](
-        { ...body, hook_event_name: "SessionStart", source: "compact" },
-        headers,
-      );
-      expect(JSON.stringify(resumed).split("Keep the price invariant.")).toHaveLength(2);
-      const next = await fixture.broker["hook"](
-        {
-          ...body,
-          hook_event_name: "PreToolUse",
-          tool_name: "Bash",
-          tool_input: { command: "git status" },
-        },
-        headers,
-      );
-      expect(JSON.stringify(next)).not.toContain("Keep the price invariant.");
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it.each(["SessionEnd", "Interrupt"])(
-    "answers Codex %s within its three-second harness limit",
-    async (event) => {
-      const fixture = await brokerFixture();
-      const entered = Promise.withResolvers<void>();
-      const finished = Promise.withResolvers<null>();
-      try {
-        await fixture.broker["sessionFor"](
-          "codex",
-          { session_id: "ending", cwd: fixture.root },
-          undefined,
-        );
-        fixture.broker["answerHook"] = async () => {
-          entered.resolve();
-          return finished.promise;
-        };
-        vi.useFakeTimers();
-        const pending = fixture.broker["hookInTime"](
-          { session_id: "ending", cwd: fixture.root, hook_event_name: event },
-          { "x-peer-agent": "codex" },
-        );
-        await entered.promise;
-        await vi.advanceTimersByTimeAsync(2000);
-        let answered = false;
-        void pending.then(() => {
-          answered = true;
-        });
-        await vi.advanceTimersByTimeAsync(0);
-        expect(answered).toBe(true);
-        expect(await pending).toBeNull();
-      } finally {
-        vi.useRealTimers();
-        finished.resolve(null);
-        await fixture.dispose();
-      }
-    },
-  );
-
   it("delivers startup guidance before a slow hub finishes, then queues the complete context", async () => {
     const fixture = await brokerFixture();
     const completed = Promise.withResolvers<Record<string, unknown>>();
@@ -364,12 +283,6 @@ describe("the broker's hooks", () => {
       const session = fixture.broker["sessions"].get("claude:one")!;
       session.task = "prices";
       session.claims = ["area:pricing"];
-      session.read.set("task:other", {
-        version: 4,
-        text: "An interface",
-        notifiedVersion: 4,
-        toldAt: Date.now(),
-      });
       const original = fixture.broker["answerHook"];
       fixture.broker["answerHook"] = async () => ({
         hookSpecificOutput: {
@@ -402,7 +315,6 @@ describe("the broker's hooks", () => {
       expect(session.runtimeGeneration).not.toBe(previous);
       const generation = session.runtimeGeneration;
       expect(session.modHandled.has("obsolete")).toBe(false);
-      expect(session.read.get("task:other")?.version).toBe(4);
       expect(session.task).toBe("prices");
       expect(session.claims).toEqual(["area:pricing"]);
       expect(fixture.broker.coordinationLevel("claude:one")).toBe("A");

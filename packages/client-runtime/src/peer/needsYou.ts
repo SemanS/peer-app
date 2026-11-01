@@ -14,13 +14,6 @@ export type WorkOpen =
   | { readonly kind: "thread"; readonly environmentId: EnvironmentId; readonly threadId: ThreadId }
   /** A herdr agent opens in Peer's agent view; its pane is where herdr shows it. */
   | { readonly kind: "herdr"; readonly agentId: string; readonly paneId: string }
-  | {
-      readonly kind: "context";
-      readonly environmentId: EnvironmentId;
-      readonly workspace: string;
-      readonly project: string;
-      readonly scope: string;
-    }
   /** A thread on another computer whose owner shares it opens read-only, relayed by the hub. */
   | {
       readonly kind: "observe";

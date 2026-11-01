@@ -1,6 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
 
-import { startContext } from "../contexts/text.ts";
 import type { HubCoordSession, HubOverlap } from "../hub/coordApi.ts";
 import type { BoardEntry } from "../index/text.ts";
 import { type CoordinationView, emptyMemory, taskClaim } from "./edits.ts";
@@ -11,6 +10,7 @@ import {
   settleAskedAt,
   settleNudge,
   settleRequest,
+  startText,
   statusText,
 } from "./news.ts";
 
@@ -109,12 +109,8 @@ describe("the project's other work", () => {
       handle: "KRK-812",
       name: "KRK-812 · Split payments",
       agents: ["Vir's agent (Claude Code, idle 9 min, on another computer, 1 file(s) changed)"],
-      keeper: "Vir's agent",
-      version: 3,
-      gist: "Split amounts live in Split.amounts; the API returns them in cents",
-      path: "/c/shared/task_krk-812.md",
     },
-    { scope: "task:x1", handle: "x1", name: "Receipts by mail", agents: [], version: 0 },
+    { scope: "task:x1", handle: "x1", name: "Receipts by mail", agents: [] },
   ];
 
   it("tells the agents on a task who asks them, and the asker their answer", () => {
@@ -211,22 +207,24 @@ describe("the project's other work", () => {
     );
   });
 
-  it("names in the start text and peer status only the commands of the plugins that are on", () => {
-    const start = startContext({
-      own: { path: "/c/me.md", saved: undefined },
-      shared: undefined,
-      findings: [],
-      agents: [],
-      nameOf,
-      on: () => false,
+  it("says at a start who the agent is, how to run Peer and who else is at work", () => {
+    const start = startText({
+      me: "Slavo's agent",
+      cliPath: "/peer/bin/peer",
+      startLines: ["Your room: peer room reads it."],
+      index: "Also on this project now:\n- KRK-812 · Split payments — Vir's agent",
     });
-    assert.include(
-      start,
-      "Choose relevant inputs yourself, even when your person did not mention another agent. Within your own task",
-    );
-    assert.include(start, "Ask an available agent through peer note;");
-    assert.notInclude(start, "peer ask");
-    assert.notInclude(start, "Outcomes:");
+    assert.deepStrictEqual(start.split("\n\n"), [
+      "You are Slavo's agent here.",
+      "Peer knows this session, its project and task: run `peer` (/peer/bin/peer) as is, with no names or IDs, and never ask your person for Peer commands. `peer status` shows who works on what, `peer claim <path>` says what you are about to touch, and `peer` lists all commands.",
+      "Your room: peer room reads it.",
+      "Also on this project now:\n- KRK-812 · Split payments — Vir's agent",
+    ]);
+    assert.include(startText({ tools: true }), "Use your peer_* tools");
+    assert.notInclude(startText({ index: null }), "Also on this project");
+  });
+
+  it("names in peer status only the commands of the plugins that are on", () => {
     const status = statusText({
       me: asking,
       view: { sessions: [asking], overlaps: [] },
@@ -236,7 +234,7 @@ describe("the project's other work", () => {
     });
     assert.include(
       status,
-      'Commands: peer index · peer context [<task>] · peer ask <task> "<question>" · peer note "<text>"',
+      'Commands: peer index · peer ask <task> "<question>" · peer note "<text>"',
     );
   });
 });

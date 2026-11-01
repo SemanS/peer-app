@@ -45,9 +45,6 @@ export function needsYouView(status: PeerHubStatus): PeerHubStatus {
     coordination: {
       ...status.coordination,
       logPath: "",
-      advice: [],
-      findings: [],
-      contexts: [],
       codexHookHomes: undefined,
       sessions: status.coordination.sessions
         .filter((s) => ids.has(s.id))

@@ -36,7 +36,6 @@ function thread(key: string, overrides: Partial<WorkThreadNode> = {}): WorkThrea
     observable: false,
     agent: undefined,
     activeAt: undefined,
-    keepsContext: false,
     ...overrides,
   };
 }
@@ -53,7 +52,6 @@ function task(
     status: "idle",
     threads,
     removable: true,
-    context: undefined,
     ...overrides,
   };
 }

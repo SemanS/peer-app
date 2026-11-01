@@ -39,8 +39,6 @@ const coordination: PeerHubStatus["coordination"] = {
   logPath: "/tmp/coordination.jsonl",
   sessions: [],
   overlaps: [],
-  findings: [],
-  contexts: [],
 };
 
 /** A plugin whose only contribution is a status slice. */

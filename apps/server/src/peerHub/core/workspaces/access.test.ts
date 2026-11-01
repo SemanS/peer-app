@@ -25,8 +25,6 @@ const started = (answer: HubAnswer) =>
           logPath: "/tmp/access-test",
           sessions: [],
           overlaps: [],
-          findings: [],
-          contexts: [],
         }),
       );
       return {

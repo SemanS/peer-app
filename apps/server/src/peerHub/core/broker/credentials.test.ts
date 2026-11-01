@@ -245,9 +245,8 @@ describe("who a peer command acts for", () => {
     }
   });
 
-  it("public reads preserve all agent state and context reads record no receipt", async () => {
-    const contextRead = vi.fn();
-    const fixture = await brokerFixture(() => ({ contextRead }));
+  it("public reads preserve all agent state", async () => {
+    const fixture = await brokerFixture();
     try {
       await fixture.register("one");
       const session = fixture.broker.sessions.get("claude:one")!;
@@ -255,9 +254,8 @@ describe("who a peer command acts for", () => {
       session.pending.push("unheard note");
       const before = JSON.stringify(fixture.broker.snapshot());
       const caller = { "x-peer-cwd": fixture.root, "x-herdr-pane": "matched" };
-      for (const command of ["status", "index", "context"])
+      for (const command of ["status", "index"])
         expect(await fixture.broker.runCli(command, [], caller)).toBeTypeOf("string");
-      expect(contextRead).not.toHaveBeenCalled();
       expect(JSON.stringify(fixture.broker.snapshot())).toBe(before);
       expect(session.pending).toEqual(["unheard note"]);
     } finally {

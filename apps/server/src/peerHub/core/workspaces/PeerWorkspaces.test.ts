@@ -42,8 +42,6 @@ const coordination: PeerHubStatus["coordination"] = {
   logPath: "/tmp/coordination.jsonl",
   sessions: [],
   overlaps: [],
-  findings: [],
-  contexts: [],
 };
 
 /** Acme's manifest: a Payments project whose one repository is at `url`. */

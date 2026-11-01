@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off globalDate:off - notes written minutes ago, in wall-clock time, and an edit in the checkout.
+// @effect-diagnostics nodeBuiltinImport:off globalDate:off - overlaps opened minutes ago, in wall-clock time, and memory files on disk.
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
@@ -6,13 +6,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import { vi } from "vite-plus/test";
 
-import type {
-  HubContextText,
-  HubCoordSession,
-  HubCoordView,
-  HubFinding,
-  HubOverlap,
-} from "../hub/coordApi.ts";
+import type { HubCoordSession, HubCoordView, HubOverlap } from "../hub/coordApi.ts";
 import { CoordinationBroker } from "./Broker.ts";
 import { NO_PLUGINS } from "./host.ts";
 import type { LocalSession } from "./sessions.ts";
@@ -78,90 +72,6 @@ async function meet(broker: CoordinationBroker, root: string, view: HubCoordView
   return session;
 }
 
-describe("durable input manifests", () => {
-  it("keeps every dependency after 13 reads, independently from pending delivery acknowledgments", async () => {
-    const fixture = await brokerFixture();
-    try {
-      await fixture.register("reader");
-      const session = fixture.broker.sessions.get("claude:reader")!;
-      for (let index = 0; index < 13; index++)
-        fixture.broker.markRead(session, `task:${index}`, index + 1, `Input ${index}`);
-      expect(session.read.size).toBe(13);
-      expect([...session.read.values()].filter((read) => read.text !== undefined)).toHaveLength(12);
-      session.pending.push("Undelivered notice");
-      await fixture.broker.saveMemories();
-      const again = new CoordinationBroker(fixture.broker.host);
-      await again.sessionFor("claude", { session_id: "reader", cwd: fixture.root }, undefined);
-      const restored = again.sessions.get("claude:reader")!;
-      expect(restored.inputRecovery).toBe("complete");
-      expect(restored.read.size).toBe(13);
-      expect(restored.read.get("task:0")?.version).toBe(1);
-      await again.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("does not treat an unmarked legacy receipt cache or missing recovery evidence as complete", async () => {
-    const fixture = await brokerFixture();
-    try {
-      await fixture.register("reader");
-      const session = fixture.broker.sessions.get("claude:reader")!;
-      const path = session.ownContextPath.replace(/\.md$/, ".memory.json");
-      await NodeFSP.mkdir(NodePath.dirname(path), { recursive: true });
-      await NodeFSP.writeFile(path, JSON.stringify({ read: [["project", 4, 4, 0]] }));
-      const again = new CoordinationBroker(fixture.broker.host);
-      await again.sessionFor("claude", { session_id: "reader", cwd: fixture.root }, undefined);
-      expect(again.sessions.get("claude:reader")?.inputRecovery).toBe("revalidation-required");
-      expect(again.sessions.get("claude:reader")?.read.get("project")?.version).toBe(4);
-      await again.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-});
-
-describe("input manifest authority binding", () => {
-  it("does not restore receipts or applied transfer markers across a Hub or environment change", async () => {
-    const fixture = await brokerFixture();
-    try {
-      await fixture.register("reader");
-      const session = fixture.broker.sessions.get("claude:reader")!;
-      fixture.broker.markRead(session, "task:one", 1, "Known input");
-      session.inputImports = ["checkpoint-from-hub-a"];
-      session.inputLineage = ["boundary-from-hub-a"];
-      await fixture.broker.saveMemories();
-      const changedHub = new CoordinationBroker({
-        ...fixture.broker.host,
-        contextAuthority: () => "https://hub-b.test",
-      });
-      await changedHub.sessionFor("claude", { session_id: "reader", cwd: fixture.root }, undefined);
-      const restored = changedHub.sessions.get("claude:reader")!;
-      expect(restored.inputRecovery).toBe("unavailable");
-      expect(restored.read.size).toBe(0);
-      expect(restored.inputLineage).toBeUndefined();
-      expect(restored.inputImports).toBeUndefined();
-      // Do not stop the second broker until after checking the independently changed environment.
-      const changedEnvironment = new CoordinationBroker({
-        ...fixture.broker.host,
-        environment: "other-environment",
-      });
-      await changedEnvironment.sessionFor(
-        "claude",
-        { session_id: "reader", cwd: fixture.root },
-        undefined,
-      );
-      expect(changedEnvironment.sessions.get("claude:reader")?.inputRecovery).toBe("unavailable");
-      expect(changedEnvironment.sessions.get("claude:reader")?.read.size).toBe(0);
-      await changedHub.stop();
-      await changedEnvironment.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-});
-
-/** What wakes Ana's agent: an owner's decision on a call of hers. */
 const decided = () => {
   const notices = wakingNotices();
   notices.tell("accepted", "Vir accepted your call.");
@@ -170,7 +80,7 @@ const decided = () => {
 
 /** What its next step tells it of its overlaps. */
 const overlapNews = (broker: CoordinationBroker, session: LocalSession) =>
-  broker.news(session, { team: false });
+  broker.news(session, { pending: false });
 
 describe("what an agent heard, across a Peer restart", () => {
   it("does not wake an agent for what it heard before Peer restarted, or tell it again", async () => {
@@ -303,33 +213,6 @@ const team = (over: Partial<HubCoordView> = {}): HubCoordView => ({
   ...over,
 });
 
-/** What Zed's agent shared about the work outside tasks, which Ana's agent is on too. */
-const finding: HubFinding = {
-  id: "f-cents",
-  project: "app",
-  text: "Totals are integer cents everywhere",
-  email: "zed@acme.test",
-  session: "claude:zed",
-  environment: "zeds-mac",
-  at: ago(5),
-};
-
-/** The shared context of the work outside tasks, kept by another agent, at `version`. */
-const shared = (version: number, text: string): HubContextText => ({
-  project: "app",
-  scope: "project",
-  version,
-  updatedAt: ago(10),
-  updatedBy: "zed@acme.test",
-  text,
-});
-
-/** That context as the Hub hands it to `session`, which keeps it now. */
-const keptBy = (session: string): HubContextText => ({
-  ...shared(1, "# app\n- totals are cents\n"),
-  keeper: { session, email: "ana@acme.test", environment: "test", since: ago(1) },
-});
-
 /** Peer quits (for an update) and starts again: a broker on the same computer's directories. */
 async function restart(broker: CoordinationBroker) {
   await broker.stop();
@@ -337,140 +220,6 @@ async function restart(broker: CoordinationBroker) {
 }
 
 describe("what else an agent was told, across a Peer restart", () => {
-  it("does not give it the index of the others' work again, only what changed meanwhile", async () => {
-    const fixture = await brokerFixture();
-    try {
-      const before = await meet(fixture.broker, fixture.root, team());
-      expect(fixture.broker.discoveryFor(before)).toContain("Rename totals");
-      const again = await restart(fixture.broker);
-      const after = await meet(again, fixture.root, team());
-      expect(again.discoveryFor(after)).toBeNull();
-      again.views.set("acme", team({ sessions: [zed({ intent: "Split totals by tax" })] }));
-      const changed = again.discoveryFor(after);
-      expect(changed).toContain("since you were told");
-      expect(changed).toContain("Split totals by tax");
-      await again.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("tells it nothing while Peer, just started, does not know the project's tasks yet", async () => {
-    // Peer reads the project's tasks from the Hub a moment after it starts; until then a work goes
-    // by its task's id, which would make it news.
-    const known = { current: true };
-    const fixture = await brokerFixture(() => ({
-      workKnown: () => known.current,
-      tasks: () => (known.current ? [{ id: "t_cart", key: "ORD-9", title: "Cart totals" }] : []),
-      taskName: (_workspace, _project, task) =>
-        known.current && task === "t_cart" ? "ORD-9 · Cart totals" : task,
-    }));
-    try {
-      const before = await meet(fixture.broker, fixture.root, team());
-      expect(fixture.broker.discoveryFor(before)).toContain("ORD-9 Cart totals");
-      known.current = false;
-      const again = await restart(fixture.broker);
-      const after = await meet(again, fixture.root, team());
-      expect(again.discoveryFor(after)).toBeNull();
-      known.current = true;
-      expect(again.discoveryFor(after)).toBeNull();
-      await again.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("does not tell it again of a work whose context it read, but of a new version of it", async () => {
-    const cart = (version: number) => ({
-      project: "app",
-      scope: "task:t_cart",
-      version,
-      updatedAt: ago(10),
-      updatedBy: "zed@acme.test",
-      gist: "Totals in integer cents",
-    });
-    const fixture = await brokerFixture();
-    try {
-      const before = await meet(fixture.broker, fixture.root, team({ contexts: [cart(2)] }));
-      expect(fixture.broker.discoveryFor(before)).toContain("Totals in integer cents");
-      // It reads that work's context (`peer context t_cart`).
-      fixture.broker.markRead(before, "task:t_cart", 2, "# Cart totals\n- totals are cents\n");
-      const again = await restart(fixture.broker);
-      const after = await meet(again, fixture.root, team({ contexts: [cart(2)] }));
-      expect(again.discoveryFor(after)).toBeNull();
-      expect(again.followedNews(after)).toBeNull();
-      // Written again while Peer was down: it hears so, without the lines Peer no longer has.
-      again.views.set("acme", team({ contexts: [cart(3)] }));
-      await again.mirror("acme", {
-        ...cart(3),
-        text: "# Cart totals\n- totals are cents\n- tax\n",
-      });
-      const changed = again.followedNews(after);
-      expect(changed).toContain("written again (version 3");
-      expect(changed).not.toContain("lines added");
-      await again.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("tells a conversation that started again what the old one was told, though Peer stopped before its next step", async () => {
-    const fixture = await brokerFixture();
-    try {
-      const before = await meet(fixture.broker, fixture.root, team());
-      expect(fixture.broker.discoveryFor(before)).not.toBeNull();
-      await fixture.broker.saveMemories();
-      // Its context is compacted, and something waits for its next step when Peer quits.
-      await fixture.broker.startContextFor(before, "compact", NO_PLUGINS);
-      before.pending.push("Peer: a note that waits for its next step");
-      const again = await restart(fixture.broker);
-      const after = await meet(again, fixture.root, team());
-      expect(again.discoveryFor(after)).toContain("Rename totals");
-      await again.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("does not tell it again a finding it heard, which it still reports heard", async () => {
-    const fixture = await brokerFixture();
-    try {
-      const before = await meet(fixture.broker, fixture.root, team({ findings: [finding] }));
-      expect(fixture.broker.findingNews(before)).toContain("team findings available");
-      const again = await restart(fixture.broker);
-      const after = await meet(again, fixture.root, team({ findings: [finding] }));
-      expect(again.findingNews(after)).toBeNull();
-      // Should its agent say it again, the Hub's knowledge counts no independent discovery.
-      expect(again.reportFor("acme")[0]?.heard).toContain("f-cents");
-      await again.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("does not tell a reader its work's shared context changed when it did not", async () => {
-    const fixture = await brokerFixture();
-    try {
-      await fixture.broker.mirror("acme", shared(2, "# app\n- totals are cents\n"));
-      const before = await meet(fixture.broker, fixture.root, team());
-      // It starts reading its work's shared context, which another agent keeps.
-      await fixture.broker.startContextFor(before, "startup", NO_PLUGINS);
-      const again = await restart(fixture.broker);
-      // The new broker reads the context again from the Hub, as it does after a restart.
-      await again.mirror("acme", shared(2, "# app\n- totals are cents\n"));
-      const after = await meet(again, fixture.root, team());
-      expect(again.sharedNews(after)).toBeNull();
-      // A version written while Peer was down is news; Peer no longer has the lines it read.
-      await again.mirror("acme", shared(3, "# app\n- totals are cents\n- tax on top\n"));
-      const changed = again.sharedNews(after);
-      expect(changed).toContain("changed (version 3");
-      expect(changed).not.toContain("lines added");
-      await again.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
   it("does not show people an overlap again, but one that opened while Peer was down", async () => {
     const fixture = await brokerFixture();
     try {
@@ -487,108 +236,6 @@ describe("what else an agent was told, across a Peer restart", () => {
       again.views.set("acme", viewWith(overlap, { ...overlap, id: "d81f0c2a9b77" }));
       again.afterViewChange("acme");
       expect(shown).toHaveBeenCalledTimes(2);
-      await again.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("gives a keeper back the context it kept, without telling it so or that it is empty", async () => {
-    // The work outside tasks has a written shared context, which Ana's agent keeps.
-    const listed = { project: "app", scope: "project", version: 1, updatedAt: ago(10) };
-    const fixture = await brokerFixture(() => ({
-      keepContext: async (_workspace, _project, _scope, session, release) =>
-        release ? shared(1, "# app\n- totals are cents\n") : keptBy(session),
-      readContext: async () => shared(1, "# app\n- totals are cents\n"),
-    }));
-    try {
-      const before = await meet(fixture.broker, fixture.root, team({ contexts: [listed] }));
-      await fixture.broker.startContextFor(before, "startup", NO_PLUGINS);
-      expect(before.keeps).toBe(true);
-      // Its Peer gives the context up as it quits, and takes it back for it as it starts again.
-      const again = await restart(fixture.broker);
-      const after = await meet(again, fixture.root, team({ contexts: [listed] }));
-      await again.followShared("acme");
-      expect(after.keeps).toBe(true);
-      expect(after.pending).toEqual([]);
-      expect(again.nudge(after, "src/cart.js")).toBeNull();
-      await again.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("tells a new keeper how many findings wait, all of them, also those it heard as a reader", async () => {
-    // Nobody keeps the work outside tasks; twelve of Zed's findings wait and one is decided.
-    const listed = { project: "app", scope: "project", version: 1, updatedAt: ago(10) };
-    const waiting = Array.from({ length: 12 }, (_, n) => ({
-      ...finding,
-      id: `f-${n}`,
-      at: ago(20 - n),
-    }));
-    const decided: HubFinding = {
-      ...finding,
-      id: "f-decided",
-      decision: {
-        status: "incorporated",
-        reason: "in Provides",
-        actor: "zed@acme.test",
-        contextScope: "project",
-        contextVersion: 1,
-        at: ago(9),
-      },
-    };
-    const fixture = await brokerFixture(() => ({
-      keepContext: async (_workspace, _project, _scope, session, release) =>
-        release ? shared(1, "# app\n- totals are cents\n") : keptBy(session),
-      readContext: async () => shared(1, "# app\n- totals are cents\n"),
-    }));
-    try {
-      const view = team({ contexts: [listed], findings: [...waiting, decided] });
-      const ana = await meet(fixture.broker, fixture.root, view);
-      // While it only read the work, it heard of one of them.
-      ana.heard.add("f-0");
-      await fixture.broker.followShared("acme");
-      expect(ana.keeps).toBe(true);
-      const told = ana.pending.filter((entry) => typeof entry === "string").join("\n");
-      expect(told).toContain("12 team findings await review");
-      await fixture.broker.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("does not tell a keeper that Peer, which ended without stopping, restarted, unless its edits wait", async () => {
-    const listed = {
-      project: "app",
-      scope: "project",
-      version: 1,
-      updatedAt: ago(10),
-      keeper: keptBy("claude:one").keeper,
-    };
-    const fixture = await brokerFixture(() => ({
-      keepContext: async (_workspace, _project, _scope, session) => keptBy(session),
-      readContext: async () => keptBy("claude:one"),
-    }));
-    try {
-      const before = await meet(fixture.broker, fixture.root, team({ contexts: [listed] }));
-      await fixture.broker.startContextFor(before, "startup", NO_PLUGINS);
-      await fixture.broker.saveMemories();
-      // The process is gone without stopping: the Hub still lists it as the keeper.
-      const again = new CoordinationBroker(fixture.broker.host);
-      const after = await meet(again, fixture.root, team({ contexts: [listed] }));
-      await again.followShared("acme");
-      expect(after.keeps).toBe(true);
-      expect(after.pending).toEqual([]);
-      // Once more, now with edits the Hub had not taken: those it hears of.
-      await again.saveMemories();
-      const third = new CoordinationBroker(fixture.broker.host);
-      const last = await meet(third, fixture.root, team({ contexts: [listed] }));
-      const copy = NodePath.join(fixture.root, "contexts", "acme", "app", "shared", "project.md");
-      await NodeFSP.writeFile(`${copy}.unsent`, "# app\n- an edit the Hub had not taken\n");
-      await third.followShared("acme");
-      expect(last.pending.join("\n")).toContain("Edits of yours the hub had not taken before");
-      await third.stop();
       await again.stop();
     } finally {
       await fixture.dispose();
@@ -623,49 +270,6 @@ describe("what else an agent was told, across a Peer restart", () => {
     }
   });
 
-  it("does not ask a keeper again to mark what its closed task should keep", async () => {
-    const fixture = await brokerFixture(() => ({ taskOf: () => "t_cart", taskDone: () => true }));
-    try {
-      const before = await meet(fixture.broker, fixture.root, team());
-      before.keeps = true;
-      expect(fixture.broker.closeNews(before)).not.toBeNull();
-      const again = await restart(fixture.broker);
-      const after = await meet(again, fixture.root, team());
-      // Its Peer gives it the context back (`followShared`).
-      after.keeps = true;
-      expect(again.closeNews(after)).toBeNull();
-      await again.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("does not tell a keeper again to compact a context it was told to compact", async () => {
-    const big = `# app\n${"- a line the keeper wrote into the shared context\n".repeat(600)}`;
-    let version = 1;
-    const fixture = await brokerFixture(() => ({
-      writeContext: async () => shared(++version, big),
-    }));
-    try {
-      const before = await meet(fixture.broker, fixture.root, team());
-      const write = async (broker: CoordinationBroker, session: typeof before) => {
-        const copy = await broker.mirror("acme", shared(version, "# app\n"));
-        copy.text = big;
-        copy.unsent = true;
-        await broker.pushNow(session, copy);
-      };
-      await write(fixture.broker, before);
-      expect(fixture.broker.news(before)).toContain("Compact it now");
-      const again = await restart(fixture.broker);
-      const after = await meet(again, fixture.root, team());
-      await write(again, after);
-      expect(after.pending).toEqual([]);
-      await again.stop();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
   it("forgets on disk what a plugin dropped, though something waits for its next step", async () => {
     const fixture = await brokerFixture();
     try {
@@ -680,6 +284,69 @@ describe("what else an agent was told, across a Peer restart", () => {
       const after = await meet(again, fixture.root, team());
       expect(again.sessionView(after).told!("audit").has("free:resource:cache")).toBe(false);
       await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("reads a file from where a Peer from before kept it, and writes it in the new place", async () => {
+    const fixture = await brokerFixture();
+    try {
+      const before = await meet(fixture.broker, fixture.root, team());
+      const memoryPath = before.memoryPath;
+      await fixture.broker.stop();
+      const former = fixture.broker.host.formerMemoryPath(memoryPath);
+      await NodeFSP.mkdir(NodePath.dirname(former), { recursive: true });
+      await NodeFSP.writeFile(
+        former,
+        JSON.stringify({
+          announced: ["overlap-1:1"],
+          acknowledged: ["overlap-1"],
+          // What a Peer from before kept besides: read back as nothing.
+          read: [["project", 4, 4, 0]],
+          told: ["task:other"],
+          plugins: { observe: ["rounding"] },
+        }),
+      );
+      await NodeFSP.rm(memoryPath, { force: true });
+      const again = new CoordinationBroker(fixture.broker.host);
+      const after = await meet(again, fixture.root, team());
+      expect(after.memory.announced.has("overlap-1:1")).toBe(true);
+      expect(after.memory.acknowledged.has("overlap-1")).toBe(true);
+      expect(again.sessionView(after).told!("observe").has("rounding")).toBe(true);
+      after.memory.notified.add("overlap-2");
+      await again.saveMemories();
+      expect(JSON.parse(await NodeFSP.readFile(memoryPath, "utf8"))).toEqual({
+        announced: ["overlap-1:1"],
+        acknowledged: ["overlap-1"],
+        notified: ["overlap-2"],
+        seenNotes: [],
+        settled: [],
+        plugins: { observe: ["rounding"] },
+      });
+      await again.stop();
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("forgets the memory files nobody wrote for months, except those of sessions it holds", async () => {
+    const fixture = await brokerFixture();
+    try {
+      const session = await meet(fixture.broker, fixture.root, team());
+      const dir = fixture.broker.host.memoryDir;
+      const old = NodePath.join(dir, "acme", "app", "gone.memory.json");
+      const recent = NodePath.join(dir, "acme", "app", "recent.memory.json");
+      await NodeFSP.mkdir(NodePath.dirname(old), { recursive: true });
+      await NodeFSP.mkdir(NodePath.dirname(session.memoryPath), { recursive: true });
+      for (const path of [old, recent, session.memoryPath]) await NodeFSP.writeFile(path, "{}");
+      const longAgo = new Date(0);
+      await NodeFSP.utimes(old, longAgo, longAgo);
+      await NodeFSP.utimes(session.memoryPath, longAgo, longAgo);
+      await fixture.broker.forgetOldMemories();
+      await expect(NodeFSP.access(old)).rejects.toThrow();
+      await expect(NodeFSP.access(recent)).resolves.toBeUndefined();
+      await expect(NodeFSP.access(session.memoryPath)).resolves.toBeUndefined();
     } finally {
       await fixture.dispose();
     }
@@ -721,7 +388,7 @@ describe("what else an agent was told, across a Peer restart", () => {
       }),
     }));
     try {
-      const before = await meet(fixture.broker, fixture.root, team({ findings: [finding] }));
+      const before = await meet(fixture.broker, fixture.root, viewWith(overlap));
       const late = { passed: false };
       const hook = fixture.broker.hook(
         {
@@ -735,16 +402,16 @@ describe("what else an agent was told, across a Peer restart", () => {
         late,
       );
       await read;
-      // The broker's tick, while the answer, with the finding in it, waits for the plugin.
+      // The broker's tick, while the answer, with the overlap in it, waits for the plugin.
       await fixture.broker.saveMemories();
       late.passed = true;
       answer();
       await hook;
       const queued = before.pending.map((part) => (typeof part === "string" ? part : part.text));
-      expect(queued.join("\n")).toContain("team findings available");
+      expect(queued.join("\n")).toContain("src/orders.js");
       const again = await restart(fixture.broker);
-      const after = await meet(again, fixture.root, team({ findings: [finding] }));
-      expect(again.findingNews(after)).toContain("team findings available");
+      const after = await meet(again, fixture.root, viewWith(overlap));
+      expect(overlapNews(again, after)).toContain("src/orders.js");
       await again.stop();
     } finally {
       await fixture.dispose();

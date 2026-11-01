@@ -40,7 +40,6 @@ describe("a task's Move to area", () => {
     status: "working",
     threads: [],
     removable: true,
-    context: undefined,
   };
   const areas = ["Payments", "Reservations", "Integrations", "Partner portal"];
   const menu = (area: string | undefined) =>
@@ -114,7 +113,6 @@ describe("a task's chats and teammates in its menu", () => {
     status: "idle",
     threads: [],
     removable: true,
-    context: undefined,
   };
 
   it("starts a chat first, and says chat where it used to say thread", () => {
@@ -154,7 +152,6 @@ describe("a task's tree items", () => {
     status: "idle",
     threads: [],
     removable: false,
-    context: undefined,
   };
   const ids = (input: Parameters<typeof taskMenuItems>[0]) =>
     taskMenuItems(input).map((item) => item.id);

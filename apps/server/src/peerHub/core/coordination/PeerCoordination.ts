@@ -1,9 +1,3 @@
-import type {
-  PeerContextViewInput,
-  PeerContextView,
-  PeerContextArchiveInput,
-  PeerContextArchive,
-} from "@t3tools/contracts";
 // @effect-diagnostics nodeBuiltinImport:off - the broker's socket path and git probes of agents' directories.
 /**
  * PeerCoordination: agents on the same project staying out of each other's way (experimental).
@@ -13,11 +7,10 @@ import type {
  * edits. The broker runs on one host built here from core's services and the active plugins:
  * places and people from PeerState, work from PeerWork, Hub calls through PeerHubClient, and what
  * plugins add (a runtime's panes, states and wake; sessions for the report). People note, resolve
- * and settle overlaps, and read shared contexts, through this service too.
+ * and settle overlaps through this service too.
  *
  * @module peerHub/core/coordination/PeerCoordination
  */
-import { contextLineage } from "./contextLineage.ts";
 import * as NodeCrypto from "node:crypto";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
@@ -27,19 +20,12 @@ import {
   PEER_PLUGIN_REASONS,
   PEER_LOCAL_WORKSPACE,
   PeerHubError,
-  type PeerContextVersion,
-  type PeerContextVersionText,
   type PeerCoordEvent,
-  type PeerHubContextInput,
-  type PeerHubContextVersionInput,
   type PeerHubCoordEventsInput,
   type PeerHubOverlapNoteInput,
   type PeerHubResolveOverlapInput,
   type PeerHubSettleOverlapInput,
-  type PeerHubStaleReadsInput,
   type PeerHubStatus,
-  type PeerStaleReads,
-  type PeerWorkContextText,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -61,7 +47,6 @@ import { PeerBrokerKind } from "../broker/owner.ts";
 import type { PeerBrokerHost, PeerBrokerPlugins } from "../broker/host.ts";
 import { socketPathFits } from "../broker/server.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
-import * as PeerIndex from "../index/PeerIndex.ts";
 import { run } from "../local.ts";
 import { threadAgentOf, threadOfNative } from "./threadLookup.ts";
 import { currentRef } from "../vcs.ts";
@@ -81,14 +66,16 @@ import * as PeerAgents from "./PeerAgents.ts";
 
 /** Where coordination keeps its files. */
 export interface CoordinationPaths {
-  /** Peer's scripts for agents' hooks, and the agents' working contexts below it. */
+  /** Peer's scripts for agents' hooks, and each session's memory below it. */
   readonly dir: string;
   /** The broker's Unix socket, which only this user may open. */
   readonly socket: string;
   /** Every coordination event, one JSON line each. */
   readonly log: string;
-  /** Agents' working contexts, one file per session. */
+  /** Where a Peer from before kept agents' working contexts, which agents could read and edit. */
   readonly contexts: string;
+  /** What Peer remembers of telling each session, one file each. */
+  readonly memory: string;
   /** The `peer` command agents run. */
   readonly peer: string;
   /** The hook scripts agents' harnesses run. */
@@ -147,25 +134,6 @@ export const brokerPlugins = Effect.gen(function* () {
 export class PeerCoordination extends Context.Service<
   PeerCoordination,
   {
-    readonly contextViewsFrom: (readers: {
-      read: (input: PeerContextViewInput) => Effect.Effect<PeerContextView, PeerHubError>;
-      discover: (input: PeerContextArchiveInput) => Effect.Effect<PeerContextArchive, PeerHubError>;
-    }) => Effect.Effect<void>;
-    readonly pendingFindings: (input: {
-      workspace: string;
-      project: string;
-      scope?: string | undefined;
-      cursor?: string | undefined;
-      limit?: number | undefined;
-    }) => Effect.Effect<
-      {
-        readonly findings: ReadonlyArray<import("../hub/coordApi.ts").HubFinding>;
-        readonly nextCursor?: string | null | undefined;
-        readonly omittedCount: number;
-        readonly unsupported?: boolean | undefined;
-      },
-      PeerHubError
-    >;
     readonly paths: CoordinationPaths;
     readonly localProjects: Effect.Effect<
       NonNullable<NonNullable<PeerHubStatus["coordination"]["local"]>["projects"]>
@@ -192,30 +160,9 @@ export class PeerCoordination extends Context.Service<
     readonly settleOverlap: (
       input: PeerHubSettleOverlapInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    /** A task's shared context with its text; null when it has none yet. */
-    readonly readContext: (
-      input: PeerHubContextInput,
-    ) => Effect.Effect<PeerWorkContextText | null, PeerHubError>;
-    /** The versions of a shared context the hub keeps, newest first. */
-    readonly contextVersions: (
-      input: PeerHubContextInput,
-    ) => Effect.Effect<ReadonlyArray<PeerContextVersion>, PeerHubError>;
-    readonly readContextVersion: (
-      input: PeerHubContextVersionInput,
-    ) => Effect.Effect<PeerContextVersionText | null, PeerHubError>;
-    /** Brings an older version of a shared context back; its keeper goes on from it. */
-    readonly restoreContext: (
-      input: PeerHubContextVersionInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
     readonly coordEvents: (
       input: PeerHubCoordEventsInput,
     ) => Effect.Effect<ReadonlyArray<PeerCoordEvent>, PeerHubError>;
-    readonly staleReads: (
-      input: PeerHubStaleReadsInput,
-    ) => Effect.Effect<PeerStaleReads, PeerHubError>;
-    readonly publishedInputs: (
-      input: PeerHubContextVersionInput,
-    ) => Effect.Effect<PeerStaleReads, PeerHubError>;
   }
 >()("t3/peerHub/core/coordination/PeerCoordination") {}
 
@@ -229,7 +176,6 @@ const make = Effect.gen(function* () {
   const runs = (yield* PeerRuns.PeerRuns).book;
   const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
   const agents = yield* PeerAgents.PeerAgents;
-  const index = yield* PeerIndex.PeerIndex;
   const projections = yield* ProjectionStore.ProjectionStoreV2;
   const projects = yield* ProjectService.ProjectService;
   const continuationRequests = yield* ProviderContinuationRequests.ProviderContinuationRequests;
@@ -243,7 +189,6 @@ const make = Effect.gen(function* () {
   const services = yield* Effect.context<never>();
   const runPromise = Effect.runPromiseWith(services);
   const runFork = Effect.runForkWith(services);
-  let contextViews: Parameters<PeerCoordination["Service"]["contextViewsFrom"]>[0] | undefined;
   const { environmentId, current } = state;
   const hubApi = client.api;
   const publish = status.publish;
@@ -261,6 +206,7 @@ const make = Effect.gen(function* () {
         ),
     log: NodePath.join(config.logsDir, "coordination.jsonl"),
     contexts: NodePath.join(dir, "contexts"),
+    memory: NodePath.join(dir, "memory"),
     peer: NodePath.join(dir, "bin", "peer"),
     scripts: { hook: NodePath.join(dir, "hook"), wait: NodePath.join(dir, "wait") },
   };
@@ -286,20 +232,10 @@ const make = Effect.gen(function* () {
     scriptsDir: paths.dir,
     logPath: paths.log,
     log,
-    contextsDir: paths.contexts,
+    memoryDir: paths.memory,
+    formerMemoryPath: (path) =>
+      NodePath.join(paths.contexts, NodePath.relative(paths.memory, path)),
     environment: environmentId,
-    contextAuthority: (workspace) => {
-      if (workspace === PEER_LOCAL_WORKSPACE) return `local:${environmentId}`;
-      return new URL(client.hubUrl(current().persisted)).href.replace(/\/+$/, "");
-    },
-    contextView: (input) =>
-      contextViews === undefined
-        ? Promise.reject(new PeerHubError({ detail: "Current context service is unavailable." }))
-        : runPromise(contextViews.read(input)),
-    contextArchive: (input) =>
-      contextViews === undefined
-        ? Promise.reject(new PeerHubError({ detail: "Context archive service is unavailable." }))
-        : runPromise(contextViews.discover(input)),
     runs,
     placeOf: (cwd) => runPromise(state.placeOf(cwd)),
     runRootAt: (run, path) =>
@@ -321,8 +257,6 @@ const make = Effect.gen(function* () {
     threadOf: (nativeId) => runPromise(threadOfNative(projections, nativeId)),
     threadRuntime: work.runtimeOf,
     threadAgent: (key) => runPromise(threadAgentOf(projections, projects, key)),
-
-    contextLineage: (key) => runPromise(contextLineage(projections, key)),
     resumableThreads: () => runPromise(work.resumableThreads),
     nativeWakePending: async (session, thread) => {
       const messageId = nativeWakeMessages.get(session);
@@ -433,7 +367,6 @@ const make = Effect.gen(function* () {
       tasksOf(current().work, workspace, project).find((candidate) => candidate.id === task)
         ?.status === "done",
     work: (workspace, project) => current().work.get(projectKey(workspace, project))?.threads ?? [],
-    workKnown: (workspace, project) => current().work.has(projectKey(workspace, project)),
     report: (workspace, sessions) =>
       withHub((hubUrl, session) =>
         hubApi.reportCoordination(hubUrl, session, workspace, {
@@ -471,81 +404,8 @@ const make = Effect.gen(function* () {
           ...(filesAt === undefined ? {} : { filesAt }),
         }),
       ),
-    readContext: (workspace, project, scope) =>
-      withHub((hubUrl, session) => hubApi.readContext(hubUrl, session, workspace, project, scope)),
-    contextRead: (workspace, project, scope, agentSession, version, op) =>
-      withHub((hubUrl, session) =>
-        hubApi.contextRead(hubUrl, session, workspace, project, scope, {
-          environment: environmentId,
-          session: agentSession,
-          version,
-          op,
-        }),
-      ),
-    staleReads: (workspace, project, agentSession) =>
-      withHub((hubUrl, session) =>
-        hubApi.staleReads(hubUrl, session, workspace, project, {
-          environment: environmentId,
-          session: agentSession,
-        }),
-      ),
     coordEvents: (workspace, project, filter) =>
       withHub((hubUrl, session) => hubApi.coordEvents(hubUrl, session, workspace, project, filter)),
-    keepContext: (workspace, project, scope, agentSession, release, epoch, op) =>
-      withHub((hubUrl, session) =>
-        hubApi.keepContext(hubUrl, session, workspace, project, scope, {
-          environment: environmentId,
-          session: agentSession,
-          ...(release ? { release: true } : {}),
-          ...(epoch === undefined ? {} : { epoch }),
-          ...(op === undefined ? {} : { op }),
-        }),
-      ),
-    pendingFindings: (workspace, project, scope, cursor, limit) =>
-      withHub((hubUrl, session) =>
-        hubApi.pendingFindings(hubUrl, session, workspace, project, scope, cursor, limit),
-      ),
-    recoverInputs: (workspace, project, agentSession, reason, reads, coverage, op) =>
-      withHub((hubUrl, session) =>
-        hubApi.recoverInputs(hubUrl, session, workspace, project, {
-          environment: environmentId,
-          session: agentSession,
-          reason,
-          reads,
-          coverage,
-          ...(op === undefined ? {} : { op }),
-        }),
-      ),
-    writeContext: (
-      workspace,
-      project,
-      scope,
-      agentSession,
-      baseVersion,
-      text,
-      epoch,
-      op,
-      findingDecisions,
-    ) =>
-      withHub((hubUrl, session) =>
-        hubApi.writeContext(hubUrl, session, workspace, project, scope, {
-          environment: environmentId,
-          session: agentSession,
-          baseVersion,
-          text,
-          ...(findingDecisions === undefined ? {} : { findingDecisions }),
-          ...(epoch === undefined ? {} : { epoch }),
-          ...(op === undefined ? {} : { op }),
-        }),
-      ),
-    contextVersions: (workspace, project, scope) =>
-      withHub((hubUrl, session) =>
-        hubApi.contextVersions(hubUrl, session, workspace, project, scope),
-      ),
-    readContextVersion: (workspace, project, scope, version) =>
-      withHub((hubUrl, session) =>
-        hubApi.contextVersion(hubUrl, session, workspace, project, scope, version),
-      ),
     changed: () => void runFork(publish.pipe(Effect.ignore)),
     plugins: () =>
       runPromise(brokerPlugins.pipe(Effect.provideService(PeerPlugins.PeerPlugins, plugins))),
@@ -571,12 +431,10 @@ const make = Effect.gen(function* () {
       catch: (failure) => hubError(`Agent coordination could not start: ${messageOf(failure)}`),
     });
     yield* agents.attach(broker);
-    yield* index.attach(broker);
   });
 
   const stop: PeerCoordination["Service"]["stop"] = Effect.gen(function* () {
     yield* agents.attach(null);
-    yield* index.attach(null);
     yield* Effect.promise(async () => {
       const running = broker;
       broker = null;
@@ -635,15 +493,6 @@ const make = Effect.gen(function* () {
     return yield* publish;
   });
 
-  const readContext: PeerCoordination["Service"]["readContext"] = (input) =>
-    onBroker(() => host().readContext(input.workspace, input.project, input.scope)).pipe(
-      Effect.map((context) =>
-        context === null
-          ? null
-          : { ...context, workspace: input.workspace, bytes: context.bytes ?? context.text.length },
-      ),
-    );
-
   const coordEvents: PeerCoordination["Service"]["coordEvents"] = Effect.fn(
     "PeerCoordination.coordEvents",
   )(function* (input) {
@@ -658,79 +507,7 @@ const make = Effect.gen(function* () {
     });
   });
 
-  const staleReads: PeerCoordination["Service"]["staleReads"] = Effect.fn(
-    "PeerCoordination.staleReads",
-  )(function* (input) {
-    if (input.workspace === PEER_LOCAL_WORKSPACE)
-      return yield* onBroker(() => local.staleReads(input.project, input.session));
-    yield* state.project(input.workspace, input.project);
-    const { hubUrl, session } = yield* client.session;
-    return yield* hubApi.staleReads(hubUrl, session, input.workspace, input.project, input);
-  });
-
-  const contextVersions: PeerCoordination["Service"]["contextVersions"] = (input) =>
-    onBroker(() => host().contextVersions(input.workspace, input.project, input.scope));
-
-  const publishedInputs: PeerCoordination["Service"]["publishedInputs"] = Effect.fn(
-    "PeerCoordination.publishedInputs",
-  )(function* (input) {
-    if (input.workspace === PEER_LOCAL_WORKSPACE)
-      return yield* onBroker(() =>
-        local.publishedInputs(input.project, input.scope, input.version),
-      );
-    yield* state.project(input.workspace, input.project);
-    const { hubUrl, session } = yield* client.session;
-    return yield* hubApi.publishedInputs(
-      hubUrl,
-      session,
-      input.workspace,
-      input.project,
-      input.scope,
-      input.version,
-    );
-  });
-
-  const readContextVersion: PeerCoordination["Service"]["readContextVersion"] = (input) =>
-    onBroker(() =>
-      host().readContextVersion(input.workspace, input.project, input.scope, input.version),
-    );
-
-  const restoreContext: PeerCoordination["Service"]["restoreContext"] = Effect.fn(
-    "PeerCoordination.restoreContext",
-  )(function* (input) {
-    if (input.workspace === PEER_LOCAL_WORKSPACE) {
-      yield* onBroker(() => local.restoreContext(input.project, input.scope, input.version));
-      broker?.hubChanged();
-      return yield* publish;
-    }
-    const { hubUrl, session } = yield* client.session;
-    yield* hubApi.restoreContext(
-      hubUrl,
-      session,
-      input.workspace,
-      input.project,
-      input.scope,
-      input.version,
-    );
-    // Its keeper here, if any, hears of it at its next step; the status follows the new version.
-    broker?.hubChanged();
-    return yield* publish;
-  });
-
   return PeerCoordination.of({
-    pendingFindings: (input) =>
-      onBroker(() => {
-        const read = host().pendingFindings;
-        return read === undefined
-          ? Promise.reject(
-              new PeerHubError({ detail: "The context authority cannot list pending findings." }),
-            )
-          : read(input.workspace, input.project, input.scope, input.cursor, input.limit);
-      }),
-    contextViewsFrom: (readers) =>
-      Effect.sync(() => {
-        contextViews = readers;
-      }),
     paths,
     localView: onBroker(() => local.view()),
     localProjects,
@@ -742,13 +519,7 @@ const make = Effect.gen(function* () {
     noteOverlap,
     resolveOverlap,
     settleOverlap,
-    readContext,
-    contextVersions,
-    readContextVersion,
-    restoreContext,
     coordEvents,
-    staleReads,
-    publishedInputs,
   });
 });
 

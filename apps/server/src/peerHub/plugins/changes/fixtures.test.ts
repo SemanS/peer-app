@@ -226,8 +226,6 @@ const COORDINATION: PeerHubStatus["coordination"] = {
   logPath: "/tmp/coordination.jsonl",
   sessions: [],
   overlaps: [],
-  findings: [],
-  contexts: [],
 };
 
 /** What a test makes its Hub do: the rows it serves, and the answer to a report. */

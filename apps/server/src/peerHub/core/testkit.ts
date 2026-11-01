@@ -1,4 +1,3 @@
-import * as PeerContextView from "./index/PeerContextView.ts";
 import * as PeerLog from "./log/PeerLog.ts";
 // @effect-diagnostics nodeBuiltinImport:off - peer-hub.json and git repositories in temporary directories, a stand-in Hub on a local port.
 /**
@@ -34,7 +33,6 @@ import * as PeerAgents from "./coordination/PeerAgents.ts";
 import * as PeerCoordination from "./coordination/PeerCoordination.ts";
 import * as PeerHubClient from "./hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./hub/PeerHubEvents.ts";
-import * as PeerIndex from "./index/PeerIndex.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
 import * as PeerPlugins from "./plugins/PeerPlugins.ts";
 import { PeerPluginRegistry } from "./registry.ts";
@@ -252,7 +250,6 @@ export const coreLayer = (
 ) =>
   PeerWorkspaces.layer.pipe(
     Layer.provideMerge(PeerAgents.layer),
-    Layer.provideMerge(PeerIndex.layer),
     Layer.provideMerge(PeerHubEvents.layer),
     Layer.provideMerge(PeerWork.layer),
     Layer.provideMerge(PeerStatus.layer),
@@ -410,7 +407,6 @@ const unused = <I, S extends object>(service: Context.Key<I, S>) =>
  * gives `PeerHub.rpcLayer` besides the plugins.
  */
 export const coreRpcStandIns = Layer.mergeAll(
-  unused(PeerContextView.PeerContextView),
   unused(PeerState.PeerState),
   unused(PeerHubClient.PeerHubClient),
   unused(PeerStatus.PeerStatus),

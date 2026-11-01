@@ -22,15 +22,11 @@ describe("automatic team discovery", () => {
   });
 
   it.each(["claude", "codex"] as const)(
-    "offers work to %s from an ordinary prompt and delivers changes between tool steps",
+    "tells %s at its start who else is at work, and does not interrupt its steps with it",
     async (agent) => {
       const fixture = await brokerFixture();
       try {
-        await fixture.broker["sessionFor"](
-          agent,
-          { session_id: "summary", cwd: fixture.root },
-          undefined,
-        );
+        fixture.broker["syncNow"] = async () => {};
         const view: HubCoordView = {
           sessions: [other("codex:counts")],
           overlaps: [],
@@ -39,51 +35,47 @@ describe("automatic team discovery", () => {
         fixture.broker["views"].set("acme", view);
         const body = { session_id: "summary", cwd: fixture.root };
         const headers = { "x-peer-agent": agent };
-        const first = await fixture.broker["hook"](
-          {
-            ...body,
-            hook_event_name: "UserPromptSubmit",
-            prompt: "Add a release readiness summary with open tasks and blockers.",
-          },
-          headers,
+        const start = JSON.stringify(
+          await fixture.broker["hook"](
+            { ...body, hook_event_name: "SessionStart", source: "startup" },
+            headers,
+          ),
         );
-        const packet = JSON.stringify(first);
-        expect(packet).toContain("counts");
-        expect(packet).toContain("Separate blocked tasks");
-        expect(packet).toContain("src/domain.js");
-        const step = {
-          ...body,
-          hook_event_name: "PostToolUse",
-          tool_name: "Read",
-          tool_input: { file_path: "src/domain.js" },
-        };
-        expect(await fixture.broker["hook"](step, headers)).toBeNull();
-
-        const context = {
-          project: "app",
-          scope: "task:counts",
-          version: 1,
-          gist: "Task count contract",
-          updatedAt: new Date().toISOString(),
-        };
-        fixture.broker["views"].set("acme", { ...view, contexts: [context] });
-        expect(JSON.stringify(await fixture.broker["hook"](step, headers))).toContain("v1");
-        fixture.broker["views"].set("acme", { ...view, contexts: [{ ...context, version: 2 }] });
-        expect(JSON.stringify(await fixture.broker["hook"](step, headers))).toContain("v2");
-        expect(await fixture.broker["hook"](step, headers)).toBeNull();
-        expect(fixture.broker["sessions"].get(`${agent}:summary`)?.read.size).toBe(0);
-
+        expect(start).toContain("Also on this project now");
+        expect(start).toContain("counts");
+        expect(start).toContain("src/domain.js");
+        expect(
+          await fixture.broker["hook"](
+            {
+              ...body,
+              hook_event_name: "UserPromptSubmit",
+              prompt: "Add a release readiness summary with open tasks and blockers.",
+            },
+            headers,
+          ),
+        ).toBeNull();
         fixture.broker["views"].set("acme", {
           ...view,
-          contexts: [{ ...context, version: 2 }],
           sessions: [
             ...view.sessions,
             other("claude:new", { task: "export", label: "Export release report", files: [] }),
           ],
         });
-        const joined = JSON.stringify(await fixture.broker["hook"](step, headers));
-        expect(joined).toContain("Export release report");
-        expect(joined).not.toContain("Task count contract");
+        expect(
+          await fixture.broker["hook"](
+            {
+              ...body,
+              hook_event_name: "PostToolUse",
+              tool_name: "Read",
+              tool_input: { file_path: "src/domain.js" },
+            },
+            headers,
+          ),
+        ).toBeNull();
+        const index = await fixture.broker["runCli"]("index", [], {
+          "x-peer-session": `${agent}:summary`,
+        });
+        expect(index).toContain("Export release report");
       } finally {
         await fixture.dispose();
       }
@@ -124,16 +116,7 @@ describe("automatic team discovery", () => {
           headers,
         );
         expect(fixture.broker["sessions"].get(`${agent}:rename`)?.task).toBe("krk-1");
-        expect(JSON.stringify(start)).not.toContain("Other work on this project");
-        const ask = await fixture.broker["hook"](
-          {
-            ...body,
-            hook_event_name: "UserPromptSubmit",
-            prompt: "Rename price() to totalPrice() in src/pricing.ts and update every caller.",
-          },
-          headers,
-        );
-        expect(JSON.stringify(ask)).not.toContain("Give price() a VAT rate");
+        expect(JSON.stringify(start)).not.toContain("Also on this project now");
         const cli = { "x-peer-session": `${agent}:rename` };
         expect(await fixture.broker["runCli"]("index", [], cli)).toContain(
           "no other work on this project",
@@ -142,7 +125,7 @@ describe("automatic team discovery", () => {
         expect(status).toContain("Also on your task");
         expect(status).toContain("No other work on this project now.");
 
-        // Another task is the others' work, and the next step names it alone.
+        // Another task is the others' work, and the index names it alone.
         fixture.broker["views"].set("acme", {
           ...view,
           sessions: [
@@ -150,19 +133,9 @@ describe("automatic team discovery", () => {
             other("codex:receipts", { task: "krk-2", label: "Receipts in euros" }),
           ],
         });
-        const step = JSON.stringify(
-          await fixture.broker["hook"](
-            {
-              ...body,
-              hook_event_name: "PostToolUse",
-              tool_name: "Read",
-              tool_input: { file_path: "src/pricing.ts" },
-            },
-            headers,
-          ),
-        );
-        expect(step).toContain("Receipts in euros");
-        expect(step).not.toContain("Give price() a VAT rate");
+        const index = await fixture.broker["runCli"]("index", [], cli);
+        expect(index).toContain("Receipts in euros");
+        expect(index).not.toContain("Give price() a VAT rate");
       } finally {
         await fixture.dispose();
       }
@@ -173,6 +146,7 @@ describe("automatic team discovery", () => {
     const fixture = await brokerFixture();
     try {
       await fixture.register("summary");
+      fixture.broker["syncNow"] = async () => {};
       fixture.broker["views"].set("acme", {
         sessions: [
           other("codex:counts", { task: undefined }),
@@ -186,23 +160,17 @@ describe("automatic team discovery", () => {
         overlaps: [],
         at: new Date().toISOString(),
       });
-      const response = await fixture.broker["hook"](
-        {
-          session_id: "summary",
-          cwd: fixture.root,
-          hook_event_name: "UserPromptSubmit",
-          prompt: "Show release readiness.",
-        },
-        {},
-      );
-      expect(JSON.stringify(response)).toContain("Separate blocked tasks");
-      expect(JSON.stringify(response)).not.toContain("secret");
+      const index = await fixture.broker["runCli"]("index", [], {
+        "x-peer-session": "claude:summary",
+      });
+      expect(index).toContain("Separate blocked tasks");
+      expect(index).not.toContain("secret");
     } finally {
       await fixture.dispose();
     }
   });
 
-  it("lets an explicit index reach work beyond the automatic batch without recording reads", async () => {
+  it("lets an explicit index reach work beyond the first page", async () => {
     const fixture = await brokerFixture();
     try {
       await fixture.register("reader");
@@ -224,66 +192,8 @@ describe("automatic team discovery", () => {
         outcome: "usage",
         reason: expect.stringContaining("page"),
       });
-      expect(fixture.broker["sessions"].get("claude:reader")?.read.size).toBe(0);
     } finally {
       await fixture.dispose();
     }
   });
-
-  it.each([false, true])(
-    "notifies a read dependency without an exact committed mirror (pending edit: %s) and still discovers activity",
-    async (pendingEdit) => {
-      const initial = {
-        project: "app",
-        scope: "task:counts",
-        version: 1,
-        text: "Contract v1",
-        updatedAt: new Date().toISOString(),
-        gist: "Counts",
-      };
-      const fixture = await brokerFixture(() => ({ readContext: async () => initial }));
-      try {
-        await fixture.register("reader");
-        fixture.broker["syncNow"] = async () => {};
-        const view: HubCoordView = {
-          sessions: [other("codex:counts")],
-          contexts: [initial],
-          overlaps: [],
-          at: initial.updatedAt,
-        };
-        fixture.broker["views"].set("acme", view);
-        const session = fixture.broker["sessions"].get("claude:reader")!;
-        await fixture.broker["contextCli"](session, initial.scope, undefined);
-        const current = { ...initial, version: 2, gist: "Corrected counts" };
-        fixture.broker["views"].set("acme", { ...view, contexts: [current] });
-        if (pendingEdit) {
-          const mirror = await fixture.broker["mirror"]("acme", {
-            ...current,
-            text: "Not committed\nWrong\nDiff",
-          });
-          mirror.unsent = true;
-        }
-        const notice = fixture.broker["news"](session)!;
-        expect(notice).toContain("version 2");
-        expect(notice).not.toContain("lines added");
-        expect(notice).not.toContain("Corrected counts");
-        expect(session.read.get(initial.scope)?.version).toBe(1);
-        expect(fixture.broker["news"](session)).toBeNull();
-
-        // v3's dedicated notice is throttled, but an agent joining must not disappear with it.
-        fixture.broker["views"].set("acme", {
-          ...view,
-          contexts: [{ ...current, version: 3 }],
-          sessions: [...view.sessions, other("claude:joined", { label: "Audit blockers" })],
-        });
-        const activity = fixture.broker["news"](session)!;
-        expect(activity).toContain("Audit blockers");
-        expect(activity).toContain("[v3]");
-        expect(session.read.get(initial.scope)?.version).toBe(1);
-        expect(fixture.broker["news"](session)).toBeNull();
-      } finally {
-        await fixture.dispose();
-      }
-    },
-  );
 });

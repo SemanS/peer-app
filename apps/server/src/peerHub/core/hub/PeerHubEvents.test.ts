@@ -32,8 +32,6 @@ const coordination: PeerHubStatus["coordination"] = {
   logPath: "/tmp/coordination.jsonl",
   sessions: [],
   overlaps: [],
-  findings: [],
-  contexts: [],
 };
 
 type Heard = Queue.Queue<string>;

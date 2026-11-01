@@ -172,8 +172,6 @@ export async function callTools(
       "restart the MCP server from the current agent process.",
     );
   const plugins = await this.plugins();
-  await this.readTeamLines(session);
-  if (session.keeps) await this.saveShared(session);
   const deliveries: PreparedDelivery[] = [];
   const step = this.pipelineStep(session, plugins, Date.now() + 2500, deliveries);
   const blocks = first ? startBlocks(step, "startup") : Promise.resolve(null);
@@ -211,9 +209,6 @@ export async function endTools(this: CoordinationBroker, id: string) {
   const step = this.pipelineStep(session, await this.plugins(), Date.now() + 2500);
   for (const pending of session.pending.splice(0))
     if (typeof pending !== "string") await notifyDeliveries(pending.deliveries, "dropped");
-  await this.readTeamLines(session);
-  if (session.keeps) await this.saveShared(session);
-  await this.release(session);
   this.leaveRun(session);
   this.sessions.delete(id);
   this.markDirty();

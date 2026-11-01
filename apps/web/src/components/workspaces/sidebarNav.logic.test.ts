@@ -19,7 +19,6 @@ function task(id: string, overrides: Partial<WorkTaskNode> = {}): WorkTaskNode {
     status: "idle",
     threads: [],
     removable: true,
-    context: undefined,
     ...overrides,
   };
 }
@@ -40,7 +39,6 @@ function project(
     name: id,
     areas: [{ name: "Orders", tasks }],
     unsorted,
-    context: undefined,
     tasks: tasks.map((t) => hubTask(t.id, t.done ? "done" : "open")),
   };
 }

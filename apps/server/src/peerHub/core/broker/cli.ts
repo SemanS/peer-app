@@ -1,12 +1,11 @@
-import { currentViewCommand } from "../index/contextViewCommand.ts";
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off - the peer command's requests on the broker's socket, and its caller in wall-clock time.
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
 /**
  * The `peer` command agents run: core's commands and the plugins', `peer help`, and how long the
  * `peer` shim waits for each command.
  *
- * Core's commands are coordination's own (status, notes, claims, contexts, the index); the broker
- * runs them. A plugin's command runs while its plugin is active. While it is not, it answers
+ * Core's commands are coordination's own (status, claims, the index, runs, tasks); the broker runs
+ * them. A plugin's command runs while its plugin is active. While it is not, it answers
  * 409 with one line and touches nothing, and `peer help` leaves it out. The shim's waits come from
  * every registered command, active or not, so turning a plugin on or off never rewrites the shim.
  *
@@ -20,11 +19,10 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
 import { clip, cutText, neutral } from "../../peerText.ts";
-import { scopeOf } from "../contexts/text.ts";
 import { generatedFile, shortId } from "../coordination/edits.ts";
 import { statusText } from "../coordination/news.ts";
 import { BOARD_ALL } from "../index/board.ts";
-import { type CommandsOn, discoveryKey, INDEX_ALL, indexText } from "../index/text.ts";
+import { type CommandsOn, INDEX_ALL, indexText } from "../index/text.ts";
 import type { PeerCommand } from "../plugin.ts";
 import { CORE_COMMANDS } from "../registry.ts";
 import type { CoordinationBroker } from "./Broker.ts";
@@ -37,7 +35,6 @@ import { newOp } from "./sync.ts";
 import { sessionTaskName, TASK_FLAGS, TASK_SWITCHES, taskCommand } from "./tasks.ts";
 import { SHARE_FLAGS, shareCommand, UNSHARED } from "./share.ts";
 import { helpText } from "./help.ts";
-import { checkpointInputs, inputCommand } from "./inputCheckpoints.ts";
 
 /** How long the `peer` shim waits for Peer's answer to a command that says nothing else. */
 export const DEFAULT_WAIT_SECONDS = 15;
@@ -106,10 +103,6 @@ export function commandArguments(args: ReadonlyArray<string>): CommandArguments 
 }
 
 const CORE_FLAGS: Readonly<Record<string, ReadonlyArray<string>>> = {
-  current: ["--cursor", "--limit"],
-  archive: ["--cursor", "--limit", "--history", "--topic"],
-  evidence: ["--cursor", "--limit"],
-  inputs: ["--since", "--page", "--drop"],
   resolve: ["--overlap"],
   log: ["--task", "--path"],
   task: TASK_FLAGS,
@@ -313,10 +306,6 @@ export async function runCli(
         (flag("--overlap") === undefined || o.id.startsWith(flag("--overlap") ?? "")),
     );
   switch (command) {
-    case "current":
-    case "archive":
-    case "evidence":
-      return currentViewCommand(this, command, parsed, session);
     case "status": {
       await this.syncNow(session.workspace, 3000);
       const board = this.board(session, BOARD_ALL);
@@ -343,7 +332,6 @@ export async function runCli(
         nameOf: this.nameOf(session.workspace),
         taskName: this.taskNamer(session.workspace, session.project),
         board,
-        now: Date.now(),
         cli: this.cli,
         on: commandsOn(plugins),
         unsupported: await unsupportedCheckout(session),
@@ -451,95 +439,8 @@ export async function runCli(
         ...held.map((path) => `${neutral(path)}: held until this session ends (Hub path intents).`),
       ].join("\n");
     }
-    case "inputs":
-      return inputCommand(this, session, parsed);
-    case "context": {
-      if (plain[0] === "decide") return this.decideFindings(session, plain[1]);
-      // `peer context [<task>] [history|<version>]`: its own work's, or another work's.
-      const first = plain[0];
-      const own =
-        first === undefined || first === "history" || first === "findings" || /^\d+$/.test(first);
-      const scope = own
-        ? scopeOf(session.task)
-        : this.scopeNamed(session.workspace, session.project, first);
-      if (scope === undefined) {
-        throw usage(
-          `no task "${first}" on ${session.project}`,
-          "run peer index for task names, then peer context <task>.",
-        );
-      }
-      return this.contextCli(session, scope, own ? first : plain[1], own ? plain[1] : plain[2]);
-    }
-    case "ack": {
-      const handle = plain[0];
-      const scope =
-        handle === undefined
-          ? undefined
-          : this.scopeNamed(session.workspace, session.project, handle);
-      if (scope === undefined)
-        throw usage("name the task whose changed context you accept", "run peer ack <task>.");
-      const current = await hubRead(
-        "ack",
-        () => this.host.readContext(session.workspace, session.project, scope),
-        "run peer ack <task> again when the Hub is reachable.",
-      );
-      if (current === null || current.version === 0)
-        throw refused(
-          "no current shared context is available",
-          "run peer context <task> once its keeper publishes it.",
-        );
-      if (this.host.contextRead === undefined)
-        throw refused(
-          "this Hub cannot record version acknowledgements",
-          "ask your person to update the Peer Hub.",
-        );
-      await hubWrite(
-        "ack",
-        () =>
-          this.host.contextRead!(
-            session.workspace,
-            session.project,
-            scope,
-            session.id,
-            current.version,
-            newOp(),
-          ),
-        "read and confirm the current version with peer context <task>, then retry.",
-      );
-      this.markRead(session, scope, current.version, current.text);
-      await checkpointInputs(this, session);
-      this.record("context.ack", { session: session.id, scope, version: current.version });
-      return `Acknowledged the change to ${handle}, version ${current.version}. You remain responsible for checking how it affects your work.`;
-    }
-    case "log": {
-      if (this.host.coordEvents === undefined)
-        throw refused(
-          "this Hub does not provide coordination history",
-          "ask your person to update the Peer Hub.",
-        );
-      const task = flag("--task");
-      const path = flag("--path");
-      const scope =
-        task === undefined ? undefined : this.scopeNamed(session.workspace, session.project, task);
-      const events = await hubRead(
-        "log",
-        () =>
-          this.host.coordEvents!(session.workspace, session.project, {
-            ...(scope?.startsWith("task:") ? { task: scope.slice(5) } : {}),
-            ...(path === undefined ? {} : { path }),
-            limit: 50,
-          }),
-        "run peer log again when the Hub is reachable.",
-      );
-      return events.length === 0
-        ? "No coordination events yet."
-        : events
-            .map(
-              (event) =>
-                `${event.at} ${event.kind} ${event.scope ?? event.task ?? ""}${event.version === undefined ? "" : ` v${event.version}`} ${event.paths.join(", ")}`,
-            )
-            .join("\n");
-    }
+    case "log":
+      return coordinationLog(this, session, flag("--task"), flag("--path"));
     case "run":
       return this.runCommand(session);
     case "task":
@@ -547,28 +448,56 @@ export async function runCli(
     case "index": {
       // The project's other work, as at a start but all of it.
       await this.syncNow(session.workspace, 3000);
-      const index = this.indexOf(plugins);
-      const all = this.indexWorks(session, Number.POSITIVE_INFINITY);
+      const all = this.board(session, Number.POSITIVE_INFINITY);
       const pages = Math.max(1, Math.ceil(all.length / INDEX_ALL));
       const page = Number(plain[0] ?? 1);
       if (!Number.isInteger(page) || page < 1 || page > pages)
         throw usage(`choose an index page from 1 to ${pages}`, "run peer index <page>.");
-      const works = all.slice((page - 1) * INDEX_ALL, page * INDEX_ALL);
-      for (const entry of works) session.told.set(entry.scope, discoveryKey(entry));
       const result =
         indexText({
-          works,
-          now: Date.now(),
+          works: all.slice((page - 1) * INDEX_ALL, page * INDEX_ALL),
           cli: this.cli,
           shown: INDEX_ALL,
           full: true,
-          on: index.on,
         }) ?? "peer: no other work on this project now.";
       return `${result}${pages > 1 ? `\nPage ${page}/${pages}.${page < pages ? ` Next: ${this.cli} index ${page + 1}` : ""}` : ""}`;
     }
     default:
       throw usage(`${command} is not a command`, "run peer help for the commands.");
   }
+}
+
+/** `peer log`: the project's history as the Hub committed it, or of one task or path. */
+export async function coordinationLog(
+  broker: CoordinationBroker,
+  place: { readonly workspace: string; readonly project: string },
+  taskHandle: string | undefined,
+  path: string | undefined,
+): Promise<string> {
+  const coordEvents = broker.host.coordEvents;
+  if (coordEvents === undefined)
+    throw refused(
+      "this Hub does not provide coordination history",
+      "ask your person to update the Peer Hub.",
+    );
+  const { workspace, project } = place;
+  const task =
+    taskHandle === undefined ? undefined : broker.taskNamed(workspace, project, taskHandle);
+  const events = await hubRead(
+    "log",
+    () =>
+      coordEvents(workspace, project, {
+        ...(task === undefined ? {} : { task }),
+        ...(path === undefined ? {} : { path }),
+        limit: 50,
+      }),
+    "run peer log again when the Hub is reachable.",
+  );
+  return events.length === 0
+    ? "No coordination events yet."
+    : events
+        .map((event) => `${event.at} ${event.kind} ${event.task ?? ""} ${event.paths.join(", ")}`)
+        .join("\n");
 }
 
 /** `peer help`: core's commands, then the active plugins'. */

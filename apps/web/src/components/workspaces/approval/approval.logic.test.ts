@@ -25,7 +25,6 @@ function thread(key: string, threadId: string): WorkThreadNode {
     observable: false,
     agent: undefined,
     activeAt: undefined,
-    keepsContext: false,
   };
 }
 
@@ -46,13 +45,11 @@ const booking: WorkProjectNode = {
           status: "blocked",
           threads: [thread("peer:opera", "opera")],
           removable: true,
-          context: undefined,
         },
       ],
     },
   ],
   unsorted: [thread("peer:loose", "loose")],
-  context: undefined,
   tasks: [],
 };
 

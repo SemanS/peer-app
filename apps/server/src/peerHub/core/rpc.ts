@@ -1,4 +1,3 @@
-import * as PeerContextView from "./index/PeerContextView.ts";
 /** Peer RPC uses ws.ts authorization; inactive or absent plugins return an explicit refusal. */
 import {
   PEER_CORE_METHODS,
@@ -33,7 +32,6 @@ const PEER_TRACE = { "rpc.aggregate": "peerHub" } as const;
 
 /** The core services Peer's RPC handlers call. */
 export type PeerRpcServices =
-  | PeerContextView.PeerContextView
   | PeerWorkspaces.PeerWorkspaces
   | PeerWork.PeerWork
   | PeerCoordination.PeerCoordination
@@ -54,7 +52,6 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
       const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
       const work = yield* PeerWork.PeerWork;
       const coordination = yield* PeerCoordination.PeerCoordination;
-      const contextView = yield* PeerContextView.PeerContextView;
       const adapters = yield* PeerAdapters.PeerAdapters;
       const plugins = yield* PeerPlugins.PeerPlugins;
       const status = yield* PeerStatus.PeerStatus;
@@ -168,44 +165,6 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubCoordEvents,
               coordination.coordEvents(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubStaleReads]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubStaleReads,
-              coordination.staleReads(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubContextView]: (input) =>
-            wrap.effect(PEER_CORE_METHODS.peerHubContextView, contextView.read(input), PEER_TRACE),
-          [PEER_CORE_METHODS.peerHubContextArchive]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubContextArchive,
-              contextView.discover(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubReadContext]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubReadContext,
-              coordination.readContext(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubContextVersions]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubContextVersions,
-              coordination.contextVersions(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubReadContextVersion]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubReadContextVersion,
-              coordination.readContextVersion(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubRestoreContext]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubRestoreContext,
-              coordination.restoreContext(input),
               PEER_TRACE,
             ),
           [PEER_CORE_METHODS.peerHubShareProject]: (input) =>

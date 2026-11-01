@@ -1,9 +1,3 @@
-import type {
-  PeerContextViewInput,
-  PeerContextView,
-  PeerContextArchiveInput,
-  PeerContextArchive,
-} from "@t3tools/contracts";
 /**
  * What the coordination broker runs on: one host, built from core's services and the active
  * plugins (`core/coordination/PeerCoordination.ts`), or from fakes in tests (`testkit.ts`). The
@@ -13,11 +7,8 @@ import type {
  * @module peerHub/core/broker/host
  */
 import type {
-  PeerContextRead,
-  PeerFindingDecisionInput,
   PeerCoordEvent,
   PeerCoordinationPolicy,
-  PeerStaleReads,
   PeerWorkStatus,
   PeerWorkThread,
 } from "@t3tools/contracts";
@@ -26,12 +17,7 @@ import type { ResumableNativeThread } from "../../workLifecycle.ts";
 
 import type { PeerHubContinueRunInput, PeerHubContinueRunResult } from "@t3tools/contracts";
 import type {
-  ContextRefusal,
-  HubContextText,
-  HubContextVersion,
-  HubContextVersionText,
   HubCoordView,
-  HubFinding,
   HubIntentAnswer,
   HubIntentRequest,
   HubOverlap,
@@ -96,13 +82,11 @@ export interface PeerBrokerHost {
   readonly scriptsDir: string;
   readonly logPath: string;
   readonly log: import("../metricsLog.ts").MetricsLog;
-  /** Where agents keep their working contexts, one file per session. */
-  readonly contextsDir: string;
+  /** Where each session's memory file is kept (`sessionMemory.ts`). */
+  readonly memoryDir: string;
+  /** Where a Peer from before kept the memory file at `path`. */
+  readonly formerMemoryPath: (path: string) => string;
   readonly environment: string;
-  /** Canonical source authority for durable references; absent means identity cannot be proved. */
-  readonly contextAuthority?: (workspace: string) => string | undefined;
-  readonly contextView?: (input: PeerContextViewInput) => Promise<PeerContextView>;
-  readonly contextArchive?: (input: PeerContextArchiveInput) => Promise<PeerContextArchive>;
 
   /** This computer's runs (`core/work/runs.ts`). Absent: sessions run without runs, as before them. */
   readonly runs?: RunBook;
@@ -150,11 +134,6 @@ export interface PeerBrokerHost {
     thread: string,
   ) => Promise<{ readonly agent: string; readonly nativeId?: string; readonly cwd: string } | null>;
   /** Native conversations whose processes were released only because they were idle. */
-  /** Sources and immutable time boundaries of a thread's context transfers. */
-  readonly contextLineage?: (thread: string) => Promise<{
-    readonly sources: ReadonlyArray<{ readonly thread: string; readonly cutoff: string }>;
-    readonly required: boolean;
-  } | null>;
   readonly resumableThreads?: () => Promise<ReadonlyArray<ResumableNativeThread>>;
   readonly queueNative?: (session: string, text: string, thread: string) => Promise<boolean>;
   /** Continues a detached run, as `peerHub.continueRun` does. */
@@ -251,11 +230,6 @@ export interface PeerBrokerHost {
   readonly taskDone: (workspace: string, project: string, task: string) => boolean;
   /** Durable unfinished work, including sessions no longer available to answer an ask. */
   readonly work?: (workspace: string, project: string) => ReadonlyArray<PeerWorkThread>;
-  /**
-   * Whether Peer has read the project's work from the Hub since it started: until then its tasks
-   * have no names, and a work goes by its task's id.
-   */
-  readonly workKnown?: (workspace: string, project: string) => boolean;
 
   readonly report: (
     workspace: string,
@@ -299,86 +273,11 @@ export interface PeerBrokerHost {
     op: string,
     filesAt?: string,
   ) => Promise<HubOverlap | HubUnsupported>;
-  /** A shared context with its text, or null when it has none. */
-  readonly readContext: (
-    workspace: string,
-    project: string,
-    scope: string,
-  ) => Promise<HubContextText | null>;
-  readonly contextRead?: (
-    workspace: string,
-    project: string,
-    scope: string,
-    session: string,
-    version: number,
-    op: string,
-  ) => Promise<PeerContextRead>;
-  readonly staleReads?: (
-    workspace: string,
-    project: string,
-    session: string,
-  ) => Promise<PeerStaleReads>;
   readonly coordEvents?: (
     workspace: string,
     project: string,
     filter: { readonly task?: string; readonly path?: string; readonly limit?: number },
   ) => Promise<ReadonlyArray<PeerCoordEvent>>;
-  /** Asks for a session to keep a shared context, or gives it up (`release`). */
-  readonly keepContext: (
-    workspace: string,
-    project: string,
-    scope: string,
-    session: string,
-    release: boolean,
-    epoch?: number,
-    op?: string,
-  ) => Promise<HubContextText | ContextRefusal>;
-  /** A new version of a shared context from the session that keeps it. */
-  readonly pendingFindings?: (
-    workspace: string,
-    project: string,
-    scope?: string,
-    cursor?: string,
-    limit?: number,
-  ) => Promise<{
-    readonly findings: ReadonlyArray<HubFinding>;
-    readonly nextCursor?: string | null | undefined;
-    readonly omittedCount: number;
-    readonly unsupported?: boolean | undefined;
-  }>;
-  readonly recoverInputs?: (
-    workspace: string,
-    project: string,
-    session: string,
-    reason: string,
-    reads: ReadonlyArray<{ readonly scope: string; readonly version: number }>,
-    coverage: "new-work" | "reconstructed" | "transferred" | "unavailable",
-    op?: string,
-  ) => Promise<PeerStaleReads>;
-  readonly writeContext: (
-    workspace: string,
-    project: string,
-    scope: string,
-    session: string,
-    baseVersion: number,
-    text: string,
-    epoch?: number,
-    op?: string,
-    findingDecisions?: ReadonlyArray<PeerFindingDecisionInput>,
-  ) => Promise<HubContextText | ContextRefusal>;
-  /** The versions of a shared context the hub keeps, newest first. */
-  readonly contextVersions: (
-    workspace: string,
-    project: string,
-    scope: string,
-  ) => Promise<ReadonlyArray<HubContextVersion>>;
-  readonly readContextVersion: (
-    workspace: string,
-    project: string,
-    scope: string,
-    version: number,
-  ) => Promise<HubContextVersionText | null>;
-
   /** What people see changed. */
   readonly changed: () => void;
 

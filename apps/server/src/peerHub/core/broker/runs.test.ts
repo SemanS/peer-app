@@ -1,5 +1,4 @@
 // @effect-diagnostics nodeBuiltinImport:off - a session's working context file on disk.
-import * as NodeFSP from "node:fs/promises";
 
 import { describe, expect, it } from "@effect/vitest";
 
@@ -185,19 +184,18 @@ describe("runs in the broker", () => {
       const headers = { "x-peer-run": run.id, "x-peer-run-token": token! };
       await hookOf(f.broker, start("one", f.root), headers);
       const one = f.broker.sessions.get("claude:one")!;
-      expect(one.ownContextPath.endsWith(`${run.id}.md`)).toBe(true);
-      one.heard.add("finding-1");
+      expect(one.memoryPath.endsWith(`${run.id}.memory.json`)).toBe(true);
+      one.memory.announced.add("overlap-1:1");
       await f.broker.saveMemories();
-      await NodeFSP.writeFile(one.ownContextPath, "# Working context\n\nSplit by currency.\n");
       await hookOf(f.broker, { ...start("one", f.root), hook_event_name: "SessionEnd" }, headers);
       expect(stateOf(runs.get(run.id)!)).toBe("detached");
 
       await hookOf(f.broker, start("two", f.root), headers);
       const two = f.broker.sessions.get("claude:two")!;
       expect(two.run).toBe(run.id);
-      expect(two.ownContextPath).toBe(one.ownContextPath);
+      expect(two.memoryPath).toBe(one.memoryPath);
       // What the run's last session heard is not told again.
-      expect(two.heard.has("finding-1")).toBe(true);
+      expect(two.memory.announced.has("overlap-1:1")).toBe(true);
       const now = runs.get(run.id)!;
       expect(stateOf(now)).toBe("running");
       expect(now.sessions.map((s) => s.id)).toEqual(["claude:one", "claude:two"]);

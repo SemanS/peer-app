@@ -6,13 +6,7 @@ import type { HubOverlap } from "../hub/coordApi.ts";
 import { brokerFixture } from "./testkit.ts";
 
 const headers = { "x-peer-session": "one" };
-const context = {
-  project: "app",
-  scope: "task:other",
-  version: 2,
-  text: "exact shared input",
-  updatedAt: "2026-10-09T12:00:00Z",
-};
+const at = "2026-10-09T12:00:00Z";
 const overlap: HubOverlap = {
   id: "overlap",
   project: "app",
@@ -20,29 +14,12 @@ const overlap: HubOverlap = {
   files: ["pay.ts"],
   state: "open",
   notes: [],
-  openedAt: context.updatedAt,
-  updatedAt: context.updatedAt,
+  openedAt: at,
+  updatedAt: at,
 };
 const tasks = [{ id: "other", key: "KRK-7", title: "Other work", status: "review" }];
 
 describe("peer command outcomes", () => {
-  it("refuses an acknowledgement when the Hub has text but no receipt support", async () => {
-    const fixture = await brokerFixture(() => ({
-      tasks: () => tasks,
-      readContext: async () => context,
-    }));
-    try {
-      await fixture.register("one");
-      await expect(fixture.broker.runCli("ack", ["KRK-7"], headers)).rejects.toMatchObject({
-        outcome: "refused",
-        reason: expect.stringContaining("cannot record"),
-        next: expect.stringContaining("update"),
-      });
-      expect(fixture.broker.sessions.get("claude:one")?.read.size).toBe(0);
-    } finally {
-      await fixture.dispose();
-    }
-  });
   it("reports a later refusal as uncertain after a resolution already took effect", async () => {
     let writes = 0;
     const resolve = async () => {
@@ -57,7 +34,7 @@ describe("peer command outcomes", () => {
       fixture.broker.views.set("acme", {
         sessions: [],
         overlaps: [overlap, { ...overlap, id: "second" }],
-        at: context.updatedAt,
+        at,
       });
       await expect(fixture.broker.runCli("resolve", ["agreed"], headers)).rejects.toMatchObject({
         outcome: "uncertain",
@@ -68,7 +45,7 @@ describe("peer command outcomes", () => {
       await fixture.dispose();
     }
   });
-  it("rejects invalid arguments and local refusals without changing claims, notes or reads", async () => {
+  it("rejects invalid arguments and local refusals without changing claims or notes", async () => {
     const fixture = await brokerFixture(() => ({ tasks: () => tasks }));
     try {
       await fixture.register("one");
@@ -81,15 +58,10 @@ describe("peer command outcomes", () => {
         ["resolve", [], "usage", "peer resolve"],
         ["claim", [], "usage", "peer claim"],
         ["claim", ["/outside/checkout"], "usage", "peer claim"],
-        ["context", ["missing"], "usage", "peer context"],
-        ["context", ["KRK-7", "nan"], "usage", "peer context"],
-        ["context", ["KRK-7", "1"], "usage", "peer context history"],
-        ["ack", [], "usage", "peer ack"],
         ["index", ["0"], "usage", "peer index"],
         ["release", ["--typo"], "usage", "peer release"],
         ["claim", ["pay.ts", "--intent"], "usage", "peer claim"],
         ["resolve", ["agreed"], "refused", "peer status"],
-        ["ack", ["KRK-7"], "refused", "peer context"],
         ["log", [], "refused", "update"],
       ];
       for (const [command, args, outcome, next] of rows) {
@@ -100,14 +72,13 @@ describe("peer command outcomes", () => {
         expect(JSON.stringify(fixture.broker.snapshot())).toBe(before);
         expect(session.claims).toEqual(["pay.ts"]);
         expect(session.pending).toEqual(["unheard note"]);
-        expect(session.read.size).toBe(0);
       }
     } finally {
       await fixture.dispose();
     }
   });
 
-  it("classifies each write failure and never acknowledges an uncertain resolution or context read", async () => {
+  it("classifies each write failure and never acknowledges an uncertain resolution", async () => {
     const failures = [
       new PeerHubError({ detail: "Hub refused the command", refused: true }),
       new PeerHubError({ detail: "Connection lost" }),
@@ -125,10 +96,7 @@ describe("peer command outcomes", () => {
       const fixture = await brokerFixture(() => ({
         tasks: () => tasks,
         taskOf: () => "other",
-        readContext: async () => context,
         resolve: fail,
-        contextRead: fail,
-        finishTask: fail,
       }));
       try {
         await fixture.register("one");
@@ -136,69 +104,45 @@ describe("peer command outcomes", () => {
         fixture.broker.views.set("acme", {
           sessions: [],
           overlaps: [overlap],
-          at: context.updatedAt,
+          at,
         });
         const session = fixture.broker.sessions.get("claude:one")!;
         const outcome = "refused" in failure && failure.refused ? "refused" : "uncertain";
-        for (const [command, args] of [
-          ["resolve", ["agreed"]],
-          ["ack", ["KRK-7"]],
-          ["context", []],
-        ] as const) {
-          await expect(fixture.broker.runCli(command, args, headers)).rejects.toMatchObject({
-            outcome,
-            next: expect.stringContaining(
-              failure.message.includes("Sign in") || failure.message.includes("Sign in again")
-                ? "sign in"
-                : outcome === "uncertain" && command !== "context"
-                  ? "peer status"
-                  : command === "context"
-                    ? "peer context again"
-                    : "",
-            ),
-          });
-          expect(session.memory.acknowledged.size).toBe(0);
-          expect(session.read.size).toBe(0);
-          expect(fixture.broker.views.get("acme")?.overlaps[0]).toEqual(overlap);
-        }
+        await expect(fixture.broker.runCli("resolve", ["agreed"], headers)).rejects.toMatchObject({
+          outcome,
+          next: expect.stringContaining(
+            failure.message.includes("Sign in") || failure.message.includes("Sign in again")
+              ? "sign in"
+              : outcome === "uncertain"
+                ? "peer status"
+                : "",
+          ),
+        });
+        expect(session.memory.acknowledged.size).toBe(0);
+        expect(fixture.broker.views.get("acme")?.overlaps[0]).toEqual(overlap);
       } finally {
         await fixture.dispose();
       }
     }
   });
 
-  it("makes failed context/history/version/log reads refusals with a retry step", async () => {
+  it("makes a failed log read a refusal with a retry step", async () => {
     for (const failure of [
       new Error("offline"),
       new PeerHubError({ detail: "denied", refused: true }),
     ]) {
-      const fail = async (): Promise<never> => {
-        throw failure;
-      };
       const fixture = await brokerFixture(() => ({
-        tasks: () => tasks,
-        readContext: fail,
-        contextVersions: fail,
-        readContextVersion: fail,
-        coordEvents: fail,
+        coordEvents: async (): Promise<never> => {
+          throw failure;
+        },
       }));
       try {
         await fixture.register("one");
-        fixture.broker.syncNow = async () => {};
-        for (const [command, args] of [
-          ["context", []],
-          ["context", ["history"]],
-          ["context", ["1"]],
-          ["ack", ["KRK-7"]],
-          ["log", []],
-        ] as const) {
-          await expect(fixture.broker.runCli(command, args, headers)).rejects.toMatchObject({
-            outcome: "refused",
-            reason: failure.message,
-            next: expect.stringContaining("again"),
-          });
-        }
-        expect(fixture.broker.sessions.get("claude:one")?.read.size).toBe(0);
+        await expect(fixture.broker.runCli("log", [], headers)).rejects.toMatchObject({
+          outcome: "refused",
+          reason: failure.message,
+          next: expect.stringContaining("again"),
+        });
       } finally {
         await fixture.dispose();
       }

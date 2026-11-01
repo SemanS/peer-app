@@ -120,7 +120,6 @@ import { codexPeerPluginEnabled, codexPeerPluginPaths } from "../src/peerHub/cod
 import {
   claudeHookGroups,
   codexHookGroups,
-  withContextAccess,
   type HookGroup,
 } from "../src/peerHub/core/adapters/scripts.ts";
 
@@ -1699,13 +1698,8 @@ function writeClaudeSettings(
   } = {},
 ) {
   const settings = NodePath.join(computer.home, "claude-settings.json");
-  // Peer's hooks, and the permission to read and edit the contexts Peer keeps, as Peer installs
-  // them; and the shell commands agents read and edit with, so nobody waits for an approval.
-  const given = withContextAccess(
-    { hooks: options.hooks ?? claudeHookGroups(computer.scripts) },
-    NodePath.join(computer.home, "userdata", "coord", "contexts"),
-    true,
-  ) as { permissions?: { allow?: string[] } };
+  // Peer's hooks as Peer installs them, and the shell commands agents read and edit with, so nobody
+  // waits for an approval.
   const shell = [
     "grep",
     "rg",
@@ -1727,14 +1721,9 @@ function writeClaudeSettings(
     settings,
     JSON.stringify(
       {
-        ...given,
+        hooks: options.hooks ?? claudeHookGroups(computer.scripts),
         permissions: {
-          ...given.permissions,
-          allow: [
-            ...(given.permissions?.allow ?? []),
-            ...shell.map((command) => `Bash(${command}:*)`),
-            ...(options.rules ?? []),
-          ],
+          allow: [...shell.map((command) => `Bash(${command}:*)`), ...(options.rules ?? [])],
         },
       },
       null,

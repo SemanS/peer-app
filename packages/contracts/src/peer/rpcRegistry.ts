@@ -1,9 +1,3 @@
-import {
-  PeerContextView,
-  PeerContextViewInput,
-  PeerContextArchive,
-  PeerContextArchiveInput,
-} from "./contextView.ts";
 import { PEER_TOOL_TRUST_METHODS, PeerToolTrustRpcs, ToolTrustRpcScopes } from "./toolTrust.rpc.ts";
 /**
  * Peer's WebSocket RPCs. Core's group and each plugin's group merge into `PeerRpcGroup`, which
@@ -58,17 +52,10 @@ import {
   PeerHubMemberProjectsInput,
   PeerHubMemberRoleInput,
   PeerHubJoinWorkspaceInput,
-  PeerHubContextInput,
-  PeerHubContextVersionInput,
-  PeerContextVersion,
-  PeerContextVersionText,
-  PeerWorkContextText,
   PeerHubStartAgentInput,
   PeerHubStartAgentResult,
   PeerHubCoordEventsInput,
-  PeerHubStaleReadsInput,
   PeerCoordEvent,
-  PeerStaleReads,
   PeerHubFoundingInput,
   PeerInvitation,
   PeerInvitationList,
@@ -114,13 +101,6 @@ export const PEER_CORE_METHODS = {
   peerHubAssignThread: "peerHub.assignThread",
   peerHubStartAgent: "peerHub.startAgent",
   peerHubCoordEvents: "peerHub.coordEvents",
-  peerHubStaleReads: "peerHub.staleReads",
-  peerHubReadContext: "peerHub.readContext",
-  peerHubContextView: "peerHub.contextView",
-  peerHubContextArchive: "peerHub.contextArchive",
-  peerHubContextVersions: "peerHub.contextVersions",
-  peerHubReadContextVersion: "peerHub.readContextVersion",
-  peerHubRestoreContext: "peerHub.restoreContext",
   peerHubShareProject: "peerHub.shareProject",
   peerHubUnshareProject: "peerHub.unshareProject",
   peerHubBindCheckout: "peerHub.bindCheckout",
@@ -271,50 +251,6 @@ const WsPeerHubCoordEventsRpc = Rpc.make(PEER_CORE_METHODS.peerHubCoordEvents, {
   success: Schema.Array(PeerCoordEvent),
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
-const WsPeerHubStaleReadsRpc = Rpc.make(PEER_CORE_METHODS.peerHubStaleReads, {
-  payload: PeerHubStaleReadsInput,
-  success: PeerStaleReads,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** A task's shared context with its text; null when it has none yet. */
-const WsPeerHubReadContextRpc = Rpc.make(PEER_CORE_METHODS.peerHubReadContext, {
-  payload: PeerHubContextInput,
-  success: Schema.NullOr(PeerWorkContextText),
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-const WsPeerHubContextViewRpc = Rpc.make(PEER_CORE_METHODS.peerHubContextView, {
-  payload: PeerContextViewInput,
-  success: PeerContextView,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubContextArchiveRpc = Rpc.make(PEER_CORE_METHODS.peerHubContextArchive, {
-  payload: PeerContextArchiveInput,
-  success: PeerContextArchive,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** The versions of a shared context the hub keeps, newest first. */
-const WsPeerHubContextVersionsRpc = Rpc.make(PEER_CORE_METHODS.peerHubContextVersions, {
-  payload: PeerHubContextInput,
-  success: Schema.Array(PeerContextVersion),
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-const WsPeerHubReadContextVersionRpc = Rpc.make(PEER_CORE_METHODS.peerHubReadContextVersion, {
-  payload: PeerHubContextVersionInput,
-  success: Schema.NullOr(PeerContextVersionText),
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-/** A person brings an older version of a shared context back, as a new version. */
-const WsPeerHubRestoreContextRpc = Rpc.make(PEER_CORE_METHODS.peerHubRestoreContext, {
-  payload: PeerHubContextVersionInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
 const WsPeerHubShareProjectRpc = Rpc.make(PEER_CORE_METHODS.peerHubShareProject, {
   payload: PeerHubShareProjectInput,
   success: PeerHubStatus,
@@ -438,13 +374,6 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubAssignThreadRpc,
   WsPeerHubStartAgentRpc,
   WsPeerHubCoordEventsRpc,
-  WsPeerHubStaleReadsRpc,
-  WsPeerHubReadContextRpc,
-  WsPeerHubContextViewRpc,
-  WsPeerHubContextArchiveRpc,
-  WsPeerHubContextVersionsRpc,
-  WsPeerHubReadContextVersionRpc,
-  WsPeerHubRestoreContextRpc,
   WsPeerHubShareProjectRpc,
   WsPeerHubUnshareProjectRpc,
   WsPeerHubBindCheckoutRpc,
@@ -466,12 +395,6 @@ export const PeerCoreRpcGroup = RpcGroup.make(
 const PeerCoreRpcScopes = {
   // Signing in binds this environment to a person's workspaces, so it belongs to its owner.
   [PEER_CORE_METHODS.peerHubSubscribe]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubReadContext]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubContextView]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubContextArchive]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubContextVersions]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubReadContextVersion]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubRestoreContext]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubFindWorkspace]: AuthOrchestrationReadScope,
   // Tasks and threads are shared work, so changing them is operating, like starting a thread;
   // sharing a project hands the workspace a repository, and binding a checkout decides where this
@@ -482,7 +405,6 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubAssignThread]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubStartAgent]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubCoordEvents]: AuthOrchestrationReadScope,
-  [PEER_CORE_METHODS.peerHubStaleReads]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubShareProject]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubUnshareProject]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubBindCheckout]: AuthAccessWriteScope,

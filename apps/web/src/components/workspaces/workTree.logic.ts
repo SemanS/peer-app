@@ -13,7 +13,6 @@ export {
   type AgentNeed,
   type WorkAgent,
   type WorkAreaNode,
-  type WorkContextNode,
   type WorkOpen,
   type WorkProjectNode,
   type WorkScope,

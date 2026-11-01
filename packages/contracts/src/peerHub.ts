@@ -389,134 +389,6 @@ export const PeerIntentResponse = Schema.Struct({
 });
 export type PeerIntentResponse = typeof PeerIntentResponse.Type;
 
-export const PeerFindingDecisionInput = Schema.Struct({
-  id: Schema.String,
-  status: Schema.Literals(["incorporated", "dismissed"]),
-  reason: Schema.String,
-});
-export type PeerFindingDecisionInput = typeof PeerFindingDecisionInput.Type;
-
-export const PeerFindingDecision = Schema.Struct({
-  status: Schema.Literals(["incorporated", "dismissed"]),
-  reason: Schema.String,
-  actor: Schema.String,
-  session: Schema.optional(Schema.String),
-  contextScope: Schema.String,
-  contextVersion: Schema.Number,
-  at: Schema.String,
-});
-export type PeerFindingDecision = typeof PeerFindingDecision.Type;
-
-/** Agents on the same project staying out of each other's way (experimental). */
-/** What an agent found for its team: a line of the "For the team" part of its working context. */
-export const PeerFinding = Schema.Struct({
-  id: Schema.String,
-  decision: Schema.optional(PeerFindingDecision),
-  workspace: Schema.String,
-  project: Schema.String,
-  task: Schema.optional(Schema.String),
-  text: Schema.String,
-  /** Whose agent found it. */
-  email: Schema.String,
-  at: Schema.String,
-  /** `project` when its agent marked it as holding beyond its task. */
-  scope: Schema.optional(Schema.Literals(["task", "project"])),
-});
-export type PeerFinding = typeof PeerFinding.Type;
-
-/** Who keeps a shared context: one agent session at a time. */
-export const PeerContextKeeper = Schema.Struct({
-  /** `claude:<session id>` */
-  session: Schema.String,
-  email: Schema.String,
-  environment: Schema.String,
-  since: Schema.String,
-  epoch: Schema.optional(Schema.Number),
-});
-export type PeerContextKeeper = typeof PeerContextKeeper.Type;
-
-/**
- * The shared context of a task, or of a project's work on no task: kept by one
- * agent session (its keeper), read by the other agents on it and by people.
- */
-export const PeerWorkContext = Schema.Struct({
-  workspace: Schema.String,
-  project: Schema.String,
-  /** `task:<id>`, or `project` for work on no task. */
-  scope: Schema.String,
-  /** 0 until its first keeper writes it. */
-  version: Schema.Number,
-  epoch: Schema.optional(Schema.Number),
-  keeper: Schema.optional(PeerContextKeeper),
-  updatedAt: Schema.String,
-  /** Who wrote this version: the keeper's person, or the person who brought an older one back. */
-  updatedBy: Schema.optional(Schema.String),
-  /** The agent session that wrote it; none when a person brought an older version back. */
-  updatedSession: Schema.optional(Schema.String),
-  restoredFrom: Schema.optional(Schema.Number),
-  /** Where the work stands, in a line. */
-  gist: Schema.optional(Schema.String),
-  bytes: Schema.Number,
-});
-export type PeerWorkContext = typeof PeerWorkContext.Type;
-
-export const PeerWorkContextText = Schema.Struct({
-  ...PeerWorkContext.fields,
-  text: Schema.String,
-});
-export type PeerWorkContextText = typeof PeerWorkContextText.Type;
-
-/** A kept version of a shared context: who wrote it, when, and how much it changed. */
-export const PeerContextVersion = Schema.Struct({
-  version: Schema.Number,
-  at: Schema.String,
-  by: Schema.optional(Schema.String),
-  /** The agent session that wrote it; none when a person brought an older version back. */
-  session: Schema.optional(Schema.String),
-  restoredFrom: Schema.optional(Schema.Number),
-  bytes: Schema.Number,
-  added: Schema.Number,
-  dropped: Schema.Number,
-});
-export type PeerContextVersion = typeof PeerContextVersion.Type;
-
-/** A kept version with its text and the lines it added and dropped. */
-export const PeerContextVersionText = Schema.Struct({
-  version: Schema.Number,
-  at: Schema.String,
-  by: Schema.optional(Schema.String),
-  session: Schema.optional(Schema.String),
-  restoredFrom: Schema.optional(Schema.Number),
-  added: Schema.Array(Schema.String),
-  dropped: Schema.Array(Schema.String),
-  text: Schema.String,
-});
-export type PeerContextVersionText = typeof PeerContextVersionText.Type;
-
-/**
- * What one of this computer's agents did with the team's work, or what Peer noted of it: it read a
- * work's shared context, or asked its agents. People see it to trust, or correct, what their agents
- * rely on. An environment from before Peer dropped its knowledge tools also says `knowledge`,
- * `found` and `governs`, which a client decodes and only shows.
- */
-export const PeerAdvice = Schema.Struct({
-  workspace: Schema.String,
-  project: Schema.String,
-  /** The agent session: `claude:<session id>` or `codex:<session id>`. */
-  session: Schema.String,
-  about: Schema.Literals(["work", "knowledge"]),
-  /** A work: `task:<id>` or `project`. */
-  scope: Schema.String,
-  /** How people name it. */
-  name: Schema.String,
-  /** The agent read it or asked its agents. */
-  how: Schema.Literals(["read", "asked", "found", "governs"]),
-  /** Why, in a sentence. */
-  why: Schema.String,
-  at: Schema.String,
-});
-export type PeerAdvice = typeof PeerAdvice.Type;
-
 export const PeerCodexHookHome = Schema.Struct({
   home: Schema.String,
   hooksPath: Schema.String,
@@ -588,12 +460,6 @@ export const PeerCoordinationState = Schema.Struct({
   policies: Schema.optional(
     Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.String)),
   ),
-  /** What the agents on your projects found for the team, newest first. */
-  findings: Schema.Array(PeerFinding),
-  /** The shared contexts of your projects' tasks, without their text. */
-  contexts: Schema.Array(PeerWorkContext),
-  /** What this computer's agents did with the team's work, newest first. */
-  advice: Schema.optional(Schema.Array(PeerAdvice)),
 });
 export type PeerCoordinationState = typeof PeerCoordinationState.Type;
 
@@ -872,16 +738,7 @@ export const PeerHubResolveOverlapInput = Schema.Struct({
 });
 export type PeerHubResolveOverlapInput = typeof PeerHubResolveOverlapInput.Type;
 
-/** A shared context; `version` is the one the caller knows of, so a newer one reads again. */
-export const PeerHubContextInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  project: TrimmedNonEmptyString,
-  scope: TrimmedNonEmptyString,
-  version: Schema.optional(Schema.Number),
-});
-export type PeerHubContextInput = typeof PeerHubContextInput.Type;
-
-/** One committed coordination transition, with its participants and exact context version. */
+/** One committed coordination transition, with its participants. */
 export const PeerCoordEvent = Schema.Struct({
   reason: Schema.optional(Schema.String),
   status: Schema.optional(Schema.String),
@@ -909,33 +766,6 @@ export const PeerCoordEvent = Schema.Struct({
 });
 export type PeerCoordEvent = typeof PeerCoordEvent.Type;
 
-export const PeerContextRead = Schema.Struct({
-  project: Schema.String,
-  scope: Schema.String,
-  session: Schema.String,
-  environment: Schema.String,
-  version: Schema.Number,
-  at: Schema.String,
-});
-export type PeerContextRead = typeof PeerContextRead.Type;
-
-export const PeerStaleReads = Schema.Struct({
-  fresh: Schema.Boolean,
-  recovery: Schema.optional(Schema.Literals(["complete", "revalidation-required", "unavailable"])),
-  reads: Schema.optional(Schema.Array(PeerContextRead)),
-  stale: Schema.Array(
-    Schema.Struct({
-      project: Schema.String,
-      scope: Schema.String,
-      readVersion: Schema.Number,
-      currentVersion: Schema.NullOr(Schema.Number),
-      at: Schema.String,
-      updatedAt: Schema.NullOr(Schema.String),
-    }),
-  ),
-});
-export type PeerStaleReads = typeof PeerStaleReads.Type;
-
 export const PeerHubCoordEventsInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
   project: TrimmedNonEmptyString,
@@ -947,15 +777,6 @@ export const PeerHubCoordEventsInput = Schema.Struct({
   revision: Schema.optional(Schema.String),
 });
 export type PeerHubCoordEventsInput = typeof PeerHubCoordEventsInput.Type;
-
-export const PeerHubStaleReadsInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  project: TrimmedNonEmptyString,
-  session: TrimmedNonEmptyString,
-  environment: TrimmedNonEmptyString,
-  revision: Schema.optional(Schema.String),
-});
-export type PeerHubStaleReadsInput = typeof PeerHubStaleReadsInput.Type;
 
 export const PeerHubStartAgentInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,
@@ -979,15 +800,6 @@ export const PeerHubStartAgentResult = Schema.Struct({
   promptError: Schema.optional(Schema.String),
 });
 export type PeerHubStartAgentResult = typeof PeerHubStartAgentResult.Type;
-
-/** One kept version of a shared context. */
-export const PeerHubContextVersionInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  project: TrimmedNonEmptyString,
-  scope: TrimmedNonEmptyString,
-  version: Schema.Number,
-});
-export type PeerHubContextVersionInput = typeof PeerHubContextVersionInput.Type;
 
 export const PeerHubShareProjectInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,

@@ -1,4 +1,4 @@
-// @effect-diagnostics nodeBuiltinImport:off globalDate:off - agents' working contexts on disk, and Peer Mod's receipts in wall-clock time.
+// @effect-diagnostics nodeBuiltinImport:off - Peer Mod's receipts on the broker's socket.
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
 /**
  * What reaches an agent: what it hears when its session starts, Peer's news at each step, and
@@ -7,22 +7,11 @@
  *
  * @module peerHub/core/broker/delivery
  */
-import { resumeInputCheckpoint } from "./inputCheckpoints.ts";
 import { pluginsForWorkspace } from "./pluginScope.ts";
-import * as NodeFSP from "node:fs/promises";
-import * as NodeHttp from "node:http";
-import * as NodePath from "node:path";
+import type * as NodeHttp from "node:http";
 import * as Effect from "effect/Effect";
 
-import {
-  contextTemplate,
-  contextWritten,
-  findingsOnWork,
-  startContext,
-  teamLines,
-} from "../contexts/text.ts";
-import { closerOf, newsFor } from "../coordination/news.ts";
-import type { HubFinding } from "../hub/coordApi.ts";
+import { closerOf, newsFor, startText } from "../coordination/news.ts";
 import { INDEX_ALL, INDEX_SHOWN, indexText } from "../index/text.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
@@ -35,16 +24,7 @@ import {
   withPluginText,
 } from "./pipeline.ts";
 import { headerOf, parseJson, respond } from "./server.ts";
-import { forgetTold } from "./sessionMemory.ts";
 import type { LocalSession } from "./sessions.ts";
-import { sleepMs } from "./sync.ts";
-import { checkoutKind } from "../vcs.ts";
-
-/**
- * How long a session's start waits for this computer's copies of its project's other works' shared
- * contexts (`mirrorBoard`): its hook has a few seconds in all.
- */
-const BOARD_START_WAIT_MS = 1200;
 
 /** What a hook's answer puts into the agent's context, in characters: its text, and the reason of a refusal. */
 export function injectedChars(out: Record<string, unknown> | null): number {
@@ -83,12 +63,7 @@ export function carriedText(out: Record<string, unknown> | null): string {
     .join("\n");
 }
 
-/**
- * What a session hears when it starts: how to keep its working context (its
- * own, made now if it has none, or its work's shared one when it keeps that),
- * the context itself after a compaction or a resume, the shared context of its
- * work, and the findings it should hear now.
- */
+/** What a session hears when it starts, with what a clone bound by its remote left for it. */
 export async function startContextFor(
   this: CoordinationBroker,
   session: LocalSession,
@@ -119,66 +94,12 @@ export async function startedContext(
   plugins: PeerBrokerPlugins,
   tools = false,
 ): Promise<string> {
-  await NodeFSP.mkdir(NodePath.dirname(session.ownContextPath), { recursive: true });
-  let saved: string | undefined;
-  try {
-    saved = await NodeFSP.readFile(session.ownContextPath, "utf8");
-    session.contextAt = (await NodeFSP.stat(session.ownContextPath)).mtimeMs;
-  } catch {
-    await NodeFSP.writeFile(
-      session.ownContextPath,
-      contextTemplate(
-        session.label,
-        session.task === undefined
-          ? undefined
-          : this.host.taskName(session.workspace, session.project, session.task),
-      ),
-    );
-  }
-  session.team = saved === undefined ? [] : teamLines(saved);
-  // What the team found, and who keeps the work's shared context, are worth a fresh look now.
+  // Who else is at work is worth a fresh look now.
   await this.syncNow(session.workspace, 1500);
-  const inputRecovery = await resumeInputCheckpoint(this, session);
-  await this.takeUp(session);
   // What it would be told at its next step is in what it hears now.
   for (const pending of tools ? [] : session.pending.splice(0)) {
     if (typeof pending !== "string") await notifyDeliveries(pending.deliveries, "dropped");
   }
-  const mirror = this.mirrorOf(session);
-  const onWork = findingsOnWork(
-    this.holder(session),
-    this.findingsOf(session.workspace),
-    session.heard,
-  );
-  let findings: HubFinding[] = [];
-  if (session.keeps) {
-    // A keeper decides every finding on its work, also those it heard of while it only read it:
-    // it is told how many there are, all of them, and reads them with `peer context`.
-    findings = findingsOnWork(this.holder(session), this.findingsOf(session.workspace), new Set());
-    for (const finding of findings) session.heard.add(finding.id);
-  } else if (this.keeperOf(session) === undefined) {
-    findings = onWork.slice(0, 8);
-    for (const finding of findings) session.heard.add(finding.id);
-  } else if (mirror !== undefined && contextWritten(mirror.text)) {
-    // Kept by another agent: what it has not folded in yet goes along with the context.
-    findings = onWork.filter((finding) => finding.decision === undefined).slice(0, 8);
-    for (const finding of findings) session.heard.add(finding.id);
-  }
-  if (session.keeps) session.roster = this.agentsOn(session);
-  if (!session.keeps && mirror !== undefined) {
-    // It reads the context now; the first change after this is news at once.
-    session.sharedHeard = mirror.version;
-    session.sharedHeardText = mirror.text;
-    session.sharedToldAt = 0;
-  }
-  // The project's other work, and where to read each: the index the agent chooses from. Its
-  // hook waits a few seconds at most: copies still on their way are named by `peer context`.
-  await Promise.race([this.mirrorBoard(session.workspace), sleepMs(BOARD_START_WAIT_MS)]);
-  session.index = this.indexOf(plugins);
-  const works = this.indexWorks(session, INDEX_ALL);
-  // A new conversation, or one that was compacted, knows nothing of the others' work yet: what
-  // each builds comes with its next ask.
-  forgetTold(session);
   const startLines = (
     await Promise.all(
       plugins.active.map(({ contributions }) => {
@@ -196,10 +117,8 @@ export async function startedContext(
   )
     .filter((line): line is string => line !== null && line.length <= 300)
     .slice(0, 3);
-  const checkout = await checkoutKind(session.root).catch(() => null);
-  const startText = startContext({
+  const text = startText({
     startLines,
-    ...(checkout?.kind === "jj" ? { vcs: "jj" as const } : {}),
     me: this.me(session),
     ...(tools || session.adapter === "mcp"
       ? { tools: true }
@@ -207,48 +126,24 @@ export async function startedContext(
         ? { cliPath: this.scripts.peer }
         : {}),
     index: indexText({
-      works,
-      now: Date.now(),
+      works: this.board(session, INDEX_ALL),
       cli: this.cli,
       shown: INDEX_SHOWN,
     }),
-    on: session.index.on,
-    own: {
-      path: session.ownContextPath,
-      saved: source === "compact" || source === "resume" ? saved : undefined,
-    },
-    shared: mirror === undefined ? undefined : { ...this.sharedOf(mirror), keeps: session.keeps },
-    findings,
-    agents: this.agentsOn(session).map((agent) => agent.name),
-    nameOf: this.nameOf(session.workspace),
   });
-  const text = inputRecovery === null ? startText : `${startText}\n\n${inputRecovery}`;
-  this.record("context.injected", {
-    session: session.id,
-    source,
-    path: session.contextPath,
-    keeps: session.keeps,
-    shared: mirror === undefined ? undefined : { scope: mirror.scope, version: mirror.version },
-    saved: saved?.length ?? 0,
-    findings: findings.map((finding) => finding.id),
-    index: works.slice(0, INDEX_SHOWN).map((entry) => entry.scope),
-    bytes: text.length,
-  });
+  this.record("context.injected", { session: session.id, source, bytes: text.length });
   return text;
 }
 
 /**
- * What happened on the session's overlaps since it last heard, and (unless
- * `team` is false) what Peer has to tell it, what changed in its work's
- * shared context and what other agents found that concerns it.
+ * The session's overlaps it was not told about and, unless `pending` is false, what waits for its
+ * next step.
  */
 export function news(
   this: CoordinationBroker,
   session: LocalSession,
   options: {
-    readonly team?: boolean;
-    readonly waking?: boolean;
-    readonly discovery?: boolean;
+    readonly pending?: boolean;
     readonly deliveries?: PreparedDelivery[] | undefined;
     readonly plugins?: PeerBrokerPlugins | undefined;
   } = {},
@@ -261,7 +156,6 @@ export function news(
     nameOf: this.nameOf(session.workspace),
     taskName: this.taskNamer(session.workspace, session.project),
     closer: (overlap) => closerOf(overlap, view.sessions),
-    ...(options.waking === true ? { waking: true } : {}),
     cli: this.cli,
   });
   if (news !== null) {
@@ -274,39 +168,29 @@ export function news(
       seen: news.seen,
     });
   }
-  // An overlap gone quiet that this agent closes is overlap news too: it may wake the agent.
+  // An overlap gone quiet that this agent closes is overlap news too.
   const parts = [news?.text ?? null, this.settleNews(session)];
-  // Findings and shared contexts wait for the agent's next step; they never wake it.
   const before: string[] = [];
-  if (options.team !== false) {
-    const pending = session.pending.splice(0).flatMap((part) => {
-      if (typeof part === "string") return [part];
-      if (
-        options.plugins &&
-        part.deliveries.some(
-          (ref) => !options.plugins!.active.some((plugin) => plugin.id === ref.plugin),
-        )
-      ) {
-        void notifyDeliveries(part.deliveries, "dropped");
-        return [];
-      }
-      options.deliveries?.push(...part.deliveries);
-      if (part.first) {
-        before.push(part.text);
-        return [];
-      }
-      return [part.text];
-    });
+  if (options.pending !== false) {
     parts.push(
-      ...pending,
-      this.closeNews(session),
-      this.rosterNews(session),
-      this.sharedNews(session),
-      this.findingNews(session),
-      this.advise(session, "followed", () => this.followedNews(session), null),
-      options.discovery === false
-        ? null
-        : this.advise(session, "index", () => this.discoveryFor(session), null),
+      ...session.pending.splice(0).flatMap((part) => {
+        if (typeof part === "string") return [part];
+        if (
+          options.plugins &&
+          part.deliveries.some(
+            (ref) => !options.plugins!.active.some((plugin) => plugin.id === ref.plugin),
+          )
+        ) {
+          void notifyDeliveries(part.deliveries, "dropped");
+          return [];
+        }
+        options.deliveries?.push(...part.deliveries);
+        if (part.first) {
+          before.push(part.text);
+          return [];
+        }
+        return [part.text];
+      }),
     );
   }
   const said = [...before, ...parts.filter((part) => part !== null)];

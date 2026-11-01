@@ -5,10 +5,10 @@
  * Core's text comes first (its start text, its news); each active plugin's text follows in registry
  * order, cut to its bound and ending with the plugin's command when cut. Plugins' text is read
  * concurrently, and what is not ready by the hook's deadline goes to the agent's next step, so a
- * plugin never holds a hook. On a tool call core's local checks come first, then the plugins'
- * verdicts within their budget (one that misses it gets its fallback, and the log says so), then
- * core's Hub intent: a plugin's deny skips the intent, so the Hub records no claim. Waking an idle
- * agent uses only the notices it must answer. With no plugin active, nothing here runs.
+ * plugin never holds a hook. On a tool call the plugins' verdicts come first, within their budget
+ * (one that misses it gets its fallback, and the log says so), then core's Hub intent: a plugin's
+ * deny skips the intent, so the Hub records no claim. Waking an idle agent uses only the notices it
+ * must answer. With no plugin active, nothing here runs.
  *
  * @module peerHub/core/broker/pipeline
  */
@@ -339,27 +339,6 @@ export function stepNotices(
   );
 }
 
-/** What the active plugins add before a session's context is compacted. */
-export function compactText(step: PipelineStep): Promise<PipelineText | null> {
-  const ctx: PeerHookContext = {
-    session: step.session,
-    event: "pre-compact",
-    remainingMs: remainingMs(step),
-  };
-  return gather(
-    step,
-    NOTICE_MAX,
-    step.plugins.active.flatMap((plugin) => {
-      const compact = plugin.contributions.hooks?.preCompact;
-      return compact === undefined
-        ? []
-        : [{ plugin: plugin.id, command: commandOf(plugin), parts: [compact(ctx)] }];
-    }),
-    "preCompact",
-    step.deadline - TEXT_MARGIN_MS,
-  );
-}
-
 /** Runs the active plugins' handlers of an event that answers nothing, by the hook's deadline. */
 export async function handlers(
   step: PipelineStep,
@@ -504,7 +483,3 @@ export function withReasons(
         hookSpecificOutput: { ...answer, permissionDecisionReason: [own, ...more].join("\n\n") },
       };
 }
-
-/** The paths active plugins let a session touch without asking its person (Codex). */
-export const ownPaths = (plugins: PeerBrokerPlugins, session: PeerSessionView) =>
-  plugins.active.flatMap((plugin) => plugin.contributions.hooks?.ownPaths?.(session) ?? []);

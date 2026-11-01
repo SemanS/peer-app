@@ -16,7 +16,6 @@ import { brokerFixture } from "../broker/testkit.ts";
 import * as PeerAdapters from "../coordination/PeerAdapters.ts";
 import * as PeerAgents from "../coordination/PeerAgents.ts";
 import * as PeerCoordination from "../coordination/PeerCoordination.ts";
-import * as PeerContextView from "../index/PeerContextView.ts";
 import {
   bindPlugin,
   type PeerLifecycleEvent,
@@ -183,7 +182,6 @@ const setup = Effect.gen(function* () {
           broker: () => fixture.broker,
           paths: {} as never,
         }),
-        Layer.mock(PeerContextView.PeerContextView)({} as never),
         Layer.mock(PeerAdapters.PeerAdapters)({} as never),
       ),
     ),

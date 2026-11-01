@@ -2,8 +2,7 @@
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
 /**
  * Syncing with the Hub: this computer's sessions reported to each workspace, with what the
- * active plugins add, and the view read back, then shared contexts and the board followed;
- * debounced while agents work. A command to the Hub carries an op, so a retry counts once.
+ * active plugins add, and the view read back; debounced while agents work. A command to the Hub carries an op, so a retry counts once.
  *
  * @module peerHub/core/broker/sync
  */
@@ -11,7 +10,6 @@ import { pluginsForWorkspace } from "./pluginScope.ts";
 import * as NodeCrypto from "node:crypto";
 
 import { runtimeStillPresent } from "../../workLifecycle.ts";
-import { scopeOf } from "../contexts/text.ts";
 import type { HubOverlap, ReportedSession } from "../hub/coordApi.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import { mergeMcpObservations } from "./observations.ts";
@@ -73,13 +71,7 @@ export function reportFor(
       ...(s.run === undefined ? {} : { run: s.run }),
       files: s.files,
       claims: s.claims,
-      // Its own lines, and those it marked [project] in a shared context it kept: a keeper that
-      // takes over does not say again what its predecessor marked.
-      findings: [...new Set([...s.team, ...s.marked])],
-      // When it was last at work: an idle keeper gives way to an agent that works.
       activeAt: new Date(s.lastActivity).toISOString(),
-      // What it has heard is no independent discovery when it says the same.
-      heard: [...s.heard].slice(-300),
     }));
 }
 
@@ -140,41 +132,27 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
       ) {
         // Plugins hear of it as it was, after core let it go, as at SessionEnd.
         const expired = this.pipelineStep(session, plugins, Date.now() + 2500);
-        void this.release(session);
         this.leaveRun(session);
         this.sessions.delete(id);
         this.record("session.expired", { session: id });
         await handlers(expired, "session-expired");
         continue;
       }
-      // Presence is not activity: an idle runtime must not refresh the keeper's activity clock.
+      // Presence is not activity: an idle runtime must not make an agent look at work.
       if (runtime !== undefined && runtime !== null) {
         session.status = runtime === "done" ? "idle" : runtime;
         session.lastPresent = now;
       }
-      // Put on another task (or taken off one): its work, and the shared context with it, change.
+      // Put on another task (or taken off one).
       const task = this.taskFor(session, plugins.runtime);
       if (task !== session.task) {
-        await this.release(session);
         this.record("session.task", { session: id, from: session.task, to: task });
         const from = session.task;
         session.task = task;
-        session.sharedHeard = 0;
-        session.sharedHeardText = "";
-        // What belonged to its old work is no part of the new: lines it marked for the project,
-        // the contexts it read for it, whom the roster was kept for.
-        session.marked.clear();
-        session.read.clear();
-        session.toldClosed = false;
-        session.sharedToldAt = 0;
-        session.roster = undefined;
-        session.compactedAt = 0;
         await this.adoptRun(session);
         const name = (t: string | undefined) =>
           t === undefined ? "no task" : this.host.taskName(session.workspace, session.project, t);
-        session.pending.push(
-          `Peer: you are on ${name(task)} now (you were on ${name(from)}). Its shared context is ${this.cli} context${task === undefined ? "" : ` ${this.handleOf(session.workspace, session.project, scopeOf(task))}`}; your working context stays ${session.ownContextPath}.`,
-        );
+        session.pending.push(`Peer: you are on ${name(task)} now (you were on ${name(from)}).`);
       }
     }
     // Runs that changed go to the Hub at the coordination report's cadence.
@@ -216,8 +194,6 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
           ms: Date.now() - started,
         });
         this.afterViewChange(workspace);
-        await this.followShared(workspace);
-        await this.mirrorBoard(workspace);
       } catch (error) {
         this.record("sync.failed", {
           workspace,

@@ -1,27 +1,17 @@
-import { currentViewCommand } from "../index/contextViewCommand.ts";
 // @effect-diagnostics nodeBuiltinImport:off - public reads use the local broker socket.
 /** Public reads use the named checkout, never an agent selected by pane, timing or directory. */
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
-import { neutral } from "../../peerText.ts";
 import type { PeerSessionView } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";
-import { commandArguments, pluginCommand } from "./cli.ts";
+import { commandArguments, coordinationLog, pluginCommand } from "./cli.ts";
 import { hubRead, refused, usage } from "./cliContract.ts";
 import { headerOf } from "./server.ts";
 import { pluginsForWorkspace } from "./pluginScope.ts";
 import type * as NodeHttp from "node:http";
 
-export const PUBLIC_COMMANDS = new Set([
-  "status",
-  "index",
-  "context",
-  "log",
-  "current",
-  "archive",
-  "evidence",
-]);
+export const PUBLIC_COMMANDS = new Set(["status", "index", "log"]);
 
 export async function publicCli(
   broker: CoordinationBroker,
@@ -53,7 +43,6 @@ export async function publicCli(
     thread: undefined,
     pane: undefined,
     status: "idle",
-    keeps: false,
     files: [],
     claims: [],
     public: true,
@@ -77,74 +66,8 @@ export async function publicCli(
     if (Result.isFailure(answer)) throw answer.failure;
     return answer.success;
   }
-  if (command === "current" || command === "archive" || command === "evidence")
-    return currentViewCommand(broker, command, parsed, session);
-  if (command === "context") {
-    const first = parsed.plain[0];
-    const own = first === undefined || first === "history" || /^\d+$/.test(first);
-    const scope = own ? "project" : broker.scopeNamed(workspace, project, first);
-    if (scope === undefined)
-      throw usage(`no task "${first}" on ${project}`, "run peer index for the task names.");
-    const which = own ? first : parsed.plain[1];
-    const next = "run peer context again when the Hub is reachable.";
-    if (which === "history") {
-      const versions = await hubRead(
-        command,
-        () => broker.host.contextVersions(workspace, project, scope),
-        next,
-      );
-      return versions.length === 0
-        ? "The shared context has no versions yet."
-        : versions.map((v) => `${v.version} ${v.at} +${v.added} -${v.dropped}`).join("\n");
-    }
-    if (which !== undefined && (!/^\d+$/.test(which) || Number(which) < 1))
-      throw usage("say which context version", "run peer context 7, or peer context history.");
-    const context =
-      which === undefined
-        ? await hubRead(command, () => broker.host.readContext(workspace, project, scope), next)
-        : await hubRead(
-            command,
-            () => broker.host.readContextVersion(workspace, project, scope, Number(which)),
-            next,
-          );
-    if (context === null) {
-      if (which !== undefined)
-        throw usage(
-          `version ${which} is not kept`,
-          "run peer context history for the kept versions.",
-        );
-      return "Nobody has written this shared context yet.";
-    }
-    return `The shared context of ${broker.subjectOf(workspace, project, scope)}, version ${context.version}.\n<shared-context>\n${neutral(context.text.trim())}\n</shared-context>`;
-  }
-  if (command === "log") {
-    if (broker.host.coordEvents === undefined)
-      throw refused(
-        "this Hub does not provide coordination history",
-        "ask your person to update the Peer Hub.",
-      );
-    const task = parsed.flag("--task");
-    const scope = task === undefined ? undefined : broker.scopeNamed(workspace, project, task);
-    const path = parsed.flag("--path");
-    const events = await hubRead(
-      command,
-      () =>
-        broker.host.coordEvents!(workspace, project, {
-          ...(scope?.startsWith("task:") ? { task: scope.slice(5) } : {}),
-          ...(path === undefined ? {} : { path }),
-          limit: 50,
-        }),
-      "run peer log again when the Hub is reachable.",
-    );
-    return events.length === 0
-      ? "No coordination events yet."
-      : events
-          .map(
-            (event) =>
-              `${event.at} ${event.kind} ${event.scope ?? event.task ?? ""} ${event.paths.join(", ")}`,
-          )
-          .join("\n");
-  }
+  if (command === "log")
+    return coordinationLog(broker, place, parsed.flag("--task"), parsed.flag("--path"));
   const view = await hubRead(
     command,
     () => broker.host.view(workspace),

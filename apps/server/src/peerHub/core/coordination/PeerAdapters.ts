@@ -43,7 +43,7 @@ import {
   claudeHookGroups,
   hasPeerHooks,
   settingsDiffer,
-  withContextAccess,
+  withoutContextAccess,
   withPeerHooks,
 } from "../adapters/scripts.ts";
 import * as PeerState from "../state/PeerState.ts";
@@ -127,7 +127,7 @@ const make = Effect.gen(function* () {
     const settingsPath = NodePath.join(home, "settings.json");
     const claude = await readJsonSettings(settingsPath);
     if (claude === null) throw new Error(`${settingsPath} is not valid JSON; fix it first`);
-    const next = withContextAccess(
+    const next = withoutContextAccess(
       withPeerHooks(
         ClaudeMod.withClaudeMod(claude, claudeModDir, false),
         claudeHookGroups(scripts),
@@ -135,7 +135,6 @@ const make = Effect.gen(function* () {
         install,
       ),
       contexts,
-      install,
     );
     if (settingsDiffer(next, claude)) await writeJsonSettings(settingsPath, next);
   };
@@ -253,15 +252,6 @@ const make = Effect.gen(function* () {
           workspace: PEER_LOCAL_WORKSPACE,
         })),
         policies: {},
-        findings: (local.view?.findings ?? []).map((finding) => ({
-          ...finding,
-          workspace: PEER_LOCAL_WORKSPACE,
-        })),
-        contexts: (local.view?.contexts ?? []).map((context) => ({
-          ...context,
-          workspace: PEER_LOCAL_WORKSPACE,
-        })),
-        advice: [],
       };
       return {
         local: {
@@ -297,43 +287,6 @@ const make = Effect.gen(function* () {
           claims: session.claims,
           local: session.local,
           ...(session.activeAt === undefined ? {} : { activeAt: session.activeAt }),
-        })),
-        findings: snapshot.findings.map((finding) => ({
-          id: finding.id,
-          workspace: finding.workspace,
-          project: finding.project,
-          ...(finding.task === undefined ? {} : { task: finding.task }),
-          text: finding.text,
-          ...(finding.decision === undefined ? {} : { decision: finding.decision }),
-          email: finding.email,
-          at: finding.at,
-          ...(finding.scope === undefined ? {} : { scope: finding.scope }),
-        })),
-        contexts: snapshot.contexts.map((context) => ({
-          workspace: context.workspace,
-          project: context.project,
-          scope: context.scope,
-          version: context.version,
-          ...(context.keeper === undefined ? {} : { keeper: context.keeper }),
-          updatedAt: context.updatedAt,
-          ...(context.updatedBy === undefined ? {} : { updatedBy: context.updatedBy }),
-          ...(context.updatedSession === undefined
-            ? {}
-            : { updatedSession: context.updatedSession }),
-          ...(context.restoredFrom === undefined ? {} : { restoredFrom: context.restoredFrom }),
-          ...(context.gist === undefined ? {} : { gist: context.gist }),
-          bytes: context.bytes ?? 0,
-        })),
-        advice: snapshot.advice.map((told) => ({
-          workspace: told.workspace,
-          project: told.project,
-          session: told.session,
-          about: told.about,
-          scope: told.scope,
-          name: told.name,
-          how: told.how,
-          why: told.why,
-          at: told.at,
         })),
         overlaps: snapshot.overlaps.map((overlap) => ({
           id: overlap.id,

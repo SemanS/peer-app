@@ -37,7 +37,6 @@ const validHash = (value: unknown): value is string =>
   typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const integer = (value: unknown): value is number =>
   Number.isSafeInteger(value) && typeof value === "number" && value >= 0;
-const RECORD_FIELDS = new Set(["contexts", "versions", "manifests", "publishedInputs"]);
 
 function arrayDelta(before: readonly unknown[], after: readonly unknown[]): Delta {
   const last = before.at(-1);
@@ -69,25 +68,17 @@ function arrayDelta(before: readonly unknown[], after: readonly unknown[]): Delt
     insert: after.slice(start, after.length - suffix),
   };
 }
-function fieldDelta(before: unknown, after: unknown, records = false): Delta {
-  if (Array.isArray(before) && Array.isArray(after)) return arrayDelta(before, after);
-  if (records && object(before) && object(after))
-    return { kind: "record", entries: stateDelta(before, after) };
-  return { kind: "value", value: after };
+function fieldDelta(before: unknown, after: unknown): Delta {
+  return Array.isArray(before) && Array.isArray(after)
+    ? arrayDelta(before, after)
+    : { kind: "value", value: after };
 }
 function stateDelta(before: ObjectState, after: ObjectState): Record<string, Delta> {
   return Object.fromEntries(
     [...new Set([...Object.keys(before), ...Object.keys(after)])].flatMap((key) =>
       before[key] === after[key]
         ? []
-        : [
-            [
-              key,
-              key in after
-                ? fieldDelta(before[key], after[key], RECORD_FIELDS.has(key))
-                : { kind: "remove" },
-            ],
-          ],
+        : [[key, key in after ? fieldDelta(before[key], after[key]) : { kind: "remove" }]],
     ),
   );
 }
@@ -120,6 +111,7 @@ function applyDelta(before: unknown, delta: Delta): unknown {
         ...delta.insert,
         ...before.slice(delta.start + delta.remove),
       ];
+    // A journal holds these from before: a commit's patch is one, and so were its keyed fields.
     case "record": {
       if (!object(before) || !object(delta.entries))
         throw new Error("Invalid Local journal record delta.");

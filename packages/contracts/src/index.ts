@@ -93,7 +93,3 @@ export * from "./peer/runs.ts";
 export * from "./peer/runs.rpc.ts";
 
 export * from "./peer/editions.ts";
-
-export * from "./peer/contextGist.ts";
-export * from "./peer/contextBlockers.ts";
-export * from "./peer/contextView.ts";

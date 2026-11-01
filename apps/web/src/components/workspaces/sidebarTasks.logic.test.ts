@@ -11,7 +11,6 @@ const node = (id: string, fields: Partial<WorkTaskNode> = {}): WorkTaskNode => (
   status: "idle",
   threads: [],
   removable: false,
-  context: undefined,
   kind: "task",
   ...fields,
 });

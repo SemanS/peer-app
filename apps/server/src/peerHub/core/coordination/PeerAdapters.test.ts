@@ -38,6 +38,7 @@ const pathsOf = (baseDir: string): PeerCoordination.CoordinationPaths => {
     socket: NodePath.join(baseDir, "coord.sock"),
     log: NodePath.join(baseDir, "coordination.jsonl"),
     contexts: NodePath.join(dir, "contexts"),
+    memory: NodePath.join(dir, "memory"),
     peer: NodePath.join(dir, "bin", "peer"),
     scripts: { hook: NodePath.join(dir, "hook"), wait: NodePath.join(dir, "wait") },
   };

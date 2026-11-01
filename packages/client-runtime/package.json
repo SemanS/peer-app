@@ -566,7 +566,6 @@
     },
     "./peer/jujutsu": "./src/peer/jujutsu.ts",
     "./peer/changes": "./src/peer/changes.ts",
-    "./peer/contextView": "./src/peer/contextView.ts",
     "./peer/rooms": "./src/peer/rooms.ts",
     "./peer/runs": "./src/peer/runs.ts"
   },

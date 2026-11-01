@@ -65,8 +65,6 @@ describe("Audit through core", () => {
             logPath: "/tmp/audit-test",
             sessions: [],
             overlaps: [],
-            findings: [],
-            contexts: [],
           }),
         );
         yield* PeerPlugins.startPlugins;

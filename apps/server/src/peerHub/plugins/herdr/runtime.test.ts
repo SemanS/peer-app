@@ -84,8 +84,6 @@ const ana = (
           logPath: "/tmp/coordination.jsonl",
           sessions: [],
           overlaps: [],
-          findings: [],
-          contexts: [],
         }),
       );
       const agents = yield* PeerAgents.PeerAgents;

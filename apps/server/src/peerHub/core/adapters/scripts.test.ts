@@ -17,7 +17,7 @@ import {
   coordinationScripts,
   hasPeerHooks,
   settingsDiffer,
-  withContextAccess,
+  withoutContextAccess,
   withPeerHooks,
 } from "./scripts.ts";
 
@@ -329,23 +329,25 @@ describe("Codex", () => {
   });
 });
 
-describe("working context", () => {
-  it("lets agents read and edit only Peer's contexts folder, and takes the rule back out", () => {
+describe("working contexts of a Peer from before", () => {
+  it("takes the rule that let agents edit them back out of a person's settings", () => {
+    const folder = "/Users/ana/.peer/userdata/coord/contexts";
     const theirs = {
       permissions: { allow: ["Bash(npm test)"], deny: ["Read(./.env)"] },
       model: "opus",
     };
-    const given = withContextAccess(theirs, "/Users/ana/.peer/userdata/coord/contexts", true);
-    assert.deepStrictEqual((given.permissions as { allow: string[] }).allow, [
-      "Bash(npm test)",
-      "Read(//Users/ana/.peer/userdata/coord/contexts/**)",
-      "Edit(//Users/ana/.peer/userdata/coord/contexts/**)",
-    ]);
-    const twice = withContextAccess(given, "/Users/ana/.peer/userdata/coord/contexts", true);
-    assert.deepStrictEqual(twice, given, "installing again changes nothing");
-    assert.deepStrictEqual(
-      withContextAccess(twice, "/Users/ana/.peer/userdata/coord/contexts", false),
-      theirs,
-    );
+    const given = {
+      ...theirs,
+      permissions: {
+        ...theirs.permissions,
+        allow: [
+          "Bash(npm test)",
+          "Read(//Users/ana/.peer/userdata/coord/contexts/**)",
+          "Edit(//Users/ana/.peer/userdata/coord/contexts/**)",
+        ],
+      },
+    };
+    assert.deepStrictEqual(withoutContextAccess(given, folder), theirs);
+    assert.deepStrictEqual(withoutContextAccess(theirs, folder), theirs);
   });
 });

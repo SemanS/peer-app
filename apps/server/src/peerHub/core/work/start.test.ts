@@ -112,8 +112,6 @@ const program = (
         logPath: "/tmp/test",
         sessions: [],
         overlaps: [],
-        findings: [],
-        contexts: [],
       }),
     );
     const plugins = yield* PeerPlugins.PeerPlugins.pipe(Effect.provide(core));

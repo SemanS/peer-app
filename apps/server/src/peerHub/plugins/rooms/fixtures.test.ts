@@ -62,8 +62,6 @@ const COORDINATION: PeerHubStatus["coordination"] = {
   logPath: "/tmp/coordination.jsonl",
   sessions: [],
   overlaps: [],
-  findings: [],
-  contexts: [],
 };
 
 const seed = (hubUrl: string) =>
@@ -214,7 +212,6 @@ export const sessionOf = (over: Partial<PeerSessionView> = {}): PeerSessionView 
     thread: undefined,
     pane: undefined,
     status: "working",
-    keeps: false,
     files: [],
     claims: [],
     local: <S>(plugin: string, init: () => S) => {

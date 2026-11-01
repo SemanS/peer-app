@@ -47,7 +47,6 @@ function waiting(key: string): WorkThreadNode {
     observable: false,
     agent: undefined,
     activeAt: undefined,
-    keepsContext: false,
   };
 }
 
@@ -60,7 +59,6 @@ function task(id: string, done: boolean, threads: ReadonlyArray<WorkThreadNode> 
     status: done ? "done" : "idle",
     threads,
     removable: true,
-    context: undefined,
   } satisfies WorkTaskNode;
 }
 
@@ -72,7 +70,6 @@ function node(id: string, name: string, tasks: ReadonlyArray<WorkTaskNode>): Wor
     name,
     areas: [{ name: null, tasks }],
     unsorted: [],
-    context: undefined,
     tasks: [],
   };
 }

@@ -14,8 +14,6 @@ const base = {
   logPath: "/local/log",
   sessions: [],
   overlaps: [],
-  findings: [],
-  contexts: [],
 };
 
 describe("local coordination presentation", () => {

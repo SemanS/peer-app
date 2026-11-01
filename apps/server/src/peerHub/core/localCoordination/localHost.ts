@@ -32,42 +32,6 @@ export function withLocalCoordination(
       isLocal(w)
         ? local.ack(...args)
         : (host.ack?.(w, ...args) ?? Promise.resolve({ unsupported: true })),
-    readContext: (w, ...args) =>
-      isLocal(w) ? local.readContext(...args) : host.readContext(w, ...args),
-    keepContext: (w, ...args) =>
-      isLocal(w) ? local.keepContext(...args) : host.keepContext(w, ...args),
-    writeContext: (w, ...args) =>
-      isLocal(w) ? local.writeContext(...args) : host.writeContext(w, ...args),
-    contextVersions: (w, ...args) =>
-      isLocal(w) ? local.contextVersions(...args) : host.contextVersions(w, ...args),
-    readContextVersion: (w, ...args) =>
-      isLocal(w) ? local.readContextVersion(...args) : host.readContextVersion(w, ...args),
-    contextRead: (w, ...args) =>
-      isLocal(w)
-        ? local.contextRead(...args)
-        : host.contextRead !== undefined
-          ? host.contextRead(w, ...args)
-          : Promise.reject(new Error("Context read tracking is unavailable on this Hub.")),
-    staleReads: (w, ...args) =>
-      isLocal(w)
-        ? local.staleReads(...args)
-        : host.staleReads !== undefined
-          ? host.staleReads(w, ...args)
-          : Promise.reject(new Error("Context read tracking is unavailable on this Hub.")),
-    contextAuthority: (workspace) =>
-      isLocal(workspace) ? `local:${local.environment}` : host.contextAuthority?.(workspace),
-    pendingFindings: (w, ...args) =>
-      isLocal(w)
-        ? local.pendingFindings(...args)
-        : host.pendingFindings !== undefined
-          ? host.pendingFindings(w, ...args)
-          : Promise.reject(new Error("Pending findings are unavailable on this Hub.")),
-    recoverInputs: (w, ...args) =>
-      isLocal(w)
-        ? local.recoverInputs(...args)
-        : host.recoverInputs !== undefined
-          ? host.recoverInputs(w, ...args)
-          : Promise.reject(new Error("Input recovery is unavailable on this Hub.")),
     coordEvents: (w, ...args) =>
       isLocal(w)
         ? local.coordEvents(...args)

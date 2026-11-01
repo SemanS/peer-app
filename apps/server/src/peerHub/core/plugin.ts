@@ -52,7 +52,6 @@ import type { AgentKind } from "./coordination/edits.ts";
 import type { ReportedSession } from "./hub/coordApi.ts";
 import type { HubPing, ReportedThread } from "./hub/hubApi.ts";
 import type * as PeerHubClient from "./hub/PeerHubClient.ts";
-import type * as PeerIndex from "./index/PeerIndex.ts";
 import type * as PeerPlugins from "./plugins/PeerPlugins.ts";
 import type * as PeerState from "./state/PeerState.ts";
 import type * as PeerStatus from "./status/PeerStatus.ts";
@@ -72,7 +71,6 @@ export type PeerCore =
   | PeerAgents.PeerAgents
   | PeerState.PeerState
   | PeerHubClient.PeerHubClient
-  | PeerIndex.PeerIndex
   | PeerPlugins.PeerPlugins
   | PeerStatus.PeerStatus
   | PeerWork.PeerWork
@@ -219,12 +217,8 @@ export interface PeerSessionView {
   /** Its herdr pane. */
   readonly pane: string | undefined;
   readonly status: PeerWorkStatus;
-  /** It keeps the shared context of its work. */
-  readonly keeps: boolean;
   readonly files: ReadonlyArray<string>;
   readonly claims: ReadonlyArray<string>;
-  /** Its "For the team" lines as last read from its working context. */
-  readonly team?: ReadonlyArray<string>;
   /** Plugin-owned per-session state, dropped with the session and on a new runtime generation. */
   readonly local: <S>(plugin: PeerPluginId, init: () => S) => S;
   /**
@@ -232,21 +226,17 @@ export interface PeerSessionView {
    * session's memory across Peer's restarts, and drops it with `local` on a new runtime generation.
    */
   readonly told?: (plugin: PeerPluginId) => Set<string>;
-  /** The version explicitly read; a telling never becomes a read receipt. */
-  readonly contextReadVersion?: (scope: string) => number | undefined;
-  /** Mark the current index entry told when another contribution carried it. */
-  readonly tellIndex?: (scope: string) => void;
 }
 
 export interface PeerHooks {
   /** Local catalog information, at most 300 characters after the commands paragraph. No I/O. */
   readonly startLine?: Effect.Effect<string | null>;
-  /** Information that must survive provider start-context limits, before core's context. */
+  /** Information that must survive provider start-context limits, before core's own text. */
   readonly priority?: "first";
   /** A block of the session's start text, at most 2,000 characters. */
   readonly sessionStart?: (ctx: PeerHookContext) => Effect.Effect<PeerHookText | null>;
   readonly notices?: ReadonlyArray<{
-    /** True only for text the agent must answer (like overlap notes). */
+    /** True only for text the agent must answer (words in its room). */
     readonly wakes: boolean;
     /**
      * True only for a message addressed to the agent that it must have read before its work lands:
@@ -281,13 +271,10 @@ export interface PeerHooks {
   };
   /** At most 1,200 characters. */
   readonly postTool?: (ctx: PeerToolContext) => Effect.Effect<string | null>;
-  readonly preCompact?: (ctx: PeerHookContext) => Effect.Effect<string | null>;
   readonly stop?: (ctx: PeerHookContext) => Effect.Effect<void>;
   readonly sessionEnd?: (ctx: PeerHookContext) => Effect.Effect<void>;
   /** No end hook came and its lease ran out: a crash, a closed pane, or an agent long quiet. */
   readonly sessionExpired?: (ctx: PeerHookContext) => Effect.Effect<void>;
-  /** Paths Peer lets the agent touch without asking its person (Codex PermissionRequest). */
-  readonly ownPaths?: (session: PeerSessionView) => ReadonlyArray<string>;
 }
 
 /** Referenced blocks are delivered whole; a block exceeding its budget is dropped, never cut. */
@@ -295,14 +282,7 @@ export type PeerHookText = string | { readonly text: string; readonly refs: Read
 
 export interface PeerHookContext {
   readonly session: PeerSessionView;
-  readonly event:
-    | "session-start"
-    | "prompt"
-    | "pre-tool"
-    | "post-tool"
-    | "pre-compact"
-    | "stop"
-    | "session-end";
+  readonly event: "session-start" | "prompt" | "pre-tool" | "post-tool" | "stop" | "session-end";
   /** At session start: startup, resume, compact or clear. */
   readonly source?: string;
   readonly prompt?: string;
@@ -328,7 +308,7 @@ export interface PeerToolContext extends PeerHookContext {
   readonly failed?: boolean;
 }
 
-/** Plugins can only make an action stricter; letting Peer's own files through is `ownPaths`. */
+/** Plugins can only make an action stricter. */
 export interface PeerVerdict {
   readonly decision: "deny" | "ask";
   /** What the agent (deny) or its person (ask) reads. */

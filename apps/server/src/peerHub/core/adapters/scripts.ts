@@ -2,7 +2,7 @@
 /**
  * The scripts Peer writes for agents (the hook their harness runs, its wake-up wait and the `peer`
  * shim) and the hook settings that point Claude Code and Codex at them: Peer's hooks among a
- * person's own, Codex's trust in them, and agents' access to their working contexts.
+ * person's own, and Codex's trust in them.
  *
  * @module peerHub/core/adapters/scripts
  */
@@ -91,7 +91,7 @@ sent=$?
 ${start}exit 0
 `,
     wait: `#!/bin/sh
-# Peer coordination: while the agent is idle, waits for a note from another agent and wakes it.
+# Peer coordination: while the agent is idle, waits for what it must answer and wakes it.
 agent="\${1:-claude}"
 [ "\${PEER_COORDINATION:-}" = off ] && { cat >/dev/null; exit 0; }
 out=$(curl -sf --max-time 1800 --unix-socket ${quoted} ${headers} -H "X-Peer-Agent: $agent" -H 'Content-Type: application/json' --data-binary @- http://peer/hook/wait 2>/dev/null) || exit 0
@@ -166,7 +166,6 @@ export function codexHookGroups(scripts: {
 }): Record<string, ReadonlyArray<HookGroup>> {
   const hook = { type: "command", command: `${hookCommand(scripts.hook)} codex`, timeout: 5 };
   return {
-    // Also after a compaction (source "compact"): its working context goes back then.
     SessionStart: [{ hooks: [hook] }],
     UserPromptSubmit: [{ hooks: [hook] }],
     // Codex runs commands as Bash and edits files with apply_patch.
@@ -389,17 +388,16 @@ export function hasPeerHooks(settings: Settings, marker: string): boolean {
   );
 }
 
-/** Claude Code permission rules that let agents read and edit their working contexts, unasked. */
-export function withContextAccess(settings: Settings, dir: string, install: boolean): Settings {
+/** A person's settings without the rules a Peer from before added for its agents' working contexts. */
+export function withoutContextAccess(settings: Settings, dir: string): Settings {
   const absolute = `/${dir.replace(/^\/+/, "")}`;
   const ours = [`Read(/${absolute}/**)`, `Edit(/${absolute}/**)`];
   const permissions = (settings.permissions ?? {}) as Record<string, unknown>;
   const allow = Array.isArray(permissions.allow)
     ? (permissions.allow as unknown[]).filter((rule) => !ours.includes(String(rule)))
     : [];
-  const next = install ? [...allow, ...ours] : allow;
   const { allow: _previous, ...restPermissions } = permissions;
-  const merged = next.length > 0 ? { ...restPermissions, allow: next } : restPermissions;
+  const merged = allow.length > 0 ? { ...restPermissions, allow } : restPermissions;
   const { permissions: _old, ...rest } = settings;
   return Object.keys(merged).length > 0 ? { ...rest, permissions: merged } : rest;
 }

@@ -1,4 +1,3 @@
-import { discoveryKey } from "../index/text.ts";
 // @effect-diagnostics nodeBuiltinImport:off cryptoRandomUUID:off globalDate:off - agents' sessions in this computer's checkouts, durable runtime generations, and wall-clock activity.
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
 /**
@@ -13,7 +12,6 @@ import * as NodePath from "node:path";
 
 import type { PeerPluginId, PeerWorkStatus } from "@t3tools/contracts";
 
-import type { ContextHolder, WorkAgent } from "../contexts/text.ts";
 import {
   AGENT_NAMES,
   type AgentKind,
@@ -25,7 +23,6 @@ import {
   type SessionMemory,
 } from "../coordination/edits.ts";
 import type { HubCoordSession, HubCoordView } from "../hub/coordApi.ts";
-import type { CommandsOn } from "../index/text.ts";
 import type { PeerRuntimeProvider, PeerSessionView } from "../plugin.ts";
 import { checkoutKind } from "../vcs.ts";
 import type { CoordinationBroker } from "./Broker.ts";
@@ -66,11 +63,6 @@ export interface LocalSession {
   readonly memory: SessionMemory;
   /** What its memory file holds (`sessionMemory.ts`), as last written or read back: `""` for none. */
   memoryFile: string;
-  /** Missing legacy receipt evidence remains unknown until explicitly reconstructed. */
-  inputRecovery?: "complete" | "revalidation-required" | "unavailable";
-  recoveryClosedAt?: string | undefined;
-  inputImports?: string[];
-  inputLineage?: string[];
   /** Its hooks being answered now: what they tell it has not reached it yet. */
   answering: number;
   /** Files whose edit its person was asked about, with what an approval settles: the edit happening means they approved. */
@@ -82,20 +74,9 @@ export interface LocalSession {
       readonly filesAt: ReadonlyMap<string, string | undefined>;
     }
   >;
-  /** The file the agent keeps its own working context in. */
-  readonly ownContextPath: string;
-  /** The file it keeps now: its own, or its work's shared context while it keeps that. */
-  contextPath: string;
-  /** It keeps the shared context of its work (task, or no task). */
-  keeps: boolean;
-  /**
-   * The shared context's version (and text) it last heard, or wrote on while keeping it. A session
-   * Peer met again after a restart has the version from its memory file, and no text.
-   */
-  sharedHeard: number;
-  sharedHeardText: string | undefined;
-  sharedToldAt: number;
-  /** What Peer tells it at its next step, e.g. that it keeps the shared context now. */
+  /** Where its memory file is (`sessionMemory.ts`). */
+  readonly memoryPath: string;
+  /** What Peer tells it at its next step. */
   readonly pending: Array<
     | string
     | {
@@ -104,14 +85,8 @@ export interface LocalSession {
         readonly first?: boolean | undefined;
       }
   >;
-  /** Its SessionStart is being answered, which settles who keeps its work's context itself. */
+  /** Its SessionStart is being answered. */
   starting: boolean;
-  /** Who it last heard is on its work, while it keeps the shared context. */
-  roster: ReadonlyArray<WorkAgent> | undefined;
-  /** The size its kept context had when it was last told to compact it. */
-  compactedAt: number;
-  /** It was asked, as the keeper of a closed task, to mark what the project should keep. */
-  toldClosed: boolean;
   /** The files git saw changed in its repository when it last looked: changes after it are its. */
   dirty: Set<string>;
   /** Git said what was changed before the session started (a big repository may take longer than a hook waits). */
@@ -120,18 +95,7 @@ export interface LocalSession {
   head: string | undefined;
   /** When its current shell command started; 0 when none runs. */
   shellAt: number;
-  /** The lines it marked [project] in the shared context while keeping it: its findings. */
-  readonly marked: Set<string>;
-  /** Its "For the team" lines as last read: what it shares with the project. */
-  team: ReadonlyArray<string>;
   readonly startedAt: number;
-  /** When the agent last changed its working context, or when Peer created it. */
-  contextAt: number;
-  nudgedAt: number;
-  /** The agent wrote its working context this session, or found one it had written before. */
-  contextKept: boolean;
-  /** It was reminded once, at its first change, that its working context was still empty. */
-  remindedAtStart: boolean;
   task: string | undefined;
   /** Its run (`core/work/runs.ts`); while it has one, its task is the run's. */
   run?: string;
@@ -142,23 +106,6 @@ export interface LocalSession {
   /** How often Peer looked for its thread: a thread's session id may be recorded after it starts. */
   threadTries: number;
   threadLastLookedAt?: number;
-  /** Findings of other agents it has heard. */
-  readonly heard: Set<string>;
-  /** The other works whose shared context it read (`peer context`): what it read, to tell it when that changes. */
-  readonly read: Map<string, ReadWork>;
-  /** What the active plugins gave its index at its last step. */
-  index: SessionIndex;
-  /**
-   * What the agent was told of each other work (`discoveryKey`), since its session started or its
-   * context was compacted: it is not told twice, only what changed. And when an ask last carried
-   * something, so a pause can be told from a flow of asks.
-   */
-  readonly told: Map<string, string>;
-  askIndexAt: number;
-  /** Its conversation started again since its memory file was written: the file forgets `told` too. */
-  toldForgotten: boolean;
-  /** The work whose shared context it kept when its memory file was written, read back after a restart. */
-  keptBefore?: string | undefined;
   /** What Peer added to its context, in characters, by the hook that carried it. */
   readonly injected: Map<string, number>;
   modAt?: number;
@@ -172,50 +119,12 @@ export interface LocalSession {
       readonly refs?: ReadonlyArray<import("./pipeline.ts").PreparedDelivery>;
     }
   >;
-  /** What it did with the team's work, newest last: people see it in Peer. */
-  readonly advice: Advice[];
   /** Plugins' own state for it (`PeerSessionView.local`); a new runtime generation drops it. */
   pluginState: Map<string, unknown>;
   /** What plugins told it (`PeerSessionView.told`): kept in its memory file, dropped with `pluginState`. */
   readonly pluginTold: Map<string, Set<string>>;
   /** Its runtime generation changed since its memory file was written: the file forgets `pluginTold`. */
   pluginsForgotten: boolean;
-}
-
-/**
- * What the active plugins give a session's index: which plugin commands Peer's texts may name. Read
- * before each step that may say them, so the texts a step composes at once have them.
- */
-export interface SessionIndex {
-  readonly on: CommandsOn;
-}
-
-/** No plugin command, until a step reads what the plugins give. */
-export const NO_INDEX: SessionIndex = { on: () => false };
-
-/**
- * A work's context as an agent read it, to tell it what changed there since. A session Peer met
- * again after a restart has the version from its memory file, and no text.
- */
-export interface ReadWork {
-  readonly version: number;
-  readonly text: string | undefined;
-  /** A change notice is not a read receipt: retain the exact input above until an explicit read. */
-  notifiedVersion: number;
-  /** When it was last told of a change, or read it. */
-  toldAt: number;
-}
-
-/** What an agent did with the team's work, or what Peer noted, for people to see in Peer. */
-export interface Advice {
-  readonly about: "work";
-  /** A work's scope. */
-  readonly scope: string;
-  readonly name: string;
-  /** The agent read it, or asked its agents. */
-  readonly how: "read" | "asked";
-  readonly why: string;
-  readonly at: number;
 }
 
 export const MAX_FILES = 200;
@@ -270,17 +179,8 @@ export function sessionView(this: CoordinationBroker, session: LocalSession): Pe
     thread: session.thread,
     pane: session.pane,
     status: session.status,
-    keeps: session.keeps,
     files: [...session.files],
     claims: [...session.claims],
-    team: [...session.team],
-    contextReadVersion: (scope) => session.read.get(scope)?.version,
-    tellIndex: (scope) => {
-      const entry = this.indexWorks(session, Number.POSITIVE_INFINITY).find(
-        (entry) => entry.scope === scope,
-      );
-      if (entry) session.told.set(scope, discoveryKey(entry));
-    },
     local: <S>(plugin: PeerPluginId, init: () => S): S => {
       if (!pluginState.has(plugin)) pluginState.set(plugin, init());
       return pluginState.get(plugin) as S;
@@ -396,7 +296,7 @@ export async function createSession(
     texts: [branch, title],
     ...(task === undefined ? {} : { task }),
   });
-  const ownContextPath = await this.contextPathFor(place, sid, dormant ? undefined : plan.id);
+  const memoryPath = await this.memoryPathFor(place, sid, dormant ? undefined : plan.id);
   const session: LocalSession = {
     id,
     credential: undefined,
@@ -423,50 +323,27 @@ export async function createSession(
     memoryFile: "",
     answering: 0,
     asked: new Map(),
-    ownContextPath,
-    contextPath: ownContextPath,
-    keeps: false,
-    sharedHeard: 0,
-    sharedHeardText: "",
-    sharedToldAt: 0,
+    memoryPath,
     pending: [],
     starting: false,
-    roster: undefined,
-    compactedAt: 0,
-    toldClosed: false,
     // What was changed before it started is not its doing.
     ...(await this.baselineOf(place.root)),
-    marked: new Set(),
-    team: [],
     startedAt: now,
-    contextAt: now,
-    nudgedAt: 0,
-    contextKept: false,
-    remindedAtStart: false,
     task: plan.task,
     ...(dormant || plan.id === undefined ? {} : { run: plan.id }),
     thread,
     threadTries: 1,
     threadLastLookedAt: now,
-    heard: new Set(),
-    read: new Map(),
-    index: NO_INDEX,
-    told: new Map(),
-    askIndexAt: 0,
-    toldForgotten: false,
     injected: new Map(),
     modHandled: new Map(),
     deliveries: new Map(),
-    advice: [],
     pluginState: new Map(),
     pluginTold: new Map(),
     pluginsForgotten: false,
   };
-  // A session Peer meets again (Peer restarted, or the session outlived its TTL) keeps what
-  // it shares: reporting it without its lines would take its findings back. Nor is it told
-  // again what it heard.
+  // A session Peer meets again (Peer restarted, or the session outlived its TTL) is not told again
+  // what it heard.
   if (await this.retireSuperseded(session)) return null;
-  await this.restoreContext(session);
   const remembered = await this.restoreMemory(session);
   // An enrollment that began before a binding change must resolve its authority again.
   await Promise.all(this.checkoutChanges.values());
@@ -535,16 +412,6 @@ export function me(this: CoordinationBroker, session: LocalSession) {
     : `${this.host.nameOf(session.workspace, email)}'s agent`;
 }
 
-export function holder(this: CoordinationBroker, session: LocalSession): ContextHolder {
-  return {
-    id: session.id,
-    project: session.project,
-    task: session.task,
-    files: session.files,
-    claims: session.claims,
-  };
-}
-
 /**
  * The task a session works on now: the one its Peer thread or runtime agent was
  * put on, or the one its branch, its runtime's title or what its person first asked names.
@@ -595,7 +462,6 @@ export async function retireSuperseded(this: CoordinationBroker, session: LocalS
       (selected.nativeId === undefined || session.id === `${selected.agent}:${selected.nativeId}`))
   )
     return false;
-  await this.release(session);
   this.leaveRun(session);
   this.sessions.delete(session.id);
   for (const waiter of this.waiters) {

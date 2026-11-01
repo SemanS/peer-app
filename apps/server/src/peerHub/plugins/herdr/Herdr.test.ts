@@ -39,8 +39,6 @@ const coordination: PeerHubStatus["coordination"] = {
   logPath: "/tmp/coordination.jsonl",
   sessions: [],
   overlaps: [],
-  findings: [],
-  contexts: [],
 };
 
 /** A Codex agent herdr runs, idle in pane w1:p1 with its own session. */

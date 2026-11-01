@@ -30,8 +30,6 @@ const status = (plugins?: ReadonlyArray<PeerPluginState>): PeerHubStatus => ({
     logPath: "/home/ana/coordination.jsonl",
     sessions: [],
     overlaps: [],
-    findings: [],
-    contexts: [],
   },
   sharedThreads: [],
   syncing: false,

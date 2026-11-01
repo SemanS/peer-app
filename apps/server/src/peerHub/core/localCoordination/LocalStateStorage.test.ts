@@ -1,11 +1,11 @@
 // @effect-diagnostics nodeBuiltinImport:off - isolated storage crash and migration fixtures.
+import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 import * as NodeOS from "node:os";
 import { describe, expect, it } from "vite-plus/test";
 import { LocalStateStorage } from "./LocalStateStorage.ts";
 import { LocalAuthority } from "./LocalAuthority.ts";
-import { readLocalStoredState } from "./localStore.ts";
 
 const decode = (value: unknown) => {
   if (typeof value !== "object" || value === null || Array.isArray(value))
@@ -141,37 +141,6 @@ describe("Local incremental authority persistence", () => {
     }
   });
 
-  it("preserves restart lease fencing when the next mutation only records an unrelated read", async () => {
-    const test = await fixture();
-    try {
-      const report = {
-        id: "keeper",
-        project: "app",
-        label: "work",
-        status: "working" as const,
-        files: [],
-        claims: [],
-      };
-      const first = new LocalAuthority(test.file, "here");
-      await first.report([report]);
-      const kept = await first.keepContext("app", "project", "keeper", false);
-      if ("refused" in kept) throw new Error("keeper");
-      await first.writeContext("app", "project", "keeper", 0, "first", kept.epoch);
-      const second = new LocalAuthority(test.file, "here");
-      await second.report([report]);
-      const epoch = (await second.readContext("app", "project"))!.epoch!;
-      await second.contextRead("app", "project", "keeper", 1, "read-after-restart");
-      const third = new LocalAuthority(test.file, "here");
-      expect((await third.readContext("app", "project"))!.epoch).toBe(epoch + 1);
-      expect((await third.readContext("app", "project"))!.keeper).toBeUndefined();
-      const persisted = await readLocalStoredState(test.file);
-      expect(persisted!.contexts[JSON.stringify(["app", "project"])]!.epoch).toBe(epoch);
-      expect(persisted!.contexts[JSON.stringify(["app", "project"])]!.keeper).toBeUndefined();
-    } finally {
-      await test.dispose();
-    }
-  });
-
   it("keeps the previous commit after pointer replacement fails, then discards the orphan append on retry", async () => {
     const test = await fixture();
     try {
@@ -247,18 +216,60 @@ describe("Local incremental authority persistence", () => {
     }
   });
 
+  it("applies the keyed changes of a journal from before", async () => {
+    const test = await fixture();
+    try {
+      const storage = new LocalStateStorage(test.file);
+      await storage.load(decode);
+      await storage.save({ contexts: { one: { version: 1 }, two: { version: 1 } }, events: [] });
+      const pointer = await test.pointer();
+      const payload = {
+        sequence: 1,
+        previous: (pointer as unknown as { head: string }).head,
+        patch: {
+          contexts: {
+            kind: "record",
+            entries: {
+              one: { kind: "value", value: { version: 2 } },
+              two: { kind: "remove" },
+            },
+          },
+          events: { kind: "tail", drop: 0, append: [{ id: "e1" }] },
+        },
+      };
+      const digest = NodeCrypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+      const entry = `${JSON.stringify({ ...payload, hash: digest })}\n`;
+      await NodeFSP.writeFile(NodePath.join(`${test.file}.store`, pointer.journal), entry);
+      await NodeFSP.writeFile(
+        test.file,
+        JSON.stringify({
+          ...pointer,
+          sequence: 1,
+          bytes: Buffer.byteLength(entry),
+          head: digest,
+        }),
+      );
+      expect(await new LocalStateStorage(test.file).load(decode)).toEqual({
+        contexts: { one: { version: 2 } },
+        events: [{ id: "e1" }],
+      });
+    } finally {
+      await test.dispose();
+    }
+  });
+
   it("refuses a missing commit pointer when durable evidence still exists", async () => {
     const test = await fixture();
     try {
       const local = new LocalAuthority(test.file, "here");
+      const reported = { project: "app", label: "work", status: "working" as const, files: [] };
       await local.report([
-        { id: "reader", project: "app", label: "work", status: "working", files: [], claims: [] },
+        { ...reported, id: "one", claims: ["src/a.ts"] },
+        { ...reported, id: "two", claims: ["src/a.ts"] },
       ]);
       await NodeFSP.rm(test.file);
       const restarted = new LocalAuthority(test.file, "here");
-      await expect(restarted.staleReads("app", "reader")).rejects.toThrow(
-        "commit pointer is missing",
-      );
+      await expect(restarted.view()).rejects.toThrow("commit pointer is missing");
       await expect(restarted.report([])).rejects.toThrow("commit pointer is missing");
       await expect(NodeFSP.stat(test.file)).rejects.toThrow();
     } finally {

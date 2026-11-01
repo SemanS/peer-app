@@ -1,5 +1,3 @@
-import * as PeerConversationReport from "./core/index/PeerConversationReport.ts";
-import * as PeerContextView from "./core/index/PeerContextView.ts";
 import * as PeerLog from "./core/log/PeerLog.ts";
 /**
  * PeerHub — this environment's link to a Peer Hub and its workspaces.
@@ -28,7 +26,6 @@ import * as PeerAgents from "./core/coordination/PeerAgents.ts";
 import * as PeerCoordination from "./core/coordination/PeerCoordination.ts";
 import * as PeerHubClient from "./core/hub/PeerHubClient.ts";
 import * as PeerHubEvents from "./core/hub/PeerHubEvents.ts";
-import * as PeerIndex from "./core/index/PeerIndex.ts";
 import * as PeerPlugins from "./core/plugins/PeerPlugins.ts";
 import * as PeerRpc from "./core/rpc.ts";
 import * as PeerState from "./core/state/PeerState.ts";
@@ -40,10 +37,8 @@ import * as PeerWorkspaces from "./core/workspaces/PeerWorkspaces.ts";
 const WORK_INTERVAL = "30 seconds";
 const MANIFEST_INTERVAL = "10 minutes";
 /** Peer's core services, built without running them: `t3 peer-core` one-shot commands use it alone. */
-export const coreLayer = Layer.mergeAll(PeerAdapters.layer, PeerContextView.layer).pipe(
-  Layer.provideMerge(PeerConversationReport.layer),
+export const coreLayer = PeerAdapters.layer.pipe(
   Layer.provideMerge(PeerCoordination.layer),
-  Layer.provideMerge(PeerIndex.layer),
   Layer.provideMerge(PeerWorkspaces.layer),
   Layer.provideMerge(PeerAgents.layer),
   Layer.provideMerge(PeerHubEvents.layer),
@@ -69,7 +64,6 @@ const run = Effect.gen(function* () {
   const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
   const coordination = yield* PeerCoordination.PeerCoordination;
   const { publish } = yield* PeerStatus.PeerStatus;
-  const reports = yield* PeerConversationReport.PeerConversationReportService;
   const layerScope = yield* Effect.scope;
   const requireSession = client.session;
 
@@ -83,13 +77,6 @@ const run = Effect.gen(function* () {
 
   /** Reports this computer's threads to each workspace and reads everyone's work back. */
   const refreshWork = work.refresh().pipe(state.lock.withPermits(1));
-
-  yield* Effect.forever(
-    reports.refresh.pipe(
-      Effect.ignoreCause({ log: true }),
-      Effect.andThen(Effect.sleep(WORK_INTERVAL)),
-    ),
-  ).pipe(Effect.forkScoped);
 
   // Keep the manifests fresh and colleagues' presence current.
   yield* Effect.forever(

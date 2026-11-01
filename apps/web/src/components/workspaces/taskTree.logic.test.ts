@@ -33,7 +33,6 @@ function node(id: string, overrides: Partial<WorkTaskNode> = {}): WorkTaskNode {
     status: "idle",
     threads: [],
     removable: true,
-    context: undefined,
     depth: 0,
     kind: "task",
     executable: true,
@@ -77,7 +76,6 @@ const project: WorkProjectNode = {
     { name: null, tasks: [r] },
   ],
   unsorted: [],
-  context: undefined,
   tasks: [g, a, b, c, r].map((task) => hubTask(task.id, { executable: task.executable })),
 };
 

@@ -13,7 +13,6 @@ import type { PeerCoordinationPolicy, PeerProjectPolicy } from "@t3tools/contrac
 
 import { clip } from "../../peerText.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
-import { commandsOn } from "../broker/cli.ts";
 import { messageOf } from "../broker/log.ts";
 import {
   type PipelineStep,
@@ -24,7 +23,6 @@ import {
 } from "../broker/pipeline.ts";
 import { inRepository, type LocalSession } from "../broker/sessions.ts";
 import { newOp, TIMED_OUT, within } from "../broker/sync.ts";
-import { scopeOf } from "../contexts/text.ts";
 import type {
   HubCoordSession,
   HubCoordView,
@@ -157,54 +155,13 @@ export async function beforeTool(
   verdictBudgetMs: number,
 ): Promise<Record<string, unknown> | null> {
   if (body.tool_name === "Bash") return this.beforeShell(session, body, step, verdictBudgetMs);
-  const files: string[] = [];
-  for (const path of this.editedPaths(session, body)) {
-    if (this.keptBy(session, path)) continue;
-    const mirror = [...this.shared.values()].find((candidate) =>
-      this.samePath(candidate.path, path),
-    );
-    if (mirror !== undefined) {
-      const keeper =
-        mirror.keeper === undefined
-          ? "another agent"
-          : `${this.host.nameOf(mirror.workspace, mirror.keeper.email)}'s agent`;
-      this.record("shared.denied", { session: session.id, scope: mirror.scope });
-      const subject = this.subjectOf(mirror.workspace, mirror.project, mirror.scope);
-      const ownWork =
-        mirror.workspace === session.workspace &&
-        mirror.project === session.project &&
-        mirror.scope === scopeOf(session.task);
-      return {
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason: ownWork
-            ? `Peer: ${keeper} keeps the shared context of ${subject}; the other agents on it only read it. Put what the work should know under "## For the team" in your working context (${session.ownContextPath}); Peer passes it to the keeper.`
-            : `Peer: this is the shared context of ${subject}, another work on this project, and ${keeper} keeps it: only its keeper writes it. Read it${commandsOn(step.plugins)("ask") ? `; if your work depends on it, ask its agents: ${this.cli} ask ${this.handleOf(mirror.workspace, mirror.project, mirror.scope)} "<question>"` : ""}.`,
-        },
-      };
-    }
+  const files = this.editedPaths(session, body).flatMap((path) => {
     const file = inRepository(session, path);
-    if (file !== null) files.push(file);
-  }
-  if (files.length === 0) {
-    // Its own contexts only: Claude Code edits them unasked. Codex takes no "allow" without a
-    // rewrite, and asks for them through PermissionRequest instead. A file elsewhere outside the
-    // repository is not Peer's to let through: its person's permission settings decide.
-    const paths = this.editedPaths(session, body);
-    const own = paths.length > 0 && paths.every((path) => this.keptBy(session, path));
-    if (session.agent === "claude" && own)
-      return {
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "allow",
-          permissionDecisionReason: "The agent's own working context",
-        },
-      };
-    return this.newsContext("PreToolUse", session, step, body);
-  }
-  // Plugins judge the edit after core's local checks and before the hub hears of it: a plugin's
-  // deny stops it with that plugin's reason, and no claim is recorded.
+    return file === null ? [] : [file];
+  });
+  if (files.length === 0) return this.newsContext("PreToolUse", session, step, body);
+  // Plugins judge the edit before the hub hears of it: a plugin's deny stops it with that plugin's
+  // reason, and no claim is recorded.
   const theirs = await verdicts(
     step,
     this.toolContext(session, body, "pre-tool", remainingMs(step)),

@@ -43,8 +43,6 @@ describe("workspace identity through core", () => {
               logPath: "/tmp/test",
               sessions: [],
               overlaps: [],
-              findings: [],
-              contexts: [],
             }),
           );
           const service = yield* PeerWorkspaces.PeerWorkspaces;

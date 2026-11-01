@@ -146,8 +146,6 @@ export function statusText(input: {
   readonly taskName?: TaskNamer;
   /** The project's other works; without it, the other agents are listed as they are. */
   readonly board?: ReadonlyArray<BoardEntry>;
-  /** What time it is, for how old each work's context is. */
-  readonly now?: number;
   readonly cli: string;
   /** The plugins' commands it names: those of the active plugins. */
   readonly on?: CommandsOn;
@@ -188,7 +186,7 @@ export function statusText(input: {
         ? "No other work on this project now."
         : [
             "Other work on this project:",
-            ...input.board.map((entry) => `- ${boardLine(entry, input.now)}`),
+            ...input.board.map((entry) => `- ${boardLine(entry)}`),
           ].join("\n"),
     );
   }
@@ -209,7 +207,6 @@ export function statusText(input: {
   }
   const commands = [
     `${input.cli} index`,
-    `${input.cli} context [<task>]`,
     ...(on("ask") ? [`${input.cli} ask <task> "<question>"`] : []),
     `${input.cli} note "<text>"`,
     `${input.cli} resolve "<agreement>"`,
@@ -218,6 +215,33 @@ export function statusText(input: {
   ];
   lines.push(`Commands: ${commands.join(" · ")}`);
   return lines.join("\n");
+}
+
+/** What Peer's command does, said when a session starts. */
+function commandsText(cli: string, path: string | undefined, tools: boolean): string {
+  return tools
+    ? "Peer knows this session, its project and task. Use your peer_* tools; peer <command> below means peer_<command>. Before changing files, call peer_claim: it says who else is on them and stops nothing. `peer_status` shows who works on what."
+    : `Peer knows this session, its project and task: run \`${cli}\`${path === undefined ? "" : ` (${path})`} as is, with no names or IDs, and never ask your person for Peer commands. \`${cli} status\` shows who works on what, \`${cli} claim <path>\` says what you are about to touch, and \`${cli}\` lists all commands.`;
+}
+
+/** What a session hears from core when it starts, resumes or comes back from a compaction. */
+export function startText(input: {
+  /** Who the agent is, e.g. "Ana's agent": it keeps its own lines apart from its teammates'. */
+  readonly me?: string;
+  /** Where Peer's command is, for an agent whose shell does not find it by name (Codex). */
+  readonly cliPath?: string;
+  readonly tools?: boolean;
+  /** What the active plugins say of their commands: the room's line. */
+  readonly startLines?: ReadonlyArray<string>;
+  /** Who else is at work on the project (`indexText`). */
+  readonly index?: string | null;
+}): string {
+  return [
+    ...(input.me === undefined ? [] : [`You are ${input.me} here.`]),
+    commandsText("peer", input.cliPath, input.tools === true),
+    ...(input.startLines ?? []),
+    ...(input.index ? [input.index] : []),
+  ].join("\n\n");
 }
 
 /** How a person's request to settle an overlap starts, so every Peer and agent recognizes it. */

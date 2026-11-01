@@ -48,8 +48,6 @@ const coordination: PeerHubStatus["coordination"] = {
   logPath: "/tmp/coordination.jsonl",
   sessions: [],
   overlaps: [],
-  findings: [],
-  contexts: [],
 };
 
 const project = (id: string, url: string) => ({

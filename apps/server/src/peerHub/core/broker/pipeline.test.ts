@@ -67,7 +67,6 @@ const chatty = plugin("observe", {
     sessionStart: () => Effect.succeed("Lore: keep prices in cents."),
     notices: [{ wakes: false, read: () => Effect.succeed("Lore applies to your change.") }],
     postTool: (ctx) => Effect.succeed(`Lore read ${ctx.paths.join(", ")}.`),
-    preCompact: () => Effect.succeed("Lore survives compaction."),
   },
 });
 
@@ -99,18 +98,16 @@ describe("what plugins add to hook answers", () => {
               {},
             ),
           ),
-          added(await fixture.broker["hook"]({ ...body, hook_event_name: "PreCompact" }, {})),
         ] as const;
       };
       const quiet = await steps("quiet-session");
       expect(quiet.join("\n")).not.toContain("Lore");
 
       on.current = true;
-      const [start, prompt, post, compact] = await steps("loud-session");
+      const [start, prompt, post] = await steps("loud-session");
       expect(start).toMatch(/[^]+\n\nLore: keep prices in cents\.$/);
       expect(prompt).toContain("Lore applies to your change.");
       expect(post).toContain("Lore applies to your change.\n\nLore read src/price.ts.");
-      expect(compact).toBe("Lore survives compaction.");
       // Core's own start text comes first, the plugin's block after it.
       expect(start.startsWith("You are Ana's agent here.")).toBe(true);
       expect(quiet[0].startsWith("You are Ana's agent here.")).toBe(true);
@@ -322,40 +319,6 @@ describe("waking an idle agent", () => {
       await fixture.register("one");
       const woken = await fixture.broker["wait"]({ session_id: "one", cwd: fixture.root }, {});
       expect(woken).toBe("Vir's agent asks where you keep the names.");
-    } finally {
-      await fixture.dispose();
-    }
-  });
-});
-
-describe("a Codex permission request", () => {
-  it("lets through the files an active plugin keeps for the session, and nothing else", async () => {
-    const fixture = await brokerFixture((host) => ({
-      plugins: async () =>
-        only(
-          plugin("observe", {
-            hooks: {
-              ownPaths: (session) => [NodePath.join(host.contextsDir, `${session.id}.notes`)],
-            },
-          }),
-        ),
-    }));
-    try {
-      const request = (file: string) =>
-        fixture.broker["hook"](
-          {
-            hook_event_name: "PermissionRequest",
-            session_id: "one",
-            cwd: fixture.root,
-            tool_name: "Edit",
-            tool_input: { file_path: file },
-          },
-          { "x-peer-agent": "codex" },
-        );
-      expect(await request(NodePath.join(fixture.root, "contexts", "codex:one.notes"))).toEqual({
-        hookSpecificOutput: { hookEventName: "PermissionRequest", decision: { behavior: "allow" } },
-      });
-      expect(await request(NodePath.join(fixture.root, "src", "pay.ts"))).toBeNull();
     } finally {
       await fixture.dispose();
     }

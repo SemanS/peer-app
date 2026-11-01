@@ -61,8 +61,6 @@ const coordination = {
   logPath: "/isolated",
   sessions: [],
   overlaps: [],
-  findings: [],
-  contexts: [],
 };
 const trustedCore = Effect.gen(function* () {
   const hub = yield* standInHub({
@@ -222,8 +220,6 @@ describe("workspace gate through provider policy", () => {
             logPath: "/isolated",
             sessions: [],
             overlaps: [],
-            findings: [],
-            contexts: [],
           }),
         );
         const member = {

@@ -12,7 +12,6 @@ import {
   PeerHubError,
   type PeerHubContinueRunInput,
   type PeerHubContinueRunResult,
-  type PeerStaleReads,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -25,7 +24,6 @@ import * as Stream from "effect/Stream";
 import * as AgentTranscript from "../../agentTranscript.ts";
 import { AGENT_TOOL_INSTRUCTIONS, CORE_AGENT_TOOLS } from "../broker/agentTools.ts";
 import type { CoordinationBroker } from "../broker/Broker.ts";
-import type { HubCoordView } from "../hub/coordApi.ts";
 import {
   CliError,
   PeerPromptStale,
@@ -37,17 +35,6 @@ import {
 } from "../plugin.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import type { CoordinationView } from "./edits.ts";
-
-/** What an agent did with the team's work, for people to see in Peer. */
-export interface PeerAdvice {
-  readonly about: "work";
-  /** A work's scope. */
-  readonly scope: string;
-  readonly name: string;
-  /** It read it, or asked its agents. */
-  readonly how: "read" | "asked";
-  readonly why: string;
-}
 
 const isHubError = Schema.is(PeerHubError);
 const isPromptStale = Schema.is(PeerPromptStale);
@@ -66,8 +53,6 @@ export class PeerAgents extends Context.Service<
     ) => Effect.Effect<A, E | PeerHubError, R>;
     /** This computer's sessions now. */
     readonly sessions: Effect.Effect<ReadonlyArray<PeerSessionView>>;
-    /** The session's stale inputs; unknown/ended sessions have none. */
-    readonly staleReads: (session: string) => Effect.Effect<PeerStaleReads, PeerHubError>;
     /**
      * The agent tool catalog any transport offers (the MCP server today): core's commands as tools
      * plus every active plugin's `agentTools`, in registry order, and what to tell the agent's model
@@ -142,16 +127,8 @@ export class PeerAgents extends Context.Service<
     readonly view: (workspace: string) => Effect.Effect<CoordinationView>;
     /** The workspaces whose view changes, as they change. */
     readonly viewChanges: Stream.Stream<string>;
-    /** Each workspace's coordination view as the Hub last sent it. */
-    readonly hubViews: Effect.Effect<
-      ReadonlyArray<{ readonly workspace: string; readonly view: HubCoordView }>
-    >;
     /** Something changed at the Hub: every workspace's view is read again within a moment. */
     readonly hubChanged: Effect.Effect<void>;
-    /** A session claims a path (`task:<id>` while it asks that task's agents); the Hub hears soon. */
-    readonly claim: (session: string, path: string) => Effect.Effect<void>;
-    /** A session gives up its claim on a path; the Hub hears soon. */
-    readonly release: (session: string, path: string) => Effect.Effect<void>;
     /**
      * A session's note on one of its overlaps; both its agents hear it. The same `op` adds no
      * second note.
@@ -162,8 +139,6 @@ export class PeerAgents extends Context.Service<
       readonly text: string;
       readonly op: string;
     }) => Effect.Effect<void, PeerHubError>;
-    /** Notes for people in Peer what a session did with the team's work. */
-    readonly advise: (session: string, advice: PeerAdvice) => Effect.Effect<void>;
     /** A line in the coordination log; a plugin's events start with its id. */
     readonly log: (event: string, fields: Readonly<Record<string, unknown>>) => Effect.Effect<void>;
     /**
@@ -245,18 +220,6 @@ const make = Effect.gen(function* () {
         (release) => Effect.sync(release),
       ),
     sessions: ask((running) => running.sessionViews(), []),
-    staleReads: (id) =>
-      Effect.suspend(() => {
-        const session = broker?.sessions.get(id);
-        const read = broker?.host.staleReads;
-        return !session || !read
-          ? Effect.succeed({ fresh: true, stale: [] })
-          : Effect.tryPromise({
-              try: () => read(session.workspace, session.project, session.id),
-              catch: () =>
-                new PeerHubError({ detail: "Could not recheck the agent's shared inputs." }),
-            });
-      }),
     tools: Effect.map(contributed, (contributions) => ({
       instructions: AGENT_TOOL_INSTRUCTIONS,
       tools: [...CORE_AGENT_TOOLS, ...contributions.flatMap((entry) => entry.agentTools ?? [])],
@@ -333,10 +296,7 @@ const make = Effect.gen(function* () {
     view: (workspace) =>
       ask((running) => running.viewOf(workspace), { sessions: [], overlaps: [] }),
     viewChanges: Stream.fromPubSub(changes),
-    hubViews: ask((running) => running.hubViews(), []),
     hubChanged: ask((running) => running.hubChanged(), undefined),
-    claim: (session, path) => ask((running) => running.claimFor(session, path), undefined),
-    release: (session, path) => ask((running) => running.releaseFor(session, path), undefined),
     note: ({ session, overlap, text, op }) => {
       const running = broker;
       return running === null
@@ -347,7 +307,6 @@ const make = Effect.gen(function* () {
               isHubError(failure) ? failure : new PeerHubError({ detail: messageOf(failure) }),
           });
     },
-    advise: (session, advice) => ask((running) => running.adviseOn(session, advice), undefined),
     log: (event, fields) => ask((running) => running.logEvent(event, fields), undefined),
     continueRun: (input) =>
       Effect.promise(async () => {

@@ -106,8 +106,6 @@ it.effect("serves peer config to an agent without a shell, through the active pl
           logPath: "/tmp/settings-mcp",
           sessions: [],
           overlaps: [],
-          findings: [],
-          contexts: [],
         }),
       );
       yield* (yield* PeerHubClient).me;

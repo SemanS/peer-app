@@ -22,22 +22,11 @@ import { coordinationRepository } from "../localCoordination/localPlace.ts";
 import { PeerHubError } from "@t3tools/contracts";
 
 import { coordinationScripts } from "../adapters/scripts.ts";
-import * as ContextCli from "../contexts/contextCli.ts";
-import * as Contexts from "../contexts/contexts.ts";
-import * as Findings from "../contexts/findings.ts";
-import type { PeerAdvice } from "../coordination/PeerAgents.ts";
 import { knownPolicies, policyOfDecision, policyWithoutHub } from "../coordination/edits.ts";
 import type { CoordinationView } from "../coordination/edits.ts";
 import { closerOf, settleAskedAt } from "../coordination/news.ts";
 import * as Overlaps from "../coordination/overlaps.ts";
-import type {
-  HubContext,
-  HubCoordSession,
-  HubCoordView,
-  HubFinding,
-  HubOverlap,
-} from "../hub/coordApi.ts";
-import type { PeerIndexWork } from "../index/PeerIndex.ts";
+import type { HubCoordSession, HubCoordView, HubOverlap } from "../hub/coordApi.ts";
 import * as Board from "../index/board.ts";
 import type { PeerSessionView } from "../plugin.ts";
 import * as Cli from "./cli.ts";
@@ -146,8 +135,6 @@ export class CoordinationBroker {
   readonly waiters = new Set<Wake.Waiter>();
   /** Codex sessions Peer is handing a note to through Codex now. */
   readonly queueing = new Set<string>();
-  /** Copies of the project's other works' contexts being made, per workspace. */
-  readonly boardMirroring = new Map<string, Promise<void>>();
   /** Ends plugins' commands still running when the broker stops. */
   readonly stopping = new AbortController();
   /** Who hears that a workspace's view changed (`PeerAgents.viewChanges`). */
@@ -155,9 +142,6 @@ export class CoordinationBroker {
   /** The `git status` runs in flight, by repository. */
   readonly gitRuns = new Map<string, Promise<string | null>>();
   readonly ignoredCwds = new Map<string, number>();
-  /** Shared contexts of the work this computer's agents are on, by `sharedKey`. */
-  readonly shared = new Map<string, Contexts.SharedMirror>();
-  readonly claimedAt = new Map<string, number>();
   dirtySince: number | null = null;
   lastSync = 0;
   syncing: Promise<void> | null = null;
@@ -238,7 +222,7 @@ export class CoordinationBroker {
     this.stopRunEnds = this.host.runs?.onEnded((run) => this.runEnded(run.id)) ?? null;
     this.timer = setInterval(() => void this.tick(), 500);
     this.record("broker.started", { socket: this.host.socketPath, policy: this.host.policy() });
-    void this.forgetOldContexts();
+    void this.forgetOldMemories();
   }
 
   /**
@@ -281,12 +265,6 @@ export class CoordinationBroker {
     // What its agents were told stays theirs for when Peer starts again.
     await this.saveMemories();
     this.dormantSessions.clear();
-    // The next agent on their work keeps what this computer's agents kept (the hub hands it
-    // over anyway once their sessions stop reporting, so an unreachable hub does not hold this up).
-    await Promise.race([
-      Promise.all([...this.sessions.values()].map((session) => this.release(session))),
-      new Promise((resolve) => setTimeout(resolve, 3000)),
-    ]);
     // Tell the hub this computer's agents are no longer coordinated; their runs stay, detached.
     this.stopRunEnds?.();
     for (const session of this.sessions.values()) this.leaveRun(session);
@@ -332,17 +310,6 @@ export class CoordinationBroker {
     readonly policies: Readonly<
       Record<string, Readonly<Record<string, ReturnType<typeof policyWithoutHub>>>>
     >;
-    readonly findings: ReadonlyArray<HubFinding & { readonly workspace: string }>;
-    readonly contexts: ReadonlyArray<HubContext & { readonly workspace: string }>;
-    /** What Peer told this computer's agents, newest first. */
-    readonly advice: ReadonlyArray<
-      Omit<Sessions.Advice, "at"> & {
-        readonly workspace: string;
-        readonly project: string;
-        readonly session: string;
-        readonly at: string;
-      }
-    >;
   } {
     const sessions = [];
     const overlaps = [];
@@ -350,20 +317,6 @@ export class CoordinationBroker {
       string,
       Readonly<Record<string, ReturnType<typeof policyWithoutHub>>>
     > = {};
-    const findings = [];
-    const contexts = [];
-    const advice = [...this.sessions.values()]
-      .flatMap((session) =>
-        session.advice.map((entry) => ({
-          ...entry,
-          workspace: session.workspace,
-          project: session.project,
-          session: session.id,
-          at: new Date(entry.at).toISOString(),
-        })),
-      )
-      .toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at))
-      .slice(0, 100);
     for (const [workspace, view] of this.views) {
       const merged = this.merged(workspace, view);
       for (const session of merged.sessions) {
@@ -382,10 +335,8 @@ export class CoordinationBroker {
         });
       }
       policies[workspace] = knownPolicies(view.policies);
-      for (const finding of view.findings ?? []) findings.push({ ...finding, workspace });
-      for (const context of view.contexts ?? []) contexts.push({ ...context, workspace });
     }
-    return { sessions, overlaps, policies, findings, contexts, advice };
+    return { sessions, overlaps, policies };
   }
 
   /** Runtime labels require a live adapter handshake; the runtime alone reports after an action. */
@@ -420,11 +371,6 @@ export class CoordinationBroker {
     return [...this.sessions.values()].map((session) => this.sessionView(session));
   }
 
-  /** Each workspace's view as the hub last sent it, with what its features add. */
-  hubViews(): ReadonlyArray<{ readonly workspace: string; readonly view: HubCoordView }> {
-    return [...this.views].map(([workspace, view]) => ({ workspace, view }));
-  }
-
   /** A workspace's coordination: the hub's view with this computer's sessions as they are now. */
   viewOf(workspace: string): CoordinationView {
     return this.merged(workspace, this.views.get(workspace));
@@ -434,22 +380,6 @@ export class CoordinationBroker {
   onViewChange(listener: (workspace: string) => void): () => void {
     this.viewListeners.add(listener);
     return () => void this.viewListeners.delete(listener);
-  }
-
-  /** A session claims `path` (last, should it hold it already); the hub hears at the next sync. */
-  claimFor(sessionId: string, path: string): void {
-    const session = this.sessions.get(sessionId);
-    if (session === undefined) return;
-    session.claims = [...session.claims.filter((claim) => claim !== path), path];
-    this.markDirty();
-  }
-
-  /** A session gives up its claim on `path`; the hub hears at the next sync. */
-  releaseFor(sessionId: string, path: string): void {
-    const session = this.sessions.get(sessionId);
-    if (session === undefined) return;
-    session.claims = session.claims.filter((claim) => claim !== path);
-    this.markDirty();
   }
 
   /**
@@ -481,32 +411,9 @@ export class CoordinationBroker {
     return this.sync(workspace);
   }
 
-  /** Notes for people in Peer what a session did with the team's work. */
-  adviseOn(sessionId: string, advice: PeerAdvice): void {
-    const session = this.sessions.get(sessionId);
-    if (session !== undefined) this.noteAdvice(session, { ...advice, at: Date.now() });
-  }
-
   /** A line in the coordination log. */
   logEvent(event: string, fields: Readonly<Record<string, unknown>>): void {
     this.record(event, fields);
-  }
-
-  /** The other works on a session's project, those with agents at work on them first. */
-  worksFor(sessionId: string): ReadonlyArray<PeerIndexWork> {
-    const session = this.sessions.get(sessionId);
-    if (session === undefined) return [];
-    return this.works(session)
-      .toSorted(Board.byActivity)
-      .map(({ entry, labels, text }) => ({
-        scope: entry.scope,
-        handle: entry.handle,
-        name: entry.name,
-        agents: entry.agents,
-        gist: entry.gist,
-        labels,
-        text,
-      }));
   }
 
   // The log (log.ts).
@@ -525,12 +432,12 @@ export class CoordinationBroker {
   touch = Sessions.touch;
   markDirty = Sessions.markDirty;
   me = Sessions.me;
-  holder = Sessions.holder;
   taskFor = Sessions.taskFor;
   findThread = Sessions.findThread;
   retireSuperseded = Sessions.retireSuperseded;
   restoreMemory = SessionMemory.restoreMemory;
   saveMemories = SessionMemory.saveMemories;
+  forgetOldMemories = SessionMemory.forgetOldMemories;
   runtimeOf = Sessions.runtimeOf;
   statusWithin = Sessions.statusWithin;
   baselineOf = Sessions.baselineOf;
@@ -540,7 +447,7 @@ export class CoordinationBroker {
 
   // Runs (runs.ts).
   planRun = Runs.planRun;
-  contextPathFor = Runs.contextPathFor;
+  memoryPathFor = Runs.memoryPathFor;
   enterRun = Runs.enterRun;
   adoptRun = Runs.adoptRun;
   openRoom = Runs.openRoom;
@@ -559,7 +466,6 @@ export class CoordinationBroker {
   answerHook = Hooks.answerHook;
   pipelineStep = Hooks.pipelineStep;
   toolContext = Hooks.toolContext;
-  pluginsOwn = Hooks.pluginsOwn;
   isPeerWork = Hooks.isPeerWork;
   beforeShell = Hooks.beforeShell;
   shellVerdicts = Hooks.shellVerdicts;
@@ -626,58 +532,9 @@ export class CoordinationBroker {
   announce = Overlaps.announce;
   markSeen = Overlaps.markSeen;
 
-  // Working and shared contexts (../contexts/contexts.ts).
-  restoreContext = Contexts.restoreContext;
-  forgetOldContexts = Contexts.forgetOldContexts;
-  readTeamLines = Contexts.readTeamLines;
-  nudge = Contexts.nudge;
-  checkpointPrivate = Contexts.checkpointPrivate;
-  keptBy = Contexts.keptBy;
-  sharedKey = Contexts.sharedKey;
-  mirrorOf = Contexts.mirrorOf;
-  sharedOf = Contexts.sharedOf;
-  keeperOf = Contexts.keeperOf;
-  agentsOn = Contexts.agentsOn;
-  mirror = Contexts.mirror;
-  writeMirror = Contexts.writeMirror;
-  stash = Contexts.stash;
-  takeUp = Contexts.takeUp;
-  keep = Contexts.keep;
-  read = Contexts.read;
-  release = Contexts.release;
-  saveShared = Contexts.saveShared;
-  pushShared = Contexts.pushShared;
-  pushNow = Contexts.pushNow;
-  followShared = Contexts.followShared;
-
-  // What an agent hears of its team's work (../contexts/findings.ts).
-  findingsOf = Findings.findingsOf;
-  findingNews = Findings.findingNews;
-  closeNews = Findings.closeNews;
-  rosterNews = Findings.rosterNews;
-  sharedNews = Findings.sharedNews;
-
-  // `peer context` and followed reads (../contexts/contextCli.ts).
-  contextCli = ContextCli.contextCli;
-  decideFindings = ContextCli.decideFindings;
-  requestedFindings = ContextCli.requestedFindings;
-  markRead = ContextCli.markRead;
-  followedNews = ContextCli.followedNews;
-
-  // The board and the index (../index/board.ts).
+  // The board (../index/board.ts).
   taskNamer = Board.taskNamer;
-  subjectOf = Board.subjectOf;
-  handleOf = Board.handleOf;
-  scopeNamed = Board.scopeNamed;
+  taskNamed = Board.taskNamed;
   boardAgent = Board.boardAgent;
-  works = Board.works;
   board = Board.board;
-  indexWorks = Board.indexWorks;
-  advise = Board.advise;
-  noteAdvice = Board.noteAdvice;
-  discoveryFor = Board.discoveryFor;
-  indexOf = Board.indexOf;
-  contextPointer = Board.contextPointer;
-  mirrorBoard = Board.mirrorBoard;
-  copyBoard = Board.copyBoard;
 }

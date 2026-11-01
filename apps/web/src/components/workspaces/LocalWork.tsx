@@ -105,12 +105,6 @@ export function LocalWork({
           ? "Connecting to this project’s environment…"
           : local.description}
       </p>
-      {scope?.refs != null && catalog === undefined ? (
-        <p className="text-sm text-muted-foreground">
-          This environment cannot identify saved contexts by repository yet. Update it to see
-          project-specific coordination here.
-        </p>
-      ) : null}
       {local.available ? (
         <>
           <p>
@@ -155,34 +149,6 @@ export function LocalWork({
           ) : null}
         </>
       ) : null}
-      {local.projects.length === 0 ? null : (
-        <section aria-label="Local shared contexts" className="flex flex-col gap-2">
-          <h3 className="font-medium">
-            Shared contexts · {local.projects.length}{" "}
-            {local.projects.length === 1 ? "project" : "projects"}
-          </h3>
-          {local.projects.slice(0, shown).map((project) => (
-            <div key={project.id} className="flex flex-col gap-1">
-              <p className="font-medium">{project.name}</p>
-              <details className="text-xs text-muted-foreground">
-                <summary className="cursor-pointer">Project details</summary>
-                <p className="break-all">{project.id}</p>
-              </details>
-              <p className="text-xs text-muted-foreground">
-                {project.contexts} saved contexts
-                {project.gist === undefined ? "" : ` · ${project.gist}`}
-              </p>
-            </div>
-          ))}
-          {shown >= local.projects.length ? null : (
-            <div>
-              <Button size="xs" variant="outline" onClick={() => setShown(shown + 20)}>
-                More projects · {local.projects.length - shown}
-              </Button>
-            </div>
-          )}
-        </section>
-      )}
       <div className="flex flex-wrap gap-2">
         <Button
           size="xs"

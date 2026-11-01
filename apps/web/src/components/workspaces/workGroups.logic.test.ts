@@ -26,7 +26,6 @@ function thread(key: string, overrides: Partial<WorkThreadNode> = {}): WorkThrea
     observable: false,
     agent: undefined,
     activeAt: undefined,
-    keepsContext: false,
     ...overrides,
   };
 }
@@ -40,7 +39,6 @@ function task(id: string, overrides: Partial<Omit<WorkTaskNode, "id">> = {}): Wo
     status: "idle",
     threads: [],
     removable: true,
-    context: undefined,
     ...overrides,
   };
 }
@@ -72,7 +70,6 @@ function project(
     name: "app",
     areas,
     unsorted: [],
-    context: undefined,
     tasks,
   };
 }

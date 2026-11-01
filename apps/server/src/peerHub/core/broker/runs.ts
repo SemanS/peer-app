@@ -3,8 +3,8 @@
 /**
  * Runs in the broker (design D2, D3, D5): which run a session joins when it starts (the run its
  * process names with a matching token, else the one its thread, pane or branch puts it on), the
- * session files kept by run so a new session of the run continues what the last one read and was
- * told, `peer run`, and the socket's `/runs` routes the terminal's Peer Core process uses.
+ * memory files kept by run so a new session of the run continues what the last one was told,
+ * `peer run`, and the socket's `/runs` routes the terminal's Peer Core process uses.
  *
  * @module peerHub/core/broker/runs
  */
@@ -153,29 +153,26 @@ const exists = (path: string) =>
   );
 
 /**
- * A session's working context file: `<run id>.md` in a run, so the run's next session continues
- * it, else `<session id>.md`. A run's first session that already had files of its own (Peer met it
- * before runs) brings them along.
+ * A session's memory file: `<run id>.memory.json` in a run, so the run's next session continues it,
+ * else `<session id>.memory.json`. A run's first session that already had a file of its own (Peer
+ * met it before it was on a task) brings it along.
  */
-export async function contextPathFor(
+export async function memoryPathFor(
   this: CoordinationBroker,
   place: { readonly workspace: string; readonly project: string },
   sid: string,
   run: string | undefined,
 ): Promise<string> {
   const dir = NodePath.join(
-    this.host.contextsDir,
+    this.host.memoryDir,
     safePart(place.workspace),
     safePart(place.project),
   );
-  const own = NodePath.join(dir, `${safePart(sid)}.md`);
+  const own = NodePath.join(dir, `${safePart(sid)}${MEMORY_FILE}`);
   if (run === undefined) return own;
-  const path = NodePath.join(dir, `${safePart(run)}.md`);
-  if (!(await exists(path)) && (await exists(own))) {
-    const memory = (file: string) => file.replace(/\.md$/, MEMORY_FILE);
+  const path = NodePath.join(dir, `${safePart(run)}${MEMORY_FILE}`);
+  if (!(await exists(path)) && (await exists(own)))
     await NodeFSP.copyFile(own, path).catch(() => undefined);
-    await NodeFSP.copyFile(memory(own), memory(path)).catch(() => undefined);
-  }
   return path;
 }
 
@@ -218,14 +215,8 @@ export async function attachRun(this: CoordinationBroker, session: LocalSession,
   if (session.run !== undefined && session.run !== id) this.leaveRun(session);
   await this.enterRun(session, { id, task: run.task });
   if (session.task === run.task) return;
-  // Its work changes as when its person puts it on another task: what it kept for the old one goes.
-  await this.release(session);
   const from = session.task;
   session.task = run.task;
-  session.read.clear();
-  session.marked.clear();
-  session.sharedHeard = 0;
-  session.sharedHeardText = "";
   const name = (task: string | undefined) =>
     task === undefined ? "no task" : this.host.taskName(session.workspace, session.project, task);
   session.pending.push(
@@ -283,7 +274,6 @@ export function runEnded(this: CoordinationBroker, run: string) {
   for (const session of this.sessions.values()) {
     if (session.run !== run) continue;
     session.claims = [];
-    void this.release(session);
     this.markDirty();
     this.record("run.ended", { session: session.id, run });
   }

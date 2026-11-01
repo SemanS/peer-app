@@ -23,13 +23,11 @@ const project = {
           status: "idle",
           threads: [],
           removable: true,
-          context: undefined,
         },
       ],
     },
   ],
   unsorted: [],
-  context: undefined,
   tasks: [],
 } satisfies WorkProjectNode;
 function search(query: string, options: { actions?: boolean; submenu?: boolean } = {}) {

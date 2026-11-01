@@ -155,31 +155,20 @@ export const testsCommand = (
           unowned: counts.unowned.length,
           seen: items.filter((item) => "seen" in item).length,
         });
+        const stored = (text: string) => answer.report.items.find((item) => item.text === text);
         return replyLines({
           label,
           filed: parsed.result,
           report: answer.report,
           changed: answer.changed,
-          sent: parsed.items.flatMap((item) => {
-            const stored = answer.report.items.find(
-              (one) => one.kind === "unverified" && one.text === item.text,
-            );
-            return item.kind !== "unverified" || item.task === undefined || !stored?.owner
-              ? []
-              : [{ text: item.text, task: item.task, owner: name(session)(stored.owner) }];
+          sent: parsed.items.flatMap(({ kind, task, text }) => {
+            const owner = stored(text)?.owner;
+            return kind === "unverified" && task !== undefined && owner
+              ? [{ text, task, owner: name(session)(owner) }]
+              : [];
           }),
           homeless: parsed.items
-            .filter(
-              (item) =>
-                item.kind === "fail" &&
-                item.task !== undefined &&
-                !answer.report.items.some(
-                  (stored) =>
-                    stored.kind === "fail" &&
-                    stored.text === item.text &&
-                    stored.task !== undefined,
-                ),
-            )
+            .filter((item) => item.kind === "fail" && item.task && !stored(item.text)?.task)
             .map((item) => item.text),
         }).join("\n");
       }),

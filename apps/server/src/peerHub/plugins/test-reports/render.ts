@@ -83,11 +83,7 @@ export function replyLines(input: {
   /** Failed items left to a task the Hub did not keep: an older Hub drops it. */
   readonly homeless?: ReadonlyArray<string>;
   /** Items named for a task that cannot carry them, which went to its owner. */
-  readonly sent?: ReadonlyArray<{
-    readonly text: string;
-    readonly task: string;
-    readonly owner: string;
-  }>;
+  readonly sent?: ReadonlyArray<Readonly<Record<"text" | "task" | "owner", string>>>;
 }): ReadonlyArray<string> {
   const { label, filed, report } = input;
   const counts = countsOf(report);

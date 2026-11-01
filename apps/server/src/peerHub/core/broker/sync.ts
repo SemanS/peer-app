@@ -17,6 +17,7 @@ import type { CoordinationBroker } from "./Broker.ts";
 import { mergeMcpObservations } from "./observations.ts";
 import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";
 import { messageOf } from "./log.ts";
+import { handlers } from "./pipeline.ts";
 import { overlapSubject } from "../coordination/edits.ts";
 
 const ACTIVE_SYNC_MS = 3000;
@@ -137,10 +138,13 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
           now,
         })
       ) {
+        // Plugins hear of it as it was, after core let it go, as at SessionEnd.
+        const expired = this.pipelineStep(session, plugins, Date.now() + 2500);
         void this.release(session);
         this.leaveRun(session);
         this.sessions.delete(id);
         this.record("session.expired", { session: id });
+        await handlers(expired, "session-expired");
         continue;
       }
       // Presence is not activity: an idle runtime must not refresh the keeper's activity clock.

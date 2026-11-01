@@ -421,6 +421,8 @@ export interface PeerHooks {
   /** Flushes reports that require this session's Hub ownership before core releases it. */
   readonly sessionEnding?: (ctx: PeerSessionEndingContext) => Effect.Effect<void>;
   readonly sessionEnd?: (ctx: PeerHookContext) => Effect.Effect<void>;
+  /** No end hook came and its lease ran out: a crash, a closed pane, or an agent long quiet. */
+  readonly sessionExpired?: (ctx: PeerHookContext) => Effect.Effect<void>;
   /** Paths Peer lets the agent touch without asking its person (Codex PermissionRequest). */
   readonly ownPaths?: (session: PeerSessionView) => ReadonlyArray<string>;
 }

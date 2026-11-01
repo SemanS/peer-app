@@ -52,6 +52,7 @@ const reminded = (ref: string) => `r:${ref}`;
 const seqOf = (ref: string) => Number(ref.slice(ref.lastIndexOf(":") + 1));
 
 export const roomHooks = (rooms: Rooms["Service"]) => {
+  const left = ({ session }: PeerHookContext) => rooms.sessionLeft(session);
   /**
    * What waits for the session, still holds and fits a step, marked as offered. A first prompt's
    * message waits for the session to sit idle unanswered: either the prompt was lost and this is
@@ -107,6 +108,8 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
   return {
     startLine: Effect.succeed(START_LINE),
     sessionStart: (ctx) => offer(ctx.session, false),
+    sessionEnd: left,
+    sessionExpired: left,
     notices: [{ wakes: true, landing: true, read: notice }],
     delivery: ({ session, refs, state }) =>
       Effect.gen(function* () {

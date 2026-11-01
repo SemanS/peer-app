@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
 import { vi } from "vite-plus/test";
 
+import type { PeerHooks } from "../plugin.ts";
+import { NO_PLUGINS } from "./host.ts";
 import { brokerFixture } from "./testkit.ts";
 
 afterEach(() => {
@@ -29,6 +32,30 @@ describe("syncing with the hub", () => {
       await fixture.broker.sync();
       expect(fixture.broker.sessions.has("claude:previous")).toBe(false);
       expect(reports.flat().map((row) => row.id)).not.toContain("claude:previous");
+    } finally {
+      await fixture.dispose();
+    }
+  });
+  it("tells plugins a session's lease ran out, which no end hook said", async () => {
+    const heard: Array<string> = [];
+    const hooks: PeerHooks = {
+      sessionEnd: ({ session }) => Effect.sync(() => void heard.push(`ended ${session.id}`)),
+      sessionExpired: ({ session }) => Effect.sync(() => void heard.push(`expired ${session.id}`)),
+    };
+    const fixture = await brokerFixture(() => ({
+      plugins: async () => ({
+        ...NO_PLUGINS,
+        active: [{ id: "rooms", title: "Rooms", contributions: { hooks } }],
+      }),
+    }));
+    try {
+      await fixture.register("crashed");
+      await fixture.register("working");
+      fixture.broker.sessions.get("claude:crashed")!.lastActivity = Date.now() - 31 * 60_000;
+      await fixture.broker.sync();
+      expect(heard).toEqual(["expired claude:crashed"]);
+      expect(fixture.broker.sessions.has("claude:crashed")).toBe(false);
+      expect(fixture.broker.sessions.has("claude:working")).toBe(true);
     } finally {
       await fixture.dispose();
     }

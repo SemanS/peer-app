@@ -365,12 +365,12 @@ export function compactText(step: PipelineStep): Promise<PipelineText | null> {
 /** Runs the active plugins' handlers of an event that answers nothing, by the hook's deadline. */
 export async function handlers(
   step: PipelineStep,
-  event: "stop" | "session-ending" | "session-end",
+  event: "stop" | "session-ending" | "session-end" | "session-expired",
   overlaps: ReadonlyArray<PeerEndingOverlap> = [],
 ): Promise<void> {
   const ctx = {
     session: step.session,
-    event: event === "session-ending" ? "session-end" : event,
+    event: event === "stop" ? event : "session-end",
     remainingMs: remainingMs(step),
     overlaps,
   } satisfies PeerSessionEndingContext;
@@ -380,7 +380,9 @@ export async function handlers(
         ? plugin.contributions.hooks?.stop
         : event === "session-ending"
           ? plugin.contributions.hooks?.sessionEnding
-          : plugin.contributions.hooks?.sessionEnd;
+          : event === "session-expired"
+            ? plugin.contributions.hooks?.sessionExpired
+            : plugin.contributions.hooks?.sessionEnd;
     return handle === undefined
       ? []
       : [

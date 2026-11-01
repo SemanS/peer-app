@@ -541,6 +541,7 @@ export const make = Effect.gen(function* () {
         policy: pack.policy,
         report: pack.report,
         live: read ?? undefined,
+        context: pack.context,
       };
     });
   return HandoffService.of({

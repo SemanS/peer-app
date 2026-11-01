@@ -21,7 +21,7 @@ import { inheritedBlock } from "./render.ts";
 import * as TestReports from "./TestReports.ts";
 
 export const START_LINE =
-  'Before peer done, file what you tested: peer tests pass|fail|mixed "<summary>" --pass "<command>" --unverified "<what it should have checked> @<person>". A dependent task can carry an item: "<text> @task:<key>", on --fail too. Unverified items need an owner or a task, failed ones a task.';
+  'Before peer done, file what you tested: peer tests pass|fail|mixed "<summary>" --pass "<command>" --unverified "<what it should have checked> @<person>". "<text> @task:<key>" leaves it to an open task that depends on this one, on --fail too; any other task\'s owner answers for an unverified one.';
 
 /** A session's start does not wait long for what a slow Hub would add. */
 const INHERITED_MS = 1500;

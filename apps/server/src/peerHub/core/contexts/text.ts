@@ -163,13 +163,13 @@ export function sharedTemplate(subject: string): string {
 }
 
 /**
- * What the template says under Blockers and Next, as HTML comments: the handoff shows those two
- * sections as "Needs attention" and "Next step", so what another task owns must not land there.
+ * What the template says under Blockers and Next, as HTML comments: what stays under Blockers at a
+ * handoff is the agent's own (`handoffOwed`), and the review page shows Next as the next step.
  * Comments never reach the Hub (`publishable`) and count as nothing written.
  */
 export const GUIDANCE = {
   blockers:
-    "<!-- What stops this task now. Work another task owns (a dependency, a later task) is not a blocker: name it under Decisions or State. -->",
+    "<!-- What stops this task now. What it needs and no task does is yours: do it, or give it an owner with peer tests. Work another task owns is no blocker: name it under Decisions or State. -->",
   next: "<!-- One line: the next step and who takes it. Ask your person only what the brief and the project's rules leave open. -->",
 } as const;
 

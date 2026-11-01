@@ -162,8 +162,8 @@ export const PeerTestsFileResult = Schema.Struct({
 export type PeerTestsFileResult = typeof PeerTestsFileResult.Type;
 
 /**
- * The task's owner, a lead or an admin gives an unverified item of `author`'s report an owner, or
- * clears it (`owner` null). `number` is the report the save was made from.
+ * The task's owner, a lead, an admin or the person an unverified item of `author`'s report names
+ * gives it an owner, or clears it (`owner` null). `number` is the report the save was made from.
  */
 export const PeerTestsSetOwnerInput = Schema.Struct({
   ...PeerTestsPlace.fields,

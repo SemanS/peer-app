@@ -49,8 +49,9 @@ type Member = { readonly email: string; readonly name: string };
  * A task's test reports on its page: every author's newest report with its result, its items and
  * where each claim comes from ("seen run by Peer, passed, 14:02" or "author-reported"), and the
  * owner of every unverified item. The person files, replaces or removes their own report; the
- * task's owner, a lead or an admin gives an unverified item an owner. The Hub decides each change,
- * and a save made from a report that was replaced meanwhile is refused with the newer one shown.
+ * task's owner, a lead, an admin or the person an unverified item names changes its owner. The Hub
+ * decides each change, and a save made from a report that was replaced meanwhile is refused with the
+ * newer one shown.
  */
 export function ReportSection(props: TaskSlotProps) {
   const state = props.project;
@@ -152,7 +153,9 @@ function TaskReports({
   const place = { workspace, project, task };
   const me = status.email;
   const own = ownReport(reports ?? [], me);
-  const canAssign = maySetOwner && assignRights(status, place);
+  const assigns = assignRights(status, place);
+  const canAssign = (item: PeerTestReportItem) =>
+    maySetOwner && (assigns || (me !== null && item.owner?.toLowerCase() === me.toLowerCase()));
   const taskLabel = (id: string) => {
     const found = tasks.find((candidate) => candidate.id === id);
     return found === undefined ? id : (found.key ?? found.title);
@@ -327,7 +330,7 @@ function ReportRow({
   readonly name: (email: string) => string;
   /** A task an item is left to, as its key or title. */
   readonly taskLabel: (id: string) => string;
-  readonly canAssign: boolean;
+  readonly canAssign: (item: PeerTestReportItem) => boolean;
   readonly onReplace: (() => void) | undefined;
   readonly onRemove: (() => void) | undefined;
   readonly onAssign: (index: number, owner: string | null) => void;
@@ -369,7 +372,7 @@ function ReportRow({
               members={members}
               name={name}
               taskLabel={taskLabel}
-              canAssign={canAssign}
+              canAssign={canAssign(item)}
               onAssign={(owner) => onAssign(index, owner)}
             />
           ))}
@@ -434,7 +437,7 @@ function ItemRow({
   );
 }
 
-/** The owner of one unverified item, for the task's owner, a lead or an admin to change. */
+/** The owner of one unverified item, for the task's owner, a lead, an admin or that owner to change. */
 function OwnerSelect({
   item,
   busy,

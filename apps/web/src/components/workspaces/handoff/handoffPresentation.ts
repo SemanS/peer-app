@@ -159,7 +159,7 @@ export function reviewPresentation(
     live === undefined
       ? packageHandoffFacts(pkg, facts.report)
       : live.evaluated
-        ? liveHandoffFacts(live)
+        ? liveHandoffFacts(live, pkg)
         : // A person moved the task since: no handoff stands, whatever the package recorded.
           packageHandoffFacts({ ...pkg, policy: undefined }),
   );

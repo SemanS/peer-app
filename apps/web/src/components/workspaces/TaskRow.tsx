@@ -7,7 +7,6 @@ import type {
 } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import { EllipsisIcon, PlusIcon } from "lucide-react";
-import { taskOwnership } from "@t3tools/client-runtime/peer/work";
 import { taskShortTitle } from "@t3tools/client-runtime/peer/taskTitle";
 import { useState } from "react";
 
@@ -84,11 +83,7 @@ export function TaskRow({
   const tree = servesTree(project);
   const label = taskLabel(task);
   const taskArea = tasks.find((t) => t.id === task.id)?.area;
-  const model = taskRowModel({
-    task,
-    needOf,
-    review: taskOwnership(project, task, taskArea ?? null).review,
-  });
+  const model = taskRowModel({ task, needOf });
   const stateLabel = rowStateLabel(model.state);
   const active = activeThread === taskRouteKey(scope, task.id);
   const RequestDialog = plugins.find(

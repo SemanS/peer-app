@@ -1,23 +1,7 @@
-import type { PeerInvitation, PeerTask, PeerWorkspaceMembers } from "@t3tools/contracts";
+import type { PeerInvitation, PeerWorkspaceMembers } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  accessOf,
-  accessText,
-  filterPeople,
-  initials,
-  isGroupPicked,
-  isPicked,
-  limitOf,
-  NO_WORK,
-  peopleRows,
-  pickAll,
-  pickedCount,
-  pickGroup,
-  pickTask,
-  workChanges,
-  workGroups,
-} from "./people.logic";
+import { accessOf, accessText, filterPeople, initials, limitOf, peopleRows } from "./people.logic";
 
 const NOW = Date.parse("2026-10-30T08:00:00Z");
 const name = (id: string) => (id === "formbricks" ? "Formbricks" : undefined);
@@ -44,8 +28,6 @@ const invitation = (email: string, status: string, projects: ReadonlyArray<strin
     invitedAt: "2026-10-29T00:00:00Z",
     expiresAt: "2026-11-12T00:00:00Z",
   }) as unknown as PeerInvitation;
-const task = (id: string, extra: Partial<PeerTask> = {}) =>
-  ({ id, title: id, status: "open", ...extra }) as PeerTask;
 
 describe("the list of people", () => {
   const rows = peopleRows({
@@ -89,69 +71,5 @@ describe("project access", () => {
     expect(accessText(["formbricks", "gone"], name)).toBe("Formbricks, gone");
     expect(limitOf(accessOf(null))).toBeNull();
     expect(limitOf(accessOf([]))).toEqual([]);
-  });
-});
-
-describe("the work to tick", () => {
-  const groups = workGroups({
-    areas: ["Auth", "Empty"],
-    tasks: [
-      task("auth", { kind: "group", title: "Authentication" } as Partial<PeerTask>),
-      task("login", { parent: "auth" }),
-      task("session", { parent: "auth" }),
-      task("drag", { area: "Auth" }),
-      task("loose"),
-      task("gone", { status: "done" }),
-    ],
-  });
-  const of = (id: string) => groups.find((group) => group.id === id)!;
-
-  it("groups tasks under their parent, then their area, and leaves out what is done", () => {
-    expect(groups.map((group) => [group.title, group.tasks.map((entry) => entry.id)])).toEqual([
-      ["Authentication", ["login", "session"]],
-      ["Auth", ["drag"]],
-      ["Empty", []],
-      ["Other tasks", ["loose"]],
-    ]);
-  });
-
-  it("hands over a whole area as the area and any other group as its tasks", () => {
-    expect(pickGroup(NO_WORK, of("area:Auth"), true)).toEqual({ areas: ["Auth"], tasks: [] });
-    expect(pickGroup(NO_WORK, of("group:auth"), true)).toEqual({
-      areas: [],
-      tasks: ["login", "session"],
-    });
-  });
-
-  it("keeps the rest of an area when one of its tasks is unticked", () => {
-    const whole = { areas: ["Auth"], tasks: [] };
-    const group = {
-      ...of("area:Auth"),
-      tasks: [...of("area:Auth").tasks, { id: "b", title: "b" }],
-    };
-    expect(isPicked(whole, group, "drag")).toBe(true);
-    expect(pickTask(whole, group, "drag", false)).toEqual({ areas: [], tasks: ["b"] });
-  });
-
-  it("counts what is ticked", () => {
-    const pick = pickGroup(NO_WORK, of("group:auth"), true);
-    expect(pickedCount(pick, groups)).toBe("2 of 4 tasks selected");
-    expect(isGroupPicked(pick, of("group:auth"))).toBe(true);
-    expect(pickedCount(pickAll(groups), groups)).toBe("4 of 4 tasks selected");
-  });
-
-  it("asks only for what changed, and keeps other people's areas", () => {
-    expect(
-      workChanges({
-        email: "bob@acme.dev",
-        before: { areas: ["Old"], tasks: ["a", "b"] },
-        after: { areas: ["New"], tasks: ["b", "c"] },
-        areaOwners: { Old: "bob@acme.dev", Other: "ana@acme.dev" },
-      }),
-    ).toEqual({
-      give: ["c"],
-      takeBack: ["a"],
-      areas: { Other: "ana@acme.dev", New: "bob@acme.dev" },
-    });
   });
 });

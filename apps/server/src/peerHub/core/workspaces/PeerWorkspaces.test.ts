@@ -219,14 +219,13 @@ describe("Peer workspaces", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("invite to named projects with a task, and set or lift a member's limit", () =>
+  it.effect("invite to named projects, and set or lift a member's limit", () =>
     Effect.gen(function* () {
       const { workspaces, hub } = yield* started("https://git.example.test/acme/api.git");
       yield* workspaces.invite({
         workspace: "acme",
         email: "cyril@freelance.test",
         projects: ["webshop"],
-        task: "vl7",
       });
       // No projects named is the whole workspace, as before.
       yield* workspaces.invite({ workspace: "acme", email: "dan@acme.test", projects: [] });
@@ -235,7 +234,7 @@ describe("Peer workspaces", () => {
           .filter((call) => call.method === "POST" && call.url === "/v1/workspaces/acme/invites")
           .map((call) => call.body),
         [
-          '{"email":"cyril@freelance.test","role":"member","projects":["webshop"],"task":"vl7"}',
+          '{"email":"cyril@freelance.test","role":"member","projects":["webshop"]}',
           '{"email":"dan@acme.test","role":"member"}',
         ],
       );

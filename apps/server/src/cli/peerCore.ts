@@ -447,8 +447,6 @@ const menuAsk: PeerCoreMenu.MenuAsk<Prompt.Environment> = {
       Prompt.MultiSelect({ message, choices: choices.map((title) => ({ title, value: title })) }),
     ).pipe(Effect.orElseSucceed(() => null)),
   confirm: shareAsk.confirm,
-  tree: (message, nodes) =>
-    Prompt.run(PeerCoreTree.treePrompt(message, nodes)).pipe(Effect.orElseSucceed(() => null)),
   treePick: (message, nodes, expand) =>
     Prompt.run(PeerCoreTree.treeStartPrompt(message, nodes, expand)).pipe(
       Effect.orElseSucceed(() => null),
@@ -544,7 +542,6 @@ const besideApp = (
         yield* Console.log(
           `Created ${task.key ?? task.id} · ${task.title} in ${input.workspace}/${input.project}.`,
         );
-        if (input.take) yield* steps.takeTask(input.workspace, input.project, task.id);
         yield* Console.log(
           "Your agents in the project see it with peer tasks, and Peer tells them who works on what.",
         );
@@ -671,16 +668,6 @@ const menuSteps = (
           yield* Console.log(
             `Created ${task.key ?? task.id} · ${task.title} in ${input.workspace}/${input.project}.`,
           );
-          if (input.take)
-            yield* PeerCoreTasks.takeTask(
-              {
-                task: task.id,
-                project: `${input.workspace}/${input.project}`,
-                cwd: realpathOrSelf(process.cwd()),
-                canWrite: true,
-              },
-              terminalIo,
-            );
           yield* Console.log(
             "Your agents in the project see it with peer tasks, and Peer tells them who works on what.",
           );
@@ -697,16 +684,6 @@ const menuSteps = (
           });
         }).pipe(hubFailure),
       unshare: unshareProject,
-      takeTask: (workspace, project, task) =>
-        PeerCoreTasks.takeTask(
-          {
-            task,
-            project: `${workspace}/${project}`,
-            cwd: realpathOrSelf(process.cwd()),
-            canWrite: true,
-          },
-          terminalIo,
-        ),
       checkoutOf: (workspace, project) => checkoutOf(stateDir, workspace, project),
       createRun: (input) =>
         runsAccess(stateDir).pipe(Effect.flatMap((access) => access.create(input))),
@@ -715,20 +692,7 @@ const menuSteps = (
           const client = yield* PeerHubClient.PeerHubClient;
           const { hubUrl, session } = yield* client.session;
           const work = (yield* client.api.work(hubUrl, session, workspace)).projects[project];
-          const view = yield* client.api.taskOwners(hubUrl, session, workspace).pipe(Effect.option);
-          const owners = Option.isSome(view) ? view.value.projects[project] : undefined;
-          return PeerCoreTasks.projectTree({
-            areas: work?.areas ?? [],
-            tasks: work?.tasks ?? [],
-            ...(owners === undefined
-              ? {}
-              : {
-                  owners: Object.fromEntries(
-                    Object.entries(owners.tasks).map(([id, row]) => [id, row.owner]),
-                  ),
-                  areaOwners: owners.map.areas,
-                }),
-          });
+          return PeerCoreTasks.projectTree({ areas: work?.areas ?? [], tasks: work?.tasks ?? [] });
         }).pipe(hubFailure),
       openPeer: Effect.gen(function* () {
         const app = [
@@ -927,18 +891,6 @@ const inviteCommand = Command.make("invite", {
     Flag.withDescription("Invite them as an admin."),
     Flag.withDefault(false),
   ),
-  area: Flag.String("area").pipe(
-    Flag.withDescription(
-      "With one --project: an area they will own when they join, its new tasks too (repeat it for more).",
-    ),
-    Flag.atLeast(0),
-  ),
-  task: Flag.String("task").pipe(
-    Flag.withDescription(
-      "With one --project: a task they will own when they join (repeat it for more).",
-    ),
-    Flag.atLeast(0),
-  ),
 }).pipe(
   Command.withDescription("Mail an invitation to a workspace you own or administer."),
   Command.withHandler((flags) =>
@@ -952,8 +904,6 @@ const inviteCommand = Command.make("invite", {
             email: flags.email,
             admin: flags.admin,
             projects: flags.project,
-            areas: flags.area,
-            tasks: flags.task,
             ...(Option.isSome(flags.workspace) ? { workspace: flags.workspace.value } : {}),
           },
           yield* workspaces.sync,
@@ -1067,72 +1017,16 @@ const taskProjectFlag = Flag.String("project").pipe(
 const tasksCommand = Command.make("tasks", {
   ...authLocationFlags,
   project: taskProjectFlag,
-  open: Flag.Boolean("open").pipe(
-    Flag.withDescription("Only the tasks nobody owns (what you can take)."),
-    Flag.withDefault(false),
-  ),
-  mine: Flag.Boolean("mine").pipe(
-    Flag.withDescription("Only the tasks you own."),
-    Flag.withDefault(false),
-  ),
 }).pipe(
   Command.withDescription(
-    "Your tasks that are not done, as the project's tree, with status, area and owner; an invitation's task first.",
+    "The tasks that are not done, as the project's tree, with status and area.",
   ),
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const config = yield* resolveConfig(flags);
-      if (flags.open && flags.mine)
-        return yield* outcome("usage", "--open and --mine exclude each other", "use one of them.");
       const owner = yield* ownerOf(config.stateDir);
       yield* PeerCoreTasks.listTasks(
         {
-          ...(Option.isSome(flags.project) ? { project: flags.project.value } : {}),
-          filter: flags.open ? "open" : flags.mine ? "mine" : "all",
-          cwd: realpathOrSelf(process.cwd()),
-          canWrite: owner === null,
-        },
-        terminalIo,
-      ).pipe(Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
-    }),
-  ),
-);
-
-const takeCommand = Command.make("take", {
-  ...authLocationFlags,
-  tasks: Argument.String("task").pipe(
-    Argument.withDescription("The tasks or groups, as peer core tasks lists them."),
-    Argument.variadic({ min: 1 }),
-  ),
-  project: taskProjectFlag,
-  asOne: Flag.Boolean("as-one").pipe(
-    Flag.withDescription("Settle an item with items: it runs as one task."),
-    Flag.withDefault(false),
-  ),
-  asParts: Flag.Boolean("as-parts").pipe(
-    Flag.withDescription("Settle an item with items: its items are the tasks."),
-    Flag.withDefault(false),
-  ),
-}).pipe(
-  Command.withDescription("Become the owner of tasks or groups nobody owns."),
-  Command.withHandler((flags) =>
-    Effect.gen(function* () {
-      const config = yield* resolveConfig(flags);
-      if (flags.asOne && flags.asParts)
-        return yield* outcome(
-          "usage",
-          "--as-one and --as-parts exclude each other",
-          "use one of them.",
-        );
-      const owner = yield* ownerOf(config.stateDir);
-      yield* PeerCoreTasks.takeTasks(
-        {
-          tasks: flags.tasks,
-          ...(flags.asOne
-            ? { settle: "one" as const }
-            : flags.asParts
-              ? { settle: "parts" as const }
-              : {}),
           ...(Option.isSome(flags.project) ? { project: flags.project.value } : {}),
           cwd: realpathOrSelf(process.cwd()),
           canWrite: owner === null,
@@ -1704,7 +1598,6 @@ const makePeerCommand = (name: "peer" | "peer-core" | "core") =>
       shareCommand,
       bindCommand,
       tasksCommand,
-      takeCommand,
       runsCommand,
       editorCommand("connect"),
       editorCommand("disconnect"),

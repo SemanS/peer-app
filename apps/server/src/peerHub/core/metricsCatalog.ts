@@ -187,16 +187,6 @@ export const CATALOG = defineEvents({
   // stop gave the agent, never what they said; and a hook that missed its deadline at one.
   "landing.stopped": ev({ messages: "count", chars: "count" }),
   "landing.late": ev({}),
-  // Ownership: a step stopped for an owner's call (edit or landing), what an agent was told (its
-  // kind and size) and what became of a call; never whose, what or why.
-  "ownership.stopped": ev({ where: { enum: ["edit", "landing"] } }),
-  "ownership.told": ev({
-    kind: { enum: ["decision", "expiry", "asked", "fact", "owner", "start"] },
-    chars: "count",
-  }),
-  "ownership.call": ev({
-    outcome: { enum: ["asked", "merged", "withdrawn", "refused", "uncertain"] },
-  }),
   // Jujutsu: how long a snapshot of a session's working copy took and whether it missed its step's
   // budget, how many divergent changes were converged, what a protection stop covered, what an agent
   // was told (its kind and size), and undo and follow outcomes; never a change id, bookmark, path or

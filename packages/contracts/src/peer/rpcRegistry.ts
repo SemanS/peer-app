@@ -99,7 +99,6 @@ import { McpRpcGroup, McpRpcScopes, PEER_MCP_METHODS } from "./mcp.rpc.ts";
 import { ObserveRpcGroup, ObserveRpcScopes, PEER_OBSERVE_METHODS } from "./observe.rpc.ts";
 import { PeerHubSetPluginInput } from "./plugin.ts";
 import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
-import { OwnershipRpcGroup, OwnershipRpcScopes, PEER_OWNERSHIP_METHODS } from "./ownership.rpc.ts";
 import { PEER_SETTINGS_METHODS, SettingsRpcGroup, SettingsRpcScopes } from "./settings.rpc.ts";
 import { PEER_ROOMS_METHODS, RoomsRpcGroup, RoomsRpcScopes } from "./rooms.rpc.ts";
 import { CardRpcGroup, CardRpcScopes, PEER_CARD_METHODS } from "./card.rpc.ts";
@@ -574,7 +573,6 @@ export const PEER_WS_METHODS = {
   ...PEER_ANNOUNCEMENTS_METHODS,
   ...PEER_NEEDS_YOU_METHODS,
   ...PEER_SETTLE_METHODS,
-  ...PEER_OWNERSHIP_METHODS,
   ...PEER_SETTINGS_METHODS,
   ...PEER_ROOMS_METHODS,
   ...PEER_CARD_METHODS,
@@ -598,7 +596,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   AnnouncementsRpcGroup,
   NeedsYouRpcGroup,
   SettleRpcGroup,
-  OwnershipRpcGroup,
   SettingsRpcGroup,
   RoomsRpcGroup,
   CardRpcGroup,
@@ -624,7 +621,6 @@ export const PEER_RPC_SCOPES = {
   ...AnnouncementsRpcScopes,
   ...NeedsYouRpcScopes,
   ...SettleRpcScopes,
-  ...OwnershipRpcScopes,
   ...SettingsRpcScopes,
   ...RoomsRpcScopes,
   ...CardRpcScopes,

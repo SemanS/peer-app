@@ -695,7 +695,7 @@ export async function beforeShell(
     mentionsCli(command, this.cli) || command.includes(script) || command.includes(quotedScript);
   if (!naming) return this.shellVerdicts(session, body, command, step, verdictBudgetMs);
   // A command that lands work is judged by the plugins' shell verdicts although it names `peer` (a
-  // commit message does): what an owner decides holds for it, whatever its message says.
+  // commit message does).
   if (isLanding(command)) {
     const judged = await this.shellVerdicts(session, body, command, step, verdictBudgetMs);
     if (judged !== null) return judged;

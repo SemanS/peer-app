@@ -404,7 +404,6 @@ const projectOf = (threads: Readonly<Record<string, ReadonlyArray<WorkThreadNode
     unsorted: [],
     context: undefined,
     tasks: TASKS,
-    ownership: undefined,
   }) satisfies WorkProjectNode;
 
 describe("whether an agent is live on a task", () => {

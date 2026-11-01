@@ -2,31 +2,6 @@ import { describe, it, expect } from "vite-plus/test";
 import { CATALOG, project, metricsOf, reasonClassOf } from "./metricsCatalog.ts";
 import { PeerHubError } from "@t3tools/contracts";
 describe("catalog projection", () => {
-  it("projects ownership's kinds, places and outcomes, and never a path, a name, a reason or a note", () => {
-    const detail = {
-      session: "claude:a",
-      path: "src/payments/fees.ts",
-      email: "ana@acme.test",
-      reason: "add a refund fee field",
-      note: "keep fees in cents",
-    };
-    expect(project("ownership.stopped", { ...detail, where: "edit" })).toEqual({
-      session: "claude:a",
-      where: "edit",
-    });
-    expect(project("ownership.told", { ...detail, kind: "decision", chars: 210 })).toEqual({
-      session: "claude:a",
-      kind: "decision",
-      chars: 210,
-    });
-    expect(project("ownership.call", { ...detail, outcome: "asked" })).toEqual({
-      session: "claude:a",
-      outcome: "asked",
-    });
-    // A kind, a place or an outcome that is not one of the named ones is dropped.
-    expect(project("ownership.stopped", { where: "src/payments/fees.ts" })).toEqual({});
-    expect(project("ownership.call", { outcome: "Ana accepted" })).toEqual({});
-  });
   it("projects agreements' sizes, due count and closing reasons, and never a word, a task, a person or an id", () => {
     const detail = {
       session: "claude:a",

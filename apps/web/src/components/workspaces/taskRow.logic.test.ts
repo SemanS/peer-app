@@ -89,24 +89,6 @@ describe("taskRowModel: the words", () => {
   });
 });
 
-describe("taskRowModel: a review asks its owner", () => {
-  const route = {
-    audience: "owner",
-    names: ["Ana"],
-    forMe: false,
-  } as unknown as Parameters<typeof taskRowModel>[0]["review"];
-
-  it("is Ana's when it asks her: the task waits on her", () => {
-    const row = taskRowModel({ task: task([thread("a")], { inReview: true }), review: route });
-    expect(row.state.kind).toBe("waiting");
-    expect(row.state.label).toBe("Ready for Ana's review");
-  });
-
-  it("asks everyone when no route is passed, as before ownership", () => {
-    expect(model(task([thread("a")], { inReview: true })).state.label).toBe("Ready for review");
-  });
-});
-
 describe("what the row looks like", () => {
   it("colours what waits on you amber and work blue, hollow while it waits on a colleague", () => {
     expect(taskStateLook("review")).toEqual({ tone: "needs", hollow: false });

@@ -1,5 +1,4 @@
 import { PeerResourcesState } from "./resources.ts";
-import { PeerOwnershipStatus } from "./ownership.ts";
 import { PeerAgreementsStatus } from "./agreements.ts";
 import { PeerChangesStatus } from "./changes.ts";
 import { JujutsuState } from "./jujutsu.ts";
@@ -36,7 +35,6 @@ export const peerPluginStatusFields = {
   mcp: SchemaValues.optional(PeerMcpStatus),
   herdr: SchemaValues.optional(PeerHerdrStatus),
   jujutsu: SchemaValues.optional(JujutsuState),
-  ownership: SchemaValues.optional(PeerOwnershipStatus),
   settings: SchemaValues.optional(PeerSettingsStatus),
   rooms: SchemaValues.optional(PeerRoomsStatus),
 } satisfies Schema.Struct.Fields;

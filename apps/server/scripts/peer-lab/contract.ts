@@ -48,7 +48,6 @@ export const KERNEL_FEATURES_OFF = [
   "announcements",
   "changes",
   "github",
-  "ownership",
   "requests",
   "resources",
 ] as const;
@@ -95,7 +94,7 @@ export const agreementsOn = (arm: Arm) => arm !== "no-agreements" && arm !== "ke
  */
 export const armEnv = (arm: Arm): Record<string, string | undefined> => ({
   PEER_AGREEMENTS: agreementsOn(arm) ? undefined : "off",
-  ...(arm === "kernel" ? { PEER_OWNERSHIP: "off", PEER_JUJUTSU: "off" } : {}),
+  ...(arm === "kernel" ? { PEER_JUJUTSU: "off" } : {}),
 });
 
 /** The project both agents start from: invoices in dollars. Plain ES modules, so that nothing builds. */

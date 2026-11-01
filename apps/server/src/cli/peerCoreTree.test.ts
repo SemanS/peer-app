@@ -10,16 +10,6 @@ const task = (id: string, title: string, more: Partial<Tree.TreeNode> = {}): Tre
   ...more,
 });
 
-const nodes: ReadonlyArray<Tree.TreeNode> = [
-  Tree.areaNode("Inference", [
-    task("i1", "Add inference scheduling"),
-    task("i2", "Add GPU inference node"),
-  ]),
-  Tree.areaNode("Audio", [task("a1", "Split speakers")], "bob@acme.test"),
-  Tree.areaNode("Evaluation", []),
-  Tree.areaNode(null, [task("n1", "Loose task")]),
-];
-
 /** A group with a section, whose unsettled item has items of its own. */
 const change: ReadonlyArray<Tree.TreeNode> = [
   Tree.areaNode("Hub", [
@@ -41,7 +31,7 @@ const change: ReadonlyArray<Tree.TreeNode> = [
             task("t2", "Server", {
               executable: false,
               unsettled: true,
-              children: [task("t3", "Model"), task("t4", "Store", { owner: "bob" })],
+              children: [task("t3", "Model"), task("t4", "Store")],
             }),
           ],
         },
@@ -51,128 +41,7 @@ const change: ReadonlyArray<Tree.TreeNode> = [
   Tree.areaNode(null, [task("n1", "Loose")]),
 ];
 
-/** Presses keys in order from a fresh tree; the state after them. */
-const after = (keys: ReadonlyArray<string>, state = Tree.initialTree(nodes)) =>
-  keys.reduce((current, key) => {
-    const next = Tree.press(current, key);
-    if ("done" in next) throw new Error("submitted");
-    return next.state;
-  }, state);
-
-const marks = (state: Tree.TreeState) =>
-  Tree.rows(state).map((row) => `${row.kind}:${Tree.mark(state, row)}`);
-
-describe("the invite tree", () => {
-  it("opens an area to its tasks and closes it back onto the area", () => {
-    const open = after(["down", "right"]);
-    assert.deepStrictEqual(
-      Tree.rows(open).map((row) => row.kind),
-      ["all", "node", "areaAll", "node", "node", "node", "node", "node", "continue"],
-    );
-    const closed = after(["down", "down", "down", "left"], open);
-    assert.strictEqual(closed.cursor, 1);
-    assert.deepStrictEqual(Tree.frame(closed, "Select areas or tasks")[2], "❯ ▸ [ ] Inference (2)");
-  });
-
-  it("chooses whole areas or single tasks, never a task twice, and shows a partly chosen area", () => {
-    // Open Inference and choose one of its tasks: the area shows [-].
-    let state = after(["down", "right", "down", "down", "space"]);
-    assert.deepStrictEqual(Tree.selection(state), { all: false, areas: [], tasks: ["i1"] });
-    assert.include(marks(state), "node:some");
-    // Choosing the whole area takes the single task into it.
-    state = after(["up", "space"], state);
-    assert.deepStrictEqual(Tree.selection(state), { all: false, areas: ["Inference"], tasks: [] });
-    // Taking a task out of a whole area leaves the others as single tasks.
-    state = after(["down", "down", "space"], state);
-    assert.deepStrictEqual(Tree.selection(state), { all: false, areas: [], tasks: ["i1"] });
-  });
-
-  it("takes one area out of everything, and the group without an area is its tasks", () => {
-    const everything = after(["space"]);
-    assert.deepStrictEqual(Tree.selection(everything), { all: true, areas: [], tasks: [] });
-    // Audio out of everything: the other areas stay whole, the loose task stays chosen.
-    const state = after(["down", "down", "space"], everything);
-    assert.deepStrictEqual(Tree.selection(state), {
-      all: false,
-      areas: ["Inference", "Evaluation"],
-      tasks: ["n1"],
-    });
-    assert.deepStrictEqual(Tree.describe(nodes, Tree.selection(state)), [
-      "✓ Inference — all tasks, and new ones",
-      "✓ Evaluation — all tasks, and new ones",
-      "✓ No area — Loose task",
-    ]);
-  });
-
-  it("continues with what is chosen", () => {
-    const state = after(["down", "space", "up", "up"]);
-    const done = Tree.press(state, "enter");
-    assert.deepStrictEqual(done, { done: { all: false, areas: ["Inference"], tasks: [] } });
-    assert.include(
-      Tree.frame(state, "Select areas or tasks").join("\n"),
-      "Audio (1) · bob@acme.test's",
-    );
-  });
-
-  it("a group covers its items, and one item out of it leaves the rest chosen", () => {
-    // Hub → add-x → 2. Hub feature → Server, each opened with →.
-    let state = after(
-      ["down", "right", "down", "down", "right", "down", "right", "down", "down", "right"],
-      Tree.initialTree(change),
-    );
-    const frame = Tree.frame(state, "Select").slice(1, -1);
-    assert.deepStrictEqual(frame, [
-      "  [ ] All areas and tasks",
-      "  ▾ [ ] Hub (6)",
-      "      [ ] All tasks in Hub",
-      "    ▾ [ ] add-x (1/3)",
-      "      ▾ [ ] 2. Hub feature (1/3)",
-      "          [ ] Routes",
-      "❯       ▾ [ ] Server ?",
-      "            [ ] Model",
-      "            [ ] Store · bob's",
-      "  ▸ [ ] No area (1)",
-      "  Continue",
-    ]);
-    // Choose the group: one id, which covers everything under it.
-    state = after(["up", "up", "space"], state);
-    assert.deepStrictEqual(Tree.selection(state).tasks, ["g2"]);
-    assert.deepStrictEqual(marks(state).slice(4, 9), [
-      "node:on",
-      "node:on",
-      "node:on",
-      "node:on",
-      "node:on",
-    ]);
-    assert.deepStrictEqual(Tree.describe(change, Tree.selection(state)), [
-      "✓ Hub — 2. Hub feature, with its items",
-    ]);
-    // Model out of it: Routes and Store stay chosen beside it, never Model, never twice.
-    state = after(["down", "down", "down", "space"], state);
-    assert.deepStrictEqual(Tree.selection(state).tasks.toSorted(), ["t1", "t4"]);
-    assert.include(marks(state), "node:some");
-    // Choosing add-x again takes the single ones into it.
-    state = after(["up", "up", "up", "up", "space"], state);
-    assert.deepStrictEqual(Tree.selection(state).tasks, ["g1"]);
-  });
-});
-
-describe("the pick tree", () => {
-  it("opens the way down to a node it is asked to expand, the cursor on it", () => {
-    const state = Tree.initialPick(change, { kind: "task", id: "t2" });
-    const row = Tree.pickRows(state)[state.cursor]!;
-    assert.strictEqual(row.node.id, "t2");
-    assert.deepStrictEqual(
-      Tree.pickRows(state).map((r) => r.node.id),
-      ["Hub", "g1", "g2", "t1", "t2", "t3", "t4", ""],
-    );
-    // One area opens on its own.
-    assert.deepStrictEqual(
-      Tree.pickRows(Tree.initialPick([change[0]!])).map((r) => r.node.id),
-      ["Hub", "g1"],
-    );
-  });
-
+describe("a scope's items", () => {
   it("lists a scope's open executable items", () => {
     assert.deepStrictEqual(
       Tree.openItems(change[0]!).map((n) => n.id),
@@ -235,5 +104,51 @@ describe("the start tree", () => {
     const state = Tree.initialStart(withNew, { kind: "task", id: "t2" });
     const row = Tree.rows(state)[state.cursor]!;
     assert.strictEqual(row.kind === "node" ? row.node.id : row.kind, "t2");
+    assert.deepStrictEqual(
+      Tree.rows(state).flatMap((r) => (r.kind === "node" ? [r.node.id] : [])),
+      ["Hub", "g1", "g2", "t1", "t2", "t3", "t4", "", "\0new"],
+    );
+    // One area opens on its own.
+    assert.deepStrictEqual(
+      Tree.rows(Tree.initialStart([change[0]!])).map((r) => r.kind),
+      ["node", "node", "continue"],
+    );
+  });
+
+  it("covers a node's items, and one item out of it leaves the rest marked", () => {
+    // Hub ▾, add-x ▾, 2. Hub feature ▾, Server ▾, then mark 2. Hub feature.
+    const state = start([
+      "right",
+      "down",
+      "right",
+      "down",
+      "right",
+      "down",
+      "down",
+      "right",
+      "up",
+      "up",
+      "space",
+    ]);
+    assert("nodes" in state);
+    assert.deepStrictEqual(Tree.marked(state), [{ kind: "group", id: "g2" }]);
+    assert.deepStrictEqual(
+      Tree.rows(state)
+        .slice(2, 7)
+        .map((row) => Tree.mark(state, row)),
+      ["on", "on", "on", "on", "on"],
+    );
+    // Model out of it: Routes and Store stay marked beside it, never Model, never twice.
+    const less = start(["down", "down", "down", "space"], state);
+    assert("nodes" in less);
+    assert.deepStrictEqual(Tree.marked(less), [
+      { kind: "task", id: "t1" },
+      { kind: "task", id: "t4" },
+    ]);
+    assert.strictEqual(Tree.mark(less, Tree.rows(less)[4]!), "some");
+    // Marking add-x again takes the single ones into it.
+    const whole = start(["up", "up", "up", "up", "space"], less);
+    assert("nodes" in whole);
+    assert.deepStrictEqual(Tree.marked(whole), [{ kind: "group", id: "g1" }]);
   });
 });

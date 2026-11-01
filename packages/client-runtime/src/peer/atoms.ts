@@ -12,7 +12,6 @@ import { createPeerCapacityAtoms } from "./capacity.ts";
 import { createPeerGitHubAtoms } from "./github.ts";
 import { createPeerHerdrAtoms } from "./herdr.ts";
 import { createPeerObserveAtoms } from "./observe.ts";
-import { createOwnershipEnvironmentAtoms } from "./ownership.ts";
 import { createPeerRequestsAtoms } from "./requests.ts";
 import { createPeerCardAtoms } from "./card.ts";
 import { createPeerRoomsAtoms } from "./rooms.ts";
@@ -39,7 +38,6 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerObserveAtoms(runtime),
     ...createPeerAuditAtoms(runtime),
     ...createPeerToolTrustAtoms(runtime),
-    peerOwnership: createOwnershipEnvironmentAtoms(runtime),
     peerRooms: createPeerRoomsAtoms(runtime),
     peerCard: createPeerCardAtoms(runtime),
     ...createPeerRunsAtoms(runtime),

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 import type { PeerTask, PeerWorkspaceRole, PeerWorkspaceState } from "@t3tools/contracts";
 
 import {
-  invitationScope,
   inviter,
   limitActions,
   limitWords,
@@ -102,36 +101,6 @@ describe("who invites to which projects", () => {
     expect(inviter(acme("owner", []))?.as).toBe("admin");
     // A member who leads nothing does not invite.
     expect(inviter(acme("member", []))).toBeNull();
-  });
-
-  it("says what an invitation to named projects hands over, and what became of its task", () => {
-    const names = {
-      project: (id: string) => (id === "webshop" ? "Webshop" : undefined),
-      task: (id: string) => (id === "vl7" ? "VL7" : undefined),
-    };
-    expect(invitationScope({ projects: ["webshop"], task: "vl7" }, names)).toBe(
-      "On Webshop only · VL7 waits for them",
-    );
-    expect(
-      invitationScope(
-        { projects: ["webshop"], task: "vl7", taskOutcome: "taken-meanwhile" },
-        names,
-      ),
-    ).toBe("On Webshop only · VL7 had been taken meanwhile");
-    expect(
-      invitationScope({ projects: ["webshop"], task: "vl7", taskOutcome: "done-meanwhile" }, names),
-    ).toBe("On Webshop only · VL7 was done meanwhile");
-    expect(
-      invitationScope(
-        { projects: ["webshop"], task: "vl7", taskOutcome: "a-newer-outcome" },
-        names,
-      ),
-    ).toBe("On Webshop only · VL7 waits for them");
-    expect(invitationScope({ projects: ["webshop", "secret"] }, names)).toBe(
-      "On Webshop and secret only",
-    );
-    expect(invitationScope({ projects: [] }, names)).toBeNull();
-    expect(invitationScope({}, names)).toBeNull();
   });
 });
 

@@ -185,8 +185,7 @@ const COMPUTER_ENTRIES: ReadonlyArray<Entry> = [
     id: "peer-plugins",
     title: "Peer plugins",
     place: c("coordination"),
-    terms:
-      "plugin plugins turn on off herdr github requests observe announcements settle ownership",
+    terms: "plugin plugins turn on off herdr github requests observe announcements settle",
   },
   {
     id: "agent-coordination",

@@ -1,9 +1,4 @@
-import {
-  taskOwnership,
-  taskState,
-  type AgentNeed,
-  type TaskState,
-} from "@t3tools/client-runtime/peer/work";
+import { taskState, type AgentNeed, type TaskState } from "@t3tools/client-runtime/peer/work";
 import type { PeerHubUpdateTaskInput, PeerTask } from "@t3tools/contracts";
 
 import {
@@ -247,7 +242,7 @@ export function taskItems(
   return subtreeOf(area, task.id).map((item) => ({
     task: item,
     indent: Math.max(0, (item.depth ?? 0) - base),
-    state: taskState(item, needs, taskOwnership(project, item, area.name).review),
+    state: taskState(item, needs),
     progress: progressLabel(item),
     canStart:
       item.executable !== false && !item.done && item.inReview !== true && item.unsettled !== true,

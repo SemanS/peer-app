@@ -135,17 +135,11 @@
     }
   },
   "apps/server/src/cli/peerCoreTasks.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
     "t3code/prefer-effect-fn": {
-      "count": 5
+      "count": 3
     }
   },
   "apps/server/src/cli/peerCoreTree.ts": {
-    "t3code/no-em-dash-copy": {
-      "count": 2
-    },
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -1037,86 +1031,6 @@
       "count": 2
     }
   },
-  "apps/server/src/peerHub/plugins/ownership/Ownership.test.ts": {
-    "t3code/no-real-time-wait-in-tests": {
-      "count": 2
-    },
-    "t3code/no-wall-clock-in-tests": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/ownership/Ownership.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/ownership/cli.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/ownership/cli.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/ownership/client/failures.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/ownership/client/hub.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/ownership/client/rules.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/ownership/fixtures.test.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/no-wall-clock-in-tests": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/ownership/index.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/ownership/tell.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/ownership/tell.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 3
-    }
-  },
-  "apps/server/src/peerHub/plugins/ownership/text.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/ownership/verdicts.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/plugins/requests/Requests.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1853,11 +1767,6 @@
       "count": 1
     }
   },
-  "packages/client-runtime/src/peer/ownershipRules.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "packages/client-runtime/src/peer/plugins.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1909,11 +1818,6 @@
   "packages/contracts/src/peer/github.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
-    }
-  },
-  "packages/contracts/src/peer/ownership.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
     }
   },
   "packages/contracts/src/peer/rooms.ts": {

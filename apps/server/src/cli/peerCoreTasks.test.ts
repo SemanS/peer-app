@@ -20,7 +20,7 @@ const task = (
   ...more,
 });
 
-/** add-x: a group, its section, an unsettled item with items, one item Bob's, one done. */
+/** add-x: a group, its section, an unsettled item with items, one done. */
 const tasks: ReadonlyArray<PeerTask> = [
   task("loose", "Loose", {}, "2026-10-29T08:00:00Z"),
   task("x", "add-x", {
@@ -52,95 +52,35 @@ const tasks: ReadonlyArray<PeerTask> = [
 
 describe("peer core tasks as a tree", () => {
   it("prints the tree, two spaces a level, progress after a parent, ? before an unsettled item", () => {
-    assert.deepStrictEqual(
-      PeerCoreTasks.taskLines({
-        tasks,
-        owners: { r2: "bob@acme.test" },
-        filter: "all",
-        email: null,
-      }),
-      [
-        "LOOSE · Loose · open · no area · nobody",
-        "X · add-x 1/4 · open · Hub · nobody",
-        "  S2 · 2. Server · open · Hub · nobody",
-        "    ? R · Routes 0/2 · open · Hub · nobody",
-        "      R1 · Create · open · Hub · nobody",
-        "      R2 · Delete · open · Hub · bob@acme.test",
-      ],
-    );
-  });
-
-  it("--open and --mine keep the executable items they match and the items above them", () => {
-    const mine = PeerCoreTasks.taskLines({
-      tasks,
-      owners: { s2: "ana@acme.test", r2: "bob@acme.test" },
-      filter: "mine",
-      email: "ana@acme.test",
-    });
-    // Create is Ana's through 2. Server; Delete is Bob's own.
-    assert.deepStrictEqual(
-      mine.map((line) => line.split(" · ")[0]),
-      ["X", "  S2", "    ? R", "      R1"],
-    );
-    const open = PeerCoreTasks.taskLines({
-      tasks,
-      owners: { r2: "bob@acme.test" },
-      filter: "open",
-      email: "ana@acme.test",
-    });
-    assert.deepStrictEqual(
-      open.map((line) => line.split(" · ")[0]),
-      ["LOOSE", "X", "  S2", "    ? R", "      R1"],
-    );
-    // A Hub that does not say who owns what has nothing open to take.
-    assert.deepStrictEqual(
-      PeerCoreTasks.taskLines({ tasks, owners: undefined, filter: "open", email: null }),
-      [],
-    );
-  });
-
-  it("says how many runs agents had on a task", () => {
-    const lines = PeerCoreTasks.taskLines({
-      tasks: [
-        task("one", "One", { runs: { running: 1, detached: 0, ended: 0 } }, "2026-10-29T09:01:00Z"),
-        task("two", "Two", { runs: { running: 0, detached: 1, ended: 2 } }, "2026-10-29T09:02:00Z"),
-        task(
-          "none",
-          "None",
-          { runs: { running: 0, detached: 0, ended: 0 } },
-          "2026-10-29T09:03:00Z",
-        ),
-        task("old", "Older Hub", {}, "2026-10-29T09:04:00Z"),
-      ],
-      owners: {},
-      filter: "all",
-      email: null,
-    });
-    assert.deepStrictEqual(lines, [
-      "ONE · One · open · no area · nobody · 1 run",
-      "TWO · Two · open · no area · nobody · 3 runs",
-      "NONE · None · open · no area · nobody",
-      "OLD · Older Hub · open · no area · nobody",
+    assert.deepStrictEqual(PeerCoreTasks.taskLines(tasks), [
+      "LOOSE · Loose · open · no area",
+      "X · add-x 1/4 · open · Hub",
+      "  S2 · 2. Server · open · Hub",
+      "    ? R · Routes 0/2 · open · Hub",
+      "      R1 · Create · open · Hub",
+      "      R2 · Delete · open · Hub",
     ]);
   });
 
-  it("lists the root holding the invitation's task first", () => {
-    const lines = PeerCoreTasks.taskLines({
-      tasks,
-      owners: {},
-      filter: "all",
-      email: null,
-      first: (t) => t.id === "r1",
-    });
-    assert.strictEqual(lines[0], "X · add-x 1/4 · open · Hub · nobody");
+  it("says how many runs agents had on a task", () => {
+    const lines = PeerCoreTasks.taskLines([
+      task("one", "One", { runs: { running: 1, detached: 0, ended: 0 } }, "2026-10-29T09:01:00Z"),
+      task("two", "Two", { runs: { running: 0, detached: 1, ended: 2 } }, "2026-10-29T09:02:00Z"),
+      task("none", "None", { runs: { running: 0, detached: 0, ended: 0 } }, "2026-10-29T09:03:00Z"),
+      task("old", "Older Hub", {}, "2026-10-29T09:04:00Z"),
+    ]);
+    assert.deepStrictEqual(lines, [
+      "ONE · One · open · no area · 1 run",
+      "TWO · Two · open · no area · 3 runs",
+      "NONE · None · open · no area",
+      "OLD · Older Hub · open · no area",
+    ]);
   });
 
   it("builds the menus' tree: areas, items under their parents, done ones gone", () => {
     const [hub, none] = PeerCoreTasks.projectTree({
       areas: ["Hub", "Web"],
       tasks,
-      owners: { r2: "bob@acme.test" },
-      areaOwners: { Web: "cy@acme.test" },
     }).filter((node) => node.id !== "Web");
     assert.strictEqual(hub?.kind, "area");
     const x = hub!.children[0]!;
@@ -155,8 +95,8 @@ describe("peer core tasks as a tree", () => {
     );
     const routes = x.children[0]!.children[0]!;
     assert.deepStrictEqual(
-      [routes.unsettled, routes.children.map((n) => `${n.id}:${n.owner ?? ""}`)],
-      [true, ["r1:", "r2:bob@acme.test"]],
+      [routes.unsettled, routes.children.map((n) => n.id)],
+      [true, ["r1", "r2"]],
     );
     assert.deepStrictEqual(
       none!.children.map((n) => n.id),

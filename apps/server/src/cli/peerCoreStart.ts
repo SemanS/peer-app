@@ -1,7 +1,7 @@
 /**
  * The menu's `Start a task`: scopes marked in the project's tree (or one row picked alone), each
- * unsettled one settled, the ones nobody owns taken, then the agent to start on them in the
- * project here, its first prompt the set's `scopePrompt`, carrying the run Peer starts for it.
+ * unsettled one settled, then the agent to start on them in the project here, its first prompt the
+ * set's `scopePrompt`, carrying the run Peer starts for it.
  *
  * @module cli/peerCoreStart
  */
@@ -48,20 +48,17 @@ const newTask = <R>(
     if (parent === null) return;
     const title = yield* ask.text(`What is the task? (in ${project.workspace}/${project.project})`);
     if (title === null || title.trim() === "") return;
-    const take = yield* ask.confirm("Take it yourself?", true);
     yield* steps.startTask({
       ...project,
       title: title.trim(),
-      take,
       ...(parent === NO_PARENT ? {} : { parent }),
     });
   });
 
 /**
  * Marked scopes, or one row picked alone. An unsettled item is settled first (by its parts it
- * stays a group in a set; picked alone, the tree opens on it); a group or task nobody owns is
- * taken, someone else's is dropped with their name; areas are nobody's. Then `Which agent?`: an
- * editor connected here that Peer can start in the project's checkout, or none now.
+ * stays a group in a set; picked alone, the tree opens on it). Then `Which agent?`: an editor
+ * connected here that Peer can start in the project's checkout, or none now.
  */
 export const startOnTree = <R>(
   ask: MenuAsk<R>,
@@ -72,7 +69,6 @@ export const startOnTree = <R>(
     readonly chooseProject: Effect.Effect<StartProject | null, never, R>;
     /** The person is on more projects than this one. */
     readonly others: boolean;
-    readonly me: string | undefined;
     /** The editors connected here that Peer can start (`connected && launchable`). */
     readonly editors: ReadonlyArray<Editor>;
     /** The connected project here, where an editor starts. */
@@ -118,12 +114,11 @@ export const startOnTree = <R>(
         return undefined;
       }
       const alone = picked.length === 1;
-      const chosen: Array<{ node: Tree.TreeNode; path: ReadonlyArray<Tree.TreeNode> }> = [];
+      const scopes: Array<Tree.TreeNode> = [];
       let reopen = false;
       for (const one of picked) {
-        const path = Tree.pathTo(nodes, one);
-        let node = path?.at(-1);
-        if (path === null || node === undefined) continue;
+        let node = Tree.pathTo(nodes, one)?.at(-1);
+        if (node === undefined) continue;
         if (node.unsettled === true) {
           const how = yield* ask.choose<"one" | "parts">(
             `Run "${node.title}" as one task, or by its parts?`,
@@ -147,47 +142,15 @@ export const startOnTree = <R>(
           }
           node = { ...node, unsettled: false, executable: how === "one" };
         }
-        chosen.push({ node, path });
-      }
-      if (reopen) continue;
-      const scopes: Array<Tree.TreeNode> = [];
-      for (const { node, path } of chosen) {
-        if (node.kind === "area") {
-          scopes.push(node);
-          continue;
-        }
-        const owner = path
-          .toReversed()
-          .find((n) => n.kind !== "area" && n.owner !== undefined)?.owner;
-        if (owner !== undefined && owner.toLowerCase() !== input.me) {
-          yield* io.say(
-            alone
-              ? `${node.title} is ${owner}'s: ask them to hand it over, or pick another.`
-              : `${node.title} is ${owner}'s: ask them to hand it over; it is left out.`,
-          );
-          continue;
-        }
-        if (owner !== undefined) yield* io.say(`${node.title} is yours already.`);
-        else {
-          const took = yield* steps.takeTask(workspace, id, node.id).pipe(
-            Effect.as(true),
-            Effect.catch((error) =>
-              io.say(`${String(error.message).replace(/^peer core: /, "")}`).pipe(Effect.as(false)),
-            ),
-          );
-          if (!took) continue;
-        }
         scopes.push(node);
       }
-      if (scopes.length === 0) {
-        if (alone && chosen.length === 1 && chosen[0]!.node.kind !== "area") continue;
-        return undefined;
-      }
+      if (reopen) continue;
+      if (scopes.length === 0) return undefined;
       const launch = yield* chooseAgent(ask, steps, io, input, project, scopes);
       if (launch === undefined)
         for (const area of scopes.filter((n) => n.kind === "area"))
           yield* io.say(
-            `${area.title}: ${Tree.openItems(area).length} open tasks. An area is nobody's to take; start an agent on it in the project.`,
+            `${area.title}: ${Tree.openItems(area).length} open tasks. Start an agent on it in the project.`,
           );
       return launch;
     }
@@ -239,7 +202,7 @@ const chooseAgent = <R>(
           }))),
       {
         title: "None now",
-        description: "The task is yours; start an agent later.",
+        description: "Start an agent later.",
         value: NONE_NOW,
       },
     ]);

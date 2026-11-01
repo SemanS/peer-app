@@ -14,48 +14,19 @@ import { MemberKeys } from "../../MemberKeys";
 import { PeerDialogMessage } from "../../PeerDialog";
 import { failureMessage, hubFailure } from "../../WorkspaceAccess";
 import { limitActions, memberActions } from "../../workspaceMembers.logic";
-import { ownershipFailure } from "../../ownership/failure";
 import { isWorkspaceAdmin } from "../peerSettings.logic";
 import { invitationActionRefusal } from "../workspacePeople.logic";
-import { ProjectAccessFields, WorkChecklist } from "./AccessFields";
-import {
-  accessOf,
-  accessText,
-  limitOf,
-  workChanges,
-  workGroups,
-  NO_WORK,
-  type PersonRow,
-  type ProjectAccess,
-  type WorkPick,
-} from "./people.logic";
+import { ProjectAccessFields } from "./AccessFields";
+import { accessOf, accessText, limitOf, type PersonRow, type ProjectAccess } from "./people.logic";
 
 type Role = "owner" | "admin" | "member";
 
 const roleName = (role: Role) => `${role.charAt(0).toUpperCase()}${role.slice(1)}`;
 
-/** What `email` owns in a project now, as the status's last view of its ownership says. */
-function ownedWork(status: PeerHubStatus, slug: string, project: string, email: string): WorkPick {
-  const view = status.ownership?.projects.find(
-    (entry) => entry.workspace === slug && entry.project === project,
-  );
-  if (view === undefined) return NO_WORK;
-  const mine = email.toLowerCase();
-  return {
-    areas: Object.entries(view.map.areas)
-      .filter(([, owner]) => owner === mine)
-      .map(([area]) => area),
-    tasks: Object.values(view.tasks)
-      .filter((row) => row.owner === mine)
-      .map((row) => row.task),
-  };
-}
-
 /**
- * Everything about one person in one place: their role, the projects they work in, the work they
- * own, an invitation still open, what stays out of the way under Advanced, and removing them. One
- * Save takes the role, the access and the work together, in that order: the Hub only lets someone
- * own work on a project they are on.
+ * Everything about one person in one place: their role, the projects they work in, an invitation
+ * still open, what stays out of the way under Advanced, and removing them. One Save takes the role
+ * and the access together.
  */
 export function PersonSheet({
   environmentId,
@@ -83,10 +54,6 @@ export function PersonSheet({
   const setProjects = useAtomCommand(serverEnvironment.peerHubSetMemberProjects, {
     reportFailure: false,
   });
-  const setOwner = useAtomCommand(serverEnvironment.peerOwnership.setTaskOwner, {
-    reportFailure: false,
-  });
-  const setMap = useAtomCommand(serverEnvironment.peerOwnership.setMap, { reportFailure: false });
   const resend = useAtomCommand(serverEnvironment.peerHubResendInvite, { reportFailure: false });
   const revoke = useAtomCommand(serverEnvironment.peerHubWithdrawInvite, { reportFailure: false });
 
@@ -105,40 +72,13 @@ export function PersonSheet({
   const [role, setPickedRole] = useState<Role | null>(null);
   const [access, setAccess] = useState<ProjectAccess | null>(null);
   const chosenAccess = access ?? accessOf(member?.projects);
-  const workProjects = allProjects.filter(
-    (project) =>
-      member !== null &&
-      (member.role !== "member" ||
-        chosenAccess.mode === "all" ||
-        chosenAccess.projects.includes(project.id)) &&
-      status.ownership?.projects.some(
-        (entry) => entry.workspace === workspace.slug && entry.project === project.id,
-      ),
-  );
-  const [picked, setPicked] = useState<string | null>(null);
-  const project = workProjects.find((entry) => entry.id === picked) ?? workProjects[0] ?? null;
-  const state = workspace.projects.find((entry) => entry.project.id === project?.id);
-  const groups = state === undefined ? [] : workGroups(state.work);
-  const before =
-    project === null || member === null
-      ? NO_WORK
-      : ownedWork(status, workspace.slug, project.id, member.email);
-  // Edits per project, so that moving between projects keeps what was ticked.
-  const [edits, setEdits] = useState<Readonly<Record<string, WorkPick>>>({});
-  const work = project === null ? NO_WORK : (edits[project.id] ?? before);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const invitation = person.invitation;
   const inviteView = invitation === null ? null : invitationView(invitation, now);
-  const dirty = role !== null || access !== null || Object.keys(edits).length > 0;
+  const dirty = role !== null || access !== null;
   const noProject = access?.mode === "selected" && access.projects.length === 0;
-  const canManageWork =
-    isWorkspaceAdmin(workspace.role) ||
-    (project !== null &&
-      workspace.projects.some(
-        (entry) => entry.project.id === project.id && entry.project.role === "lead",
-      ));
 
   const save = async () => {
     if (member === null) return;
@@ -162,47 +102,6 @@ export function PersonSheet({
           }),
         );
         if (failure !== null) return setError(failure);
-      }
-      for (const [id, after] of Object.entries(edits)) {
-        const owned = ownedWork(status, workspace.slug, id, member.email);
-        const view = status.ownership?.projects.find(
-          (entry) => entry.workspace === workspace.slug && entry.project === id,
-        );
-        const changes = workChanges({
-          email: member.email.toLowerCase(),
-          before: owned,
-          after,
-          areaOwners: view?.map.areas ?? {},
-        });
-        const owners = [
-          ...changes.give.map((task) => ({ task, owner: member.email })),
-          ...changes.takeBack.map((task) => ({ task, owner: null })),
-        ];
-        for (const { task, owner } of owners) {
-          const failure = ownershipFailure(
-            await setOwner({
-              environmentId,
-              input: { workspace: workspace.slug, project: id, task, owner },
-            }),
-          );
-          if (failure !== null) return setError(failure);
-        }
-        if (changes.areas !== null && view !== undefined) {
-          const failure = ownershipFailure(
-            await setMap({
-              environmentId,
-              input: {
-                workspace: workspace.slug,
-                project: id,
-                version: view.map.version,
-                areas: changes.areas,
-                paths: view.map.paths,
-                decide: view.map.decide,
-              },
-            }),
-          );
-          if (failure !== null) return setError(failure);
-        }
       }
       onChanged();
       onClose();
@@ -362,37 +261,6 @@ export function PersonSheet({
                       ))}
                     </div>
                   )}
-                </section>
-              )}
-              {project === null || !canManageWork ? null : (
-                <section className="flex flex-col gap-2">
-                  <h3 className="text-sm font-medium text-foreground">Assigned work</h3>
-                  {workProjects.length > 1 ? (
-                    <Select
-                      value={project.id}
-                      disabled={busy}
-                      onValueChange={(next) => next !== null && setPicked(next)}
-                    >
-                      <SelectTrigger size="sm" aria-label="Project">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectPopup>
-                        {workProjects.map((entry) => (
-                          <SelectItem key={entry.id} value={entry.id}>
-                            {entry.name}
-                          </SelectItem>
-                        ))}
-                      </SelectPopup>
-                    </Select>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">{project.name}</p>
-                  )}
-                  <WorkChecklist
-                    groups={groups}
-                    pick={work}
-                    disabled={busy}
-                    onChange={(next) => setEdits((current) => ({ ...current, [project.id]: next }))}
-                  />
                 </section>
               )}
               {isWorkspaceAdmin(workspace.role) ? (

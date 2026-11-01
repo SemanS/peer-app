@@ -18,7 +18,7 @@ const project = {
 } as WorkProjectNode;
 const status = { coordination: { enabled: false } } as unknown as PeerHubStatus;
 const plugin = (id: string, count: number | null): PeerWebPlugin => ({
-  id: "ownership",
+  id: "observe",
   projectSignals: () => [
     { id, label: id, icon: UsersIcon, count, detail: "", tone: "team", open: () => undefined },
   ],

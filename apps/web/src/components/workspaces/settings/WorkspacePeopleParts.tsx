@@ -24,8 +24,8 @@ import {
 } from "../PeerDialog";
 import { hubFailure } from "../WorkspaceAccess";
 import { inviter } from "../workspaceMembers.logic";
-import { InviteWorkFields, ProjectAccessFields } from "./people/AccessFields";
-import { NO_WORK, workGroups, type ProjectAccess, type WorkPick } from "./people/people.logic";
+import { ProjectAccessFields } from "./people/AccessFields";
+import type { ProjectAccess } from "./people/people.logic";
 import {
   INVITE_LIMIT,
   INVITE_NOTE,
@@ -45,10 +45,10 @@ import {
 } from "./workspacePeople.logic";
 
 /**
- * Invites people in one form: who, their role, the projects they work in and, for one project, the
- * work they will own. Several addresses go one after the other; the ones the Hub refuses stay in
- * the field with the Hub's reason, the others are done. A lead who is no admin invites members to
- * the projects they lead, so names at least one; an admin may give every project instead.
+ * Invites people in one form: who, their role and the projects they work in. Several addresses go
+ * one after the other; the ones the Hub refuses stay in the field with the Hub's reason, the others
+ * are done. A lead who is no admin invites members to the projects they lead, so names at least
+ * one; an admin may give every project instead.
  */
 export function InviteDialog({
   environmentId,
@@ -74,26 +74,14 @@ export function InviteDialog({
     projects: choices.length === 1 ? [choices[0]!.id] : [],
   }));
   const projects = role === "member" && access.mode === "selected" ? access.projects : [];
-  const [entire, setEntire] = useState(true);
-  const [pick, setPick] = useState<WorkPick>(NO_WORK);
-  const onlyProject = projects.length === 1 ? projects[0] : undefined;
-  const onlyState = workspace.projects.find(({ project }) => project.id === onlyProject);
-  const groups = onlyState === undefined ? [] : workGroups(onlyState.work);
-  const handed = entire || onlyProject === undefined ? NO_WORK : pick;
-  const hasWork = handed.areas.length > 0 || handed.tasks.length > 0;
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<ReadonlyArray<{ address: string; message: string }>>([]);
   const addresses = parseAddresses(text);
   const tooMany = addresses.valid.length > INVITE_LIMIT;
-  // Work goes to one person, and selected access names one project at least.
-  const workForMany = hasWork && addresses.valid.length > 1;
+  // Selected access names one project at least.
   const needsProject = role === "member" && access.mode === "selected" && projects.length === 0;
   const ready =
-    addresses.valid.length > 0 &&
-    addresses.invalid.length === 0 &&
-    !tooMany &&
-    !workForMany &&
-    !needsProject;
+    addresses.valid.length > 0 && addresses.invalid.length === 0 && !tooMany && !needsProject;
   const previews = useInvitePreviews(
     environmentId,
     workspace.slug,
@@ -120,8 +108,6 @@ export function InviteDialog({
           email: address,
           role: lead ? "member" : role,
           ...(projects.length === 0 ? {} : { projects: [...projects] }),
-          ...(handed.areas.length === 0 ? {} : { areas: [...handed.areas] }),
-          ...(handed.tasks.length === 0 ? {} : { tasks: [...handed.tasks] }),
         },
       });
       const failure = hubFailure(result);
@@ -228,27 +214,6 @@ export function InviteDialog({
                 onChange={setAccess}
               />
             )}
-            {onlyProject === undefined ? null : (
-              <InviteWorkFields
-                groups={groups}
-                entire={entire}
-                pick={pick}
-                disabled={busy}
-                onEntireChange={setEntire}
-                onPickChange={setPick}
-              />
-            )}
-            {projects.length > 1 ? (
-              <p className="text-sm text-muted-foreground">
-                Pick one project to assign tasks now. You can assign more on their page after they
-                join.
-              </p>
-            ) : null}
-            {workForMany ? (
-              <PeerDialogMessage tone="error">
-                Assigned work goes to one person. Invite one address with it.
-              </PeerDialogMessage>
-            ) : null}
             {reaches.map((reach) => (
               <div
                 key={reach.email}

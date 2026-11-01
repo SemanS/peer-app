@@ -42,14 +42,6 @@ import type {
 import { isExecutable, runTaskOf, taskKind } from "@t3tools/contracts";
 import type { EnvironmentThreadShell } from "../state/models.ts";
 import { projectVcs, type PeerVcsKind } from "./vcsWords.ts";
-import {
-  projectOwnership,
-  reviewRoute,
-  taskOwnerView,
-  type ProjectOwnership,
-  type ReviewRoute,
-  type TaskOwnerView,
-} from "./ownershipRules.ts";
 
 /** A colleague's thread nobody has reported for this long shows as no longer live. */
 export const STALE_AFTER_MS = 3 * 60 * 1000;
@@ -188,12 +180,6 @@ export interface WorkProjectNode {
   readonly chats?: ReadonlyArray<WorkTaskNode>;
   /** The version control of the project's checkouts on this computer. */
   readonly vcs?: PeerVcsKind | undefined;
-  /**
-   * The project's owners, owner map and calls as the Hub last said, with who is looking. Absent
-   * while the ownership plugin is off, the Hub does not serve it or no view was read yet: the
-   * board then shows no owners and asks every member for a review, as before ownership.
-   */
-  readonly ownership?: ProjectOwnership | undefined;
 }
 
 /**
@@ -279,16 +265,10 @@ const TASK_STATE_LABEL: Readonly<Record<Exclude<TaskStateKind, "waiting">, strin
  * colleague's chat waiting on them, chats that stopped, and no chat at all. A colleague's chat nobody
  * reports any more neither works nor waits. `needs` tells an approval from an answer; without it a
  * waiting chat of yours reads as an answer.
- *
- * A review asks the person only when `route` says so (it asks everyone without one, as before
- * ownership): "Ready for your review". One that asks someone else is no state of the person's: what
- * their own chats wait for comes first, and otherwise the task waits on that person, "Ready for
- * Slavo's review", under In progress.
  */
 export function taskState(
   task: WorkTaskNode,
   needs: ReadonlyMap<string, AgentNeed> = new Map(),
-  route?: ReviewRoute,
 ): TaskState {
   const state = (kind: Exclude<TaskStateKind, "waiting">): TaskState => ({
     kind,
@@ -296,12 +276,7 @@ export function taskState(
     waitingOn: undefined,
   });
   if (task.done || task.status === "done") return state("done");
-  const askedElsewhere = task.inReview === true && route !== undefined && !route.forMe;
-  if (task.inReview === true && !askedElsewhere) {
-    return route === undefined || route.audience === "everyone"
-      ? state("review")
-      : { kind: "review", label: "Ready for your review", waitingOn: undefined };
-  }
+  if (task.inReview === true) return state("review");
   const live = task.threads.filter((thread) => !thread.stale);
   const waitingMine = live.filter((thread) => thread.mine && thread.status === "blocked");
   if (
@@ -311,23 +286,11 @@ export function taskState(
   )
     return state("approval");
   if (waitingMine.length > 0) return state("input");
-  if (askedElsewhere) return waitingForReview(route);
   if (live.some((thread) => thread.status === "working")) return state("working");
   const waiting = live.find((thread) => !thread.mine && thread.status === "blocked");
   if (waiting !== undefined)
     return { kind: "waiting", label: `Blocked on ${waiting.person}`, waitingOn: waiting.person };
   return state(task.threads.length > 0 ? "paused" : "new");
-}
-
-/** A review that asks someone else: the task waits on them, in words that name them. */
-function waitingForReview(route: ReviewRoute): TaskState {
-  const reviewer =
-    route.audience === "leads" && route.names.length !== 1 ? "a lead" : route.names[0];
-  return {
-    kind: "waiting",
-    label: `Ready for ${reviewer ?? "someone"}'s review`,
-    waitingOn: reviewer,
-  };
 }
 
 /** A shared context as the tree shows it, with the findings on its work its keeper has not decided. */
@@ -686,7 +649,6 @@ function projectTree(input: {
       .toSorted((a, b) => b.createdAt.localeCompare(a.createdAt))
       .flatMap((task) => taskNodes.get(task.id) ?? []),
     vcs: projectVcs(state.repositories),
-    ownership: projectOwnership(status, workspace, state.project),
   };
 }
 
@@ -884,28 +846,6 @@ export function projectColor(key: string): ProjectIconColor {
 
 export function inScope(scope: string, project: WorkProjectNode): boolean {
   return scope === ALL_PROJECTS || projectScopeKey(project) === scope;
-}
-
-/**
- * A task's owner and, for a task in review, whom its review asks: what a card says of them. A view
- * that words the state itself (`taskState`) passes the route, or the state reads as it did before
- * ownership: a review asks everyone.
- */
-export function taskOwnership(
-  project: Pick<WorkProjectNode, "ownership">,
-  task: Pick<WorkTaskNode, "id" | "inReview">,
-  area: string | null,
-): { readonly owner: TaskOwnerView | undefined; readonly review: ReviewRoute | undefined } {
-  const owner = taskOwnerView(project.ownership, {
-    id: task.id,
-    ...(area === null ? {} : { area }),
-  });
-  // A review asks the task's owner, else the project's leads, else every member; without
-  // ownership it asks everyone, as before.
-  return {
-    owner,
-    review: task.inReview === true ? reviewRoute(project.ownership, owner) : undefined,
-  };
 }
 
 /** How long before `now` a time was, in words: "yesterday", "3 days ago". */

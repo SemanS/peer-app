@@ -1,4 +1,4 @@
-import { taskOwnership, taskState, type TaskStateKind } from "@t3tools/client-runtime/peer/work";
+import { taskState, type TaskStateKind } from "@t3tools/client-runtime/peer/work";
 import type { PeerHubStatus, PeerTask } from "@t3tools/contracts";
 
 import { personName, type WorkProjectNode, type WorkTaskNode } from "./workTree.logic";
@@ -78,15 +78,7 @@ export function groupTasks(project: WorkProjectNode): ReadonlyArray<TaskGroupNod
         id: `area:${area.name ?? ""}`,
         title: area.name ?? (named ? "No area" : undefined),
         done: false,
-        // A review that asks someone else is that person's to do: the task waits on them.
-        tasks: ordered(
-          open,
-          hub,
-          (task) =>
-            STATE_RANK[
-              taskState(task, undefined, taskOwnership(project, task, area.name).review).kind
-            ],
-        ),
+        tasks: ordered(open, hub, (task) => STATE_RANK[taskState(task).kind]),
       });
   }
   if (done.length > 0)

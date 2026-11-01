@@ -101,7 +101,6 @@ describe("the arms", () => {
     expect(armEnv("no-agreements")).toEqual({ PEER_AGREEMENTS: "off" });
     expect(armEnv("kernel")).toEqual({
       PEER_AGREEMENTS: "off",
-      PEER_OWNERSHIP: "off",
       PEER_JUJUTSU: "off",
     });
     // `undefined` drops the variable from a child's environment, even one the operator set.

@@ -1,4 +1,3 @@
-import type { ReviewRoute } from "@t3tools/client-runtime/peer/ownership";
 import { taskState, type TaskState, type TaskStateKind } from "@t3tools/client-runtime/peer/work";
 
 import type { StateTone } from "./taskChats.logic";
@@ -55,12 +54,7 @@ export function taskRowModel(input: {
   readonly task: WorkTaskNode;
   /** What each of the person's waiting chats waits for. */
   readonly needOf?: ReadonlyMap<string, AgentNeed> | undefined;
-  /**
-   * Whom the task's review asks (`taskOwnership`), for a task in review: a review that asks someone
-   * else is not the person's to do. Without it a review asks everyone, as before ownership.
-   */
-  readonly review?: ReviewRoute | undefined;
 }): TaskRowModel {
-  const state = taskState(input.task, input.needOf ?? new Map<string, AgentNeed>(), input.review);
+  const state = taskState(input.task, input.needOf ?? new Map<string, AgentNeed>());
   return { state, look: taskStateLook(state.kind) };
 }

@@ -1,4 +1,3 @@
-import { projectOwnership } from "@t3tools/client-runtime/peer/ownership";
 import {
   STALE_AFTER_MS,
   type WorkProjectNode,
@@ -141,12 +140,8 @@ describe("the tasks a request can name", () => {
     ...extra,
   });
 
-  const inArea = (
-    tasks: ReadonlyArray<WorkTaskNode>,
-    ownership?: WorkProjectNode["ownership"],
-  ): Pick<WorkProjectNode, "areas" | "ownership"> => ({
+  const inArea = (tasks: ReadonlyArray<WorkTaskNode>): Pick<WorkProjectNode, "areas"> => ({
     areas: [{ name: "Payments", tasks }],
-    ownership,
   });
 
   it("offers open tasks with their label and state, and leaves out what is done", () => {
@@ -162,56 +157,6 @@ describe("the tasks a request can name", () => {
     ).toEqual([
       { id: "a", title: "Allergen check", label: "ORD-5 · Allergen check", state: "Not started" },
       { id: "c", title: "Task c", label: "Task c", state: "Ready for review" },
-    ]);
-  });
-
-  it("says whose review a task in review waits for, when its owner is someone else", () => {
-    const ownership = (email: string) =>
-      projectOwnership(
-        {
-          email,
-          ownership: {
-            projects: [
-              {
-                workspace: "acme",
-                project: "ordering",
-                at: "2026-10-12T20:00:00Z",
-                leads: [],
-                map: { version: 1, areas: {}, paths: {}, decide: [] },
-                tasks: {
-                  c: {
-                    project: "ordering",
-                    task: "c",
-                    owner: "bob@acme.test",
-                    since: "2026-10-12T19:00:00Z",
-                    reason: "named",
-                  },
-                },
-                calls: [],
-              },
-            ],
-          },
-        },
-        { slug: "acme", role: "member" },
-        {
-          id: "ordering",
-          role: "member",
-          members: [
-            { email: "bob@acme.test", name: "Bob" },
-            { email: "cyril@acme.test", name: "Cyril" },
-          ],
-        },
-      );
-    const states = (email: string) =>
-      taskOptions(inArea([task("c", { inReview: true })], ownership(email))).map(
-        (option) => option.state,
-      );
-    // Bob owns it, so the review is his; for Cyril the task waits on Bob.
-    expect(states("bob@acme.test")).toEqual(["Ready for your review"]);
-    expect(states("cyril@acme.test")).toEqual(["Ready for Bob's review"]);
-    // Without ownership (the plugin off) a review asks everyone, as before.
-    expect(taskOptions(inArea([task("c", { inReview: true })])).map((o) => o.state)).toEqual([
-      "Ready for review",
     ]);
   });
 

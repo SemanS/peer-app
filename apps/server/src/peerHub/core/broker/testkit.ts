@@ -36,7 +36,7 @@ export const pluginsOf = (
 });
 
 /**
- * A plugin that wakes an idle agent, the way ownership tells an owner's decision: each message once,
+ * A plugin that wakes an idle agent, the way a room tells a message: each message once,
  * in the notice or at the session's start, marked in `session.told`, which core keeps across restarts
  * and forgets with a new conversation. `tell` gives it a message; a local project does not have it.
  */
@@ -44,7 +44,7 @@ export function wakingNotices() {
   const messages = new Map<string, string>();
   const unheard = (session: PeerSessionView) =>
     Effect.sync(() => {
-      const told = session.told!("ownership");
+      const told = session.told!("rooms");
       const fresh = [...messages].filter(([id]) => !told.has(id));
       for (const [id] of fresh) told.add(id);
       return fresh.length === 0 ? null : fresh.map(([, text]) => text).join("\n\n");
@@ -53,7 +53,7 @@ export function wakingNotices() {
     ...NO_PLUGINS,
     active: [
       {
-        id: "ownership",
+        id: "rooms",
         title: "fake",
         requiresHub: true,
         contributions: {
@@ -68,7 +68,7 @@ export function wakingNotices() {
   return {
     plugins,
     tell: (id: string, text: string) => void messages.set(id, text),
-    told: (session: LocalSession) => session.pluginTold.get("ownership") ?? new Set<string>(),
+    told: (session: LocalSession) => session.pluginTold.get("rooms") ?? new Set<string>(),
   };
 }
 

@@ -49,9 +49,6 @@ export interface InviteInput {
   readonly workspace?: string;
   readonly projects?: ReadonlyArray<string>;
   readonly admin?: boolean;
-  /** With one project: the areas and tasks they will own when they join. */
-  readonly areas?: ReadonlyArray<string>;
-  readonly tasks?: ReadonlyArray<string>;
 }
 
 /** `peer core invite <email>`: mails an invitation to a workspace the person may invite to. */
@@ -85,8 +82,6 @@ export const invite = (input: InviteInput, status: PeerHubStatus, io: OneShotIo)
       email,
       ...(input.admin === true ? { role: "admin" as const } : {}),
       ...(projects.length > 0 ? { projects } : {}),
-      ...(input.areas === undefined || input.areas.length === 0 ? {} : { areas: input.areas }),
-      ...(input.tasks === undefined || input.tasks.length === 0 ? {} : { tasks: input.tasks }),
     });
     const failed = result.delivery?.error;
     yield* io.say(
@@ -308,7 +303,7 @@ export const menuItems = (
       ? [
           {
             title: "Start a task",
-            description: "Your teammates and agents see it; take it yourself to begin.",
+            description: "Your teammates and agents see it.",
             value: { kind: "task" as const },
           },
         ]
@@ -410,11 +405,6 @@ export interface MenuAsk<R = never> {
   /** A folder, browsed from the home directory. */
   readonly folder: (message: string) => Effect.Effect<string | null, never, R>;
   readonly confirm: (message: string, initial: boolean) => Effect.Effect<boolean, never, R>;
-  /** The areas, groups and tasks to assign, selected in a tree. */
-  readonly tree: (
-    message: string,
-    nodes: ReadonlyArray<Tree.TreeNode>,
-  ) => Effect.Effect<Tree.Selection | null, never, R>;
   /** The scopes marked in the tree, in its order, or one row alone; `expand` opens the way to it. */
   readonly treePick: (
     message: string,
@@ -427,8 +417,6 @@ export interface TaskInput {
   readonly workspace: string;
   readonly project: string;
   readonly title: string;
-  /** The person becomes its owner. */
-  readonly take: boolean;
   /** The task it goes under. */
   readonly parent?: string;
 }
@@ -463,12 +451,6 @@ export interface MenuSteps<R = never> {
     workspace: string,
     project: string,
   ) => Effect.Effect<void, CliError.UserError, R>;
-  /** The person becomes the owner of a task nobody owns. */
-  readonly takeTask: (
-    workspace: string,
-    project: string,
-    task: string,
-  ) => Effect.Effect<void, CliError.UserError, R>;
   /** Settles whether an item runs as one task (`executable`) or by its parts. */
   readonly settleTask: (
     workspace: string,
@@ -476,7 +458,7 @@ export interface MenuSteps<R = never> {
     task: string,
     executable: boolean,
   ) => Effect.Effect<void, CliError.UserError, R>;
-  /** A project's areas with their groups, tasks and owners, as a tree. */
+  /** A project's areas with their groups and tasks, as a tree. */
   readonly scope: (
     workspace: string,
     project: string,
@@ -684,7 +666,6 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
               project,
               chooseProject,
               others: projects.length > 1,
-              me: status.email?.toLowerCase(),
               editors: editors.filter((e) => e.connected && e.launchable),
               here: here?.state === "connected" ? here : undefined,
             });
@@ -719,22 +700,6 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
                     );
             if (project === null)
               return yield* steps.invite({ email, workspace: slug, projects: [] });
-            const nodes = yield* steps.scope(slug, project);
-            const how = yield* ask.choose<"all" | "pick">("What would you like to assign?", [
-              {
-                title: "All areas and tasks",
-                description: "Every area that has no owner yet, with its new tasks.",
-                value: "all",
-              },
-              { title: "Select areas or tasks", value: "pick" },
-            ]);
-            if (how === null) return;
-            const chosen: Tree.Selection | null =
-              how === "all"
-                ? { all: true, areas: [], tasks: [] }
-                : yield* ask.tree("Select areas or tasks", nodes);
-            if (chosen === null) return;
-            const named = nodes.flatMap((a) => (a.id === "" ? [] : [a.id]));
             yield* io.say(
               [
                 "",
@@ -743,32 +708,13 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
                 `Workspace: ${slug}`,
                 `Project: ${project}`,
                 "",
-                "Assignments:",
-                ...(chosen.all || chosen.areas.length > 0 || chosen.tasks.length > 0
-                  ? Tree.describe(nodes, chosen).map((line) => `  ${line}`)
-                  : ["  none: they can take any task"]),
-                ...nodes
-                  .filter(
-                    (a) =>
-                      a.id !== "" &&
-                      a.owner !== undefined &&
-                      (chosen.all || chosen.areas.includes(a.id)),
-                  )
-                  .map((a) => `  · ${a.id} stays ${a.owner}'s`),
-                "",
               ].join("\n"),
             );
             if (!(yield* ask.confirm("Send invitation?", true))) {
               yield* io.say("Nothing sent.");
               return;
             }
-            return yield* steps.invite({
-              email,
-              workspace: slug,
-              projects: [project],
-              areas: chosen.all ? named : chosen.areas,
-              tasks: chosen.all ? [] : chosen.tasks,
-            });
+            return yield* steps.invite({ email, workspace: slug, projects: [project] });
           }
         }
       });

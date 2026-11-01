@@ -89,7 +89,6 @@ const sayWorkspaces = (status: PeerHubStatus, io: OneShotIo) =>
 /** What an invitation named, read from `/v1/me` before joining (the offer is gone after). */
 interface Invitation {
   readonly projects?: ReadonlyArray<string>;
-  readonly task?: string;
 }
 
 export interface JoinInput {
@@ -155,10 +154,8 @@ export const join = (input: JoinInput, io: OneShotIo) =>
     }
     const me = yield* client.me;
     const offer = me.joinable.find((w) => w.slug === slug);
-    const invitation: Invitation = {
-      ...(offer?.projects === undefined ? {} : { projects: offer.projects }),
-      ...(offer?.task === undefined ? {} : { task: offer.task }),
-    };
+    const invitation: Invitation =
+      offer?.projects === undefined ? {} : { projects: offer.projects };
     const status = yield* workspaces.joinWorkspace({ workspace: slug, confirmDomainMatch: true });
     const joined = status.workspaces.find((workspace) => workspace.slug === slug);
     if (joined === undefined)
@@ -171,13 +168,11 @@ const sameHub = (a: string, b: string) =>
   a.replace(/\/+$/, "").toLowerCase() === b.replace(/\/+$/, "").toLowerCase();
 
 /**
- * The invited projects with their repositories, the task that waits (kept in `invitedTasks`), and
- * the clone commands for the next step.
+ * The invited projects with their repositories, and the clone commands for the next step.
  */
 const sayInvitation = (slug: string, invitation: Invitation, io: OneShotIo) =>
   Effect.gen(function* () {
     const state = yield* PeerState.PeerState;
-    const client = yield* PeerHubClient.PeerHubClient;
     const workspace = (yield* state.workspaces).find((w) => w.slug === slug);
     const projects = (workspace?.manifest?.projects ?? []).filter(
       (project) =>
@@ -191,33 +186,6 @@ const sayInvitation = (slug: string, invitation: Invitation, io: OneShotIo) =>
         yield* io.say(`${project.id} · ${repository.url} (${repository.branch})`);
         clones.push(`git clone --branch ${repository.branch} ${repository.url}`);
       }
-    if (invitation.task !== undefined) {
-      const wanted = invitation.task;
-      // The title is the Hub's; without an answer, the id alone still says which task waits.
-      const work = yield* Effect.flatMap(client.session, ({ hubUrl, session }) =>
-        client.api.work(hubUrl, session, slug),
-      ).pipe(Effect.option);
-      const found = projects.flatMap((project) => {
-        const tasks = work._tag === "Some" ? (work.value.projects[project.id]?.tasks ?? []) : [];
-        const task = tasks.find((t) => t.id === wanted || t.key === wanted);
-        return task === undefined ? [] : [{ project: project.id, task }];
-      })[0];
-      const project =
-        found?.project ?? (projects.length === 1 ? (projects[0]?.id ?? undefined) : undefined);
-      yield* io.say(
-        found === undefined
-          ? `Waiting for you: ${wanted}`
-          : `Waiting for you: ${found.task.key ?? found.task.id} · ${found.task.title}`,
-      );
-      const id = found?.task.id ?? wanted;
-      yield* state.updatePersisted((p) => ({
-        ...p,
-        invitedTasks: [
-          ...(p.invitedTasks ?? []).filter((t) => !(t.workspace === slug && t.task === id)),
-          { workspace: slug, ...(project === undefined ? {} : { project }), task: id },
-        ],
-      }));
-    }
     return { workspace: slug, clones };
   });
 

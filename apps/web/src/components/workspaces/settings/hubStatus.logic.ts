@@ -153,16 +153,6 @@ const FEATURES: ReadonlyArray<Feature> = [
     },
   },
   {
-    id: "ownership",
-    name: "Ownership",
-    without: "plugin",
-    words: {
-      on: "Tasks and paths have owners, who hear about changes in their paths and decide them where they ask to.",
-      off: "Tasks and paths can’t have owners: this Hub doesn’t run it.",
-      newer: "Tasks and paths can’t have owners until the Hub is updated.",
-    },
-  },
-  {
     id: "agreements",
     name: "Agreements",
     without: "plugin",

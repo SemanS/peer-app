@@ -93,10 +93,10 @@ describe("the agreements plugin", () => {
     assert.isUndefined(AgreementsPlugin.forcedOff?.());
   });
 
-  it("is listed once, in the contracts' order: ownership, then agreements, then changes, with settings last", () => {
+  it("is listed once, in the contracts' order: resources, then agreements, then changes, with settings last", () => {
     const listed = peerPlugins().map((entry) => entry.id);
     assert.deepStrictEqual(listed, [...PEER_PLUGIN_IDS]);
-    assert.strictEqual(listed.indexOf("agreements"), listed.indexOf("ownership") + 1);
+    assert.strictEqual(listed.indexOf("agreements"), listed.indexOf("resources") + 1);
     assert.strictEqual(listed.indexOf("agreements") + 1, listed.indexOf("changes"));
     assert.strictEqual(listed.at(-1), "settings");
   });

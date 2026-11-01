@@ -42,14 +42,6 @@ export const PeerInvitation = Schema.Struct({
   expiresAt: Schema.optional(Schema.String),
   delivery: Schema.optional(PeerInvitationDelivery),
   projects: Schema.optional(Schema.Array(Schema.String)),
-  /** The task of a named project the invitation hands the person. */
-  task: Schema.optional(Schema.NullOr(Schema.String)),
-  /**
-   * What became of that task when they joined: `taken-meanwhile` when somebody else owned it by
-   * then, so it stayed theirs; `done-meanwhile` when it was done by then, so nobody became its
-   * owner. An open string, so a newer Hub's outcome decodes.
-   */
-  taskOutcome: Schema.optional(Schema.NullOr(Schema.String)),
   /** When an accepted or revoked invitation ended, and who ended it. */
   at: Schema.optional(Schema.NullOr(Schema.String)),
   by: Schema.optional(Schema.NullOr(Schema.String)),

@@ -2,7 +2,6 @@ import { canWithdraw, expiresIn, requestOutcome } from "@t3tools/client-runtime/
 import {
   STALE_AFTER_MS,
   taskLabel,
-  taskOwnership,
   taskState,
   type WorkProjectNode,
 } from "@t3tools/client-runtime/peer/work";
@@ -139,14 +138,11 @@ export interface TaskOption {
 /**
  * The project's open tasks for the picker, in the tree's order. A task that is done (the Hub's, or
  * every pull request of its chats merged) is not offered: the request would be about finished work.
- * A task in review says whose review it waits for, as every Work view does.
  */
-export function taskOptions(
-  project: Pick<WorkProjectNode, "areas" | "ownership">,
-): ReadonlyArray<TaskOption> {
+export function taskOptions(project: Pick<WorkProjectNode, "areas">): ReadonlyArray<TaskOption> {
   return project.areas.flatMap((area) =>
     area.tasks.flatMap((task) => {
-      const state = taskState(task, undefined, taskOwnership(project, task, area.name).review);
+      const state = taskState(task);
       return state.kind === "done"
         ? []
         : [{ id: task.id, title: task.title, label: taskLabel(task), state: state.label }];

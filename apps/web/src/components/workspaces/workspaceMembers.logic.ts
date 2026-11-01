@@ -1,5 +1,4 @@
 import type {
-  PeerInvitation,
   PeerRemovalPlan,
   PeerWorkspaceMembers,
   PeerWorkspaceRole,
@@ -100,32 +99,4 @@ export function limitActions(input: {
   if (limit === null) return { edit: false, addTo: [] };
   const led = inviter(workspace)?.projects ?? [];
   return { edit: false, addTo: led.filter((project) => !limit.includes(project.id)) };
-}
-
-/**
- * What an invitation's row says of whom it is for: "On Webshop only · VL7 waits for them", and
- * once accepted, "VL7 had been taken meanwhile" when somebody else owned it by then, or "VL7 was
- * done meanwhile" when it was done by then; either way nobody became its owner through the
- * invitation. Null for an invitation to the whole workspace.
- */
-export function invitationScope(
-  invitation: Pick<PeerInvitation, "projects" | "task" | "taskOutcome">,
-  names: {
-    readonly project: (id: string) => string | undefined;
-    readonly task: (id: string) => string | undefined;
-  },
-): string | null {
-  const projects = invitation.projects ?? [];
-  if (projects.length === 0) return null;
-  const only = limitWords(projects, names.project);
-  const task = invitation.task ?? null;
-  if (task === null) return `${only.charAt(0).toUpperCase()}${only.slice(1)}`;
-  const label = names.task(task) ?? task;
-  const outcome =
-    invitation.taskOutcome === "taken-meanwhile"
-      ? `${label} had been taken meanwhile`
-      : invitation.taskOutcome === "done-meanwhile"
-        ? `${label} was done meanwhile`
-        : `${label} waits for them`;
-  return `${only.charAt(0).toUpperCase()}${only.slice(1)} · ${outcome}`;
 }

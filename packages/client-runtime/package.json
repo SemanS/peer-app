@@ -584,7 +584,6 @@
     "./peer/contextView": "./src/peer/contextView.ts",
     "./peer/resources": "./src/peer/resources.ts",
     "./peer-resources": "./src/peer/resources.ts",
-    "./peer/ownership": "./src/peer/ownership.ts",
     "./peer/rooms": "./src/peer/rooms.ts",
     "./peer/runs": "./src/peer/runs.ts"
   },

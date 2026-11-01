@@ -262,8 +262,6 @@ export const PeerJoinableWorkspace = Schema.Struct({
   reason: Schema.Literals(["domain", "invite"]),
   /** The projects an invitation names (the newcomer is on these only); absent: the workspace's. */
   projects: Schema.optional(Schema.Array(Schema.String)),
-  /** The task an invitation names, waiting for the newcomer. */
-  task: Schema.optional(Schema.String),
 });
 export type PeerJoinableWorkspace = typeof PeerJoinableWorkspace.Type;
 
@@ -782,15 +780,6 @@ export const PeerHubInviteInput = Schema.Struct({
    * before. A lead names only projects they lead, and invites members only.
    */
   projects: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
-  /** One task of a named project, not done, that waits for them: theirs when they join. */
-  task: Schema.optional(TrimmedNonEmptyString),
-  /**
-   * With exactly one project named: the areas they will own when they join (covering the area's
-   * future tasks), unless a member owns one already.
-   */
-  areas: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
-  /** With exactly one project named: tasks they will own when they join, unless owned already. */
-  tasks: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
 });
 export type PeerHubInviteInput = typeof PeerHubInviteInput.Type;
 

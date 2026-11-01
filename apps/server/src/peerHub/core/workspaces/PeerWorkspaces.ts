@@ -422,9 +422,6 @@ const make = Effect.gen(function* () {
         ...(input.projects === undefined || input.projects.length === 0
           ? {}
           : { projects: input.projects }),
-        ...(input.task === undefined ? {} : { task: input.task }),
-        ...(input.areas === undefined || input.areas.length === 0 ? {} : { areas: input.areas }),
-        ...(input.tasks === undefined || input.tasks.length === 0 ? {} : { tasks: input.tasks }),
       });
       return { ...(yield* publish), ...invitation };
     },

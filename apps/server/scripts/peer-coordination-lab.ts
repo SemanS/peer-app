@@ -102,6 +102,10 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   subscription and runs only after the maintainer agrees; without it scripted stand-ins play both agents.
 //   REAL_SCENARIO=handoff (peer-lab/handoffSteps.ts) measures who moves next after a handoff: scripted and checked by
 //   default; with REAL_AGENTS=1 real agents, reported as one `handoff:` line (LAB_ARM names the build, LAB_REPORT a file).
+//   REAL_SCENARIO=gap (peer-lab/gap.ts) measures what falls between two tasks: whether the seam nobody's brief names gets
+//   an owner at handoff, and whether the merged tree then serves the page. Scripted and checked by default; with
+//   REAL_AGENTS=1 real agents, reported as one `gap:` line (LAB_ARM names the build, LAB_REPORT a file). LAB_GAP=soft
+//   asks for a page and not for where it opens, as the brief of the real case read.
 //   REAL_SCENARIO=rooms LAB_SHARED=1 REAL_AGENTS=1 (LAB_VCS=jj for Jujutsu) proves one room across two projects: a
 //   message in the room starts one real agent, with a checkout of its own in both, and each project's diff shows its work.
 //   REAL_SCENARIO=rooms LAB_RETRY=1 REAL_AGENTS=1 (LAB_VCS=jj for Jujutsu) proves Try again on real agents in chats: an
@@ -223,6 +227,7 @@ import { RpcClient, RpcSerialization } from "effect/rpc";
 import {
   ORCHESTRATION_PROTOCOL_VERSION,
   PEER_ACCEPTANCE_METHODS,
+  PEER_TEST_REPORTS_METHODS,
   PEER_FORECAST_METHODS,
   PEER_JUJUTSU_METHODS,
   PEER_ROOM_SESSION_ENDED,
@@ -233,6 +238,7 @@ import {
   PeerAgreementsView,
   PeerImpactView,
   PeerPlansView,
+  writtenBlockers,
 } from "@t3tools/contracts";
 
 import {
@@ -273,6 +279,19 @@ import {
   writeHandoffSeed,
   type LabItem,
 } from "./peer-lab/handoffSteps.ts";
+import {
+  GAP_A_PROMPT,
+  GAP_B_PROMPT,
+  GAP_DELIVER_PROMPT,
+  GAP_B_SOFT_PROMPT,
+  GAP_TASKS,
+  aboutGap,
+  gapOwnerPrompt,
+  measure as measureGap,
+  serves,
+  writeGapSeed,
+  type GapFinding,
+} from "./peer-lab/gap.ts";
 import { plainSession, toldTexts } from "./peer-lab/told.ts";
 import {
   dependencyBlocks,
@@ -476,6 +495,8 @@ const SHARED = ROOMS && REAL && process.env.LAB_SHARED === "1";
 const RETRY = ROOMS && REAL && process.env.LAB_RETRY === "1";
 /** REAL_SCENARIO=handoff (`peer-lab/handoffSteps.ts`): what an agent clears after a handoff, what reaches a person. */
 const HANDOFF = process.env.REAL_SCENARIO === "handoff";
+/** REAL_SCENARIO=gap (`peer-lab/gap.ts`): what falls between two tasks, and who comes to answer for it. */
+const GAP = process.env.REAL_SCENARIO === "gap";
 if (process.env.LAB_VCS !== undefined && !["git", "jj"].includes(process.env.LAB_VCS)) {
   throw new Error(`LAB_VCS must be git or jj, not ${process.env.LAB_VCS}`);
 }
@@ -699,7 +720,8 @@ function makeOrigin(): string {
   // The follow scenario starts from the hidden seed: orderTotal() in euros, used by the receipt and VAT.
   if (FOLLOW) writeHiddenSeed(work);
   if (HANDOFF) writeHandoffSeed(work, NodePath.join(repoRoot, "node_modules/.bin/tsc"));
-  if (!CONTRACT && !FOLLOW && !HANDOFF) {
+  if (GAP) writeGapSeed(work);
+  if (!CONTRACT && !FOLLOW && !HANDOFF && !GAP) {
     NodeFS.writeFileSync(
       NodePath.join(work, "src/pricing.ts"),
       "export function price(items: number[]): number {\n  return items.reduce((sum, item) => sum + item, 0);\n}\n",
@@ -709,7 +731,7 @@ function makeOrigin(): string {
       'import { price } from "./pricing";\n\nexport const cartTotal = (items: number[]) => price(items);\n',
     );
   }
-  if (REAL && !OWNERS && !CONTRACT && !FOLLOW && !HANDOFF) {
+  if (REAL && !OWNERS && !CONTRACT && !FOLLOW && !HANDOFF && !GAP) {
     // Prices are integer cents, and other files rely on it: something worth keeping.
     NodeFS.writeFileSync(
       NodePath.join(work, "src/format.ts"),
@@ -722,9 +744,9 @@ function makeOrigin(): string {
   }
   git(work, "init", "--quiet", "--initial-branch", "main");
   // The project keeps knowledge with kontext, when it is installed here.
-  if (kontext && !CONTRACT && !FOLLOW && !HANDOFF)
+  if (kontext && !CONTRACT && !FOLLOW && !HANDOFF && !GAP)
     NodeChildProcess.execFileSync("kontext", ["init", "--no-hooks"], { cwd: work });
-  if (REAL && !OWNERS && kontext && !CONTRACT && !FOLLOW && !HANDOFF) {
+  if (REAL && !OWNERS && kontext && !CONTRACT && !FOLLOW && !HANDOFF && !GAP) {
     NodeFS.mkdirSync(NodePath.join(work, ".ai", "conventions"), { recursive: true });
     NodeFS.writeFileSync(
       NodePath.join(work, ".ai", "conventions", "what-agents-mark-for-the-project.md"),
@@ -891,7 +913,7 @@ async function setUpWorkspace() {
         session: admin,
         body: { title: task.title, key: task.key },
       });
-  } else if (REAL && !OWNERS && !FOLLOW && !ROOMS && !HANDOFF) {
+  } else if (REAL && !OWNERS && !FOLLOW && !ROOMS && !HANDOFF && !GAP) {
     const krk1 = await hubCall("/v1/workspaces/acme/projects/lab/tasks", {
       method: "POST",
       session: admin,
@@ -4920,6 +4942,8 @@ async function startClaude(
     "acceptEdits",
     "--model",
     process.env.LAB_CLAUDE_MODEL ?? "sonnet",
+    // A lab agent never reaches the person's own browser, whatever its permission mode lets it ask.
+    "--no-chrome",
   ];
   let lastScreen = "";
   for (let launch = 0; launch < 3; launch += 1) {
@@ -9313,6 +9337,426 @@ const handoffProgram = Effect.gen(function* () {
   }
 }).pipe(Effect.scoped);
 
+/**
+ * REAL_SCENARIO=gap (`peer-lab/gap.ts`): what falls between GAP-1 and GAP-2. Bob's agent hands the API off, Ana's builds
+ * the page and leaves the server to GAP-1, so nothing serves the page. Scripted stand-ins with every line checked, or
+ * with REAL_AGENTS=1 real Claude Code, measured and reported as one `gap:` line. A person an item names gets one message
+ * to their agent, and the merged tree then serves the page or does not.
+ */
+const gapProgram = Effect.gen(function* () {
+  yield* Effect.promise(() =>
+    waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
+  );
+  yield* Effect.promise(setUpWorkspace);
+  writeFakeModel();
+  const anaHerdr = REAL ? startHerdr("Ana") : undefined;
+  const bobHerdr = REAL ? startHerdr("Bob") : undefined;
+  const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr?.socket);
+  const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr?.socket);
+  const tasksPath = "/v1/workspaces/acme/projects/lab/tasks";
+  const make = (task: { title: string; key: string }) =>
+    hubCall(tasksPath, {
+      method: "POST",
+      session: hubSession,
+      body: { title: task.title, key: task.key },
+    }).then((created) => String(created.id));
+  const taskA = yield* Effect.promise(() => make(GAP_TASKS.a));
+  const taskB = yield* Effect.promise(() => make(GAP_TASKS.b));
+  yield* Effect.promise(() =>
+    hubCall(`${tasksPath}/${encodeURIComponent(taskB)}/dependencies`, {
+      method: "PATCH",
+      session: hubSession,
+      body: { add: [taskA], remove: [] },
+    }),
+  );
+  for (const computer of [ana, bob]) {
+    git(computer.checkout, "config", "user.name", computer.name);
+    git(computer.checkout, "config", "user.email", `${computer.name.toLowerCase()}@acme.test`);
+    yield* Effect.promise(() =>
+      until(
+        `${computer.name}'s Peer knows both tasks`,
+        async () => {
+          const synced = await Effect.runPromise(computer.client[WS_METHODS.peerHubSync]({}));
+          return (
+            synced.workspaces[0]?.projects
+              .find((p) => p.project.id === "lab")
+              ?.work.tasks.some((one) => one.key === GAP_TASKS.b.key) === true
+          );
+        },
+        30_000,
+      ),
+    );
+  }
+  branchOff(bob.checkout, GAP_TASKS.a.branch);
+  branchOff(ana.checkout, GAP_TASKS.b.branch);
+  const placeB = { workspace: "acme", project: "lab", task: taskB };
+  const rpc = <A>(effect: Effect.Effect<A, unknown>, ms = 15_000) =>
+    Promise.race([
+      Effect.runPromise(effect),
+      sleep(ms).then(() => Promise.reject(new Error(`no answer in ${ms} ms`))),
+    ]);
+  const newestReport = async (id: string) => {
+    const read = (await hubCall(`/v1/workspaces/acme/tests/lab/${encodeURIComponent(id)}`, {
+      session: hubSession,
+    }).catch(() => ({}))) as { reports?: ReadonlyArray<Record<string, any>> };
+    return read.reports?.[0] as
+      | { number: number; items: ReadonlyArray<LabItem>; [field: string]: any }
+      | undefined;
+  };
+  const contextOfPackage = async (id: string) => {
+    const read = (await hubCall(`/v1/workspaces/acme/handoffs/lab/${encodeURIComponent(id)}`, {
+      session: hubSession,
+    }).catch(() => ({}))) as {
+      packages?: ReadonlyArray<{
+        context?: { sections: ReadonlyArray<{ name: string; lines: ReadonlyArray<string> }> };
+      }>;
+    };
+    return read.packages?.[0]?.context;
+  };
+  const blockersOf = async (id: string) => writtenBlockers(await contextOfPackage(id));
+  const cli = (computer: Computer, command: string) =>
+    events(computer).filter((entry) => entry.event === "cli" && entry.command === command);
+  /** What is on origin's two branches, merged, as a person would run it. */
+  const mergedServes = async () => {
+    const tree = NodeFS.mkdtempSync(NodePath.join(lab, "merged-"));
+    git(lab, "clone", "--quiet", git(ana.checkout, "remote", "get-url", "origin").trim(), tree);
+    const merges = [GAP_TASKS.a.branch, GAP_TASKS.b.branch].map(
+      (branch) =>
+        NodeChildProcess.spawnSync(
+          "git",
+          [
+            "-c",
+            "user.name=lab",
+            "-c",
+            "user.email=lab@acme.test",
+            "merge",
+            "--no-edit",
+            `origin/${branch}`,
+          ],
+          { cwd: tree, encoding: "utf8" },
+        ).status === 0,
+    );
+    return { merged: merges.every(Boolean), serves: await serves(tree) };
+  };
+  const finding = async (): Promise<GapFinding> => ({
+    items: (await newestReport(taskB))?.items,
+    blockers: await blockersOf(taskB),
+    lines: (await contextOfPackage(taskB))?.sections.flatMap((section) => section.lines) ?? [],
+    changedServer:
+      NodeChildProcess.spawnSync(
+        "git",
+        ["diff", "--quiet", `origin/${GAP_TASKS.a.branch}`, "--", "src/server.ts"],
+        { cwd: ana.checkout },
+      ).status === 1,
+  });
+  const owners = async () => {
+    const held = (await hubCall("/v1/workspaces/acme/ownership?project=lab", {
+      session: hubSession,
+    })) as { projects?: { lab?: { tasks?: Record<string, { owner?: string }> } } };
+    return held.projects?.lab?.tasks ?? {};
+  };
+  const live: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [];
+  const allow = ["git add", "git commit", "git push", "git fetch", "git merge", "node", "curl"];
+  const cost = (computer: Computer) => {
+    const sessions = new Set(
+      events(computer)
+        .filter((entry) => entry.event === "hook" && String(entry.session).startsWith("claude:"))
+        .map((entry) => plainSession(entry.session)),
+    );
+    return [...sessions].map((session) => {
+      const text = transcriptOf(session);
+      return text === undefined ? { session, missing: true } : transcriptCost(text);
+    });
+  };
+  /** Whether what `cwd` holds is on origin's `branch`, nothing left out of it. */
+  const pushed = (cwd: string, branch: string) =>
+    git(cwd, "status", "--porcelain").trim() === "" &&
+    git(cwd, "ls-remote", "origin", `refs/heads/${branch}`).split(/\s/)[0] ===
+      git(cwd, "rev-parse", "HEAD").trim();
+  let afterHandoff: GapFinding;
+  let afterOwner: Awaited<ReturnType<typeof mergedServes>> | null = null;
+  let answered: string | null = null;
+  const delivered: { bob?: boolean; ana?: boolean } = {};
+  try {
+    if (REAL) {
+      const bobPane = yield* Effect.promise(() => startClaude(bobHerdr!, bob, "bob", { allow }));
+      const bobs = { computer: bob, h: bobHerdr!, pane: bobPane };
+      live.push(bobs);
+      herdrJson(bobHerdr!, "agent", "prompt", bobPane, GAP_A_PROMPT);
+      say("Bob's agent prompted", GAP_A_PROMPT);
+      yield* Effect.promise(() => quietUntil([bobs], 8 * 60_000));
+      const anaPane = yield* Effect.promise(() => startClaude(anaHerdr!, ana, "ana", { allow }));
+      const anas = { computer: ana, h: anaHerdr!, pane: anaPane };
+      live.push(anas);
+      const brief = process.env.LAB_GAP === "soft" ? GAP_B_SOFT_PROMPT : GAP_B_PROMPT;
+      herdrJson(anaHerdr!, "agent", "prompt", anaPane, brief);
+      say("Ana's agent prompted", brief);
+      yield* Effect.promise(() => quietUntil([anas], 10 * 60_000));
+      afterHandoff = yield* Effect.promise(finding);
+      delivered.bob = pushed(bob.checkout, GAP_TASKS.a.branch);
+      delivered.ana = pushed(ana.checkout, GAP_TASKS.b.branch);
+      const item = afterHandoff.items?.find((one) => one.owner !== undefined && aboutGap(one.text));
+      if (item !== undefined) {
+        answered = item.owner ?? null;
+        const who = item.owner === "bob@acme.test" ? bobs : anas;
+        const words = gapOwnerPrompt(item.text);
+        herdrJson(who.h, "agent", "prompt", who.pane, words);
+        say(`${who.computer.name}'s agent prompted by its person`, words);
+        yield* Effect.promise(() => quietUntil([who], 8 * 60_000));
+      }
+      // What each left unpushed is no part of the merged tree: a person says so once, whoever answered.
+      for (const [one, branch] of [
+        [bobs, GAP_TASKS.a.branch],
+        [anas, GAP_TASKS.b.branch],
+      ] as const) {
+        if (pushed(one.computer.checkout, branch)) continue;
+        herdrJson(one.h, "agent", "prompt", one.pane, GAP_DELIVER_PROMPT);
+        say(`${one.computer.name}'s agent prompted by its person`, GAP_DELIVER_PROMPT);
+        yield* Effect.promise(() => quietUntil([one], 3 * 60_000));
+      }
+      if (item !== undefined) afterOwner = yield* Effect.promise(mergedServes);
+    } else {
+      const server = NodePath.join(bob.checkout, "src/server.ts");
+      NodeFS.writeFileSync(
+        server,
+        NodeFS.readFileSync(server, "utf8")
+          .replace(
+            'import { createServer } from "node:http";',
+            'import { createServer } from "node:http";\nimport { splits } from "./splits.ts";',
+          )
+          .replace(
+            "  response.writeHead(404);\n  response.end();",
+            '  if (_request.url === "/api/splits") return void response.end(JSON.stringify(splits));\n  response.writeHead(404);\n  response.end();',
+          ),
+      );
+      const a = agent(bob, "lab-gap-a", "w30:p1");
+      a.start();
+      a.edit("PreToolUse", "src/server.ts");
+      a.edit("PostToolUse", "src/server.ts");
+      a.peer("tests", "pass", "the API answers", "--pass", "node --test test/api.test.ts");
+      git(bob.checkout, "add", "-A");
+      git(bob.checkout, "commit", "--quiet", "-m", "GAP-1: the API");
+      git(bob.checkout, "push", "--quiet", "origin", GAP_TASKS.a.branch);
+      yield* Effect.promise(() =>
+        until(
+          "Bob owns GAP-1, as his agent was first at work on it",
+          async () => (await owners())[taskA]?.owner === "bob@acme.test",
+          30_000,
+        ),
+      );
+      told("Bob's agent (peer review)", a.peer("review"));
+
+      git(ana.checkout, "fetch", "--quiet", "origin");
+      git(ana.checkout, "merge", "--quiet", `origin/${GAP_TASKS.a.branch}`);
+      NodeFS.mkdirSync(NodePath.join(ana.checkout, "public"), { recursive: true });
+      NodeFS.writeFileSync(
+        NodePath.join(ana.checkout, "public/index.html"),
+        '<ul id="splits"></ul>\n<script src="app.js"></script>\n',
+      );
+      NodeFS.writeFileSync(NodePath.join(ana.checkout, "public/app.js"), 'fetch("/api/splits");\n');
+      const gap = "nothing serves public/index.html from src/server.ts";
+      const b = agent(ana, "lab-gap-b", "w31:p1");
+      const started = b.start().told;
+      const sharedPath = /You keep the shared context of .+? in (\S+\.md)[.,:]/.exec(
+        started ?? "",
+      )?.[1];
+      check(sharedPath !== undefined, "GAP-2's agent keeps its shared context");
+      const template = NodeFS.readFileSync(sharedPath, "utf8").replace(
+        "## State\n",
+        "## State\n\n- The page is built.\n",
+      );
+      check(
+        template.includes("What it needs and no task does is yours"),
+        "the template says what is the task's own",
+      );
+      const writeShared = (text: string) => {
+        NodeFS.writeFileSync(sharedPath, text);
+        b.hook("PostToolUse", {
+          tool_name: "Write",
+          tool_input: { file_path: sharedPath, content: "(the context above)" },
+        });
+      };
+      writeShared(template.replace("## Blockers\n", `## Blockers\n\n- ${gap}\n`));
+      b.edit("PreToolUse", "public/index.html");
+      b.edit("PostToolUse", "public/index.html");
+      b.peer("tests", "pass", "the page is built", "--pass", "node --test test/page.test.ts");
+      git(ana.checkout, "add", "-A");
+      git(ana.checkout, "commit", "--quiet", "-m", "GAP-2: the page");
+      git(ana.checkout, "push", "--quiet", "origin", GAP_TASKS.b.branch);
+
+      const first = b.peer("review");
+      told("Ana's agent (first peer review)", first);
+      check(b.peerStatus === 0, "a written blocker stops no handoff");
+      check(
+        first.includes("Yours before a person reads this handoff:") &&
+          first.includes(`blocker, nobody answers for it: "${gap}"`) &&
+          !first.includes("Waits for a person's review"),
+        "the reply names the blocker as the agent's, and no wait for a person",
+      );
+      check(first.includes("take its line out of ## Blockers"), "and how it leaves");
+      check(
+        (yield* Effect.promise(() => blockersOf(taskB))).includes(gap),
+        "the handoff holds it, for the page",
+      );
+
+      const refused = b.peer("tests", "mixed", "x", "--fail", `${gap} @task:${GAP_TASKS.a.key}`);
+      told("Ana's agent (a failure for a task that does not depend on this one)", refused);
+      check(b.peerStatus !== 0, "a failure does not go to a person");
+      const filed = b.peer(
+        "tests",
+        "mixed",
+        "the page is built and nothing serves it",
+        "--pass",
+        "node --test test/page.test.ts",
+        "--unverified",
+        `${gap} @task:${GAP_TASKS.a.key}`,
+      );
+      told("Ana's agent (peer tests)", filed);
+      check(
+        filed.includes(`answers for "${gap}", as the owner of ${GAP_TASKS.a.key}`),
+        "the reply says who took the item",
+      );
+      const report = (yield* Effect.promise(() => newestReport(taskB)))!;
+      const index = report.items.findIndex((item) => item.text === gap);
+      check(
+        report.items[index]?.owner === "bob@acme.test" && report.items[index]?.task === undefined,
+        "GAP-1 cannot carry it, so its owner answers for it",
+      );
+      // `peer review` gave the context up with the run; a session still at work takes it back at its next sync.
+      yield* Effect.promise(() =>
+        until(
+          "Ana's agent keeps its context again",
+          () =>
+            events(ana).filter(
+              (entry) => entry.event === "shared.kept" && entry.session === "claude:lab-gap-b",
+            ).length > 1,
+          40_000,
+        ),
+      );
+      writeShared(template);
+      const second = b.peer("review");
+      told("Ana's agent (second peer review)", second);
+      check(
+        !second.includes("Yours before a person") && second.includes("Waits for a person's review"),
+        "with an owner and the line out, the agent owes nothing and a person is asked",
+      );
+      yield* Effect.promise(() =>
+        until(
+          "Bob's Peer says he answers for it",
+          async () => {
+            const synced = await Effect.runPromise(bob.client[WS_METHODS.peerHubSync]({}));
+            return (synced.testReports?.summaries ?? []).some(
+              (summary) =>
+                summary.task === taskB &&
+                (summary.asks ?? []).includes("bob@acme.test") &&
+                (summary.yours ?? []).includes(gap),
+            );
+          },
+          30_000,
+        ),
+      );
+
+      const given = yield* Effect.promise(() =>
+        rpc(
+          bob.client[PEER_TEST_REPORTS_METHODS.peerTestsSetOwner]({
+            ...placeB,
+            author: "ana@acme.test",
+            index,
+            number: report.number,
+            owner: null,
+          }),
+        ),
+      );
+      check(given.kind === "saved", "the person named on the item gives it back");
+      const third = b.peer("review");
+      told("Ana's agent (third peer review)", third);
+      check(
+        third.includes(`unverified, nobody answers for it: "${gap}"`),
+        "an item given back is the agent's again",
+      );
+      b.peer(
+        "tests",
+        "mixed",
+        "the page is built and nothing serves it",
+        "--pass",
+        "node --test test/page.test.ts",
+        "--unverified",
+        `${gap} @task:${GAP_TASKS.a.key}`,
+      );
+      afterHandoff = yield* Effect.promise(finding);
+      const scored = measureGap(afterHandoff);
+      check(
+        scored.owned && scored.person === "bob@acme.test" && scored.blockers === 0,
+        "at the end of the intended path the gap has an owner and no line is left",
+      );
+      check(
+        !(yield* Effect.promise(mergedServes)).serves,
+        "and the merged tree serves no page yet",
+      );
+      answered = scored.person;
+      NodeFS.writeFileSync(
+        server,
+        NodeFS.readFileSync(server, "utf8")
+          .replace(
+            "  response.writeHead(404);\n  response.end();",
+            [
+              '  const file = new URL(`../public${_request.url === "/" ? "/index.html" : _request.url}`, import.meta.url);',
+              "  if (existsSync(file)) return void response.end(readFileSync(file));",
+              "  response.writeHead(404);",
+              "  response.end();",
+            ].join("\n"),
+          )
+          .replace(
+            'import { createServer } from "node:http";',
+            'import { existsSync, readFileSync } from "node:fs";\nimport { createServer } from "node:http";',
+          ),
+      );
+      git(bob.checkout, "add", "-A");
+      git(bob.checkout, "commit", "--quiet", "-m", "GAP-1: serve the page");
+      git(bob.checkout, "push", "--quiet", "origin", GAP_TASKS.a.branch);
+      afterOwner = yield* Effect.promise(mergedServes);
+      check(
+        afterOwner.merged && afterOwner.serves,
+        "once its owner settled it, the tree serves the page",
+      );
+    }
+
+    yield* Effect.promise(() => sleep(1500));
+    const summary = {
+      arm: process.env.LAB_ARM ?? "unnamed",
+      model: REAL ? (process.env.LAB_CLAUDE_MODEL ?? "sonnet") : "stand-in",
+      gap: measureGap(afterHandoff),
+      finding: afterHandoff,
+      answered,
+      afterOwner,
+      delivered,
+      mergedAtEnd: yield* Effect.promise(mergedServes),
+      reviews: cli(ana, "review").length,
+      blockerHeard: cli(ana, "review").some((entry) => String(entry.out).includes("blocker,")),
+      tests: cli(ana, "tests").map((entry) => [entry.outcome, entry.code ?? entry.reason ?? null]),
+      gap1Owner: (yield* Effect.promise(owners))[taskA]?.owner ?? null,
+      costBob: cost(bob),
+      costAna: cost(ana),
+    };
+    say("gap", JSON.stringify(summary));
+    if (process.env.LAB_REPORT)
+      NodeFS.writeFileSync(process.env.LAB_REPORT, `${JSON.stringify(summary, null, 2)}\n`);
+  } finally {
+    for (const { computer, h, pane } of live) {
+      console.log(`\n===== ${computer.name}'s agent, last screen =====`);
+      console.log(
+        herdrText(h, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "260"),
+      );
+    }
+    for (const computer of [bob, ana]) {
+      console.log(`\n===== ${computer.name}'s peer commands =====`);
+      for (const entry of events(computer))
+        if (entry.event === "cli") console.log(JSON.stringify(entry).slice(0, 1500));
+    }
+    for (const herdr of [anaHerdr, bobHerdr]) if (herdr) herdrText(herdr, "server", "stop");
+  }
+}).pipe(Effect.scoped);
+
 try {
   await Effect.runPromise(
     TEAM
@@ -9341,9 +9785,11 @@ try {
                       ? realSettleProgram
                       : SETTINGS_SCENARIO
                         ? realSettingsProgram
-                        : process.env.REAL_AGENTS === "1"
-                          ? realProgram
-                          : program,
+                        : GAP
+                          ? gapProgram
+                          : process.env.REAL_AGENTS === "1"
+                            ? realProgram
+                            : program,
   );
   say("PASS");
   process.exitCode = 0;

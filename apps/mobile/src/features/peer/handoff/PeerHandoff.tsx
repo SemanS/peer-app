@@ -71,7 +71,7 @@ export function PeerHandoff({
   const stepsOf = (p: NonNullable<typeof query.data>[number]) => {
     const current = live.data?.signals;
     const next = handoffNextSteps(
-      current === undefined ? packageHandoffFacts(p) : liveHandoffFacts(current),
+      current === undefined ? packageHandoffFacts(p) : liveHandoffFacts(current, p),
     );
     return task.status !== "review" || p.acceptance !== undefined
       ? []

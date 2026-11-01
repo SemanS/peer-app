@@ -83,6 +83,20 @@ describe("what peer tests says of items left to a task", () => {
     assert.isTrue(reply.some((line) => line.includes('"malformed revision" has no home')));
   });
 
+  it("says who answers for an item its task could not carry", () => {
+    const reply = replyLines({
+      label: "EVN-4",
+      filed: "mixed",
+      report,
+      changed: true,
+      sent: [{ text: "the API serves no page", task: "EVN-3", owner: "Slavo" }],
+    });
+    assert.include(
+      reply,
+      'Slavo answers for "the API serves no page", as the owner of EVN-3, which cannot carry it.',
+    );
+  });
+
   it("counts an item a dependent task covers as owned, and shows which task", () => {
     assert.deepStrictEqual(
       countsOf(report).unowned.map((item) => item.text),

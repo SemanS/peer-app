@@ -236,7 +236,7 @@ describe("the decision on a handoff", () => {
   const section = (label: string) =>
     renderer!.root.find((node) => node.type === "section" && node.props["aria-label"] === label);
 
-  it("opens with the decision and the policy's signals, the agent's blockers folded under its notes", async () => {
+  it("opens with the decision and the policy's signals, and lists a written blocker as the agent's", async () => {
     hub.packages = [
       {
         ...PACKAGE,
@@ -252,7 +252,8 @@ describe("the decision on a handoff", () => {
     await show(true);
     expect(words(section("Decision"))).toBe("Accept VL7? Not pushed.");
     expect(words(section("Agent action needed"))).toContain("The delivery was not observed");
-    expect(words(section("Agent action needed"))).not.toContain("VL8 is a separate task");
+    expect(words(section("Agent action needed"))).toContain("VL8 is a separate task");
+    expect(words(section("Agent action needed"))).toContain("give it an owner with peer tests");
     expect(
       renderer!.root.findAll((node) => node.props["aria-label"] === "Needs attention"),
     ).toEqual([]);

@@ -134,6 +134,24 @@ describe("a task's test reports", () => {
     expect(ownerSelects()).toHaveLength(1);
   });
 
+  it("lets the person named on an item hand it on or give it back, and only that item", async () => {
+    const named: PeerTestReport = {
+      ...ANAS,
+      items: [
+        { kind: "unverified", text: "The API serves no page", owner: CYRIL },
+        { kind: "unverified", text: "iPhone layout", owner: ANA },
+      ],
+    };
+    hub.reports = [named];
+    hub.setOwner.mockResolvedValue(AsyncResult.success({ kind: "saved", report: named }));
+    await show(CYRIL);
+    expect(ownerSelects()).toHaveLength(1);
+    await act(async () => ownerSelects()[0]!.props.onValueChange("no-owner"));
+    expect(hub.setOwner).toHaveBeenCalledWith(
+      expect.objectContaining({ input: expect.objectContaining({ index: 0, owner: null }) }),
+    );
+  });
+
   it("names the newer report when a save was made from a replaced one", async () => {
     hub.setOwner.mockResolvedValue(
       AsyncResult.success({ kind: "stale", number: 3, report: { ...ANAS, number: 3 } }),

@@ -82,6 +82,8 @@ export function replyLines(input: {
   readonly changed: boolean;
   /** Failed items left to a task the Hub did not keep: an older Hub drops it. */
   readonly homeless?: ReadonlyArray<string>;
+  /** Items named for a task that cannot carry them, which went to its owner. */
+  readonly sent?: ReadonlyArray<Readonly<Record<"text" | "task" | "owner", string>>>;
 }): ReadonlyArray<string> {
   const { label, filed, report } = input;
   const counts = countsOf(report);
@@ -110,9 +112,13 @@ export function replyLines(input: {
     lines.push(
       `This Peer Hub keeps no task on a failed item, so ${(input.homeless ?? []).map((text) => `"${plain(text, 80)}"`).join(", ")} has no home: fix it, or ask your person to decide.`,
     );
+  for (const { text, task, owner } of input.sent ?? [])
+    lines.push(
+      `${plain(owner, 60)} answers for "${plain(text, 80)}", as the owner of ${plain(task, 40)}, which cannot carry it.`,
+    );
   if (counts.unowned.length > 0)
     lines.push(
-      `Before peer done, give each an owner: file again with --unverified "<text> @<person>" (or "<text> @task:<key>" for what a dependent task covers), or ask your person to on the task page.`,
+      `Before peer done, give each an owner: file again with --unverified "<text> @<person>" (or "<text> @task:<key>" for what another task should answer for), or ask your person to on the task page.`,
     );
   return lines;
 }

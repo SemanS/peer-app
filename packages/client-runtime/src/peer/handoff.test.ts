@@ -444,7 +444,7 @@ describe("handoffNextSteps", () => {
     }).toEqual(want);
   });
 
-  it("keeps the sixteen rule ids of the decision model and every value meets one rule", () => {
+  it("keeps the seventeen rule ids of the decision model and every value meets one rule", () => {
     expect(HANDOFF_RULES.map((rule) => rule.id)).toEqual([
       "no-report",
       "has-report",
@@ -462,6 +462,7 @@ describe("handoffNextSteps", () => {
       "call-declined",
       "call-settled",
       "input-moved",
+      "blocker-written",
     ]);
     const facts: ReadonlyArray<HandoffFact> = [
       { fact: "report", exists: true },
@@ -483,6 +484,7 @@ describe("handoffNextSteps", () => {
       })),
       { fact: "changed_input", state: "changed" },
       { fact: "changed_input", state: "gone" },
+      { fact: "blocker", state: "written" },
     ];
     expect(new Set(facts.map((fact) => handoffRule(fact).id)).size).toBe(HANDOFF_RULES.length);
   });
@@ -566,6 +568,64 @@ describe("a handoff's facts", () => {
 
   it("has none when no agent handoff was evaluated", () => {
     expect(liveHandoffFacts({ evaluated: false, at: "t", signals: [] })).toEqual([]);
+  });
+
+  describe("written Blockers", () => {
+    const context = {
+      version: 1,
+      updatedAt: "t",
+      gist: null,
+      projectLines: [],
+      sections: [
+        { name: "State" as const, shortened: false, lines: ["Landed the page."] },
+        { name: "Blockers" as const, shortened: false, lines: ["- The API serves no page."] },
+      ],
+    };
+
+    it("are the agent's to settle, whatever the line says", () => {
+      const facts = liveHandoffFacts(live, { source: "agent", context });
+      const next = handoffNextSteps(facts);
+      expect(next.agent_action.find((step) => step.rule === "blocker-written")).toEqual({
+        rule: "blocker-written",
+        class: "agent_action",
+        actor: "author_agent",
+        next: "Do it, or give it an owner with peer tests, then take it out of Blockers",
+        label: "The API serves no page.",
+        who: null,
+      });
+    });
+
+    it("say nothing when they only report none, or come from a person's handoff", () => {
+      const none = {
+        ...context,
+        sections: [{ name: "Blockers" as const, shortened: false, lines: ["None."] }],
+      };
+      const rules = (facts: ReadonlyArray<HandoffFact>) =>
+        handoffNextSteps(facts).steps.map((step) => step.rule);
+      expect(rules(liveHandoffFacts(live, { source: "agent", context: none }))).not.toContain(
+        "blocker-written",
+      );
+      expect(rules(liveHandoffFacts(live, { source: "person", context }))).not.toContain(
+        "blocker-written",
+      );
+      expect(liveHandoffFacts({ evaluated: false, at: "t", signals: [] }, p)).toEqual([]);
+    });
+
+    it("come with what a package recorded, for an agent's evaluated handoff only", () => {
+      const pkg = {
+        ...p,
+        source: "agent" as const,
+        policy: { mode: "ask" as const, version: 1, signals: [], accepted: false },
+        overlaps: [],
+        inputs: [],
+        context,
+      };
+      expect(handoffNextSteps(packageHandoffFacts(pkg)).agent_action.at(-1)?.label).toBe(
+        "The API serves no page.",
+      );
+      const stood = packageHandoffFacts({ ...pkg, policy: undefined });
+      expect(stood.some((fact) => fact.fact === "blocker")).toBe(false);
+    });
   });
 
   it("falls back to what the package recorded, keeping a call with a person", () => {

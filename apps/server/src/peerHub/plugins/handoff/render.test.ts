@@ -363,6 +363,45 @@ describe("delivery and policy", () => {
       expect(owedOf({})).toEqual([]);
     });
 
+    describe("a written blocker", () => {
+      const context = {
+        version: 3,
+        updatedAt: "t",
+        gist: null,
+        projectLines: [],
+        sections: [
+          {
+            name: "Blockers" as const,
+            shortened: false,
+            lines: ["- The API serves no page.", "- None."],
+          },
+        ],
+      };
+
+      it("comes first, as the rest of the list can be cut", () => {
+        const owed = owedOf({ policy, delivery: shared, live, context });
+        expect(owed[0]).toBe('blocker, nobody answers for it: "The API serves no page."');
+        expect(owed.filter((line) => line.startsWith("blocker"))).toHaveLength(1);
+        const lines = handoffPolicyLines(policy, owed);
+        expect(lines[1]).toContain("The API serves no page.");
+        expect(lines.at(-1)).toContain("take its line out of ## Blockers");
+      });
+
+      it("reaches the agent without a live read, and not once the policy accepted", () => {
+        expect(owedOf({ policy, delivery: shared, report: undefined, context })[0]).toContain(
+          "The API serves no page.",
+        );
+        expect(owedOf({ policy: { ...policy, accepted: true }, context })).toEqual([]);
+      });
+
+      it("adds no sentence when only items are owed, and every sentence fits a reply line", () => {
+        const lines = handoffPolicyLines(policy, ['failed: "x"']);
+        expect(lines.join("\n")).not.toContain("## Blockers");
+        for (const line of handoffPolicyLines(policy, ["blocker, nobody answers for it: x"]))
+          expect(line.length).toBeLessThanOrEqual(180);
+      });
+    });
+
     it("names at most five and points at the rest", () => {
       const lines = handoffPolicyLines(policy, ["1", "2", "3", "4", "5", "6", "7"]);
       expect(lines.filter((line) => line.startsWith("- ")).length).toBe(6);

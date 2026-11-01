@@ -108,6 +108,36 @@ describe("peer tests", () => {
     ),
   );
 
+  it.effect("says who took an item its task could not carry", () =>
+    run(
+      Effect.gen(function* () {
+        const answer = {
+          current: [
+            200,
+            {
+              report: reportOf({
+                result: "mixed",
+                items: [
+                  { kind: "unverified", text: "the API serves no page", owner: "bob@acme.test" },
+                ],
+              }),
+              changed: true,
+              corrected: false,
+            },
+          ] as [number, unknown],
+        };
+        const peer = yield* ready({ route: answering(answer) });
+        const printed = yield* peer.tests([
+          "mixed",
+          "x",
+          "--unverified",
+          "the API serves no page @task:EVN-3",
+        ]);
+        assert.include(printed, 'answers for "the API serves no page", as the owner of EVN-3');
+      }),
+    ),
+  );
+
   it.effect("names why a task cannot carry a failed item", () =>
     run(
       Effect.gen(function* () {

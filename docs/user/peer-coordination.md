@@ -1188,16 +1188,27 @@ a task's reports to an agent as reference from the team, not as instructions.
 the project who answers for the item; `@ana` is completed with the workspace's domain, and a name that is
 not a member refuses the whole report. The agent can name owners when it files, or the task's owner, a
 project lead or a workspace admin gives each item an owner on the task page, where you can also file,
-replace or remove your own report. While the task's newest report lists an unverified item without an
-owner, the Hub refuses an agent's `peer done` and names the items. `peer review` is never held back by a
-report, and a person marking a task done is never stopped; the task page keeps showing the item.
+replace or remove your own report. If an item names you, you can hand it to someone else there, or clear
+the owner to give it back to the task's agent. While the task's newest report lists an unverified item
+without an owner, the Hub refuses an agent's `peer done` and names the items. `peer review` is never held
+back by a report, and a person marking a task done is never stopped; the task page keeps showing the
+item.
 
-**Every failed item needs a home before an agent finishes the task.** Fix it, or leave it to a task that
-depends on this one and is not done with `--fail "<text> @task:<key>"`. It still counts as failed, and
-the Hub refuses any other task. `peer done` names the failed items that have no home; a person's move
-is free. The task that carries an item lists it on its page under **Left to this task**, with where it
-came from, and an agent starting that task reads it. A newer report that no longer lists the item takes
-it away.
+**`@task:<key>` hands an item to another task.** An open task that depends on this one carries the item,
+and nobody is asked. Named for any other task, such as the one that provides what this one needs, an
+unverified item goes to that task's owner. A task nobody owns refuses the report, and the agent names a
+person instead.
+
+**Every failed item needs a home before an agent finishes the task.** Fix it, or leave it to an open task
+that depends on this one with `--fail "<text> @task:<key>"`. It still counts as failed, and the Hub
+refuses any other task. `peer done` names the failed items that have no home; a person's move is free.
+The task that carries an item lists it on its page under **Left to this task**, with where it came from,
+and an agent starting that task reads it. A newer report that no longer lists the item takes it away.
+
+**What a task needs and no task does is its own.** Whatever stays under `## Blockers` of an agent's
+shared context at `peer review` is named back to the agent, and shows on the review page under **Agent
+action needed**. Nothing is held back by it. The agent does the work, or gives it an owner with
+`peer tests`, and takes the line out.
 
 A person named on an unverified item sees it in Needs you as **You answer for:**, with the way to the
 task, on the computer and the phone, until a newer report no longer lists it or it has another owner.

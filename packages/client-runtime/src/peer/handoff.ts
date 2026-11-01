@@ -1,5 +1,6 @@
 import {
   WS_METHODS,
+  writtenBlockers,
   type PeerAcceptanceVia,
   type PeerHandoffDelivery,
   type PeerHandoffDeliveryState,
@@ -292,6 +293,7 @@ export type HandoffFact = {
       readonly state: "pending" | "accepted" | "declined" | "withdrawn" | "expired";
     }
   | { readonly fact: "changed_input"; readonly state: "changed" | "gone" }
+  | { readonly fact: "blocker"; readonly state: "written" }
 );
 
 interface HandoffRule {
@@ -408,6 +410,14 @@ export const HANDOFF_RULES: ReadonlyArray<HandoffRule> = [
     actor: "author_agent",
     next: "Read the new version with peer inputs",
   },
+  {
+    id: "blocker-written",
+    fact: "blocker",
+    when: ["written"],
+    class: "agent_action",
+    actor: "author_agent",
+    next: "Do it, or give it an owner with peer tests, then take it out of Blockers",
+  },
 ];
 
 function factValue(fact: HandoffFact): boolean | string {
@@ -422,6 +432,7 @@ function factValue(fact: HandoffFact): boolean | string {
     case "overlap":
     case "owner_call":
     case "changed_input":
+    case "blocker":
       return fact.state;
   }
 }
@@ -497,6 +508,7 @@ const STEP_WORDS: Readonly<Record<string, string>> = {
   "unverified-task": "An unverified item",
   "call-pending": "An owner's call",
   "call-declined": "A declined owner's call",
+  "blocker-written": "A blocker the agent wrote",
 };
 
 /** One open fact as the page and the phone list it. */
@@ -529,8 +541,22 @@ const OWNER_CALL_STATES = ["pending", "accepted", "declined", "withdrawn", "expi
 const ownerCallState = (state: string) =>
   OWNER_CALL_STATES.find((candidate) => candidate === state) ?? "pending";
 
-/** Today's facts of a handoff as the Hub reads them; none when no agent handoff was evaluated. */
-export function liveHandoffFacts(live: PeerHandoffSignals): ReadonlyArray<HandoffFact> {
+/** What an agent left under Blockers of its handoff. */
+const blockerFacts = (
+  pkg: Pick<PeerHandoffPackage, "source" | "context">,
+): ReadonlyArray<HandoffFact> =>
+  pkg.source !== "agent"
+    ? []
+    : writtenBlockers(pkg.context).map((label) => ({ fact: "blocker", state: "written", label }));
+
+/**
+ * Today's facts of a handoff as the Hub reads them; none when no agent handoff was evaluated.
+ * `pkg` adds its written Blockers: a live read does not hold the package's sections.
+ */
+export function liveHandoffFacts(
+  live: PeerHandoffSignals,
+  pkg?: Pick<PeerHandoffPackage, "source" | "context">,
+): ReadonlyArray<HandoffFact> {
   if (!live.evaluated) return [];
   return [
     { fact: "report", exists: (live.reports ?? []).length > 0 },
@@ -567,6 +593,7 @@ export function liveHandoffFacts(live: PeerHandoffSignals): ReadonlyArray<Handof
       state: input.currentVersion === null ? "gone" : "changed",
       label: input.scope,
     })),
+    ...(pkg === undefined ? [] : blockerFacts(pkg)),
   ];
 }
 
@@ -579,7 +606,7 @@ export function liveHandoffFacts(live: PeerHandoffSignals): ReadonlyArray<Handof
 export function packageHandoffFacts(
   pkg: Pick<
     PeerHandoffPackage,
-    "source" | "policy" | "report" | "delivery" | "overlaps" | "inputs"
+    "source" | "policy" | "report" | "delivery" | "overlaps" | "inputs" | "context"
   >,
   report?: Pick<PeerTestReport, "items"> | undefined,
 ): ReadonlyArray<HandoffFact> {
@@ -630,6 +657,7 @@ export function packageHandoffFacts(
           ...(signals.includes("owner-call")
             ? [{ fact: "owner_call", state: "pending" } as const]
             : []),
+          ...blockerFacts(pkg),
         ];
   return [
     ...evaluated,

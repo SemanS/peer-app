@@ -45,7 +45,7 @@ function failure(error: PeerHubError, filing: boolean): CliError {
   if (error.code === "not_a_dependent")
     return refused(
       error.detail,
-      "a failed item can only be left to a task that depends on this one and is not done: fix it, or name such a task after @task:.",
+      "only an open task that depends on this one carries a failed item: fix it, or name such a task after @task:. Name a person after @ for an unverified item.",
     );
   // A Hub from before items could be left to a task refuses the field whole.
   if (error.status === 400 && /unknown field `task`/.test(error.detail))
@@ -155,23 +155,20 @@ export const testsCommand = (
           unowned: counts.unowned.length,
           seen: items.filter((item) => "seen" in item).length,
         });
+        const stored = (text: string) => answer.report.items.find((item) => item.text === text);
         return replyLines({
           label,
           filed: parsed.result,
           report: answer.report,
           changed: answer.changed,
+          sent: parsed.items.flatMap(({ kind, task, text }) => {
+            const owner = stored(text)?.owner;
+            return kind === "unverified" && task !== undefined && owner
+              ? [{ text, task, owner: name(session)(owner) }]
+              : [];
+          }),
           homeless: parsed.items
-            .filter(
-              (item) =>
-                item.kind === "fail" &&
-                item.task !== undefined &&
-                !answer.report.items.some(
-                  (stored) =>
-                    stored.kind === "fail" &&
-                    stored.text === item.text &&
-                    stored.task !== undefined,
-                ),
-            )
+            .filter((item) => item.kind === "fail" && item.task && !stored(item.text)?.task)
             .map((item) => item.text),
         }).join("\n");
       }),

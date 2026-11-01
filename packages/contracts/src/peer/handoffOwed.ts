@@ -9,6 +9,7 @@ import type {
   PeerHandoffPolicy,
   PeerHandoffSignals,
 } from "./handoff.ts";
+import { writtenBlockers } from "./contextBlockers.ts";
 
 /** The most owed items a reply names; `peer tests show` has the rest. */
 const OWED_SHOWN = 5;
@@ -20,10 +21,13 @@ export interface HandoffFacts {
   readonly report?: PeerHandoffPackage["report"];
   /** The Hub's current facts, with each item's text; the package's stand in without them. */
   readonly live?: PeerHandoffSignals | undefined;
+  /** The package's context, for what the agent left under Blockers: no live read holds that. */
+  readonly context?: PeerHandoffPackage["context"] | undefined;
 }
 
 const NO_REPORT = "no test report: file one with peer tests";
 const nobody = (text: string) => `unverified, nobody answers for it: ${text}`;
+const BLOCKER = "blocker, nobody answers for it: ";
 
 /**
  * The task's newest test report in one line, apart from the author's own checks: its result, the
@@ -50,10 +54,12 @@ export function handoffReportLine(
  * policy accepted it or an older Hub did not evaluate it.
  */
 export function handoffOwed(
-  { delivery, policy, report, live }: HandoffFacts,
+  { delivery, policy, report, live, context }: HandoffFacts,
   quote: (text: string) => string,
 ): ReadonlyArray<string> {
   if (policy === undefined || policy.accepted) return [];
+  // First: the reply cuts the list with "peer tests show", which holds no blocker.
+  const blockers = writtenBlockers(context).map((line) => `${BLOCKER}${quote(line)}`);
   const notDelivered =
     delivery === undefined
       ? ["delivery: not observed"]
@@ -62,6 +68,7 @@ export function handoffOwed(
         : [];
   if (live?.evaluated === true)
     return [
+      ...blockers,
       ...((live.reports ?? []).length === 0 ? [NO_REPORT] : []),
       ...notDelivered,
       ...(live.items ?? []).flatMap((item) => {
@@ -78,6 +85,7 @@ export function handoffOwed(
     ];
   const failed = report?.failed ?? 0;
   return [
+    ...blockers,
     ...(report === undefined ? [NO_REPORT] : []),
     ...notDelivered,
     ...(failed > 0
@@ -103,7 +111,10 @@ export function handoffPolicyLines(
       "Yours before a person reads this handoff:",
       ...owed.slice(0, OWED_SHOWN).map((item) => `- ${item}`),
       ...(rest > 0 ? [`- and ${rest} more: peer tests show`] : []),
-      'Run or fix each, or leave it with peer tests (--fail "<text> @task:<key>", --unverified "<text> @<person>"), then run peer review again.',
+      'Run or fix each, or leave it with peer tests (--fail "<text> @task:<key>", --unverified "<text> @<person>" or "<text> @task:<key>"), then run peer review again.',
+      ...(owed.some((item) => item.startsWith(BLOCKER))
+        ? ["A blocker leaves the same way: settle it, then take its line out of ## Blockers."]
+        : []),
     ];
   }
   if (policy.signals.length > 0)

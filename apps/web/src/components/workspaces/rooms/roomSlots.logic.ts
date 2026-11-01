@@ -1,6 +1,6 @@
 /** What the rooms plugin adds outside its page: Needs you's count and labels, and the palette's way in. */
 import type { RoomPlace } from "@t3tools/client-runtime/peer/rooms";
-import type { PeerHubStatus } from "@t3tools/contracts";
+import { PEER_LOCAL_WORKSPACE, type PeerHubStatus } from "@t3tools/contracts";
 import { MessagesSquareIcon } from "lucide-react";
 
 import type { PaletteAction } from "../slots.types";
@@ -12,6 +12,7 @@ const projectOf = (status: Pick<PeerHubStatus, "workspaces">, place: RoomPlace) 
 
 /** A task as Needs you names it: its key, else its title, else its id. */
 export function roomTaskLabel(status: Pick<PeerHubStatus, "workspaces">, place: RoomPlace) {
+  if (place.workspace === PEER_LOCAL_WORKSPACE) return place.project;
   const task = projectOf(status, place)?.work.tasks.find((row) => row.id === place.task);
   return task?.key ?? task?.title ?? place.task;
 }

@@ -128,8 +128,8 @@ describe("Peer plugins", () => {
         "Observe is turned off on this environment.",
       );
       assert.strictEqual(
-        yield* refusal(core.plugins.requireActive("observe")),
-        'There is no Peer plugin "observe" on this environment.',
+        yield* refusal(core.plugins.requireActive("herdr")),
+        'There is no Peer plugin "herdr" on this environment.',
       );
       // Only the active plugin's work runs.
       assert.strictEqual(yield* Queue.take(seen), "started");

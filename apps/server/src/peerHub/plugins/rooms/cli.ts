@@ -29,6 +29,7 @@ import type * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import type * as PeerState from "../../core/state/PeerState.ts";
 import type * as PeerWork from "../../core/work/PeerWork.ts";
 import { anchorOf, FORM, personOf } from "./client/parse.ts";
+import { isLocalRoom, LOCAL_ROOM } from "./client/local.ts";
 import { hearsWhileWaiting } from "./client/queue.ts";
 import { oneMessageText, roomText } from "./client/render.ts";
 import type { Rooms } from "./Rooms.ts";
@@ -91,7 +92,12 @@ export const roomCommands = (
   agents: PeerAgents.PeerAgents["Service"],
 ): ReadonlyArray<PeerCommand> => {
   const nameOf = (session: PeerSessionView) => (email: string) =>
-    state.nameOf(session.workspace, email);
+    isLocalRoom(session.workspace) ? "Your person" : state.nameOf(session.workspace, email);
+
+  const taskNameOf = (session: PeerSessionView, task: string) =>
+    isLocalRoom(session.workspace)
+      ? Effect.succeed("this project")
+      : work.taskName(session.workspace, session.project, task);
 
   const taskNamed = (session: PeerSessionView, word: string) =>
     Effect.flatMap(work.tasks(session.workspace, session.project), (tasks) => {
@@ -105,15 +111,19 @@ export const roomCommands = (
 
   /** The session with its room, which the first thing it says opens. */
   const withRoom = (session: PeerSessionView) =>
-    rooms
-      .roomOf(session)
-      .pipe(
-        Effect.flatMap((opened) =>
-          opened.run === undefined || opened.task === undefined
-            ? Effect.fail(refused(NO_ROOM, "ask your person to share this project in a workspace."))
-            : Effect.succeed({ session: opened, run: opened.run, task: opened.task }),
-        ),
-      );
+    isLocalRoom(session.workspace)
+      ? Effect.succeed({ session, run: session.id, task: LOCAL_ROOM })
+      : rooms
+          .roomOf(session)
+          .pipe(
+            Effect.flatMap((opened) =>
+              opened.run === undefined || opened.task === undefined
+                ? Effect.fail(
+                    refused(NO_ROOM, "ask your person to share this project in a workspace."),
+                  )
+                : Effect.succeed({ session: opened, run: opened.run, task: opened.task }),
+            ),
+          );
 
   const posted = (
     session: PeerSessionView,
@@ -148,7 +158,7 @@ export const roomCommands = (
         ),
       );
       return roomText({
-        taskName: yield* work.taskName(session.workspace, session.project, task),
+        taskName: yield* taskNameOf(session, task),
         messages,
         waiting,
         me: email ?? "",
@@ -168,7 +178,7 @@ export const roomCommands = (
           refused(`this room has no message #${seq}`, "run peer room to see its numbers."),
         );
       return oneMessageText({
-        taskName: yield* work.taskName(session.workspace, session.project, task),
+        taskName: yield* taskNameOf(session, task),
         message,
         me: (yield* state.email) ?? "",
         nameOf: nameOf(session),
@@ -180,9 +190,11 @@ export const roomCommands = (
     args: ReadonlyArray<string>,
     words: string,
   ) {
-    const { project } = yield* state
-      .project(asked.workspace, asked.project)
-      .pipe(Effect.mapError((error) => failure(error, false)));
+    const members = isLocalRoom(asked.workspace)
+      ? []
+      : (yield* state
+          .project(asked.workspace, asked.project)
+          .pipe(Effect.mapError((error) => failure(error, false)))).project.members;
     const people: string[] = [];
     const named: string[] = [];
     let reply: string | undefined;
@@ -211,11 +223,11 @@ export const roomCommands = (
         to: [
           ...people.map((name): PeerRoomTargetInput => ({
             kind: "person",
-            email: personOf(project.members, name),
+            email: personOf(members, name),
           })),
           ...named.map((name): PeerRoomTargetInput => ({
             kind: "agent",
-            email: personOf(project.members, name),
+            email: personOf(members, name),
           })),
         ],
       }),
@@ -263,8 +275,8 @@ export const roomCommands = (
     const { session, run, task } = yield* withRoom(asked);
     const op = yield* opOf(run, mark, text);
     yield* posted(session, run, { op, text, to: [], mark });
-    if (mark === "ready") {
-      localOf(session).readyNotes = 0;
+    if (mark === "ready") localOf(session).readyNotes = 0;
+    if (mark === "ready" && !isLocalRoom(session.workspace))
       yield* work
         .updateTask({
           workspace: session.workspace,
@@ -273,7 +285,6 @@ export const roomCommands = (
           status: "review",
         })
         .pipe(Effect.ignore);
-    }
   });
 
   const ask = Effect.fn("PeerRoomCli.ask")(function* (
@@ -281,6 +292,10 @@ export const roomCommands = (
     handle: string,
     question: string,
   ) {
+    if (isLocalRoom(asked.workspace))
+      return yield* Effect.fail(
+        usage("a project on this computer has one room", 'run peer room say "<text>".'),
+      );
     const { session, run, task } = yield* withRoom(asked);
     const target = yield* taskNamed(session, handle);
     const view = yield* agents.view(session.workspace);
@@ -348,12 +363,14 @@ export const roomCommands = (
     summary: "read your task's room or another's, or post as your person's agent",
     run: ({ session, args, plain }) =>
       Effect.gen(function* () {
-        const task = session.task;
+        const task = isLocalRoom(session.workspace) ? LOCAL_ROOM : session.task;
         const [verb, ...rest] = plain;
         // Another task's room reads as one's own: a review or a decision made there is for the
         // agents who build on that task too, and it is the only place it may be written.
         if (verb !== undefined && verb !== "say" && !/^[1-9]\d*$/.test(verb)) {
-          const tasks = yield* work.tasks(session.workspace, session.project);
+          const tasks = isLocalRoom(session.workspace)
+            ? []
+            : yield* work.tasks(session.workspace, session.project);
           const other = tasks.find(
             (candidate) =>
               candidate.id === verb || candidate.key?.toLowerCase() === verb.toLowerCase(),

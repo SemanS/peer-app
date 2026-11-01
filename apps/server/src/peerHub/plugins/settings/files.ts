@@ -1,7 +1,6 @@
 /**
  * The settings as YAML files, in the layout the Hub exports and `peerhub workspace apply` reads:
- * `workspace.yaml`, then `projects/`, `tools/`, `capacity/` and `webhooks/` with a file for each
- * id. `settingsFiles` lays a visible document out that way for an agent; `bundleOf` reads such
+ * `workspace.yaml`, then `projects/`, `tools/` and `capacity/` with a file for each id. `settingsFiles` lays a visible document out that way for an agent; `bundleOf` reads such
  * files back into what the Hub imports.
  *
  * @module peerHub/plugins/settings/files
@@ -11,10 +10,10 @@ import { parse, stringify } from "yaml";
 
 import { block } from "../../peerText.ts";
 
-const DIRECTORIES = ["projects", "tools", "capacity", "webhooks"] as const;
+const DIRECTORIES = ["projects", "tools", "capacity"] as const;
 /** What `workspace.yaml` holds of the configuration; the workspace's name and domains are its own. */
 export const WORKSPACE_KEYS = ["currency", "gateway", "knowledge", "people", "github"] as const;
-const FILE = /^(projects|tools|capacity|webhooks)\/([a-z0-9][a-z0-9-]*)\.ya?ml$/;
+const FILE = /^(projects|tools|capacity)\/([a-z0-9][a-z0-9-]*)\.ya?ml$/;
 
 const isMapping = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -67,8 +66,8 @@ export function readMapping(path: string, text: string): Record<string, unknown>
 /**
  * What the Hub imports from exported files (path → text): `workspace.yaml` splits into the
  * workspace's own `settings` and the `config`, each directory into a map by id. A missing
- * directory is none of its kind, as for `peerhub workspace apply`, but for `webhooks/`: without
- * it the Hub keeps its webhooks. `base` is `given`, else `.peer-revision`'s (`<seq> <commit>`).
+ * directory is none of its kind, as for `peerhub workspace apply`. `base` is `given`, else
+ * `.peer-revision`'s (`<seq> <commit>`).
  */
 export function bundleOf(files: Readonly<Record<string, string>>, given?: number) {
   if (files["workspace.yaml"] === undefined) {
@@ -91,11 +90,7 @@ export function bundleOf(files: Readonly<Record<string, string>>, given?: number
     capacity: sections.capacity ?? {},
   };
   return {
-    bundle: {
-      settings,
-      config,
-      ...(sections.webhooks === undefined ? {} : { webhooks: sections.webhooks }),
-    },
+    bundle: { settings, config },
     base: given ?? (seq === undefined ? undefined : Number(seq)),
   };
 }

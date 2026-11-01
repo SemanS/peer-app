@@ -3,13 +3,10 @@ import { verificationReadKey } from "@t3tools/client-runtime/peer/github";
 import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
 import type { ReactNode } from "react";
 
-import { useEnvironmentQuery } from "../../../../state/query";
 import { formatRelativeTimeLabel } from "../../../../timestampFormat";
-import { factOfQuery } from "../../../settings/connectionFacts";
 import { ConnectionBadge } from "../../../settings/ConnectionStatus";
 import { useRelativeTimeTick } from "../../../settings/settingsLayout";
 import { PeerCard } from "../../PeerPageHeader";
-import { slackAtoms } from "../../slack/atoms";
 import {
   HUB_DESCRIPTION,
   featuresFootnote,
@@ -21,9 +18,7 @@ import {
 import { githubFactConnection } from "../integrations.logic";
 import { useGitHubChecksStatus } from "../IntegrationsGitHub";
 import type { WorkspacePageProps } from "../pageProps";
-import { isWorkspaceAdmin } from "../peerSettings.logic";
 import { PeerSettingsPage } from "../PeerSettingsPage";
-import { slackAdminConnection, slackMemberConnection } from "../slackConnection.logic";
 import { useSettingsView } from "../useSettingsView";
 
 function Fact({ label, children }: { readonly label: string; readonly children: ReactNode }) {
@@ -39,25 +34,16 @@ function Fact({ label, children }: { readonly label: string; readonly children: 
  * The Hub this computer is signed in to (design artboard 23): read only, since its operator changes
  * it. Its address, build and the last sync, and each of its features in the status language:
  * Connected, Not available (the operator's choice, or a Hub that needs an update) or Off on this
- * computer, with what it means for the workspace. Slack and GitHub's checks are also the
- * workspace's to connect, so they say Needs setup (at its step) or Off until that is done. A Hub
+ * computer, with what it means for the workspace. GitHub's checks are also the workspace's to
+ * connect, so they say Needs setup (at its step) or Off until that is done. A Hub
  * says its build and its features in the answer that tells who is signed in; one that says less (an
  * older Hub) leaves the page to the plugins' states and the settings read.
  */
 export function HubStatus({ environmentId, status, workspace }: WorkspacePageProps) {
   useRelativeTimeTick(60_000);
   const view = useSettingsView(workspace.slug);
-  const admin = isWorkspaceAdmin(workspace.role);
-  const input = { workspace: workspace.slug };
   // What the workspace connected is read only where the Hub serves the feature to this computer.
-  const slackOn = inactivePluginReason(status, "slack") === null;
   const githubOn = inactivePluginReason(status, "github") === null;
-  const slackAdmin = useEnvironmentQuery(
-    slackOn && admin ? slackAtoms.admin({ environmentId, input }) : null,
-  );
-  const slackMe = useEnvironmentQuery(
-    slackOn && !admin ? slackAtoms.me({ environmentId, input }) : null,
-  );
   const github = useGitHubChecksStatus(
     githubOn
       ? {
@@ -72,16 +58,7 @@ export function HubStatus({ environmentId, status, workspace }: WorkspacePagePro
     hub: status.hub,
     flags: view.features,
     pathRuleProjects: projectsWithPathRules(view.document),
-    connections: {
-      ...(slackOn
-        ? {
-            slack: admin
-              ? slackAdminConnection(factOfQuery(slackAdmin), workspace.name)
-              : slackMemberConnection(factOfQuery(slackMe), workspace.name),
-          }
-        : {}),
-      ...(githubOn ? { github: githubFactConnection(github.fact) } : {}),
-    },
+    connections: githubOn ? { github: githubFactConnection(github.fact) } : {},
   });
   const build = hubBuild(status.hub);
   return (

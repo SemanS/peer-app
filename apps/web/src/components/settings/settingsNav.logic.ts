@@ -75,16 +75,8 @@ export const NO_MARKS: NavMarks = { toFinish: null, dots: new Set(), tags: new M
 function navItemOfRow(rowId: string): string | undefined {
   if (rowId === "workspace:hub") return "workspace:hub";
   if (rowId === "workspace:capacity") return "workspace:capacity";
-  if (
-    rowId === "workspace:slack" ||
-    rowId === "workspace:webhooks" ||
-    rowId === "workspace:github"
-  ) {
-    return "workspace:integrations";
-  }
-  if (rowId === "me:slack") return "workspace:slack";
+  if (rowId === "workspace:github") return "workspace:general";
   if (rowId === "me:plans") return "workspace:plans";
-  if (rowId === "computer:slack-plugin") return "computer:coordination";
   if (rowId === "computer:browser") return "settings:/settings/browser";
   if (rowId === "computer:device-hub") return "settings:/settings/devices";
   if (rowId.startsWith("computer:provider:")) return "settings:/settings/providers";
@@ -185,12 +177,10 @@ export const APP_PAGES = [
   "/settings/about",
 ] as const satisfies ReadonlyArray<SettingsPath>;
 
-/** The Workspace pages whose plugins decide whether they are listed (Integrations: any of three). */
+/** The Workspace pages whose plugins decide whether they are listed. */
 const SECTION_PLUGINS: Readonly<Partial<Record<WorkspaceSection, ReadonlyArray<string>>>> = {
   capacity: ["capacity"],
   audit: ["audit"],
-  integrations: ["slack", "github", "webhooks"],
-  slack: ["slack"],
 };
 
 const COMPUTER_PLUGINS: Readonly<Partial<Record<ComputerSection, string>>> = {

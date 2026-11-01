@@ -20,7 +20,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { SidebarInset } from "../../ui/sidebar";
 import { Toggle, ToggleGroup } from "../../ui/toggle-group";
 import { PeerPageHeader, PeerSectionLabel } from "../PeerPageHeader";
-import { INTEGRATION_ANCHORS } from "../settings/peerSettings.logic";
+import { GITHUB_ANCHOR } from "../settings/peerSettings.logic";
 import { useOpenPeerSettings } from "../settings/peerSettingsLinks";
 import { usePeerHubStatus } from "../WorkspaceAccess";
 import { UsageSharingSection } from "./UsageSharing";
@@ -98,8 +98,8 @@ function Tile({ tile, workspace }: { readonly tile: UsageTile; readonly workspac
             variant="outline"
             onClick={() =>
               void openSettings(
-                { kind: "workspace", workspace, section: "integrations" },
-                { hash: INTEGRATION_ANCHORS.github },
+                { kind: "workspace", workspace, section: "general" },
+                { hash: GITHUB_ANCHOR },
               )
             }
           >

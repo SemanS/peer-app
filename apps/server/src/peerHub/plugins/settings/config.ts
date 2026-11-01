@@ -40,8 +40,7 @@ const ID = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const HEADER =
   /^# Peer settings · ([a-z0-9][a-z0-9-]{0,62}) · revision (\d{1,15}) · scope \S+[ \t]*$/;
 const NAMED = /^# File: (\S+)[ \t]*$/;
-const FILE =
-  /^(?:workspace\.yaml|(projects|tools|capacity|webhooks)\/([a-z0-9][a-z0-9-]{0,62})\.ya?ml)$/;
+const FILE = /^(?:workspace\.yaml|(projects|tools|capacity)\/([a-z0-9][a-z0-9-]{0,62})\.ya?ml)$/;
 type Words = ReadonlyArray<string>;
 
 const invalid = () => usage(`use peer ${CONFIG_USAGE}`, "run peer help for the commands.");

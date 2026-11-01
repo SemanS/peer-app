@@ -572,7 +572,6 @@ describe("the document", () => {
       },
       tools: { postgres: { name: "Postgres", mcp: { command: "npx" } } },
       capacity: { default: { name: "Default", models: [] } },
-      webhooks: { ops: { format: "teams", url: "${secret:OPS}", events: [], enabled: true } },
       gateway: { url: "https://llm.acme.dev" },
     });
     expect(parts.currency).toBe("EUR");
@@ -581,14 +580,12 @@ describe("the document", () => {
     expect(parts.people["ana@acme.dev"]!.personal?.[0]?.plan).toBe("team");
     expect(Object.keys(parts.tools)).toEqual(["postgres"]);
     expect(Object.keys(parts.pools)).toEqual(["default"]);
-    expect(parts.webhooks.ops!.url).toBe("${secret:OPS}");
     expect(readDocument({})).toEqual({
       currency: undefined,
       people: {},
       projects: {},
       tools: {},
       pools: {},
-      webhooks: {},
     });
     expect(readDocument({ projects: ["no", "mapping"], tools: null }).projects).toEqual({});
   });

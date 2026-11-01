@@ -410,8 +410,6 @@ describe("every page of the app's settings", () => {
 
 describe("searching Peer's pages", () => {
   const PLUGINS = [
-    "slack",
-    "webhooks",
     "github",
     "capacity",
     "audit",
@@ -445,26 +443,9 @@ describe("searching Peer's pages", () => {
   const find = (query: string, list = entries()) =>
     searchSettingsEntries(query, list).map((entry) => [entry.title, searchEntryPath(entry)]);
 
-  it("finds the six places Slack lives, each with where it is", () => {
-    expect(find("slack")).toEqual(
-      expect.arrayContaining([
-        ["Slack conversations", "Workspace › Integrations"],
-        ["Bot token", "Workspace › Integrations › Slack"],
-        ["Signing secret", "Workspace › Integrations › Slack"],
-        ["Slack account", "Me › Slack"],
-        ["Slack plugin", "This computer › Coordination & plugins"],
-        ["Webhooks", "Workspace › Integrations"],
-      ]),
-    );
-    expect(find("slack")).toHaveLength(6);
-  });
-
-  it("finds the bot token and the gateway's master key by 'token'", () => {
+  it("finds the gateway's master key by 'token'", () => {
     const titles = find("token").map(([title]) => title);
-    expect(titles).toContain("Bot token");
     expect(titles).toContain("Gateway master key");
-    // The title that says it leads.
-    expect(titles[0]).toBe("Bot token");
   });
 
   it("finds each page, section and key field by the words people remember it by", () => {
@@ -473,9 +454,6 @@ describe("searching Peer's pages", () => {
         find(query).map(([name]) => name),
         query,
       ).toContain(title);
-    found("signing secret", "Signing secret");
-    found("webhook", "Webhooks");
-    found("signing key", "Webhook signing key");
     found("github checks", "GitHub PR checks");
     found("coordination", "Coordination policy");
     found("path rules", "Path rules");
@@ -495,7 +473,6 @@ describe("searching Peer's pages", () => {
     found("history", "Settings history");
     found("herdr", "Peer plugins");
     found("ownership", "Peer plugins");
-    found("manifest", "Slack conversations");
     found("dns", "Email domains");
   });
 
@@ -511,22 +488,17 @@ describe("searching Peer's pages", () => {
   });
 
   it("opens a result on the part of the page it names", () => {
-    const [token] = searchSettingsEntries("bot token", entries());
-    expect(token).toMatchObject({
-      location: { kind: "workspace", workspace: "acme", section: "integrations" },
-      targetId: "integrations-slack",
+    const [checks] = searchSettingsEntries("github checks", entries());
+    expect(checks).toMatchObject({
+      location: { kind: "workspace", workspace: "acme", section: "general" },
+      targetId: "workspace-github",
     });
   });
 
   it("does not hand a member the admin pages or their fields", () => {
     const member = entries("member");
-    const titles = find("slack", member).map(([title]) => title);
-    expect(titles).toEqual(expect.arrayContaining(["Slack account", "Slack plugin"]));
-    for (const admin of ["Slack conversations", "Bot token", "Signing secret", "Webhooks"]) {
-      expect(titles).not.toContain(admin);
-    }
+    expect(find("github checks", member).map(([title]) => title)).not.toContain("GitHub PR checks");
     const tokens = find("token", member).map(([title]) => title);
-    expect(tokens).not.toContain("Bot token");
     expect(tokens).not.toContain("Gateway master key");
     expect(find("secrets", member).map(([title]) => title)).not.toContain("Hub secrets");
     expect(find("yaml", member)).toEqual([]);
@@ -536,20 +508,20 @@ describe("searching Peer's pages", () => {
     expect(find("tool trust", member).map(([title]) => title)).toContain("Tool trust");
   });
 
-  it("takes the items of a plugin that is turned off, and keeps the plugin's own to turn it back on", () => {
+  it("takes the items of a plugin that is turned off", () => {
     const off = PLUGINS.map((plugin) =>
-      plugin.id === "slack" ? { ...plugin, enabled: false, active: false, reason: "off" } : plugin,
+      plugin.id === "github" ? { ...plugin, enabled: false, active: false, reason: "off" } : plugin,
     );
     const items = entries("admin", { status: { plugins: off, signedIn: true } });
-    expect(find("slack", items).map(([title]) => title)).toEqual(["Slack plugin", "Webhooks"]);
+    expect(find("github checks", items).map(([title]) => title)).not.toContain("GitHub PR checks");
   });
 
   it("leaves a plugin the Hub cannot serve yet in, since its page says so", () => {
     const waiting = PLUGINS.map((plugin) =>
-      plugin.id === "slack" ? { ...plugin, active: false, reason: "hub" } : plugin,
+      plugin.id === "github" ? { ...plugin, active: false, reason: "hub" } : plugin,
     );
     const items = entries("admin", { status: { plugins: waiting, signedIn: true } });
-    expect(find("slack", items).map(([title]) => title)).toContain("Slack conversations");
+    expect(find("github checks", items).map(([title]) => title)).toContain("GitHub PR checks");
   });
 
   it("offers only This computer's pages with no workspace, and none when nobody is signed in", () => {
@@ -561,13 +533,13 @@ describe("searching Peer's pages", () => {
 
   it("shows where a connection stands on the result", () => {
     const withStatus = entries("admin", {
-      statuses: { "workspace:slack": "Needs setup", "me:plans": "2 detected" },
+      statuses: { "workspace:github": "Needs setup", "me:plans": "2 detected" },
     });
     const byTitle = (title: string) =>
       searchSettingsEntries(title, withStatus).find((entry) => entry.title === title);
-    expect(byTitle("Slack conversations")).toMatchObject({ status: "Needs setup" });
+    expect(byTitle("GitHub PR checks")).toMatchObject({ status: "Needs setup" });
     expect(byTitle("AI subscriptions")).toMatchObject({ status: "2 detected" });
-    expect(byTitle("Webhooks")).not.toHaveProperty("status");
+    expect(byTitle("Hub secrets")).not.toHaveProperty("status");
   });
 
   it("searches the app's settings and Peer's together, the app's first", () => {

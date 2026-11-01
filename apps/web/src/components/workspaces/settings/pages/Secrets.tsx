@@ -77,23 +77,14 @@ function SecretsOfAdmin({
       ) : null}
       {rows === null ? null : rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No secrets yet. A webhook’s address, GitHub PR checks and the gateway’s key each store
-          theirs when you set them up.
+          No secrets yet. GitHub PR checks and the gateway’s key each store theirs when you set them
+          up.
         </p>
       ) : (
         <SecretsTable rows={rows} onSet={setSetting} onDelete={setDeleting} />
       )}
       <p className="text-xs text-muted-foreground">
-        Slack’s tokens live in{" "}
-        <InlineButton
-          tone="muted"
-          onClick={() =>
-            void open({ kind: "workspace", workspace: workspace.slug, section: "integrations" })
-          }
-        >
-          Integrations
-        </InlineButton>
-        . Secrets a tool asks for, like{" "}
+        Secrets a tool asks for, like{" "}
         <code className="font-mono">$&#123;secret:JIRA_TOKEN&#125;</code>, are set by each person on
         their own computer in{" "}
         <InlineButton

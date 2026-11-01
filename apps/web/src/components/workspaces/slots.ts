@@ -30,7 +30,6 @@ import { acceptanceWebPlugin } from "./acceptance";
  */
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { announcementsWebPlugin } from "./announcements";
-import { slackWebPlugin } from "./slack";
 import { settingsWebPlugin } from "./settings";
 
 import { auditWebPlugin } from "./audit";
@@ -61,7 +60,6 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   observeWebPlugin,
   knowledgeWebPlugin,
   memoryWebPlugin,
-  slackWebPlugin,
 
   auditWebPlugin,
   toolTrustWebPlugin,

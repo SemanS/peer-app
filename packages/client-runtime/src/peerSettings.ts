@@ -14,7 +14,6 @@ import {
   PeerSettingsPool,
   PeerSettingsProject,
   PeerSettingsTool,
-  PeerSettingsWebhook,
   type PeerSettingsSet,
 } from "@t3tools/contracts";
 import * as Option from "effect/Option";
@@ -493,7 +492,6 @@ const decodePerson = Schema.decodeUnknownOption(PeerSettingsPersonEntry);
 const decodeProject = Schema.decodeUnknownOption(PeerSettingsProject);
 const decodeTool = Schema.decodeUnknownOption(PeerSettingsTool);
 const decodePool = Schema.decodeUnknownOption(PeerSettingsPool);
-const decodeWebhook = Schema.decodeUnknownOption(PeerSettingsWebhook);
 
 const entriesOf = <A>(section: unknown, decode: (raw: unknown) => Option.Option<A>) =>
   Object.fromEntries(
@@ -517,6 +515,5 @@ export function readDocument(document: Readonly<Record<string, unknown>>) {
     projects: entriesOf(document.projects, decodeProject),
     tools: entriesOf(document.tools, decodeTool),
     pools: entriesOf(document.capacity, decodePool),
-    webhooks: entriesOf(document.webhooks, decodeWebhook),
   };
 }

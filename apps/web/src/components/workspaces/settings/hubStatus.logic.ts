@@ -149,27 +149,6 @@ const FEATURES: ReadonlyArray<Feature> = [
     },
   },
   {
-    id: "webhooks",
-    name: "Webhooks",
-    without: "plugin",
-    words: {
-      on: "Workspace events can go to Slack, Teams or an address of your own.",
-      off: "Webhooks can’t be added or changed: this Hub doesn’t run them.",
-      newer: "Webhooks can’t be added until the Hub is updated.",
-    },
-  },
-  {
-    id: "slack",
-    name: "Slack",
-    without: "plugin",
-    words: {
-      on: "Agents can ask people in Slack when they wait.",
-      off: "Agents can’t ask people in Slack: this Hub doesn’t run it.",
-      newer: "Agents can’t ask people in Slack until the Hub is updated.",
-      pending: "Until then agents ask only in Peer.",
-    },
-  },
-  {
     id: "requests",
     name: "Team requests",
     without: "plugin",
@@ -297,7 +276,7 @@ const KNOWN: ReadonlySet<string> = new Set(FEATURES.map((feature) => feature.id)
 const OFF_HERE = "Turned off on this computer. Its owner turns it on in Coordination & plugins.";
 
 /** The features whose Hub support is only half of it: the workspace connects them too. */
-export type ConnectedFeature = "slack" | "github";
+export type ConnectedFeature = "github";
 
 /**
  * What the workspace's own connection says of the features that have one, by the feature's id:
@@ -478,9 +457,7 @@ export function hubFeatureRows(input: {
     if (state === undefined) continue;
     const plugin = plugins.find((candidate) => candidate.id === feature.id);
     const view =
-      state === "on" && (feature.id === "slack" || feature.id === "github")
-        ? input.connections?.[feature.id]
-        : undefined;
+      state === "on" && feature.id === "github" ? input.connections?.[feature.id] : undefined;
     rows.push({
       id: feature.id,
       name: feature.name,

@@ -2,16 +2,18 @@ import { getAt } from "@t3tools/client-runtime/peer-settings";
 
 import { serverEnvironment } from "../../../../state/server";
 import { useAtomCommand } from "../../../../state/use-atom-command";
-import { SettingsSearchTarget } from "../../../settings/settingsLayout";
+import { SettingsSearchTarget, SettingsSection } from "../../../settings/settingsLayout";
 import { EMAIL_DOMAINS_TARGET } from "../../workspaceAccess.logic";
 import { ProjectMark } from "../../signals";
 import { failureMessage } from "../../WorkspaceAccess";
 import { NotSaved, OwnersNote, PageSection, SettingsReadError } from "../CapacityCoordinationParts";
 import { DraftSaveBar } from "../DraftBar";
+import { GitHubChecksCard } from "../IntegrationsGitHub";
 import type { WorkspacePageProps } from "../pageProps";
 import { ownLimit } from "../../workspaceMembers.logic";
-import { isWorkspaceAdmin, workspaceRoleBadge } from "../peerSettings.logic";
-import { PeerSettingsPage } from "../PeerSettingsPage";
+import { GITHUB_ANCHOR, isWorkspaceAdmin, workspaceRoleBadge } from "../peerSettings.logic";
+import { PeerSettingsPage, RequirePlugin } from "../PeerSettingsPage";
+import { HostedWorkspaceSettings } from "../PluginSlots";
 import { SettingsUnavailableNote } from "../SettingsUnavailable";
 import { useSettingsDraft } from "../useSettingsDraft";
 import { useSettingsView } from "../useSettingsView";
@@ -32,7 +34,8 @@ import {
 
 /**
  * A workspace's General page (design artboard 14): its name, the email domains that let colleagues
- * in on their own, the company knowledge store, and its settings as YAML to export and import.
+ * in on their own, the company knowledge store, its settings as YAML to export and import, and for
+ * admins GitHub's PR checks (against a Hub without the settings feature, the setup they always had).
  * Admins rename the workspace, set the store and use YAML; only owners change domains; everyone
  * else reads. The store goes into a draft that a review saves, the name and the domains are the
  * Hub's own calls and take effect at once. Without the settings feature on the Hub the page shows
@@ -142,6 +145,29 @@ export function WorkspaceGeneral({ environmentId, status, workspace }: Workspace
 
         {admin && available ? (
           <YamlCard environmentId={environmentId} workspace={workspace} view={view} />
+        ) : null}
+
+        {admin ? (
+          <RequirePlugin status={status} plugin="github" title="GitHub">
+            <SettingsSearchTarget id={GITHUB_ANCHOR}>
+              {available ? (
+                <GitHubChecksCard
+                  environmentId={environmentId}
+                  status={status}
+                  workspace={workspace}
+                />
+              ) : (
+                <SettingsSection title="GitHub" hideTitle>
+                  <HostedWorkspaceSettings
+                    host="github"
+                    environmentId={environmentId}
+                    status={status}
+                    workspace={workspace}
+                  />
+                </SettingsSection>
+              )}
+            </SettingsSearchTarget>
+          </RequirePlugin>
         ) : null}
 
         <WorkspaceRows

@@ -41,20 +41,12 @@ const document = {
   capacity: {
     default: { name: "Default", models: [{ id: "m", provider: "anthropic", harness: ["claude"] }] },
   },
-  webhooks: {
-    ops: {
-      format: "teams",
-      url: "${secret:TEAMS_ALERTS_URL}",
-      events: ["overlap.ask"],
-      enabled: true,
-    },
-  },
 };
 const settingsView = {
   revision: { seq: 42, commit: "3f2a", at: "2026-10-11T12:00:00Z", by: eva, message: "Start" },
   rights: { admin: false, owner: false, leads: ["app"] },
   document,
-  features: { pathRules: true, webhooks: true, github: true },
+  features: { pathRules: true, github: true },
   people: [],
 };
 const line = {
@@ -212,15 +204,12 @@ describe("peer config show", () => {
           "projects/other.yaml",
           "tools/postgres.yaml",
           "capacity/default.yaml",
-          "webhooks/ops.yaml",
         ],
       );
       assert.include(all, "scope all");
       // Each kind's fields are said once, with its first file.
       assert.strictEqual(all.match(/^# Fields: name, client/gm)?.length, 1);
       assert.strictEqual(all.match(/^# Fields: currency/gm)?.length, 1);
-      // A reference to a secret is all a file ever holds of it.
-      assert.include(all, "${secret:TEAMS_ALERTS_URL}");
       const sameWorkspace = yield* run(["show", "--workspace", "acme", "--all"]);
       assert.strictEqual(sameWorkspace, all);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
@@ -307,11 +296,6 @@ describe("peer config propose", () => {
             mcp: { transport: "stdio", command: "pnpx", args: ["pg"] },
           },
         },
-      ]);
-      yield* write("w.yaml", block("webhooks/ops.yaml"));
-      yield* run(["propose", "--file", "w.yaml", "--why", "Nothing"]);
-      assert.deepStrictEqual((proposed() as { set: unknown }).set, [
-        { path: ["webhooks", "ops"], value: document.webhooks.ops },
       ]);
       // workspace.yaml is its settings, each person's entry on its own; a blank one is left alone.
       const workspace = block("workspace.yaml").replace("currency: EUR", "currency: EUR\ngateway:");

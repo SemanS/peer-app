@@ -1,33 +1,19 @@
 /**
- * The Workspace and Me rows of Settings › Overview: the Hub, Slack, webhooks, GitHub's checks and
- * shared capacity that a workspace's admins connect, and the person's own Slack account and plans.
+ * The Workspace and Me rows of Settings › Overview: the Hub, GitHub's checks and shared capacity
+ * that a workspace's admins connect, and the person's own plans.
  * Each is told from facts the pages already read; a fact not read yet says "Checking…", and only
  * one that failed says "Problem".
  */
-import {
-  SLACK_OLDER_HUB_LINE,
-  slackLinkView,
-  slackOlderHub,
-} from "@t3tools/client-runtime/peer/slack";
-import { webhookStatus } from "@t3tools/client-runtime/peer/webhooks";
 import type {
   PeerGitHubStatus,
   PeerHubStatus,
   PeerSettingsGatewayView,
-  PeerSlackAdminResult,
-  PeerSlackMe,
-  PeerWebhookList,
   PeerWorkspaceRole,
 } from "@t3tools/contracts";
 
 import { hubAddress, hubBuild } from "../workspaces/settings/hubStatus.logic";
 import { githubFactConnection } from "../workspaces/settings/integrations.logic";
-import { formatLabel } from "../workspaces/settings/webhookForm.logic";
-import { INTEGRATION_ANCHORS, isWorkspaceAdmin } from "../workspaces/settings/peerSettings.logic";
-import {
-  slackAdminConnection,
-  slackMemberConnection,
-} from "../workspaces/settings/slackConnection.logic";
+import { GITHUB_ANCHOR, isWorkspaceAdmin } from "../workspaces/settings/peerSettings.logic";
 import { CHECKING, LOADING, type ConnectionView, type Fact } from "./connectionFacts";
 import {
   actionFor,
@@ -62,10 +48,6 @@ export interface WorkspaceFacts {
   readonly slug: string;
   readonly name: string;
   readonly role: PeerWorkspaceRole;
-  /** The admin's view of Slack (admins only) and the member's own (everyone). */
-  readonly slackAdmin: Fact<PeerSlackAdminResult> | null;
-  readonly slackMe: Fact<PeerSlackMe> | null;
-  readonly webhooks: Fact<PeerWebhookList> | null;
   readonly github: Fact<PeerGitHubStatus> | null;
   /** Null where the Hub cannot show the settings, so the gateway is not known. */
   readonly gateway: Fact<GatewayFact> | null;
@@ -82,22 +64,13 @@ export type PeerFacts = {
 
 const peerTarget = (
   workspace: string,
-  section: "hub" | "integrations" | "capacity" | "slack" | "plans",
+  section: "hub" | "general" | "capacity" | "plans",
   targetId?: string,
 ): OverviewTarget => ({
   kind: "peer",
   location: { kind: "workspace", workspace, section },
   ...(targetId === undefined ? {} : { targetId }),
 });
-
-const SLACK_UNTIL = "Until then agents ask only in Peer.";
-
-/** The workspace's Slack as the person sees it: the admin's steps, or whether it is connected. */
-export function workspaceSlackConnection(workspace: WorkspaceFacts): ConnectionView {
-  return isWorkspaceAdmin(workspace.role)
-    ? slackAdminConnection(workspace.slackAdmin ?? LOADING, workspace.name)
-    : slackMemberConnection(workspace.slackMe ?? LOADING, workspace.name);
-}
 
 /** The Hub: connected as of the last sync, a problem when the last sync failed. */
 function hubRow(peer: PeerFacts): OverviewRow {
@@ -128,105 +101,8 @@ function hubRow(peer: PeerFacts): OverviewRow {
   });
 }
 
-/** Slack's conversations, which an admin connects: the steps, or the problem Slack reports. */
-function slackRow(peer: PeerFacts, workspace: WorkspaceFacts): OverviewRow | null {
-  const gate = pluginGate(peer.status, "slack", "Slack");
-  if (gate.kind === "hidden") return null;
-  const connection = gate.kind === "view" ? gate.view : workspaceSlackConnection(workspace);
-  return overviewRow({
-    id: "workspace:slack",
-    group: "workspace",
-    name: "Slack conversations",
-    subject: `Slack for ${workspace.name}`,
-    connection,
-    consequence: SLACK_UNTIL,
-    action: actionFor(
-      connection,
-      peerTarget(workspace.slug, "integrations", INTEGRATION_ANCHORS.slack),
-      "Integrations",
-      { off: "Set up" },
-    ),
-  });
-}
-
 function pluralize(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
-}
-
-/** "Slack and Teams", "Slack, Teams and Generic". */
-function nameList(names: ReadonlyArray<string>): string {
-  if (names.length <= 1) return names[0] ?? "";
-  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-}
-
-/**
- * The webhooks: none yet is Off; one failing is a Problem; one that lacks its URL or signing key
- * Needs setup; otherwise Connected with how many deliver and where to.
- */
-export function webhooksConnection(list: PeerWebhookList): ConnectionView {
-  const hooks = list.webhooks;
-  if (hooks.length === 0) {
-    return {
-      state: "off",
-      detail: "No webhook yet: workspace events can go to Slack, Teams or your own address.",
-    };
-  }
-  const states = hooks.map(webhookStatus);
-  const failing = states.filter((state) => state === "failing").length;
-  if (failing > 0) {
-    return {
-      state: "problem",
-      detail: `${pluralize(failing, "webhook is", "webhooks are")} failing to deliver.`,
-    };
-  }
-  const needSetup = states.filter((state) => state === "needs-setup").length;
-  if (needSetup > 0) {
-    return {
-      state: "setup",
-      detail: `${pluralize(needSetup, "webhook needs", "webhooks need")} its address or signing key.`,
-      step: { n: 2, of: 2, title: "Add the address and signing key" },
-    };
-  }
-  const delivering = hooks.filter((_, index) => states[index] !== "paused");
-  if (delivering.length === 0) {
-    return {
-      state: "off",
-      detail: `${pluralize(hooks.length, "webhook is", "webhooks are")} paused.`,
-    };
-  }
-  const formats = [...new Set(delivering.map((hook) => formatLabel(hook.format)))];
-  const paused = hooks.length - delivering.length;
-  return {
-    state: "connected",
-    detail: `${delivering.length} delivering to ${nameList(formats)}${paused === 0 ? "" : ` · ${paused} paused`}`,
-  };
-}
-
-function webhooksRow(peer: PeerFacts, workspace: WorkspaceFacts): OverviewRow | null {
-  const gate = pluginGate(peer.status, "webhooks", "Webhooks");
-  if (gate.kind === "hidden") return null;
-  const fact = workspace.webhooks ?? LOADING;
-  const connection =
-    gate.kind === "view"
-      ? gate.view
-      : fact.kind === "loading"
-        ? CHECKING
-        : fact.kind === "failed"
-          ? ({ state: "problem", detail: fact.message } satisfies ConnectionView)
-          : webhooksConnection(fact.value);
-  return overviewRow({
-    id: "workspace:webhooks",
-    group: "workspace",
-    name: "Webhooks",
-    subject: `Webhooks of ${workspace.name}`,
-    connection,
-    action: actionFor(
-      connection,
-      peerTarget(workspace.slug, "integrations", INTEGRATION_ANCHORS.webhooks),
-      "Integrations",
-      { off: "Add a webhook" },
-    ),
-  });
 }
 
 function githubRow(peer: PeerFacts, workspace: WorkspaceFacts): OverviewRow | null {
@@ -241,12 +117,9 @@ function githubRow(peer: PeerFacts, workspace: WorkspaceFacts): OverviewRow | nu
     subject: `GitHub PR checks for ${workspace.name}`,
     connection,
     consequence: "Until then pull requests count as their agents report them.",
-    action: actionFor(
-      connection,
-      peerTarget(workspace.slug, "integrations", INTEGRATION_ANCHORS.github),
-      "Integrations",
-      { off: "Turn on" },
-    ),
+    action: actionFor(connection, peerTarget(workspace.slug, "general", GITHUB_ANCHOR), "GitHub", {
+      off: "Turn on",
+    }),
   });
 }
 
@@ -323,60 +196,9 @@ export function workspaceRows(peer: PeerFacts): ReadonlyArray<OverviewRow> {
   const { workspace } = peer;
   const rows: Array<OverviewRow | null> = [hubRow(peer)];
   if (workspace !== null && isWorkspaceAdmin(workspace.role)) {
-    rows.push(
-      slackRow(peer, workspace),
-      webhooksRow(peer, workspace),
-      githubRow(peer, workspace),
-      capacityRow(peer, workspace),
-    );
+    rows.push(githubRow(peer, workspace), capacityRow(peer, workspace));
   }
   return rows.filter((row): row is OverviewRow => row !== null);
-}
-
-/**
- * The person's own Slack account: waiting while the workspace has not connected Slack, then not
- * linked, a link waiting for its proof, or linked (with whether their agents' questions go there).
- */
-export function slackAccountConnection(fact: Fact<PeerSlackMe>): ConnectionView {
-  if (fact.kind === "loading") return CHECKING;
-  if (fact.kind === "failed") {
-    return slackOlderHub(fact.message)
-      ? { state: "unavailable", detail: SLACK_OLDER_HUB_LINE }
-      : { state: "problem", detail: fact.message };
-  }
-  const me = fact.value;
-  if (!me.connected) {
-    return { state: "off", label: "Waiting", detail: "For the workspace to connect Slack." };
-  }
-  const link = slackLinkView(me);
-  if (link.kind === "pending") return { state: "setup", detail: link.text };
-  if (link.kind === "none") {
-    return {
-      state: "setup",
-      detail: "Link your Slack account to get your agents’ questions there.",
-    };
-  }
-  return {
-    state: "connected",
-    detail: me.settings.enabled
-      ? `${link.text}. Your agents ask you in Slack.`
-      : `${link.text}. Your agents’ questions stay in Peer until you turn Slack on.`,
-  };
-}
-
-function slackAccountRow(peer: PeerFacts, workspace: WorkspaceFacts): OverviewRow | null {
-  const gate = pluginGate(peer.status, "slack", "Slack");
-  if (gate.kind === "hidden") return null;
-  const connection =
-    gate.kind === "view" ? gate.view : slackAccountConnection(workspace.slackMe ?? LOADING);
-  return overviewRow({
-    id: "me:slack",
-    group: "me",
-    name: "Slack account",
-    subject: "Your Slack account",
-    connection,
-    action: actionFor(connection, peerTarget(workspace.slug, "slack"), "Me › Slack"),
-  });
 }
 
 const planCount = (count: number) => `${count} ${count === 1 ? "plan" : "plans"}`;
@@ -423,11 +245,8 @@ function plansRow(workspace: WorkspaceFacts): OverviewRow {
   });
 }
 
-/** The Me group: the person's Slack account and AI plans in the workspace that is open. */
+/** The Me group: the person's AI plans in the workspace that is open. */
 export function meRows(peer: PeerFacts): ReadonlyArray<OverviewRow> {
   const { workspace } = peer;
-  if (workspace === null) return [];
-  return [slackAccountRow(peer, workspace), plansRow(workspace)].filter(
-    (row): row is OverviewRow => row !== null,
-  );
+  return workspace === null ? [] : [plansRow(workspace)];
 }

@@ -147,7 +147,6 @@ export const PeerSettingsView = Schema.Struct({
   document: Schema.Record(Schema.String, Schema.Unknown),
   features: Schema.Struct({
     pathRules: Schema.Boolean,
-    webhooks: Schema.Boolean,
     github: Schema.Boolean,
     /** The Hub reads and writes a project's `agents.memory`; absent from a Hub from before it. */
     agentMemory: Schema.optional(Schema.Boolean),
@@ -487,17 +486,6 @@ export const PeerSettingsPool = keeping({
   ),
 });
 export type PeerSettingsPool = typeof PeerSettingsPool.Type;
-
-/** `webhooks.<id>`: `url` and `signingSecret` name workspace secrets (`${secret:NAME}`), never hold them. */
-export const PeerSettingsWebhook = keeping({
-  format: Text,
-  url: Text,
-  events: Schema.Array(Text),
-  projects: Schema.optional(Schema.Array(Text)),
-  signingSecret: Schema.optional(Schema.Array(Text)),
-  enabled: Schema.Boolean,
-});
-export type PeerSettingsWebhook = typeof PeerSettingsWebhook.Type;
 
 // Inputs. Every one names its workspace; a save names the revision it started from.
 const Workspace = TrimmedNonEmptyString;

@@ -37,8 +37,6 @@ import {
 } from "../workspaces/settings/peerSettings.logic";
 import { readCatalogPools } from "../workspaces/settings/sharedCapacity.logic";
 import { knownRevision } from "../workspaces/settings/settingsView.logic";
-import { slackAtoms } from "../workspaces/slack/atoms";
-import { webhookAtoms } from "../workspaces/webhooks/atoms";
 import { LOADING, factOfQuery, failedFact, readyFact } from "./connectionFacts";
 import { detectedPlanCount } from "./overviewComputer.logic";
 import {
@@ -76,22 +74,6 @@ function useOverviewFacts(): OverviewFacts {
   const asking = environmentId !== null && slug !== null ? { environmentId, slug } : null;
   const input = slug === null ? null : { workspace: slug };
 
-  const slackOn = asking !== null && active("slack");
-  const slackAdmin = useEnvironmentQuery(
-    slackOn && admin && input !== null
-      ? slackAtoms.admin({ environmentId: asking.environmentId, input })
-      : null,
-  );
-  const slackMe = useEnvironmentQuery(
-    slackOn && input !== null
-      ? slackAtoms.me({ environmentId: asking.environmentId, input })
-      : null,
-  );
-  const webhooks = useEnvironmentQuery(
-    asking !== null && admin && active("webhooks") && input !== null
-      ? webhookAtoms.list({ environmentId: asking.environmentId, input })
-      : null,
-  );
   const github = useGitHubChecksStatus(
     asking !== null && admin && active("github") && signedIn !== null && workspace !== null
       ? {
@@ -102,20 +84,14 @@ function useOverviewFacts(): OverviewFacts {
       : null,
   );
   // GitHub's checks are a command, not a query: read them again when the person moves to another
-  // page, so the badge follows a setup they just finished. Slack's views are read again too: this
-  // hook keeps them open for all of Settings, so without it Me › Slack would still say "not
-  // connected" after an admin connected Slack on another page.
+  // page, so the badge follows a setup they just finished.
   const lastPath = useRef(pathname);
   const reloadGitHub = github.reload;
-  const reloadSlackAdmin = slackAdmin.refresh;
-  const reloadSlackMe = slackMe.refresh;
   useEffect(() => {
     if (lastPath.current === pathname) return;
     lastPath.current = pathname;
     reloadGitHub();
-    reloadSlackAdmin();
-    reloadSlackMe();
-  }, [pathname, reloadGitHub, reloadSlackAdmin, reloadSlackMe]);
+  }, [pathname, reloadGitHub]);
 
   const settingsOn = asking !== null && email !== null && active("settings");
   const revision = signedIn === null || slug === null ? undefined : knownRevision(signedIn, slug);
@@ -191,9 +167,6 @@ function useOverviewFacts(): OverviewFacts {
           slug: workspace.slug,
           name: workspace.name,
           role: workspace.role,
-          slackAdmin: slackOn && admin ? factOfQuery(slackAdmin) : null,
-          slackMe: slackOn ? factOfQuery(slackMe) : null,
-          webhooks: admin ? factOfQuery(webhooks) : null,
           github: admin ? github.fact : null,
           gateway: gatewayFact,
           plans,

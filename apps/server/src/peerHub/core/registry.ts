@@ -40,8 +40,6 @@ import { RoomsPlugin } from "../plugins/rooms/index.ts";
 import { ToolTrustPlugin } from "../plugins/tool-trust/index.ts";
 import { RequestsPlugin } from "../plugins/requests/index.ts";
 import { SettingsPlugin } from "../plugins/settings/index.ts";
-import { SlackPlugin } from "../plugins/slack/index.ts";
-import { WebhooksPlugin } from "../plugins/webhooks/index.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
 
 /**
@@ -88,8 +86,6 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   AskPlugin,
   FindPlugin,
   MemoryPlugin,
-  WebhooksPlugin,
-  SlackPlugin,
 
   AuditPlugin,
   ToolTrustPlugin,

@@ -31,9 +31,7 @@ const plugin = (id: string, extra: Record<string, unknown> = {}) => ({
   active: true,
   ...extra,
 });
-const PLUGINS = ["slack", "github", "webhooks", "capacity", "audit", "tool-trust"].map((id) =>
-  plugin(id),
-);
+const PLUGINS = ["github", "capacity", "audit", "tool-trust"].map((id) => plugin(id));
 const off = (...ids: string[]) =>
   PLUGINS.map((entry) =>
     ids.includes(entry.id) ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
@@ -76,7 +74,6 @@ describe("the one settings navigation", () => {
       "Shared capacity",
       "Tools",
       "Secrets",
-      "Integrations",
       "Audit log",
       "Hub",
     ]);
@@ -85,7 +82,7 @@ describe("the one settings navigation", () => {
   });
 
   it("puts Peer's pages and the app's own together under This computer and App", () => {
-    expect(labels("me")).toEqual(["AI subscriptions", "Keys", "Slack"]);
+    expect(labels("me")).toEqual(["AI subscriptions", "Keys"]);
     expect(labels("computer")).toEqual([
       "Coordination & plugins",
       "Tool trust",
@@ -142,49 +139,41 @@ describe("who sees which page", () => {
       "Tools",
       "Hub",
     ]);
-    // Their projects, keys and Slack are theirs whatever their role.
+    // Their projects and keys are theirs whatever their role.
     for (const role of ["owner", "admin", "member"] as const) {
       expect(labels("projects", { workspace: acme(role) })).toEqual([
         "Booking",
         "Peer Hub",
         "+ New project",
       ]);
-      expect(labels("me", { workspace: acme(role) })).toEqual([
-        "AI subscriptions",
-        "Keys",
-        "Slack",
-      ]);
+      expect(labels("me", { workspace: acme(role) })).toEqual(["AI subscriptions", "Keys"]);
     }
   });
 
-  it("takes the pages of a plugin that is turned off, and keeps Integrations while one of its three is on", () => {
+  it("takes the pages of a plugin that is turned off", () => {
     const status = (...ids: string[]) => ({ plugins: off(...ids), signedIn: true });
-    expect(labels("me", { status: status("slack") })).toEqual(["AI subscriptions", "Keys"]);
     expect(labels("workspace", { status: status("capacity", "audit") })).toEqual([
       "General",
       "People",
       "Tools",
       "Secrets",
-      "Integrations",
       "Hub",
     ]);
     expect(labels("computer", { status: status("tool-trust") })).not.toContain("Tool trust");
-    expect(labels("workspace", { status: status("slack", "github") })).toContain("Integrations");
-    expect(labels("workspace", { status: status("slack", "github", "webhooks") })).not.toContain(
-      "Integrations",
-    );
   });
 
   it("keeps a page whose plugin waits for a newer Hub, since the page says so", () => {
     const waiting = PLUGINS.map((entry) =>
-      entry.id === "slack" ? { ...entry, active: false, reason: "hub" } : entry,
+      entry.id === "capacity" ? { ...entry, active: false, reason: "hub" } : entry,
     );
-    expect(labels("me", { status: { plugins: waiting, signedIn: true } })).toContain("Slack");
+    expect(labels("workspace", { status: { plugins: waiting, signedIn: true } })).toContain(
+      "Shared capacity",
+    );
   });
 
   it("lists everything, plugins included, when no status is known", () => {
     expect(labels("computer", { status: undefined })).toContain("Tool trust");
-    expect(labels("me", { status: undefined })).toContain("Slack");
+    expect(labels("workspace", { status: undefined })).toContain("Shared capacity");
   });
 
   it("shows the app's Project page under This computer only while a project is chosen", () => {
@@ -320,13 +309,13 @@ describe("what the navigation marks", () => {
       who: "Acme",
       rows: [
         row({
-          id: "workspace:slack",
+          id: "workspace:github",
           attention: true,
           underway: true,
           badge: "Needs setup",
           connection: {
             state: "setup",
-            step: { n: 3, of: 4, title: "verify the stored token with Slack" },
+            step: { n: 3, of: 4, title: "add the webhook to GitHub" },
           },
         }),
       ],
@@ -358,15 +347,15 @@ describe("what the navigation marks", () => {
     ]);
   });
 
-  it("puts a dot on Integrations while Slack is at a step, and '2 detected' beside AI subscriptions", () => {
+  it("puts a dot on General while GitHub is at a step, and '2 detected' beside AI subscriptions", () => {
     const marks = navMarks(groups);
     expect(marks.toFinish).toBe("1 to finish");
-    expect([...marks.dots]).toEqual(["workspace:integrations"]);
+    expect([...marks.dots]).toEqual(["workspace:general"]);
     expect([...marks.tags]).toEqual([["workspace:plans", "2 detected"]]);
     const built = nav({ marks });
     expect(built.overview.badge).toBe("1 to finish");
-    const integrations = built.groups[0]?.items.find((item) => item.label === "Integrations");
-    expect(integrations).toMatchObject({ dot: true });
+    const general = built.groups[0]?.items.find((item) => item.label === "General");
+    expect(general).toMatchObject({ dot: true });
     const plans = built.groups.find((group) => group.id === "me")?.items[0];
     expect(plans).toMatchObject({ label: "AI subscriptions", tag: "2 detected" });
   });

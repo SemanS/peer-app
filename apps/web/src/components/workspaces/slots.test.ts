@@ -31,7 +31,6 @@ describe("the web plugin registry", () => {
       "requests",
       "observe",
       "knowledge",
-      "slack",
       "audit",
       "tool-trust",
       "mcp",

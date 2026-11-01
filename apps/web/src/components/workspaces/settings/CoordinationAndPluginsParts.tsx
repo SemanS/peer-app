@@ -37,7 +37,6 @@ import {
   type PluginView,
   type ProjectRef,
 } from "./coordinationAndPlugins.logic";
-import { SlackPluginChips, SlackPluginNotes } from "./SlackPluginParts";
 import { useSettingsView } from "./useSettingsView";
 import { ValueSource } from "./ValueSource";
 import { withFinally } from "~/lib/withFinally";
@@ -237,14 +236,6 @@ function WorkspacePathRules({
   );
 }
 
-/**
- * Slack is on and served: it works for the workspaces the computer is in, so the row says how each
- * one stands (Waiting for it to connect Slack, or Connected). Anything else is the plugin's own
- * status.
- */
-const perWorkspace = (view: PluginView, status: PeerHubStatus) =>
-  view.id === "slack" && view.status === "connected" && status.workspaces.length > 0;
-
 /** A plugin's status in the one language every connection speaks, and where it comes from. */
 function PluginChip({ view }: { readonly view: PluginView }) {
   return (
@@ -315,18 +306,11 @@ function PeerPlugins({
                 <span className="text-xs text-muted-foreground">{view.note}</span>
               )}
               {view.consequence === "path-rules" ? pathRules : null}
-              {perWorkspace(view, status) ? (
-                <SlackPluginNotes environmentId={environmentId} status={status} owner={owner} />
-              ) : null}
               {view.error === null ? null : (
                 <span className="text-xs text-destructive-foreground">{view.error}</span>
               )}
             </div>
-            {perWorkspace(view, status) ? (
-              <SlackPluginChips environmentId={environmentId} status={status} owner={owner} />
-            ) : (
-              <PluginChip view={view} />
-            )}
+            <PluginChip view={view} />
             <Switch
               checked={view.checked}
               disabled={view.disabled}

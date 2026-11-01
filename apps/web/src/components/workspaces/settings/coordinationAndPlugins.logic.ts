@@ -6,14 +6,12 @@
  * (`effectivePolicy` is how this computer works it out); the plugins' state is the environment's.
  */
 import { effectivePolicy, getAt } from "@t3tools/client-runtime/peer-settings";
-import { isSlackAdmin, slackOlderHub } from "@t3tools/client-runtime/peer/slack";
 import type {
   PeerCoordinationPolicy,
   PeerCoordinationState,
   PeerHubInfo,
   PeerPluginState,
   PeerSettingsView,
-  PeerWorkspaceRole,
 } from "@t3tools/contracts";
 
 import type { ConnectionState } from "../../settings/connectionStatus.logic";
@@ -157,9 +155,8 @@ export interface PluginView {
 /**
  * The plugins whose Hub feature the signed-in Hub has turned off, by plugin id (a plugin's id is its
  * Hub feature's). A Hub lists the features its operator turned off in what it says of itself
- * (`featuresOff`). An older Hub does not; one that serves settings still says so for the features
- * the settings document holds the parts of (`features` of its view): path rules, which are the
- * resources plugin's, and webhooks.
+ * (`featuresOff`). An older Hub does not; one that serves settings still says so for what the
+ * settings document holds a part of (`features` of its view): path rules, the resources plugin's.
  */
 export function hubOffPlugins(
   hub: Pick<PeerHubInfo, "featuresOff"> | undefined,
@@ -168,7 +165,6 @@ export function hubOffPlugins(
   if (hub?.featuresOff !== undefined) return new Set(hub.featuresOff);
   const off = new Set<string>();
   if (features?.pathRules === false) off.add("resources");
-  if (features?.webhooks === false) off.add("webhooks");
   return off;
 }
 
@@ -255,70 +251,6 @@ export function pluginViews(
       disabled: row.busy || !input.owner,
     };
   });
-}
-
-/** Where the Slack row sends a person: the admins to the setup, everyone else to their own page. */
-export interface SlackPluginLink {
-  readonly section: "integrations" | "slack";
-  readonly label: string;
-}
-
-/** One workspace's line of the Slack plugin row: the chip, where it comes from, a note and a link. */
-export interface SlackPluginLine {
-  readonly status: ConnectionState;
-  readonly statusLabel?: string | undefined;
-  /** After the chip: "for Webinson to connect Slack", or the workspace's name when several are listed. */
-  readonly source: string;
-  readonly note: string | null;
-  readonly link: SlackPluginLink | null;
-}
-
-/**
- * What the Slack plugin row says of a workspace while the plugin is on and served. The plugin works
- * on this computer, but nothing is asked in Slack until the workspace has connected it: that reads
- * Waiting, for the workspace, with the way to do it (the setup for an admin, the page naming the
- * admins for a member). Once connected it says where each person sets what reaches them.
- */
-export function slackPluginLine(input: {
-  readonly workspace: {
-    readonly name: string;
-    readonly role: PeerWorkspaceRole;
-  };
-  /** What the member's view of Slack says; null while it has not arrived. */
-  readonly connected: boolean | null;
-  /** Why the view could not be read, if it could not. */
-  readonly error: string | null;
-  /** The computer's owner reads "on for you"; anyone else reads "on for this computer". */
-  readonly owner: boolean;
-  /** Several workspaces are listed, so each line says which it is about. */
-  readonly named: boolean;
-}): SlackPluginLine {
-  const { workspace, connected, error, owner, named } = input;
-  if (error !== null) {
-    return slackOlderHub(error)
-      ? { status: "unavailable", source: "needs a newer Hub", note: null, link: null }
-      : { status: "problem", source: "could not read Slack from the Hub", note: null, link: null };
-  }
-  if (connected === null) {
-    return { status: "off", statusLabel: "Checking…", source: "", note: null, link: null };
-  }
-  if (connected) {
-    return {
-      status: "connected",
-      source: named ? workspace.name : "",
-      note: "Agents on this computer can ask you in Slack, as set in Me › Slack.",
-      link: { section: "slack", label: "Me › Slack" },
-    };
-  }
-  return {
-    status: "off",
-    statusLabel: "Waiting",
-    source: `for ${workspace.name} to connect Slack`,
-    note: `${owner ? "On for you" : "On for this computer"}, but ${workspace.name} hasn’t connected Slack. Agents’ questions stay in Peer meanwhile.`,
-    link: isSlackAdmin(workspace.role)
-      ? { section: "integrations", label: "Open Slack setup" }
-      : { section: "slack", label: "Me › Slack" },
-  };
 }
 
 /**

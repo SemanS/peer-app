@@ -15,7 +15,6 @@ const FOLDERS = [
   ["projects", "project", "projects"],
   ["tools", "tool", "tools"],
   ["capacity", "pool", "pools"],
-  ["webhooks", "webhook", "webhooks"],
 ] as const;
 
 type Folder = (typeof FOLDERS)[number][0];
@@ -107,12 +106,11 @@ const ID = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
  * A YAML file with no folder around it cannot say what it is, but its top-level keys do: a tool has
- * `mcp`, a pool `models`, a webhook `events` or `format`; anything else is a project.
+ * `mcp`, a pool `models`; anything else is a project.
  */
 export function sniffFolder(text: string): Folder {
   if (/^mcp\s*:/m.test(text)) return "tools";
   if (/^models\s*:/m.test(text)) return "capacity";
-  if (/^(events|format)\s*:/m.test(text)) return "webhooks";
   return "projects";
 }
 

@@ -5,10 +5,6 @@ import {
   SourceControlProviderKind,
   type PeerGitHubStatus,
   type PeerPluginState,
-  type PeerSlackAdminResult,
-  type PeerSlackMe,
-  type PeerWebhook,
-  type PeerWebhookList,
   type ServerProvider,
   type SourceControlDiscoveryResult,
   type SourceControlProviderDiscoveryItem,
@@ -38,48 +34,7 @@ const plugin = (id: string, extra: Partial<PeerPluginState> = {}): PeerPluginSta
   ...extra,
 });
 
-const PLUGINS = ["slack", "webhooks", "github", "capacity", "settings"].map((id) => plugin(id));
-
-const slackAdmin = (extra: Partial<PeerSlackAdminResult> = {}): PeerSlackAdminResult => ({
-  state: "needs-setup",
-  secrets: { botToken: "stored", signingSecret: "stored" },
-  team: null,
-  bot: null,
-  verifiedAt: null,
-  auth: null,
-  default: null,
-  projects: [],
-  lastPostAt: null,
-  lastFailure: null,
-  linkedMembers: 0,
-  openAsks: 0,
-  hubUrl: "https://hub.webinson.com",
-  manifest: { eventsUrl: "https://hub/e", actionsUrl: "https://hub/a" },
-  ...extra,
-});
-
-const slackMe = (extra: Partial<PeerSlackMe> = {}): PeerSlackMe => ({
-  connected: false,
-  team: null,
-  bot: null,
-  link: null,
-  pending: null,
-  settings: { enabled: false, delayMinutes: 2, place: "thread", kinds: [] },
-  projects: [],
-  ...extra,
-});
-
-const webhook = (extra: Partial<PeerWebhook> = {}): PeerWebhook => ({
-  id: "ops",
-  format: "slack",
-  events: ["task.done"],
-  projects: null,
-  enabled: true,
-  destination: { state: "ok", host: "hooks.slack.com" },
-  signing: "derived",
-  health: { pending: 0, failed: 0, lastDeliveredAt: "2026-10-12T09:00:00Z", lastFailure: null },
-  ...extra,
-});
+const PLUGINS = ["github", "capacity", "settings"].map((id) => plugin(id));
 
 const github = (extra: Partial<PeerGitHubStatus> = {}): PeerGitHubStatus => ({
   configured: false,
@@ -95,13 +50,6 @@ const workspace = (extra: Partial<WorkspaceFacts> = {}): WorkspaceFacts => ({
   slug: "webinson",
   name: "Webinson",
   role: "admin",
-  // Both values stored, not verified: step 3 of 4.
-  slackAdmin: readyFact(slackAdmin()),
-  slackMe: readyFact(slackMe()),
-  webhooks: readyFact<PeerWebhookList>({
-    revision: null,
-    webhooks: [webhook(), webhook({ id: "teams", format: "teams" })],
-  }),
   github: readyFact(github()),
   gateway: readyFact({
     view: {
@@ -247,17 +195,11 @@ describe("the Overview of an admin", () => {
     ]);
     expect(rowsOf(groups, "workspace").map((row) => row.name)).toEqual([
       "Peer Hub",
-      "Slack conversations",
-      "Webhooks",
       "GitHub PR checks",
       "Shared capacity",
     ]);
-    expect(rowsOf(groups, "me").map((row) => row.name)).toEqual([
-      "Slack account",
-      "AI subscriptions",
-    ]);
+    expect(rowsOf(groups, "me").map((row) => row.name)).toEqual(["AI subscriptions"]);
     expect(rowsOf(groups, "computer").map((row) => row.name)).toEqual([
-      "Slack plugin",
       "GitHub CLI",
       "Bitbucket",
       "GitLab, Azure DevOps, Forgejo",
@@ -279,24 +221,7 @@ describe("the Overview of an admin", () => {
     });
   });
 
-  it("says Slack needs setup at step 3 of 4, never Off or On, once both values are stored", () => {
-    expect(rowNamed(groups, "Slack conversations")).toMatchObject({
-      subject: "Slack for Webinson",
-      connection: {
-        state: "setup",
-        step: { n: 3, of: 4, title: "verify the stored token with Slack" },
-      },
-      action: { label: "Continue setup" },
-      attention: true,
-      underway: true,
-    });
-  });
-
-  it("reads webhooks, GitHub's checks and the gateway from what their pages read", () => {
-    expect(rowNamed(groups, "Webhooks")?.connection).toEqual({
-      state: "connected",
-      detail: "2 delivering to Slack and Teams",
-    });
+  it("reads GitHub's checks and the gateway from what their pages read", () => {
     expect(rowNamed(groups, "GitHub PR checks")).toMatchObject({
       connection: { state: "off", detail: "Agents can’t prove a merge yet." },
       action: { label: "Turn on" },
@@ -306,19 +231,6 @@ describe("the Overview of an admin", () => {
       state: "connected",
       detail: "Gateway synced · 2 model pools",
       checkedAt: "2026-10-12T10:00:00Z",
-    });
-  });
-
-  it("waits for the workspace to connect Slack, for the account and the plugin alike", () => {
-    expect(rowNamed(groups, "Slack account")?.connection).toEqual({
-      state: "off",
-      label: "Waiting",
-      detail: "For the workspace to connect Slack.",
-    });
-    expect(rowNamed(groups, "Slack plugin")?.connection).toEqual({
-      state: "off",
-      label: "Waiting",
-      detail: "Turned on for you; questions stay in Peer until Slack is connected.",
     });
   });
 
@@ -358,24 +270,21 @@ describe("the Overview of an admin", () => {
 
 describe("something to finish", () => {
   const groups = overviewRows(facts());
-  const summary = overviewSummary(groups);
-
-  it("counts Slack as one to finish in the navigation and lists both rows under Needs attention", () => {
-    expect(summary.toFinish).toBe(1);
-    expect(toFinishLabel(summary)).toBe("1 to finish");
-    const attention = filterOverview(groups, "attention");
-    expect(attention.flatMap((group) => group.rows.map((row) => row.name))).toEqual([
-      "Slack conversations",
-      "AI subscriptions",
-      "Bitbucket",
-    ]);
-    expect(summary.attention).toBe(3);
-  });
 
   it("names the first missing step in the banner, with what it means until then", () => {
-    expect(summary.first?.row.name).toBe("Slack conversations");
-    expect(summary.first?.text).toBe(
-      "Slack for Webinson is at step 3 of 4: verify the stored token with Slack. Until then agents ask only in Peer.",
+    const waiting = overviewSummary(
+      overviewRows(
+        facts({
+          peer: {
+            kind: "ready",
+            peer: peerFacts(workspace({ github: readyFact(github({ configured: true })) })),
+          },
+        }),
+      ),
+    );
+    expect(waiting.first?.row.name).toBe("GitHub PR checks");
+    expect(waiting.first?.text).toMatch(
+      /^GitHub PR checks for Webinson is at step \d of \d: .+ Until then pull requests count as their agents report them\.$/,
     );
   });
 
@@ -395,16 +304,6 @@ describe("something to finish", () => {
             kind: "ready",
             peer: peerFacts(
               workspace({
-                slackAdmin: readyFact(
-                  slackAdmin({
-                    state: "connected",
-                    team: { id: "T1", name: "Webinson" },
-                    bot: { name: "peer" },
-                    verifiedAt: "2026-10-12T10:00:00Z",
-                    default: { id: "C1", name: "agents", private: false },
-                  }),
-                ),
-                slackMe: readyFact(slackMe({ connected: true })),
                 plans: { kind: "ready", added: ["Claude Max"], detected: 0 },
               }),
             ),
@@ -445,18 +344,22 @@ describe("something to finish", () => {
           kind: "ready",
           peer: peerFacts(
             workspace({
-              slackAdmin: readyFact(
-                slackAdmin({ auth: { code: "invalid_auth", at: "2026-10-12T10:42:00Z" } }),
+              github: readyFact(
+                github({
+                  configured: true,
+                  lastPingAt: "2026-10-12T10:42:00Z",
+                  lastVerifiedAt: "2026-10-12T10:42:00Z",
+                }),
               ),
             }),
           ),
         },
       }),
     );
-    const row = rowNamed(problem, "Slack conversations");
+    const row = rowNamed(problem, "GitHub PR checks");
     expect(row?.connection.state).toBe("problem");
-    expect(row && finishText(row)).toBe(
-      "Slack for Webinson: Slack does not accept the bot token; store it again and choose Verify. Until then agents ask only in Peer.",
+    expect(row && finishText(row)).toMatch(
+      /^GitHub PR checks for Webinson: Its secret is not stored, .+ Until then pull requests count as their agents report them\.$/,
     );
     expect(overviewSummary(problem).toFinish).toBe(1);
   });
@@ -465,7 +368,7 @@ describe("something to finish", () => {
 describe("what a member sees", () => {
   const member = overviewRows(
     facts({
-      peer: { kind: "ready", peer: peerFacts(workspace({ role: "member", slackAdmin: null })) },
+      peer: { kind: "ready", peer: peerFacts(workspace({ role: "member" })) },
     }),
   );
 
@@ -474,37 +377,24 @@ describe("what a member sees", () => {
     expect(rowsOf(member, "workspace").map((row) => row.name)).toEqual(["Peer Hub"]);
     expect(member.find((group) => group.id === "workspace")?.who).toBe("Webinson");
   });
-
-  it("keeps the member's own Slack account and plans", () => {
-    expect(rowsOf(member, "me").map((row) => row.name)).toEqual([
-      "Slack account",
-      "AI subscriptions",
-    ]);
-  });
 });
 
 describe("a plugin that is not there", () => {
   const without = (id: string, extra: Partial<PeerPluginState>) =>
     PLUGINS.map((entry) => (entry.id === id ? { ...entry, ...extra } : entry));
 
-  it("removes the rows of a plugin turned off, but keeps the plugin's own row to turn it back on", () => {
+  it("removes the rows of a plugin turned off", () => {
     const groups = overviewRows(
       facts({
         peer: {
           kind: "ready",
           peer: peerFacts(workspace(), {
-            plugins: without("slack", { enabled: false, active: false, reason: "off" }),
+            plugins: without("github", { enabled: false, active: false, reason: "off" }),
           }),
         },
       }),
     );
-    expect(rowNamed(groups, "Slack conversations")).toBeUndefined();
-    expect(rowNamed(groups, "Slack account")).toBeUndefined();
-    expect(rowNamed(groups, "Slack plugin")).toMatchObject({
-      connection: { state: "off" },
-      action: { label: "Coordination & plugins" },
-    });
-    expect(overviewSummary(groups).toFinish).toBe(0);
+    expect(rowNamed(groups, "GitHub PR checks")).toBeUndefined();
   });
 
   it("says Not available where the Hub cannot serve the feature yet", () => {
@@ -513,13 +403,16 @@ describe("a plugin that is not there", () => {
         peer: {
           kind: "ready",
           peer: peerFacts(workspace(), {
-            plugins: without("webhooks", { active: false, reason: "hub" }),
+            plugins: without("github", { active: false, reason: "hub" }),
           }),
         },
       }),
     );
-    expect(rowNamed(groups, "Webhooks")).toMatchObject({
-      connection: { state: "unavailable", detail: "This Peer Hub has no Webhooks support yet." },
+    expect(rowNamed(groups, "GitHub PR checks")).toMatchObject({
+      connection: {
+        state: "unavailable",
+        detail: "This Peer Hub has no GitHub support yet.",
+      },
       action: null,
     });
   });
@@ -533,21 +426,18 @@ describe("what is not read yet, and what failed", () => {
           kind: "ready",
           peer: peerFacts(
             workspace({
-              slackAdmin: { kind: "loading" },
-              webhooks: failedFact("The Hub refused."),
               github: { kind: "loading" },
+              gateway: failedFact("The Hub refused."),
             }),
           ),
         },
       }),
     );
-    expect(rowNamed(groups, "Slack conversations")?.connection).toBe(CHECKING);
     expect(rowNamed(groups, "GitHub PR checks")?.connection).toBe(CHECKING);
-    expect(rowNamed(groups, "Webhooks")?.connection).toEqual({
+    expect(rowNamed(groups, "Shared capacity")?.connection).toEqual({
       state: "problem",
       detail: "The Hub refused.",
     });
-    expect(rowNamed(groups, "Slack plugin")?.connection).toBe(CHECKING);
   });
 
   it("says a failed Hub sync is a Problem, and a sync that has not happened yet is not one", () => {
@@ -577,7 +467,6 @@ describe("what is not read yet, and what failed", () => {
       },
       action: { label: "Sign in" },
     });
-    expect(rowNamed(signedOut, "Slack plugin")).toBeUndefined();
 
     const disconnected = overviewRows(facts({ peer: { kind: "disconnected" } }));
     expect(rowNamed(disconnected, "Peer Hub")?.connection.detail).toBe(

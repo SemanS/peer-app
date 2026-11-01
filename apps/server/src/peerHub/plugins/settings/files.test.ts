@@ -17,9 +17,6 @@ const document = {
   projects: { camp: { name: "Camp-bot" }, booking: project },
   tools: { postgres: { name: "Postgres", mcp: { command: "npx", args: ["pg"] } } },
   capacity: { default: { name: "Default", models: [] } },
-  webhooks: {
-    ops: { format: "teams", url: "${secret:OPS}", events: ["task.done"], enabled: true },
-  },
   futureSection: { ignored: true },
 };
 const isPeerHubError = Schema.is(PeerHubError);
@@ -42,7 +39,6 @@ describe("the settings as files", () => {
         "projects/camp.yaml",
         "tools/postgres.yaml",
         "capacity/default.yaml",
-        "webhooks/ops.yaml",
       ],
     );
     // An empty section (`github: {}`, all a member is shown of it) is nothing to read or propose.
@@ -115,7 +111,6 @@ describe("the bundle the Hub imports", () => {
     "projects/camp.yml": "name: Camp-bot\n",
     "tools/postgres.yaml": "name: Postgres\n",
     "capacity/default.yaml": "name: Default\n",
-    "webhooks/ops.yaml": "format: teams\n",
     ".peer-revision": "42 3f2a9c1e\n",
   };
 
@@ -130,7 +125,6 @@ describe("the bundle the Hub imports", () => {
           tools: { postgres: { name: "Postgres" } },
           capacity: { default: { name: "Default" } },
         },
-        webhooks: { ops: { format: "teams" } },
       },
       base: 42,
     });
@@ -147,7 +141,6 @@ describe("the bundle the Hub imports", () => {
       "projects/nested/deep.yaml": "name: x\n",
       ".git/config": "[core]",
     });
-    // Without webhooks/ the Hub keeps its webhooks, as `peerhub workspace apply` leaves them.
     assert.deepStrictEqual(bare.bundle, {
       settings: {},
       config: { currency: "USD", projects: {}, tools: {}, capacity: {} },
@@ -177,7 +170,6 @@ describe("the bundle the Hub imports", () => {
     assert.deepStrictEqual(bundle.config.projects, document.projects);
     assert.deepStrictEqual(bundle.config.tools, document.tools);
     assert.deepStrictEqual(bundle.config.capacity, document.capacity);
-    assert.deepStrictEqual(bundle.webhooks, document.webhooks);
     assert.deepStrictEqual(bundle.config.people, document.people);
     assert.strictEqual(bundle.config.currency, "EUR");
   });

@@ -88,10 +88,6 @@ export * from "./peer/requests.rpc.ts";
 export * from "./peer/observe.rpc.ts";
 export * from "./peer/knowledge.rpc.ts";
 export * from "./peer/memory.rpc.ts";
-export * from "./peer/webhooks.ts";
-export * from "./peer/webhooks.rpc.ts";
-export * from "./peer/slack.ts";
-export * from "./peer/slack.rpc.ts";
 export * from "./peer/settings.ts";
 export * from "./peer/settings.rpc.ts";
 

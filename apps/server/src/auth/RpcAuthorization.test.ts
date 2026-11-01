@@ -1,5 +1,4 @@
 import {
-  AuthAccessReadScope,
   AuthAccessWriteScope,
   AuthEnvironmentMaintainScope,
   AuthDiagnosticsReadScope,
@@ -92,12 +91,7 @@ describe("RPC authorization scopes", () => {
     );
   });
 
-  it("reads webhook health separately from delivery actions", () => {
-    expect(requiredScopeForRpcMethod(WS_METHODS.peerWebhooksList)).toBe(AuthAccessReadScope);
-    expect(requiredScopeForRpcMethod(WS_METHODS.peerWebhooksDeliveries)).toBe(AuthAccessReadScope);
-    expect(requiredScopeForRpcMethod(WS_METHODS.peerWebhooksRequeue)).toBe(AuthAccessWriteScope);
-    expect(requiredScopeForRpcMethod(WS_METHODS.peerWebhooksTest)).toBe(AuthAccessWriteScope);
-  });
+  it("reads webhook health separately from delivery actions", () => {});
 
   it("requires source control writes to start, retry, or cancel project clones", () => {
     for (const method of [

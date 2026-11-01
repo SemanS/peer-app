@@ -3,7 +3,7 @@
  * `/settings/peer`:
  *
  * - `w/<workspace>/<section>`: a workspace's own pages, and the "Me" pages that are per workspace
- *   (`plans`, `keys`, `slack`), since a person's keys and Slack link belong to one workspace.
+ *   (`plans`, `keys`), since a person's keys belong to one workspace.
  * - `w/<workspace>/project/<id>/<tab>`: one project's pages.
  * - `computer/<section>`: this computer's pages.
  */
@@ -12,12 +12,8 @@ import type { PeerHubStatus, PeerWorkspaceRole } from "@t3tools/contracts";
 
 export const PEER_SETTINGS_PATH = "/settings/peer";
 
-/** The parts of the Integrations page that Settings › Overview and search send people to. */
-export const INTEGRATION_ANCHORS = {
-  slack: "integrations-slack",
-  webhooks: "integrations-webhooks",
-  github: "integrations-github",
-} as const;
+/** The GitHub part of a workspace's General page: Settings › Overview and search send people to it. */
+export const GITHUB_ANCHOR = "workspace-github";
 
 /** Whether `pathname` is the Peer settings area or one of its pages. */
 export function isPeerSettingsPath(pathname: string): boolean {
@@ -30,13 +26,11 @@ export const WORKSPACE_SECTIONS = [
   "capacity",
   "tools",
   "secrets",
-  "integrations",
   "audit",
   "hub",
   "new-project",
   "plans",
   "keys",
-  "slack",
 ] as const;
 export type WorkspaceSection = (typeof WORKSPACE_SECTIONS)[number];
 
@@ -65,13 +59,11 @@ export const WORKSPACE_SECTION_LABELS: Readonly<Record<WorkspaceSection, string>
   capacity: "Shared capacity",
   tools: "Tools",
   secrets: "Secrets",
-  integrations: "Integrations",
   audit: "Audit log",
   hub: "Hub",
   "new-project": "New project",
   plans: "AI subscriptions",
   keys: "Keys",
-  slack: "Slack",
 };
 
 export const PROJECT_TAB_LABELS: Readonly<Record<ProjectTab, string>> = {
@@ -164,7 +156,6 @@ export const isWorkspaceAdmin = (role: PeerWorkspaceRole): boolean =>
 const ADMIN_ONLY_SECTIONS: ReadonlySet<WorkspaceSection> = new Set([
   "capacity",
   "secrets",
-  "integrations",
   "audit",
 ]);
 
@@ -177,17 +168,12 @@ export const WORKSPACE_NAV_SECTIONS = [
   "capacity",
   "tools",
   "secrets",
-  "integrations",
   "audit",
   "hub",
 ] as const satisfies ReadonlyArray<WorkspaceSection>;
 
 /** The Me group: the person's own, whatever their role. */
-export const ME_NAV_SECTIONS = [
-  "plans",
-  "keys",
-  "slack",
-] as const satisfies ReadonlyArray<WorkspaceSection>;
+export const ME_NAV_SECTIONS = ["plans", "keys"] as const satisfies ReadonlyArray<WorkspaceSection>;
 
 /** Whether a role gets a link to a workspace section in the navigation. */
 export const sectionInNav = (section: WorkspaceSection, role: PeerWorkspaceRole): boolean =>
@@ -387,7 +373,7 @@ export type SlotHost =
   | "general"
   | "people"
   | "capacity"
-  | "integrations"
+  | "github"
   | "audit"
   | "tool-trust"
   | "basics"
@@ -402,9 +388,9 @@ const SLOT_HOMES: Readonly<Record<SlotKind, SlotHost>> = {
 };
 
 const SLOT_PLACEMENTS: Readonly<Record<SlotKind, Readonly<Record<string, SlotHost>>>> = {
-  settings: { capacity: "capacity", "tool-trust": "tool-trust", slack: "own" },
+  settings: { capacity: "capacity", "tool-trust": "tool-trust" },
   alwaysSettings: {},
-  workspaceSettings: { audit: "audit", github: "integrations", metrics: "people" },
+  workspaceSettings: { audit: "audit", github: "github", metrics: "people" },
   projectSettings: { capacity: "own", acceptance: "coordination" },
 };
 

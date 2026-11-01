@@ -1,74 +1,13 @@
-import {
-  ProviderDriverKind,
-  ProviderInstanceId,
-  type PeerSlackMe,
-  type PeerWebhook,
-  type ServerProvider,
-} from "@t3tools/contracts";
+import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { CHECKING, failedFact, readyFact } from "./connectionFacts";
+import { CHECKING } from "./connectionFacts";
 import {
   detectedPlanCount,
   deviceHubConnection,
   providerConnection,
 } from "./overviewComputer.logic";
-import {
-  gatewayConnection,
-  plansConnection,
-  slackAccountConnection,
-  webhooksConnection,
-  type GatewayFact,
-} from "./overviewWorkspace.logic";
-
-const hook = (extra: Partial<PeerWebhook> = {}): PeerWebhook => ({
-  id: "ops",
-  format: "slack",
-  events: ["task.done"],
-  projects: null,
-  enabled: true,
-  destination: { state: "ok", host: "hooks.slack.com" },
-  signing: "derived",
-  health: { pending: 0, failed: 0, lastDeliveredAt: "2026-10-12T09:00:00Z", lastFailure: null },
-  ...extra,
-});
-const list = (...webhooks: PeerWebhook[]) => ({ revision: null, webhooks });
-
-describe("the webhooks", () => {
-  it("are Off before any is added", () => {
-    expect(webhooksConnection(list()).state).toBe("off");
-  });
-
-  it("are Connected, saying how many deliver and where to", () => {
-    expect(
-      webhooksConnection(list(hook(), hook({ id: "teams", format: "teams" }), hook({ id: "a" }))),
-    ).toEqual({ state: "connected", detail: "3 delivering to Slack and Teams" });
-    expect(webhooksConnection(list(hook())).detail).toBe("1 delivering to Slack");
-  });
-
-  it("count a paused one apart, and are Off when all are paused", () => {
-    expect(webhooksConnection(list(hook(), hook({ id: "p", enabled: false }))).detail).toBe(
-      "1 delivering to Slack · 1 paused",
-    );
-    expect(webhooksConnection(list(hook({ enabled: false }))).state).toBe("off");
-  });
-
-  it("are a Problem while one fails to deliver, ahead of one that needs setup", () => {
-    const failing = hook({
-      id: "f",
-      health: { pending: 0, failed: 2, lastDeliveredAt: null, lastFailure: null },
-    });
-    const missingUrl = hook({ id: "m", destination: { state: "missing" } });
-    expect(webhooksConnection(list(hook(), failing, missingUrl))).toEqual({
-      state: "problem",
-      detail: "1 webhook is failing to deliver.",
-    });
-    expect(webhooksConnection(list(hook(), missingUrl))).toEqual({
-      state: "setup",
-      detail: "1 webhook needs its address or signing key.",
-    });
-  });
-});
+import { gatewayConnection, plansConnection, type GatewayFact } from "./overviewWorkspace.logic";
 
 describe("the gateway behind shared capacity", () => {
   const gateway = (
@@ -115,63 +54,6 @@ describe("the gateway behind shared capacity", () => {
     });
     expect(gatewayConnection(gateway({}, 1)).detail).toBe("Gateway synced · 1 model pool");
     expect(gatewayConnection(gateway({}, null)).detail).toBe("Gateway synced");
-  });
-});
-
-describe("the person's Slack account", () => {
-  const me = (extra: Partial<PeerSlackMe> = {}): PeerSlackMe => ({
-    connected: true,
-    team: { id: "T1", name: "Acme" },
-    bot: { name: "peer" },
-    link: null,
-    pending: null,
-    settings: { enabled: false, delayMinutes: 2, place: "thread", kinds: [] },
-    projects: [],
-    ...extra,
-  });
-  const link = { slackUser: "U1", name: "slavo", linkedAt: "2026-10-01T09:00:00Z" };
-
-  it("waits for the workspace to connect Slack, which is not the person's to do", () => {
-    expect(slackAccountConnection(readyFact(me({ connected: false })))).toEqual({
-      state: "off",
-      label: "Waiting",
-      detail: "For the workspace to connect Slack.",
-    });
-  });
-
-  it("needs setup until linked, and says what the link waits for", () => {
-    expect(slackAccountConnection(readyFact(me())).state).toBe("setup");
-    expect(
-      slackAccountConnection(
-        readyFact(
-          me({ pending: { kind: "code", code: "A1B2", expiresAt: "2026-10-12T10:30:00Z" } }),
-        ),
-      ).detail,
-    ).toContain("A1B2");
-  });
-
-  it("is Connected once linked, and says whether the agents' questions go there", () => {
-    expect(slackAccountConnection(readyFact(me({ link }))).detail).toBe(
-      "Linked as slavo. Your agents’ questions stay in Peer until you turn Slack on.",
-    );
-    expect(
-      slackAccountConnection(
-        readyFact(
-          me({ link, settings: { enabled: true, delayMinutes: 2, place: "thread", kinds: [] } }),
-        ),
-      ),
-    ).toEqual({ state: "connected", detail: "Linked as slavo. Your agents ask you in Slack." });
-  });
-
-  it("says Checking… until read, Not available on an older Hub, Problem on a failure", () => {
-    expect(slackAccountConnection({ kind: "loading" })).toBe(CHECKING);
-    expect(slackAccountConnection(failedFact("Slack needs a newer Peer Hub.")).state).toBe(
-      "unavailable",
-    );
-    expect(slackAccountConnection(failedFact("boom"))).toEqual({
-      state: "problem",
-      detail: "boom",
-    });
   });
 });
 

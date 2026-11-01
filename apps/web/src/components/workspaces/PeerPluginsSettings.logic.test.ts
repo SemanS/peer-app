@@ -103,11 +103,11 @@ describe("pluginRows", () => {
 });
 
 describe("reasonText", () => {
-  const hub = { hub: { features: { requests: 1 }, featuresOff: ["slack"] } };
+  const hub = { hub: { features: { requests: 1 }, featuresOff: ["handoff"] } };
 
   it("says a plugin the Hub does not serve needs a newer Hub, as an older Hub's silence allows", () => {
-    expect(reasonText("hub", {}, "slack")).toBe("needs a newer Peer Hub.");
-    expect(reasonText("hub", { hub: { features: { requests: 1 } } }, "slack")).toBe(
+    expect(reasonText("hub", {}, "handoff")).toBe("needs a newer Peer Hub.");
+    expect(reasonText("hub", { hub: { features: { requests: 1 } } }, "handoff")).toBe(
       "needs a newer Peer Hub.",
     );
   });
@@ -122,8 +122,8 @@ describe("reasonText", () => {
   });
 
   it("says the Hub turned the feature off where the Hub lists it, and a newer one is still needed otherwise", () => {
-    expect(reasonText("hub", hub, "slack")).toBe("is turned off on this Peer Hub.");
-    expect(reasonText("hub", hub, "handoff")).toBe("needs a newer Peer Hub.");
+    expect(reasonText("hub", hub, "handoff")).toBe("is turned off on this Peer Hub.");
+    expect(reasonText("hub", hub, "observe")).toBe("needs a newer Peer Hub.");
   });
 
   it("says Memory is missing from a Hub built without it, where an update would not help", () => {
@@ -141,9 +141,9 @@ describe("reasonText", () => {
   });
 
   it("leaves every other reason as it was, whatever the Hub says", () => {
-    expect(reasonText("off", hub, "slack")).toBe("is turned off on this environment.");
-    expect(reasonText("locked", hub, "slack")).toBe("is forced off by the environment operator.");
-    expect(reasonText("missing", hub, "slack")).toBe("is not available on this environment.");
+    expect(reasonText("off", hub, "handoff")).toBe("is turned off on this environment.");
+    expect(reasonText("locked", hub, "handoff")).toBe("is forced off by the environment operator.");
+    expect(reasonText("missing", hub, "handoff")).toBe("is not available on this environment.");
   });
 });
 

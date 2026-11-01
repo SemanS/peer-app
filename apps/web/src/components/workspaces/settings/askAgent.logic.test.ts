@@ -100,7 +100,7 @@ describe("which pages offer to ask an agent", () => {
   const at = (path: string) => askPageOf(parsePeerSettingsPath(path));
 
   it("are the workspace pages that hold settings an agent can propose changes to", () => {
-    for (const section of ["general", "people", "capacity", "tools", "integrations"]) {
+    for (const section of ["general", "people", "capacity", "tools"]) {
       expect(at(`/settings/peer/w/acme/${section}`)).toBe("acme");
     }
   });

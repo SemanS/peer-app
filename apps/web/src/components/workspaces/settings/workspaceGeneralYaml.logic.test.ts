@@ -217,13 +217,12 @@ describe("the files Import takes", () => {
         "booking.yaml": "name: Booking\nmembers: ['*']\n",
         "postgres.yaml": "name: Postgres\nmcp:\n  command: npx\nrequires: []\n",
         "standard.yaml": "name: Standard\nmodels:\n  - id: claude-sonnet-5-5\n",
-        "teams.yaml": "format: teams\nurl: ${secret:TEAMS}\nevents: [task.done]\n",
         ".peer-revision": "3 abc\n",
       });
       expect(read).toMatchObject({
         ok: true,
         base: 3,
-        summary: "workspace.yaml, 1 project, 1 tool, 1 pool, 1 webhook",
+        summary: "workspace.yaml, 1 project, 1 tool, 1 pool",
       });
       if (!read.ok) return;
       expect(Object.keys(read.files)).toEqual([
@@ -231,7 +230,6 @@ describe("the files Import takes", () => {
         "capacity/standard.yaml",
         "projects/booking.yaml",
         "tools/postgres.yaml",
-        "webhooks/teams.yaml",
         "workspace.yaml",
       ]);
     });
@@ -322,8 +320,6 @@ describe("small pieces", () => {
   it.each([
     ["name: Postgres\nmcp:\n  command: npx\n", "tools"],
     ["name: Standard\nmodels: []\n", "capacity"],
-    ["format: teams\nurl: x\n", "webhooks"],
-    ["events: [a]\n", "webhooks"],
     ["name: Booking\nmembers: ['*']\ntools: [mcp]\n", "projects"],
     ["", "projects"],
   ])("tells %j is in %s", (text, folder) => {
@@ -337,8 +333,7 @@ describe("small pieces", () => {
         "workspace.yaml": "",
         "projects/a.yaml": "",
         "projects/b.yaml": "",
-        "webhooks/w.yaml": "",
       }),
-    ).toBe("workspace.yaml, 2 projects, 1 webhook");
+    ).toBe("workspace.yaml, 2 projects");
   });
 });

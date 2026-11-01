@@ -22,8 +22,6 @@ const plugin = (id: string, overrides: Partial<PeerPluginState> = {}): PeerPlugi
 /** A Hub that serves everything: every plugin that needs a feature is active. */
 const everything = [
   "settings",
-  "webhooks",
-  "slack",
   "requests",
   "observe",
   "knowledge",
@@ -35,7 +33,7 @@ const everything = [
   "plans",
 ].map((id) => plugin(id));
 
-const flags = { pathRules: true, webhooks: true, github: true };
+const flags = { pathRules: true, github: true };
 
 /** Every feature of the Hub this app has words for. */
 const ALL = [
@@ -45,8 +43,6 @@ const ALL = [
   "audit",
   "metrics",
   "usage",
-  "webhooks",
-  "slack",
   "requests",
   "observe",
   "knowledge",
@@ -91,8 +87,6 @@ describe("the features of a Hub that serves them all", () => {
       "audit",
       "metrics",
       "usage",
-      "webhooks",
-      "slack",
       "requests",
       "observe",
       "knowledge",
@@ -168,11 +162,11 @@ describe("a feature a Hub with a catalog does not serve", () => {
   it("is told by the catalog, not by whether the Hub serves settings", () => {
     const list = rows({
       hub: catalog(
-        ALL.filter((id) => id !== "slack" && id !== "settings"),
-        ["slack"],
+        ALL.filter((id) => id !== "requests" && id !== "settings"),
+        ["requests"],
       ),
     });
-    expect(byId(list, "slack")?.state).toBe("off-hub");
+    expect(byId(list, "requests")?.state).toBe("off-hub");
     expect(byId(list, "settings")?.state).toBe("newer");
   });
 
@@ -190,19 +184,19 @@ describe("a feature a Hub with a catalog does not serve", () => {
 describe("what the Hub says is not what this computer chose", () => {
   it("does not call a plugin turned off here a fact about a Hub that serves it", () => {
     const off = everything.map((entry) =>
-      entry.id === "slack" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
+      entry.id === "requests" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
     );
     const list = rows({ hub: catalog(ALL), plugins: off });
-    expect(byId(list, "slack")).toMatchObject({ state: "on", label: "Connected" });
+    expect(byId(list, "requests")).toMatchObject({ state: "on", label: "Connected" });
     expect(featuresFootnote(list)).not.toContain("this computer");
   });
 
   it("lists a feature whose plugin this build has not, as the Hub says, but not Memory", () => {
     const list = rows({
       hub: catalog(ALL),
-      plugins: everything.filter((entry) => entry.id !== "memory" && entry.id !== "slack"),
+      plugins: everything.filter((entry) => entry.id !== "memory" && entry.id !== "requests"),
     });
-    expect(byId(list, "slack")?.state).toBe("on");
+    expect(byId(list, "requests")?.state).toBe("on");
     // Memory is frozen in a build that has no plugin for it; a Hub that serves it is not advertised.
     expect(byId(list, "memory")).toBeUndefined();
   });
@@ -274,8 +268,6 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
       "settings",
       "resources",
       "github",
-      "webhooks",
-      "slack",
       "requests",
       "observe",
       "knowledge",
@@ -300,7 +292,7 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
 
   it("needs a newer Hub when the Hub does not even serve settings", () => {
     const old = everything.map((entry) =>
-      ["settings", "webhooks", "slack", "handoff", "dependencies"].includes(entry.id)
+      ["settings", "handoff", "dependencies"].includes(entry.id)
         ? { ...entry, active: false, reason: "hub" }
         : entry,
     );
@@ -310,16 +302,16 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
       label: "Not available",
       effect: "Settings can be read here but not changed until the Hub is updated.",
     });
-    expect(byId(list, "webhooks")?.state).toBe("newer");
+    expect(byId(list, "handoff")?.state).toBe("newer");
     expect(byId(list, "requests")?.state).toBe("on");
   });
 
   it("still tells from the plugins when the catalog has no list of what is off", () => {
     const list = rows({
       hub: { features: { requests: 1, settings: 1 } },
-      plugins: without("slack"),
+      plugins: without("handoff"),
     });
-    expect(byId(list, "slack")?.state).toBe("off-hub");
+    expect(byId(list, "handoff")?.state).toBe("off-hub");
     expect(byId(list, "requests")?.state).toBe("on");
   });
 
@@ -367,9 +359,9 @@ describe("what the app cannot tell", () => {
 
   it("does not call a plugin turned off here a fact about the Hub", () => {
     const off = everything.map((entry) =>
-      entry.id === "slack" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
+      entry.id === "requests" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
     );
-    expect(byId(rows({ plugins: off }), "slack")).toMatchObject({
+    expect(byId(rows({ plugins: off }), "requests")).toMatchObject({
       state: "off-here",
       label: "Off",
       effect: "Turned off on this computer. Its owner turns it on in Coordination & plugins.",
@@ -378,11 +370,11 @@ describe("what the app cannot tell", () => {
 
   it("says who forced a plugin off", () => {
     const locked = everything.map((entry) =>
-      entry.id === "slack"
+      entry.id === "requests"
         ? { ...entry, enabled: false, active: false, reason: "the operator", locked: true }
         : entry,
     );
-    expect(byId(rows({ plugins: locked }), "slack")?.effect).toBe("Forced off by the operator.");
+    expect(byId(rows({ plugins: locked }), "requests")?.effect).toBe("Forced off by the operator.");
   });
 });
 
@@ -431,7 +423,7 @@ describe("around the table", () => {
 
   it("explains a choice made on this computer when one is in the table", () => {
     const off = everything.map((entry) =>
-      entry.id === "slack" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
+      entry.id === "requests" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
     );
     expect(featuresFootnote(rows({ plugins: off }))).toContain(
       "“Off” is a choice made on this computer, in Coordination & plugins.",
@@ -476,9 +468,9 @@ describe("a feature in the status language", () => {
       label: "Not available",
     });
     const off = everything.map((entry) =>
-      entry.id === "slack" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
+      entry.id === "requests" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
     );
-    expect(byId(rows({ plugins: off }), "slack")).toMatchObject({
+    expect(byId(rows({ plugins: off }), "requests")).toMatchObject({
       connection: "off",
       label: "Off",
     });
@@ -490,28 +482,28 @@ describe("a feature in the status language", () => {
   });
 });
 
-describe("Slack and GitHub's checks, which the workspace connects too", () => {
-  const slackSetup: ConnectionView = {
+describe("GitHub's checks, which the workspace connects too", () => {
+  const githubSetup: ConnectionView = {
     state: "setup",
-    step: { n: 3, of: 4, title: "verify the stored token with Slack" },
+    step: { n: 2, of: 4, title: "add the webhook to GitHub" },
   };
   const githubOff: ConnectionView = {
     state: "off",
     detail: "Agents can’t prove a merge yet.",
   };
 
-  it("says Slack needs setup, at its step, while the workspace has not finished", () => {
-    const row = byId(rows({ connections: { slack: slackSetup } }), "slack");
+  it("says they need setup, at their step, while the workspace has not finished", () => {
+    const row = byId(rows({ connections: { github: githubSetup } }), "github");
     expect(row).toMatchObject({
       state: "on",
       connection: "setup",
       label: "Needs setup",
       effect:
-        "Step 3 of 4: verify the stored token with Slack. Until then agents ask only in Peer.",
+        "Step 2 of 4: add the webhook to GitHub. Pull requests count as their agents report them.",
     });
   });
 
-  it("says GitHub's checks are off with what that means for pull requests", () => {
+  it("says they are off with what that means for pull requests", () => {
     const row = byId(rows({ connections: { github: githubOff } }), "github");
     expect(row).toMatchObject({
       connection: "off",
@@ -522,41 +514,28 @@ describe("Slack and GitHub's checks, which the workspace connects too", () => {
 
   it("keeps what the feature does once the workspace is connected", () => {
     const row = byId(
-      rows({ connections: { slack: { state: "connected", detail: "Acme as @peer" } } }),
-      "slack",
+      rows({ connections: { github: { state: "connected", detail: "2 repositories" } } }),
+      "github",
     );
     expect(row).toMatchObject({
       connection: "connected",
       label: "Connected",
-      effect: "Agents can ask people in Slack when they wait.",
+      effect: "GitHub’s word on a pull request can count over the agent’s report.",
     });
   });
 
   it("says Checking… and what the feature does while the connection is being read", () => {
-    const row = byId(rows({ connections: { slack: CHECKING } }), "slack");
+    const row = byId(rows({ connections: { github: CHECKING } }), "github");
     expect(row).toMatchObject({
       connection: "off",
       label: "Checking…",
-      effect: "Agents can ask people in Slack when they wait.",
+      effect: "GitHub’s word on a pull request can count over the agent’s report.",
     });
   });
 
   it("leaves the rest to what the Hub does when it knows nothing of the connection", () => {
-    const row = byId(rows({ connections: {} }), "slack");
+    const row = byId(rows({ connections: {} }), "github");
     expect(row).toMatchObject({ connection: "connected", label: "Connected" });
-    expect(row?.effect).toBe("Agents can ask people in Slack when they wait.");
-  });
-
-  it("does not tell a connection of a feature the Hub cannot serve", () => {
-    const list = rows({
-      hub: catalog(ALL.filter((id) => id !== "slack")),
-      connections: { slack: slackSetup },
-    });
-    expect(byId(list, "slack")).toMatchObject({
-      state: "newer",
-      connection: "unavailable",
-      label: "Not available",
-      effect: "Agents can’t ask people in Slack until the Hub is updated.",
-    });
+    expect(row?.effect).toBe("GitHub’s word on a pull request can count over the agent’s report.");
   });
 });

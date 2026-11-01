@@ -35,7 +35,6 @@ export function proposalPageOf(
   }
   switch (location.section) {
     case "keys":
-    case "slack":
       return null;
     case "plans":
       return email === null ? null : { workspace: location.workspace, scope: `person:${email}` };

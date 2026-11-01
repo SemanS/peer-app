@@ -79,7 +79,8 @@ describe("the area's addresses", () => {
     expect(Object.keys(COMPUTER_SECTION_LABELS).toSorted()).toEqual(
       [...COMPUTER_SECTIONS].toSorted(),
     );
-    expect(isWorkspaceSection("integrations")).toBe(true);
+    expect(isWorkspaceSection("audit")).toBe(true);
+    expect(isWorkspaceSection("integrations")).toBe(false);
     expect(isWorkspaceSection("project")).toBe(false);
     expect(isProjectTab("history")).toBe(true);
     expect(isProjectTab("plans")).toBe(false);
@@ -147,10 +148,9 @@ describe("the group a page is listed under", () => {
   it("is Workspace, Projects, Me or This computer, as the navigation lists it", () => {
     const workspace = (section: WorkspaceSection) =>
       peerSettingsGroupLabel({ kind: "workspace", workspace: "acme", section });
-    expect(workspace("integrations")).toBe("Workspace");
+    expect(workspace("audit")).toBe("Workspace");
     expect(workspace("plans")).toBe("Me");
     expect(workspace("keys")).toBe("Me");
-    expect(workspace("slack")).toBe("Me");
     expect(workspace("new-project")).toBe("Projects");
     expect(
       peerSettingsGroupLabel({ kind: "project", workspace: "acme", projectId: "b", tab: "basics" }),
@@ -279,14 +279,13 @@ describe("where plugin settings are hosted", () => {
     expect(slotHost("settings", "capacity")).toBe("capacity");
     expect(slotHost("settings", "tool-trust")).toBe("tool-trust");
     expect(slotHost("workspaceSettings", "audit")).toBe("audit");
-    expect(slotHost("workspaceSettings", "github")).toBe("integrations");
+    expect(slotHost("workspaceSettings", "github")).toBe("github");
     expect(slotHost("workspaceSettings", "metrics")).toBe("people");
     // The review policy sits with the project's other coordination rules.
     expect(slotHost("projectSettings", "acceptance")).toBe("coordination");
   });
 
-  it("leaves Slack and a project's capacity to the pages that render them with what they need", () => {
-    expect(slotHost("settings", "slack")).toBe("own");
+  it("leaves a project's capacity to the page that renders it with what it needs", () => {
     expect(slotHost("projectSettings", "capacity")).toBe("own");
   });
 

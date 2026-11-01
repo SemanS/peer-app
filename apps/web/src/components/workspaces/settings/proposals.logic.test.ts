@@ -60,9 +60,8 @@ describe("which proposals a page shows", () => {
     });
   });
 
-  it("gives Keys, Slack, the computer's pages and an unknown page none", () => {
+  it("gives Keys, the computer's pages and an unknown page none", () => {
     expect(proposalPageOf(section("keys"), "ana@acme.dev")).toBeNull();
-    expect(proposalPageOf(section("slack"), "ana@acme.dev")).toBeNull();
     expect(proposalPageOf(section("plans"), null)).toBeNull();
     expect(
       proposalPageOf({ kind: "computer", section: "coordination" }, "ana@acme.dev"),

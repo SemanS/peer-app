@@ -21,8 +21,6 @@ import { dependenciesMobilePlugin } from "./dependencies";
  */
 import type { PeerHubStatus } from "@t3tools/contracts";
 import { announcementsMobilePlugin } from "./announcements";
-import { webhooksMobilePlugin } from "./webhooks";
-import { slackMobilePlugin } from "./slack";
 
 import { githubMobilePlugin } from "./github";
 import { auditMobilePlugin } from "./audit";
@@ -52,8 +50,6 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   requestsMobilePlugin,
   knowledgeMobilePlugin,
   memoryMobilePlugin,
-  webhooksMobilePlugin,
-  slackMobilePlugin,
 
   auditMobilePlugin,
   toolTrustMobilePlugin,

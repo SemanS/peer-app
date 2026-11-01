@@ -1,7 +1,7 @@
 /**
  * What settings search knows of Peer's own pages: each page of the Workspace, the person's Projects,
  * Me and This computer, the sections on them and their key fields, with the words people remember
- * them by (Slack, bot token, signing secret, webhook, master key, pools, path rules…). Peer's pages
+ * them by (master key, pools, path rules…). Peer's pages
  * live at addresses that name a workspace and a project, so the catalog is built for the ones the
  * person has open (`peerSearchItems`); a result carries where it lives, so it can say so.
  *
@@ -13,7 +13,7 @@ import {
   COMPUTER_SECTION_LABELS,
   PROJECT_TAB_LABELS,
   WORKSPACE_SECTION_LABELS,
-  INTEGRATION_ANCHORS,
+  GITHUB_ANCHOR,
   isPluginHidden,
   isWorkspaceAdmin,
   peerSettingsGroupLabel,
@@ -138,57 +138,13 @@ const WORKSPACE_ENTRIES: ReadonlyArray<Entry> = [
     place: w("secrets"),
     terms: "secret secrets token key sealed value store",
   },
-  // Integrations
-  {
-    id: "slack",
-    title: "Slack conversations",
-    place: w("integrations"),
-    targetId: INTEGRATION_ANCHORS.slack,
-    terms: "slack bot app manifest ask questions conversations channel",
-    plugin: "slack",
-    row: "workspace:slack",
-  },
-  {
-    id: "slack-bot-token",
-    title: "Bot token",
-    place: w("integrations"),
-    part: "Slack",
-    targetId: INTEGRATION_ANCHORS.slack,
-    terms: "slack xoxb token bot user oauth",
-    plugin: "slack",
-  },
-  {
-    id: "slack-signing-secret",
-    title: "Signing secret",
-    place: w("integrations"),
-    part: "Slack",
-    targetId: INTEGRATION_ANCHORS.slack,
-    terms: "slack secret signing",
-    plugin: "slack",
-  },
-  {
-    id: "webhooks",
-    title: "Webhooks",
-    place: w("integrations"),
-    targetId: INTEGRATION_ANCHORS.webhooks,
-    terms: "webhook slack teams generic events notifications deliveries",
-    plugin: "webhooks",
-    row: "workspace:webhooks",
-  },
-  {
-    id: "webhook-signing-key",
-    title: "Webhook signing key",
-    place: w("integrations"),
-    part: "Webhooks",
-    targetId: INTEGRATION_ANCHORS.webhooks,
-    terms: "webhook signing key whsec secret token generic standard webhooks",
-    plugin: "webhooks",
-  },
+  // GitHub
   {
     id: "github-checks",
     title: "GitHub PR checks",
-    place: w("integrations"),
-    targetId: INTEGRATION_ANCHORS.github,
+    place: w("general"),
+    targetId: GITHUB_ANCHOR,
+    admin: true,
     terms: "github webhook secret ping pull request merge checks",
     plugin: "github",
     row: "workspace:github",
@@ -228,14 +184,6 @@ const WORKSPACE_ENTRIES: ReadonlyArray<Entry> = [
     place: w("keys"),
     terms: "keys key api key shared capacity personal computer",
   },
-  {
-    id: "slack-account",
-    title: "Slack account",
-    place: w("slack"),
-    terms: "slack ask me dm notifications delay link account",
-    plugin: "slack",
-    row: "me:slack",
-  },
 ];
 
 /** This computer's own pages, whatever workspace is open. */
@@ -252,13 +200,6 @@ const COMPUTER_ENTRIES: ReadonlyArray<Entry> = [
     place: c("coordination"),
     terms:
       "plugin plugins turn on off herdr github dependencies handoff requests observe knowledge memory announcements settle recipes forecast metrics usage digest impact ownership",
-  },
-  {
-    id: "slack-plugin",
-    title: "Slack plugin",
-    place: c("coordination"),
-    terms: "slack plugin",
-    row: "computer:slack-plugin",
   },
   {
     id: "agent-coordination",

@@ -10,7 +10,6 @@ import {
   pathRulesNote,
   pluginViews,
   projectsWithPathRules,
-  slackPluginLine,
   splitByDefault,
   type PluginView,
 } from "./coordinationAndPlugins.logic";
@@ -203,7 +202,7 @@ describe("the plugins and where each comes from", () => {
   });
 
   it("shows a plugin whose feature the Hub turned off as Not available, switch off and locked", () => {
-    expect(only([plugin("webhooks")], { ...OWNER, hubOff: new Set(["webhooks"]) })).toMatchObject({
+    expect(only([plugin("requests")], { ...OWNER, hubOff: new Set(["requests"]) })).toMatchObject({
       status: "unavailable",
       source: "turned off on this Hub",
       checked: false,
@@ -228,9 +227,9 @@ describe("the plugins and where each comes from", () => {
 
   it("prefers the owner's own choice over the Hub's: a plugin they turned off is off by them", () => {
     expect(
-      only([plugin("webhooks", { enabled: false, active: false, reason: "off" })], {
+      only([plugin("requests", { enabled: false, active: false, reason: "off" })], {
         ...OWNER,
-        hubOff: new Set(["webhooks"]),
+        hubOff: new Set(["requests"]),
       }),
     ).toMatchObject({ status: "off", source: "by you", consequence: null });
   });
@@ -365,22 +364,20 @@ describe("the plugins and where each comes from", () => {
 
   it("believes the Hub's list over the flags of the settings it shows", () => {
     // A Hub that lists nothing off is not contradicted by flags that say otherwise.
-    expect(
-      hubOffPlugins({ featuresOff: [] }, { pathRules: false, webhooks: false, github: true }),
-    ).toEqual(new Set());
-    expect(
-      hubOffPlugins({ featuresOff: ["slack"] }, { pathRules: true, webhooks: true, github: true }),
-    ).toEqual(new Set(["slack"]));
+    expect(hubOffPlugins({ featuresOff: [] }, { pathRules: false, github: true })).toEqual(
+      new Set(),
+    );
+    expect(hubOffPlugins({ featuresOff: ["requests"] }, { pathRules: true, github: true })).toEqual(
+      new Set(["requests"]),
+    );
   });
 
   it("falls back to the settings a Hub that serves them shows, where it lists nothing", () => {
     expect(hubOffPlugins(undefined, null)).toEqual(new Set());
-    expect(hubOffPlugins({}, { pathRules: true, webhooks: true, github: true })).toEqual(new Set());
-    expect(hubOffPlugins({}, { pathRules: false, webhooks: true, github: false })).toEqual(
+    expect(hubOffPlugins({}, { pathRules: true, github: true })).toEqual(new Set());
+    expect(hubOffPlugins({}, { pathRules: false, github: false })).toEqual(new Set(["resources"]));
+    expect(hubOffPlugins(undefined, { pathRules: false, github: true })).toEqual(
       new Set(["resources"]),
-    );
-    expect(hubOffPlugins(undefined, { pathRules: false, webhooks: false, github: true })).toEqual(
-      new Set(["resources", "webhooks"]),
     );
   });
 });
@@ -421,75 +418,5 @@ describe("what stops applying while path rules are off", () => {
     expect(projectsWithPathRules(undefined, mine)).toEqual([]);
     expect(projectsWithPathRules({}, mine)).toEqual([]);
     expect(projectsWithPathRules({ projects: [] }, mine)).toEqual([]);
-  });
-});
-
-describe("the Slack plugin row, which waits for the workspace", () => {
-  const admin = { name: "Webinson", role: "admin" } as const;
-  const member = { name: "Webinson", role: "member" } as const;
-  const line = (
-    changes: Partial<Parameters<typeof slackPluginLine>[0]> & {
-      readonly workspace?: Parameters<typeof slackPluginLine>[0]["workspace"];
-    } = {},
-  ) =>
-    slackPluginLine({
-      workspace: admin,
-      connected: false,
-      error: null,
-      owner: true,
-      named: false,
-      ...changes,
-    });
-
-  it("waits for the workspace to connect Slack, and sends an admin to the setup", () => {
-    expect(line()).toEqual({
-      status: "off",
-      statusLabel: "Waiting",
-      source: "for Webinson to connect Slack",
-      note: "On for you, but Webinson hasn’t connected Slack. Agents’ questions stay in Peer meanwhile.",
-      link: { section: "integrations", label: "Open Slack setup" },
-    });
-  });
-
-  it("sends a member to the page that names the admins", () => {
-    expect(line({ workspace: member }).link).toEqual({ section: "slack", label: "Me › Slack" });
-  });
-
-  it("does not claim the plugin is on for someone who is not the computer's owner", () => {
-    expect(line({ owner: false }).note).toBe(
-      "On for this computer, but Webinson hasn’t connected Slack. Agents’ questions stay in Peer meanwhile.",
-    );
-  });
-
-  it("is Connected once the workspace has connected Slack, pointing to Me › Slack", () => {
-    expect(line({ connected: true })).toEqual({
-      status: "connected",
-      source: "",
-      note: "Agents on this computer can ask you in Slack, as set in Me › Slack.",
-      link: { section: "slack", label: "Me › Slack" },
-    });
-  });
-
-  it("names the workspace when the computer is in several", () => {
-    expect(line({ connected: true, named: true }).source).toBe("Webinson");
-    expect(line({ named: true }).source).toBe("for Webinson to connect Slack");
-  });
-
-  it("is checking until the workspace's Slack has been read", () => {
-    expect(line({ connected: null })).toEqual({
-      status: "off",
-      statusLabel: "Checking…",
-      source: "",
-      note: null,
-      link: null,
-    });
-  });
-
-  it("is Not available on a Hub without Slack, and a Problem when Slack could not be read", () => {
-    expect(line({ connected: null, error: "Slack needs a newer Peer Hub." })).toMatchObject({
-      status: "unavailable",
-      source: "needs a newer Hub",
-    });
-    expect(line({ connected: null, error: "boom" })).toMatchObject({ status: "problem" });
   });
 });

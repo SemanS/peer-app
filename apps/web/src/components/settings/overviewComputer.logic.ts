@@ -1,6 +1,6 @@
 /**
- * The This computer rows of Settings › Overview: Peer's Slack plugin, the hosting tools source
- * control found, the agent providers, the browser agents may open and the device hub. They are the
+ * The This computer rows of Settings › Overview: the hosting tools source control found, the agent
+ * providers, the browser agents may open and the device hub. They are the
  * environment's own, whatever workspace is open.
  */
 import { defaultInstanceIdForDriver } from "@t3tools/contracts";
@@ -11,15 +11,9 @@ import type {
   SourceControlDiscoveryResult,
 } from "@t3tools/contracts";
 
-import { CHECKING, CHECKING_LABEL, type ConnectionView, type Fact } from "./connectionFacts";
-import {
-  actionFor,
-  overviewRow,
-  pluginGate,
-  type OverviewRow,
-  type OverviewTarget,
-} from "./overviewRow.logic";
-import { workspaceSlackConnection, type PeerFacts } from "./overviewWorkspace.logic";
+import { CHECKING, type ConnectionView, type Fact } from "./connectionFacts";
+import { actionFor, overviewRow, type OverviewRow, type OverviewTarget } from "./overviewRow.logic";
+import type { PeerFacts } from "./overviewWorkspace.logic";
 import { detectedPlans } from "../workspaces/settings/aiSubscriptions.logic";
 import {
   getProviderVersionLabel,
@@ -54,61 +48,6 @@ const settingsTarget = (
   to: "/settings/source-control" | "/settings/providers" | "/settings/integrations",
   targetId?: string,
 ): OverviewTarget => ({ kind: "settings", to, ...(targetId === undefined ? {} : { targetId }) });
-
-const COORDINATION: OverviewTarget = {
-  kind: "peer",
-  location: { kind: "computer", section: "coordination" },
-};
-
-/**
- * Peer's Slack plugin on this computer. It waits for the workspace to connect Slack; once it has,
- * the plugin is Connected. Turned off here it says so, with the way back (the row stays: it is the
- * reverse of turning it off).
- */
-function slackPluginRow(peer: PeerFacts): OverviewRow {
-  const gate = pluginGate(peer.status, "slack", "Slack");
-  const workspace = peer.workspace;
-  const open = (connection: ConnectionView): ConnectionView =>
-    connection.state === "connected"
-      ? { state: "connected", detail: "Your agents ask people in Slack when they wait." }
-      : connection.label === CHECKING_LABEL
-        ? CHECKING
-        : {
-            state: "off",
-            label: "Waiting",
-            detail: "Turned on for you; questions stay in Peer until Slack is connected.",
-          };
-  const plugin = peer.status.plugins?.find((candidate) => candidate.id === "slack");
-  const connection: ConnectionView =
-    gate.kind === "view"
-      ? gate.view
-      : gate.kind === "hidden"
-        ? plugin?.locked === true
-          ? { state: "off", detail: "Forced off by the operator." }
-          : plugin === undefined
-            ? { state: "unavailable", detail: "This version of Peer has no Slack plugin." }
-            : {
-                state: "off",
-                detail: "Turned off on this computer: agents here do not ask in Slack.",
-              }
-        : workspace === null
-          ? {
-              state: "off",
-              label: "Waiting",
-              detail: "Turned on for you; it waits for a workspace to connect Slack.",
-            }
-          : open(workspaceSlackConnection(workspace));
-  return overviewRow({
-    id: "computer:slack-plugin",
-    group: "computer",
-    name: "Slack plugin",
-    connection,
-    action:
-      connection.state === "unavailable"
-        ? null
-        : { label: "Coordination & plugins", target: COORDINATION },
-  });
-}
 
 /** What a provider is called when its instance names none. */
 const PROVIDER_NAMES: Readonly<Record<string, string>> = {
@@ -327,7 +266,6 @@ export function computerRows(
   computer: ComputerFacts,
 ): ReadonlyArray<OverviewRow> {
   return [
-    ...(peer === null || !peer.status.signedIn ? [] : [slackPluginRow(peer)]),
     ...sourceControlRows(computer.sourceControl),
     ...providerRows(computer.providers, computer.environmentId),
     browserRow(computer.agentBrowser),

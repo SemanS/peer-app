@@ -18,7 +18,6 @@ const ASK_SECTIONS: ReadonlySet<WorkspaceSection> = new Set([
   "people",
   "capacity",
   "tools",
-  "integrations",
 ]);
 
 /**

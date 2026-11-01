@@ -31,7 +31,6 @@ import {
   settingsLineChange,
   PeerSettingsTool,
   PeerSettingsView,
-  PeerSettingsWebhook,
   PeerSettingsWorkspaceUpdate,
   agentMemoryOf,
   isAgentMemory,
@@ -61,7 +60,6 @@ const project = Schema.decodeUnknownSync(PeerSettingsProject);
 const personEntry = Schema.decodeUnknownSync(PeerSettingsPersonEntry);
 const tool = Schema.decodeUnknownSync(PeerSettingsTool);
 const pool = Schema.decodeUnknownSync(PeerSettingsPool);
-const webhook = Schema.decodeUnknownSync(PeerSettingsWebhook);
 const putSecretInput = Schema.decodeUnknownExit(PeerSettingsPutSecretInput);
 const invite = Schema.decodeUnknownExit(PeerHubInviteInput);
 
@@ -119,7 +117,7 @@ describe("GET /settings", () => {
         projects: { booking: { name: "Booking" } },
         futureSection: { kept: true },
       },
-      features: { pathRules: true, webhooks: true, github: true, future: true },
+      features: { pathRules: true, github: true, future: true },
       people: [{ ...eva, role: "member" }],
     });
     expect(Exit.isSuccess(answer)).toBe(true);
@@ -134,7 +132,7 @@ describe("GET /settings", () => {
       revision: { ...revision, message: null },
       rights: { admin: true, owner: true, leads: [] },
       document: {},
-      features: { pathRules: true, webhooks: true, github: true },
+      features: { pathRules: true, github: true },
       people: [],
     });
     expect(Exit.isSuccess(answer) && answer.value.revision.message).toBeNull();
@@ -147,7 +145,7 @@ describe("GET /settings", () => {
           revision,
           rights: { admin: true, owner: true, leads: [] },
           document: {},
-          features: { pathRules: false, webhooks: false, github: false },
+          features: { pathRules: false, github: false },
           people: [{ ...eva, role: "emperor" }],
         }),
       ),
@@ -560,7 +558,7 @@ describe("the parts of the document the app reads", () => {
     expect(read.tools).toHaveLength(2);
   });
 
-  it("reads people, tools, pools and webhooks", () => {
+  it("reads people, tools and pools", () => {
     expect(
       personEntry({ name: "Ana", personal: [{ harness: "codex", plan: "team", seat: "x" }] })
         .personal?.[0]?.seat,
@@ -588,15 +586,6 @@ describe("the parts of the document the app reads", () => {
         ],
       }).models[0]?.extra,
     ).toBe(1);
-    expect(
-      webhook({
-        format: "teams",
-        url: "${secret:TEAMS_ALERTS_URL}",
-        events: ["overlap.ask"],
-        signingSecret: ["${secret:TEAMS_SIGN}"],
-        enabled: true,
-      }).signingSecret,
-    ).toEqual(["${secret:TEAMS_SIGN}"]);
   });
 });
 

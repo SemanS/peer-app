@@ -231,11 +231,6 @@
       "count": 1
     }
   },
-  "apps/server/src/cli/openspecItems.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/cli/peerCore.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -263,14 +258,6 @@
     }
   },
   "apps/server/src/cli/peerCoreMenu.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 4
-    }
-  },
-  "apps/server/src/cli/peerCoreOpenSpec.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     },
@@ -781,11 +768,6 @@
       "count": 1
     }
   },
-  "apps/server/src/peerHub/core/work/workItems.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/core/workSnapshots.test.ts": {
     "t3code/no-real-time-wait-in-tests": {
       "count": 1
@@ -1054,56 +1036,6 @@
   },
   "apps/server/src/peerHub/plugins/find/findModel.ts": {
     "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/forecast/ForecastService.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 6
-    }
-  },
-  "apps/server/src/peerHub/plugins/forecast/check.test.ts": {
-    "t3code/no-test-timeout-or-unreasoned-skip": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/forecast/check.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 3
-    }
-  },
-  "apps/server/src/peerHub/plugins/forecast/client/git.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 6
-    }
-  },
-  "apps/server/src/peerHub/plugins/forecast/client/jj.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/forecast/index.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/forecast/jjSources.test.ts": {
-    "t3code/no-test-timeout-or-unreasoned-skip": {
-      "count": 3
-    }
-  },
-  "apps/server/src/peerHub/plugins/forecast/jjSources.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/forecast/share.test.ts": {
-    "t3code/no-test-timeout-or-unreasoned-skip": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/forecast/share.ts": {
-    "t3code/prefer-effect-fn": {
       "count": 1
     }
   },
@@ -1820,11 +1752,6 @@
       "count": 4
     }
   },
-  "apps/server/src/peerHub/plugins/settings/files.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/plugins/settings/service.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1849,39 +1776,6 @@
     },
     "t3code/prefer-effect-fn": {
       "count": 7
-    }
-  },
-  "apps/server/src/peerHub/plugins/slack/PeerSlack.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/slack/deliver.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/slack/ledger.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/slack/redact.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/slack/waits.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/slack/world.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 1
     }
   },
   "apps/server/src/peerHub/plugins/test-reports/TestReports.ts": {
@@ -2240,11 +2134,6 @@
       "count": 2
     }
   },
-  "apps/web/src/components/workspaces/jujutsu/pairActions.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/knowledge/Flows.test.tsx": {
     "t3code/require-disposable-render": {
       "count": 3
@@ -2505,21 +2394,6 @@
       "count": 2
     }
   },
-  "apps/web/src/components/workspaces/settings/IntegrationsSlackConnected.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/settings/IntegrationsWebhooks.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/settings/IntegrationsWebhooks.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/InviteDialog.test.tsx": {
     "t3code/require-disposable-render": {
       "count": 2
@@ -2571,19 +2445,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/settings/WebhookDialog.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/settings/WebhookDialog.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/WorkspaceGeneralDomains.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -2601,7 +2462,7 @@
   },
   "apps/web/src/components/workspaces/settings/coordinationAndPlugins.logic.ts": {
     "t3code/no-low-value-comments": {
-      "count": 2
+      "count": 1
     }
   },
   "apps/web/src/components/workspaces/settings/hubStatus.logic.ts": {
@@ -2767,11 +2628,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/settings/webhookForm.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/workspaceGeneral.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -2793,26 +2649,6 @@
     }
   },
   "apps/web/src/components/workspaces/signals.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/slack/SlackSetup.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/slack/SlackStepper.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/slack/slack.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/slack/slackSteps.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -3024,11 +2860,6 @@
   "packages/contracts/src/peer/settings.ts": {
     "t3code/no-low-value-comments": {
       "count": 2
-    }
-  },
-  "packages/contracts/src/peer/slack.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
     }
   },
   "packages/contracts/src/peer/test-reports.ts": {

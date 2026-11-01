@@ -5,9 +5,7 @@ import { useState } from "react";
 import { serverEnvironment } from "../../../../state/server";
 import { useAtomCommand } from "../../../../state/use-atom-command";
 import { SettingsGroup } from "../../../settings/SettingsGroup";
-import { SettingsRow } from "../../../settings/settingsLayout";
 import { Button } from "../../../ui/button";
-import { Switch } from "../../../ui/switch";
 import { toastManager } from "../../../ui/toast";
 import { usePeerPlugins } from "../../slots";
 import { DraftSaveBar } from "../DraftBar";
@@ -24,12 +22,8 @@ import {
 import {
   basicsReadOnlyNote,
   basicsValues,
-  companyKnowledgeHint,
-  companyStoreOf,
   deleteConsequences,
   deleteOperation,
-  firstRepositoryId,
-  projectKnowledgeHint,
 } from "../projectBasics.logic";
 import { leadNamesOf } from "../projectPeople.logic";
 import { gatewayNote, savedTitle } from "../reviewChanges.logic";
@@ -39,8 +33,8 @@ import { useSettingsDraft } from "../useSettingsDraft";
 import { useSettingsView } from "../useSettingsView";
 
 /**
- * A project's Basics tab (design artboard 05): its name, client and description, what it shares
- * with agents as knowledge, the rows plugins add to a project, and deleting it. Leads and admins
+ * A project's Basics tab (design artboard 05): its name, client and description, the rows plugins
+ * add to a project, and deleting it. Leads and admins
  * change the form in a draft that is saved through the review; everyone else reads it, with who may
  * change it named. Deleting asks for the project's id, then goes through the same review, and
  * leaves for the workspace's General page once it is saved.
@@ -81,7 +75,6 @@ export function ProjectBasics({ environmentId, status, workspace, state }: Proje
   const entry = draft.value;
   const values = basicsValues(entry, project);
   const editable = view.hubHasSettings && view.document !== null && view.canChange(path);
-  const store = companyStoreOf(view.document, workspace.companyKnowledge);
   const readOnlyNote =
     view.hubHasSettings && view.document !== null && !editable
       ? basicsReadOnlyNote(
@@ -125,40 +118,6 @@ export function ProjectBasics({ environmentId, status, workspace, state }: Proje
             disabled={!editable}
             onCommit={(description) => draft.set(["description"], description)}
           />
-        </section>
-
-        <section aria-labelledby="knowledge-heading" className="flex flex-col gap-2.5">
-          <h2 id="knowledge-heading" className="text-sm font-semibold text-foreground">
-            Knowledge for agents
-          </h2>
-          <SettingsGroup>
-            <SettingsRow
-              title="Project knowledge"
-              description={projectKnowledgeHint(
-                firstRepositoryId(entry) ?? project.repositories[0]?.id,
-              )}
-              control={
-                <Switch
-                  aria-label="Project knowledge"
-                  checked={values.kontext}
-                  disabled={!editable}
-                  onCheckedChange={(checked) => draft.set(["knowledge", "kontext"], checked)}
-                />
-              }
-            />
-            <SettingsRow
-              title="Company knowledge"
-              description={companyKnowledgeHint(workspace.name, store)}
-              control={
-                <Switch
-                  aria-label="Company knowledge"
-                  checked={values.company}
-                  disabled={!editable || store === null}
-                  onCheckedChange={(checked) => draft.set(["knowledge", "company"], checked)}
-                />
-              }
-            />
-          </SettingsGroup>
         </section>
 
         {hostsRows ? (

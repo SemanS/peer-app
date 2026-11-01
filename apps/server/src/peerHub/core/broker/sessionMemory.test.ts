@@ -573,10 +573,10 @@ describe("what else an agent was told, across a Peer restart", () => {
     const fixture = await brokerFixture();
     try {
       const before = await meet(fixture.broker, fixture.root, team());
-      fixture.broker.sessionView(before).told!("knowledge").add("rounding");
+      fixture.broker.sessionView(before).told!("observe").add("rounding");
       const again = await restart(fixture.broker);
       const after = await meet(again, fixture.root, team());
-      expect(again.sessionView(after).told!("knowledge").has("rounding")).toBe(true);
+      expect(again.sessionView(after).told!("observe").has("rounding")).toBe(true);
       // A new conversation starts, and something waits for its next step when Peer quits.
       await again.hook(
         {
@@ -590,7 +590,7 @@ describe("what else an agent was told, across a Peer restart", () => {
       after.pending.push("Peer: a note that waits for its next step");
       const third = await restart(again);
       const last = await meet(third, fixture.root, team());
-      expect(third.sessionView(last).told!("knowledge").has("rounding")).toBe(false);
+      expect(third.sessionView(last).told!("observe").has("rounding")).toBe(false);
       await third.stop();
     } finally {
       await fixture.dispose();
@@ -674,8 +674,8 @@ describe("what else an agent was told, across a Peer restart", () => {
         ...NO_PLUGINS,
         active: [
           {
-            id: "knowledge",
-            title: "knowledge",
+            id: "observe",
+            title: "observe",
             contributions: {
               hooks: {
                 notices: [

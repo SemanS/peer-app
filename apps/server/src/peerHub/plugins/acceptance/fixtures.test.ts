@@ -140,7 +140,6 @@ export const ready = (
           overlaps: [],
           findings: [],
           contexts: [],
-          candidates: [],
         } satisfies PeerHubStatus["coordination"]),
       );
       const state = yield* PeerState.PeerState;

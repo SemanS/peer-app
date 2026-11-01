@@ -128,7 +128,6 @@ const program = (
         overlaps: [],
         findings: [],
         contexts: [],
-        candidates: [],
       }),
     );
     const plugins = yield* PeerPlugins.PeerPlugins.pipe(Effect.provide(core));

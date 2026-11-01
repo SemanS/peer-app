@@ -66,7 +66,6 @@ function project(tasks: ReadonlyArray<WorkTaskNode>): WorkProjectNode {
     areas: [{ name: null, tasks }],
     unsorted: [],
     context: undefined,
-    candidates: 0,
     tasks: [],
   };
 }

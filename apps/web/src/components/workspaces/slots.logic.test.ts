@@ -11,9 +11,9 @@ import {
   teamTaskFactsOf,
 } from "./slots.logic";
 
-const REGISTRY = ["herdr", "github", "capacity", "requests", "observe", "knowledge", "memory"].map(
-  (id) => ({ id }),
-);
+const REGISTRY = ["herdr", "github", "capacity", "requests", "observe", "roles"].map((id) => ({
+  id,
+}));
 
 const plugin = (id: string, active = true): PeerPluginState => ({
   id,
@@ -43,7 +43,6 @@ const status = (plugins?: ReadonlyArray<PeerPluginState>): PeerHubStatus => ({
     overlaps: [],
     findings: [],
     contexts: [],
-    candidates: [],
   },
   sharedThreads: [],
   syncing: false,
@@ -57,16 +56,16 @@ const ids = (selected: ReadonlyArray<{ readonly id: string }>) => selected.map((
 describe("selectPeerPlugins", () => {
   it("selects only the plugins that are active, in registry order", () => {
     const listed = status([
-      plugin("knowledge"),
+      plugin("roles"),
       plugin("observe", false),
       plugin("requests"),
       plugin("herdr"),
     ]);
-    expect(ids(selectPeerPlugins(REGISTRY, listed))).toEqual(["herdr", "requests", "knowledge"]);
+    expect(ids(selectPeerPlugins(REGISTRY, listed))).toEqual(["herdr", "requests", "roles"]);
   });
 
   it("selects the features that existed before plugins when the status lists none", () => {
-    const legacy = ["herdr", "github", "capacity", "requests", "observe", "knowledge"];
+    const legacy = ["herdr", "github", "capacity", "requests", "observe"];
     expect(ids(selectPeerPlugins(REGISTRY, status()))).toEqual(legacy);
     expect(ids(selectPeerPlugins(REGISTRY, status([])))).toEqual(legacy);
   });
@@ -84,7 +83,7 @@ describe("selectPeerPlugins", () => {
 
 describe("Needs you", () => {
   const requests: PeerWebPlugin = { id: "requests", needsYou: { count: () => 2 } };
-  const knowledge: PeerWebPlugin = { id: "knowledge", needsYou: { count: () => 1 } };
+  const roles: PeerWebPlugin = { id: "roles", needsYou: { count: () => 1 } };
   const herdr: PeerWebPlugin = {
     id: "herdr",
     needsYou: {
@@ -95,7 +94,7 @@ describe("Needs you", () => {
   const observe: PeerWebPlugin = { id: "observe" };
 
   it("adds what the active plugins say waits on the person", () => {
-    expect(needsYouCount([observe, requests, knowledge], status())).toBe(3);
+    expect(needsYouCount([observe, requests, roles], status())).toBe(3);
     expect(needsYouCount([observe], status())).toBe(0);
     expect(needsYouCount([], status())).toBe(0);
   });

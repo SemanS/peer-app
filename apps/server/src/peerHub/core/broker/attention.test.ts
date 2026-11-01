@@ -109,7 +109,7 @@ describe("people's decision signals from coordination", () => {
         ...NO_PLUGINS,
         active: [
           {
-            id: "knowledge",
+            id: "observe",
             title: "Test",
             contributions: {
               hooks: {

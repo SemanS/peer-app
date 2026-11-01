@@ -67,7 +67,6 @@ describe("Audit through core", () => {
             overlaps: [],
             findings: [],
             contexts: [],
-            candidates: [],
           }),
         );
         yield* PeerPlugins.startPlugins;

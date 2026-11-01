@@ -16,7 +16,7 @@ import { useResolvedProjectSets } from "./projectScope";
 import { chatScopeKeys, isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
 import type { WorkActions } from "./useWorkActions";
 import { ShareProject } from "./ShareProject";
-import { NavRow, ProjectActivityNav, ProjectKnowledgeNav } from "./SidebarNav";
+import { NavRow, ProjectActivityNav } from "./SidebarNav";
 import type { SidebarTab } from "./SidebarViewSwitch.logic";
 import { useLocalProject } from "./StableWorkNavigation";
 import { useOpenScopedChats } from "./useOpenScopedChats";
@@ -33,7 +33,7 @@ import { sharedRoomsOf } from "./rooms/sharedRoom.logic";
 /**
  * The team's work in the sidebar, for the project the project button names (`scope`, which the root
  * checked against the projects there are). Each tab has a purpose of its own: Work is the chats,
- * rooms and tasks, Knowledge what holds beyond one task, Activity what moved. With all projects,
+ * rooms and tasks, Activity what moved. With all projects,
  * Work groups the work under expandable headings, this computer's project sets first. A project no workspace
  * shares has no team tasks, and the view says so.
  */
@@ -71,21 +71,20 @@ export function WorkPanel({
           environmentId === null || status === null ? (
             <p className="px-2 text-xs text-muted-foreground">Connecting…</p>
           ) : local ? (
-            <LocalProjectTab scope={resolved} tab={tab} />
+            <LocalProjectTab scope={resolved} />
           ) : current !== undefined ? (
             <ProjectTab
               environmentId={environmentId}
               status={status}
               project={current}
-              tab={tab}
               sharedContext={counts.sharedContext}
             />
           ) : members === undefined ? (
             <p className="px-2 text-xs leading-relaxed text-muted-foreground">
-              Choose one project to see its {tab === "knowledge" ? "knowledge" : "activity"}.
+              Choose one project to see its activity.
             </p>
           ) : (
-            <section aria-label={tab === "knowledge" ? "Knowledge" : "Activity"}>
+            <section aria-label="Activity">
               {members.map((member) => {
                 const project = listed.find((node) => projectScopeKey(node) === member.scope);
                 return (
@@ -97,13 +96,12 @@ export function WorkPanel({
                     defaultOpen
                   >
                     {project === undefined ? (
-                      <LocalProjectTab scope={member} tab={tab} />
+                      <LocalProjectTab scope={member} />
                     ) : (
                       <ProjectTab
                         environmentId={environmentId}
                         status={status}
                         project={project}
-                        tab={tab}
                         sharedContext={sidebarNav([project], needs).sharedContext}
                       />
                     )}
@@ -296,32 +294,19 @@ function ProjectRows({
   });
 }
 
-/** One team project's Knowledge or Activity. */
+/** One team project's Activity. */
 function ProjectTab({
   environmentId,
   status,
   project,
-  tab,
   sharedContext,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
-  readonly tab: "knowledge" | "activity";
   readonly sharedContext: boolean;
 }) {
   const { plugins, activeThread } = useWorkData();
-  if (tab === "knowledge") {
-    return (
-      <ProjectKnowledgeNav
-        status={status}
-        project={project}
-        plugins={plugins}
-        activeThread={activeThread}
-        sharedContext={sharedContext}
-      />
-    );
-  }
   return (
     <section aria-label="Activity" className="flex flex-col gap-3">
       <ProjectActivityNav
@@ -330,6 +315,7 @@ function ProjectTab({
         project={project}
         plugins={plugins}
         activeThread={activeThread}
+        sharedContext={sharedContext}
       />
       <SignalTiles
         status={status}
@@ -342,25 +328,19 @@ function ProjectTab({
   );
 }
 
-/** What a project no workspace shares has under Knowledge and Activity. */
-function LocalProjectTab({
-  scope,
-  tab,
-}: {
-  readonly scope: ResolvedProjectScope;
-  readonly tab: SidebarTab;
-}) {
+/** What a project no workspace shares has under Activity. */
+function LocalProjectTab({ scope }: { readonly scope: ResolvedProjectScope }) {
   const navigate = useNavigate();
   const { context } = useLocalProject(scope);
-  if (tab !== "knowledge" || context === undefined) {
+  if (context === undefined) {
     return (
       <p className="px-2 text-xs leading-relaxed text-muted-foreground">
-        A project shared with a workspace keeps its {tab} here.
+        A project shared with a workspace keeps its activity here.
       </p>
     );
   }
   return (
-    <SidebarMenu aria-label="Project knowledge">
+    <SidebarMenu aria-label="Project activity">
       <NavRow
         icon={FileTextIcon}
         label="Project context"

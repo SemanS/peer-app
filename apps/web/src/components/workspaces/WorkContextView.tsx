@@ -393,9 +393,6 @@ export function WorkContextView({
                 {currentView.data?.conversations === undefined ? null : (
                   <ConversationReport
                     report={currentView.data.conversations}
-                    place={
-                      environmentId === null ? undefined : { environmentId, workspace, project }
-                    }
                     onOpenThread={(threadId) => {
                       if (environmentId === null) return;
                       actions.open({
@@ -631,10 +628,9 @@ function ContextAgentRow({
 }
 
 /**
- * What this work's agents did with the team's work and the project's knowledge: which contexts they
- * read, whose agents they asked, what a model they asked pointed them to, and which decision of the
- * project governs files they change. The agents choose from an index Peer gives them; people see
- * here what they relied on, to trust it or to correct it.
+ * What this work's agents did with the team's work: which contexts they read and whose agents they
+ * asked. The agents choose from an index Peer gives them; people see here what they relied on, to
+ * trust it or to correct it.
  */
 function Advice({
   rows,
@@ -657,17 +653,10 @@ function Advice({
               {row.why === "" ? null : (
                 <span className="line-clamp-2 block text-xs text-muted-foreground">{row.why}</span>
               )}
-              {row.path === undefined ? null : (
-                <span className="block truncate font-mono text-xs text-muted-foreground">
-                  {row.path}
-                </span>
-              )}
             </span>
-            {row.about === "work" ? (
-              <Button size="xs" variant="outline" onClick={() => onOpenWork(row.scope)}>
-                Open
-              </Button>
-            ) : null}
+            <Button size="xs" variant="outline" onClick={() => onOpenWork(row.scope)}>
+              Open
+            </Button>
           </li>
         ))}
       </ul>

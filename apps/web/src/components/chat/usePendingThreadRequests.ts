@@ -24,7 +24,6 @@ import { useRef, useState, type RefObject, type SetStateAction } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { type DraftId, useComposerDraftStore } from "../../composerDraftStore";
 import { useStableCallback } from "../../hooks/useStableCallback";
-import { withProjectDecision } from "../workspaces/approval/projectDecision";
 import { getUploadedAttachments, useAttachmentUploadStore } from "../../lib/attachmentUploadQueue";
 import {
   buildPendingUserInputAnswers,
@@ -478,14 +477,7 @@ export function usePendingThreadRequests(input: {
     }
     if (activePendingProgress.isLastQuestion) {
       if (activePendingResolvedAnswers) {
-        void onRespondToUserInput(
-          activePendingUserInput.requestId,
-          withProjectDecision(
-            activePendingUserInput.requestId,
-            activePendingUserInput.questions,
-            activePendingResolvedAnswers,
-          ),
-        );
+        void onRespondToUserInput(activePendingUserInput.requestId, activePendingResolvedAnswers);
       }
       return;
     }

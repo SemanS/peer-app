@@ -4,12 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { ProjectSignal } from "../slots.types";
 import type { WorkProjectNode, WorkThreadNode } from "../workTree.logic";
-import {
-  answerWithDecision,
-  approvalSignals,
-  denyWithNote,
-  PROJECT_DECISION_LINE,
-} from "./approval.logic";
+import { approvalSignals, denyWithNote } from "./approval.logic";
 
 const HERE = EnvironmentId.make("here");
 
@@ -60,7 +55,6 @@ const booking: WorkProjectNode = {
   ],
   unsorted: [thread("peer:loose", "loose")],
   context: undefined,
-  candidates: 0,
   tasks: [],
 };
 
@@ -146,15 +140,6 @@ describe("the Peer band of a waiting thread", () => {
     expect(
       approvalSignals({ tree: [booking], status, threadKey: "here:other", signals: () => [] }),
     ).toBeNull();
-  });
-});
-
-describe("an answer marked as a project decision", () => {
-  it("asks the agent to record it, and leaves an unmarked answer as it is", () => {
-    expect(answerWithDecision("3 times, then wait.  ", true)).toBe(
-      `3 times, then wait.\n\n${PROJECT_DECISION_LINE}`,
-    );
-    expect(answerWithDecision("3 times", false)).toBe("3 times");
   });
 });
 

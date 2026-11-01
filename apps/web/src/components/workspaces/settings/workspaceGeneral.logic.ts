@@ -1,29 +1,13 @@
 /**
  * What the workspace's General page works out, apart from how it draws (design artboard 14): whether
  * a name can be saved, the state each email domain is in and what the page says of it, what the
- * Hub's answers to adding and checking a domain mean in words, the company knowledge store as the
- * form edits it, and how much of it the projects use. The Hub decides every change again (an owner
- * changes domains, an admin the rest); these only keep the page from offering what it would refuse.
+ * Hub's answers to adding and checking a domain mean in words. The Hub decides every change again
+ * (an owner changes domains, an admin the rest); these only keep the page from offering what it
+ * would refuse.
  */
-import { getAt, repositoryPath } from "@t3tools/client-runtime/peer-settings";
-import type {
-  PeerCheckoutState,
-  PeerDomainState,
-  PeerSettingsDomainCheck,
-} from "@t3tools/contracts";
+import type { PeerDomainState, PeerSettingsDomainCheck } from "@t3tools/contracts";
 
 import { companyDomainOf } from "../workspaceAccess.logic";
-import { isSafeGitRef, isSafeGitRemote } from "./shared.logic";
-
-type Mapping = Readonly<Record<string, unknown>>;
-const isMapping = (value: unknown): value is Mapping =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-/** A write to the draft, at a path below the slice the page edits; `undefined` removes the node. */
-export interface Edit {
-  readonly path: ReadonlyArray<string>;
-  readonly value: unknown;
-}
 
 /** The longest name the Hub keeps; it cuts a longer one. */
 export const NAME_MAX = 80;
@@ -278,134 +262,6 @@ export function claimOutcome(claim: DomainClaim): CheckOutcome {
       text: `${holder} holds ${claim.domain}. Publish the record, then check.`,
     }
   );
-}
-
-const DEFAULT_BRANCH = "main";
-const DEFAULT_STORE = ".ai";
-
-/** The workspace's company knowledge store: a repository, its branch, and the folder in it. */
-export interface CompanyKnowledge {
-  readonly repository: string;
-  readonly branch: string;
-  readonly store: string;
-}
-
-/** The store as the settings document holds it (`knowledge.company`); undefined where there is none. */
-export function readCompany(node: unknown): CompanyKnowledge | undefined {
-  if (!isMapping(node) || typeof node.repository !== "string" || node.repository === "") {
-    return undefined;
-  }
-  const text = (value: unknown, fallback: string) =>
-    typeof value === "string" && value !== "" ? value : fallback;
-  return {
-    repository: node.repository,
-    branch: text(node.branch, DEFAULT_BRANCH),
-    store: text(node.store, DEFAULT_STORE),
-  };
-}
-
-/** Why `text` is not a repository address, in the words the new project form uses; null where it is one (or empty). */
-export function repositoryTextProblem(text: string): string | null {
-  const url = text.trim();
-  return url === "" || isSafeGitRemote(url)
-    ? null
-    : "Enter a clone address, like https://github.com/acme/knowledge.";
-}
-
-export function branchTextProblem(text: string): string | null {
-  const branch = text.trim();
-  return branch === "" || isSafeGitRef(branch)
-    ? null
-    : "A branch has letters, digits and . _ / - only, and does not start with - or /.";
-}
-
-/** The folder a typed path names, inside the repository: relative, without a trailing `/`. */
-export function normalizeStore(text: string): string | undefined {
-  const path = repositoryPath(text);
-  return path === undefined ? undefined : path.replace(/\/+$/, "") || undefined;
-}
-
-export function storeTextProblem(text: string): string | null {
-  return text.trim() === "" || normalizeStore(text) !== undefined
-    ? null
-    : "A folder inside the repository, like .ai.";
-}
-
-/**
- * The write for a repository that was typed: with no store yet it makes the whole entry (the Hub's
- * defaults for the branch and the folder), else it changes the address alone.
- */
-export function repositoryEdit(current: CompanyKnowledge | undefined, repository: string): Edit {
-  const address = repository.trim();
-  return current === undefined
-    ? { path: [], value: { repository: address, branch: DEFAULT_BRANCH, store: DEFAULT_STORE } }
-    : { path: ["repository"], value: address };
-}
-
-/** Leaving the repository empty takes the store away: no company knowledge. */
-export const removeCompanyEdit: Edit = { path: [], value: undefined };
-
-export const branchEdit = (branch: string): Edit => ({ path: ["branch"], value: branch.trim() });
-
-export const storeEdit = (store: string): Edit => ({
-  path: ["store"],
-  value: normalizeStore(store),
-});
-
-/** How many projects use the store, of those the person sees. */
-export interface KnowledgeUse {
-  readonly on: number;
-  readonly total: number;
-}
-
-/**
- * Of the settings document's projects, how many have company knowledge on (it is on unless a
- * project turns it off, as the Hub reads one).
- */
-export function knowledgeUseOf(projects: unknown): KnowledgeUse {
-  const all = isMapping(projects) ? Object.values(projects) : [];
-  return {
-    on: all.filter((project) => getAt(project, ["knowledge", "company"]) !== false).length,
-    total: all.length,
-  };
-}
-
-/** The same, from the manifest's projects, where the document cannot be read. */
-export function knowledgeUseOfManifest(
-  projects: ReadonlyArray<{
-    readonly project: { readonly knowledge: { readonly company: boolean } };
-  }>,
-): KnowledgeUse {
-  return {
-    on: projects.filter(({ project }) => project.knowledge.company).length,
-    total: projects.length,
-  };
-}
-
-/** "Cloned on this computer · on in 3 of 4 projects" (design artboard 14). */
-export function knowledgeStatus(input: {
-  readonly clone: PeerCheckoutState | undefined;
-  readonly error?: string | undefined;
-  readonly use: KnowledgeUse;
-}): string {
-  const clone = (() => {
-    switch (input.clone) {
-      case "ready":
-        return "Cloned on this computer";
-      case "cloning":
-        return "Cloning on this computer…";
-      case "missing":
-        return "Not cloned on this computer yet";
-      case "error":
-        return `Could not clone on this computer${input.error === undefined ? "" : `: ${input.error}`}`;
-      case undefined:
-        return null;
-    }
-  })();
-  const { on, total } = input.use;
-  const use =
-    total === 0 ? null : `on in ${on} of ${total} ${total === 1 ? "project" : "projects"}`;
-  return [clone, use].filter((part) => part !== null).join(" · ");
 }
 
 /** Where the workspace's configuration stands: the settings revision, and the Hub's id for what is applied. */

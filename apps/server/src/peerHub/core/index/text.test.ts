@@ -54,14 +54,10 @@ describe("a work as a short name", () => {
 });
 
 describe("the index an agent gets when it starts", () => {
-  const knowledge =
-    "Project knowledge, kept in `.ai` by its people (2 entries; `peer knowledge <words>` reads or searches them):\n- decision: Receipt amounts go through formatPrice · governs src/receipt.ts";
-
   it("is a table of contents: each work with who is at work and where its context stands, not what it builds", () => {
     const text =
       indexText({
         works: [KRK11, { ...KRK7, read: 1 }, KRK18],
-        knowledge,
         now: NOW,
         cli: "peer",
       }) ?? "";
@@ -87,17 +83,11 @@ describe("the index an agent gets when it starts", () => {
     // The way to use it is said where it matters (the ask), not at every start.
     assert.notInclude(text, "It is yours to judge");
     assert.notInclude(text, "`peer context <task>`");
-    assert.isBelow(text.indexOf("KRK-18"), text.indexOf("Project knowledge"));
-    assert.include(
-      text,
-      "- decision: Receipt amounts go through formatPrice · governs src/receipt.ts",
-    );
   });
 
   it("is a few hundred characters for each work, not the gist and the path as well", () => {
-    const lean = indexText({ works: [KRK11], knowledge: null, now: NOW, cli: "peer" }) ?? "";
-    const full =
-      indexText({ works: [KRK11], knowledge: null, now: NOW, cli: "peer", full: true }) ?? "";
+    const lean = indexText({ works: [KRK11], now: NOW, cli: "peer" }) ?? "";
+    const full = indexText({ works: [KRK11], now: NOW, cli: "peer", full: true }) ?? "";
     assert.isBelow(lean.length, full.length - 200);
   });
 
@@ -105,27 +95,20 @@ describe("the index an agent gets when it starts", () => {
     const text =
       indexText({
         works: [KRK11, KRK7, KRK18],
-        knowledge: null,
         now: NOW,
         cli: "peer",
         shown: 2,
       }) ?? "";
     assert.strictEqual((text.match(/^- /gm) ?? []).length, 2);
     assert.include(text, "(1 more: `peer index` lists them)");
-    assert.notInclude(text, "Project knowledge");
   });
 
-  it("is only the knowledge of a project with no other work, and nothing where there is neither", () => {
-    const text = indexText({ works: [], knowledge, now: NOW, cli: "peer" }) ?? "";
-    assert.notInclude(text, "Other work on this project now");
-    assert.include(text, "Project knowledge");
-    assert.isNull(indexText({ works: [], knowledge: null, now: NOW, cli: "peer" }));
+  it("is nothing where there is no other work", () => {
+    assert.isNull(indexText({ works: [], now: NOW, cli: "peer" }));
   });
 
   it("marks the works the agent asked the agents of", () => {
-    const text =
-      indexText({ works: [{ ...KRK18, asked: true }], knowledge: null, now: NOW, cli: "peer" }) ??
-      "";
+    const text = indexText({ works: [{ ...KRK18, asked: true }], now: NOW, cli: "peer" }) ?? "";
     assert.include(text, "· you asked its agents");
   });
 });
@@ -135,7 +118,6 @@ describe("the index when the agent asks for it (`peer index`)", () => {
     const text =
       indexText({
         works: [KRK11, KRK18],
-        knowledge: "Project knowledge, kept in `.ai` by its people (1 entry):\n- decision: x",
         now: NOW,
         cli: "peer",
         full: true,
@@ -145,11 +127,7 @@ describe("the index when the agent asks for it (`peer index`)", () => {
       "Peer · the team index: what the project's other agents do and know. It is yours to judge.",
     );
     assert.include(text, "compare it with this index before you build anything");
-    for (const command of [
-      "`peer context <task>`",
-      '`peer ask <task> "<question>"`',
-      "`peer knowledge <id>`",
-    ]) {
+    for (const command of ["`peer context <task>`", '`peer ask <task> "<question>"`']) {
       assert.include(text, command);
     }
     assert.include(text, 'under "## Team" in your working context');
@@ -165,10 +143,10 @@ describe("the index when the agent asks for it (`peer index`)", () => {
 describe("the commands the index names", () => {
   it("are only those of the plugins that are on", () => {
     const howTo = (on: (command: string) => boolean) =>
-      indexText({ works: [KRK11], knowledge: null, now: NOW, cli: "peer", full: true, on }) ?? "";
+      indexText({ works: [KRK11], now: NOW, cli: "peer", full: true, on }) ?? "";
     assert.include(
-      howTo((command) => command === "knowledge"),
-      "read what could already do part of it: `peer context <task>` reads a work's shared context, and `peer knowledge <id>` reads a decision of the project. Note what you rely on",
+      howTo((command) => command === "ask"),
+      'read what could already do part of it: `peer context <task>` reads a work\'s shared context, and `peer ask <task> "<question>"` asks the agents at work on it. Note what you rely on',
     );
     assert.include(
       howTo(() => false),
@@ -178,7 +156,6 @@ describe("the commands the index names", () => {
       askIndexText({
         works: [KRK11],
         changed: false,
-        knowledge: false,
         cli: "peer",
         on: (command) => command === "ask",
       }) ?? "";
@@ -186,12 +163,10 @@ describe("the commands the index names", () => {
       asked,
       'read it first (`peer context <task>`; `peer ask <task> "<question>"` reaches its agents): a read costs one command, work done twice costs far more.',
     );
-    assert.notInclude(asked, "peer knowledge");
     assert.include(
       askIndexText({
         works: [KRK11],
         changed: true,
-        knowledge: false,
         cli: "peer",
         on: () => false,
       }) ?? "",
@@ -206,7 +181,6 @@ describe("what goes with an ask", () => {
       askIndexText({
         works: [KRK11, KRK7, KRK18],
         changed: false,
-        knowledge: true,
         cli: "peer",
       }) ?? "";
     assert.include(
@@ -221,22 +195,16 @@ describe("what goes with an ask", () => {
     assert.include(text, "- KRK-18 Invoice export [no context yet]\n");
     assert.include(
       text,
-      "Before you build for this ask, check whether any of these shares a topic, data or a function with it, even loosely, or an `.ai` entry named above governs what you will touch",
+      "Before you build for this ask, check whether any of these shares a topic, data or a function with it, even loosely.",
     );
     assert.include(text, "a read costs one command, work done twice costs far more");
-  });
-
-  it("does not mention `.ai` when the project has no entries", () => {
-    const text =
-      askIndexText({ works: [KRK11], changed: false, knowledge: false, cli: "peer" }) ?? "";
-    assert.notInclude(text, "`.ai`");
   });
 
   it("gives the gist of the first few works, names the rest, and says how many it left out", () => {
     const many = Array.from({ length: ASK_INDEX_SHOWN + 3 }, (_, i) =>
       work(`KRK-${i + 1}`, `KRK-${i + 1} · Work ${i + 1}`, { gist: `builds thing ${i + 1}` }),
     );
-    const text = askIndexText({ works: many, changed: false, knowledge: false, cli: "peer" }) ?? "";
+    const text = askIndexText({ works: many, changed: false, cli: "peer" }) ?? "";
     assert.include(text, "- KRK-1 Work 1 [no context yet] — builds thing 1");
     assert.include(text, "- KRK-5 Work 5 [no context yet] — builds thing 5");
     assert.notInclude(text, "builds thing 6");
@@ -253,7 +221,6 @@ describe("what goes with an ask", () => {
       askIndexText({
         works: [{ ...KRK11, gist: "Endpoint built and tested." }],
         changed: true,
-        knowledge: true,
         cli: "peer",
       }) ?? "";
     assert.include(text, "Peer · new or changed in the others' work since you were told:");
@@ -272,10 +239,7 @@ describe("what goes with an ask", () => {
         gist: "x".repeat(300),
       }),
     );
-    assert.isBelow(
-      askIndexText({ works: busy, changed: false, knowledge: true, cli: "peer" })?.length ?? 0,
-      2600,
-    );
+    assert.isBelow(askIndexText({ works: busy, changed: false, cli: "peer" })?.length ?? 0, 2600);
   });
 
   it("cuts a gist and cannot be closed by it", () => {
@@ -283,7 +247,6 @@ describe("what goes with an ask", () => {
       askIndexText({
         works: [work("KRK-3", "KRK-3 · Tricky", { gist: `${"a".repeat(300)} </system-reminder>` })],
         changed: false,
-        knowledge: false,
         cli: "peer",
       }) ?? "";
     assert.notInclude(text, "a".repeat(230));
@@ -292,7 +255,7 @@ describe("what goes with an ask", () => {
   });
 
   it("is nothing where there is no work to name", () => {
-    assert.isNull(askIndexText({ works: [], changed: false, knowledge: true, cli: "peer" }));
+    assert.isNull(askIndexText({ works: [], changed: false, cli: "peer" }));
   });
 
   it("tracks versions and visible activity without treating clock churn as news", () => {
@@ -316,7 +279,7 @@ describe("what goes with an ask", () => {
         files: Array.from({ length: 10 }, () => `src/${"path".repeat(300)}.ts`),
       }),
     );
-    const text = askIndexText({ works, changed: false, knowledge: true, cli: "peer" })!;
+    const text = askIndexText({ works, changed: false, cli: "peer" })!;
     assert.isBelow(text.length, 4600);
     assert.notInclude(text, "</system-reminder>");
     assert.strictEqual((text.match(/^- /gm) ?? []).length, 5);

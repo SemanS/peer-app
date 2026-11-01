@@ -7,7 +7,7 @@ import * as PeerLog from "./core/log/PeerLog.ts";
  * A person signs in with their email address (the hub mails a one-time
  * code), then joins the workspaces their address qualifies for — by its
  * domain or an invite — or creates one. Each workspace tells this environment
- * which projects to check out, which agent tools and knowledge they use, and
+ * which projects to check out, which agent tools they use, and
  * what shared AI capacity each one has. Provisioning stays local:
  * repositories are cloned with the person's own git credentials, projects are
  * ordinary T3 projects, and shared capacity becomes an ordinary provider

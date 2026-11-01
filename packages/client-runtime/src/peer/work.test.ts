@@ -79,7 +79,6 @@ function kirkwood(): PeerProjectState {
         { email: "chino@acme.test", name: "Chino" },
       ],
       repositories: [{ id: "app", url: "git@example.test:acme/app.git", branch: "main" }],
-      knowledge: { kontext: true, company: true },
       tools: [],
       capacity: { personal: "any", personalHarnesses: [] },
     },
@@ -154,7 +153,6 @@ function status(project: PeerProjectState, role: "owner" | "member" = "owner"): 
         allowedDomains: ["acme.test"],
         currency: "EUR",
         memberName: "Slavo",
-        companyKnowledge: null,
         projects: [project],
         lastSyncAt: null,
         error: null,
@@ -195,7 +193,6 @@ function status(project: PeerProjectState, role: "owner" | "member" = "owner"): 
       overlaps: [],
       findings: [],
       contexts: [],
-      candidates: [],
     },
     sharedThreads: ["peer:t1"],
     syncing: false,
@@ -640,16 +637,6 @@ describe("what an agent did with the team's work", () => {
     };
     expect(row({})).toBe("Yev’s agent read this work’s context");
     expect(row({ how: "asked" })).toBe("Yev’s agent asked this work’s agents");
-    expect(row({ how: "found" })).toBe("Yev’s agent was pointed to this work by a model it asked");
-    expect(row({ about: "knowledge", scope: "kx:d1", entryKind: "decision", how: "read" })).toBe(
-      "Yev’s agent read a decision of the project",
-    );
-    expect(row({ about: "knowledge", scope: "kx:d1", entryKind: "decision", how: "governs" })).toBe(
-      "Yev’s agent was reminded of a decision of the project that governs files it changes",
-    );
-    expect(row({ about: "knowledge", scope: "kx:d1", how: "found" })).toBe(
-      "Yev’s agent was pointed to an entry of the project by a model it asked",
-    );
     const mine = on(withAdvice([told({})]), "task:krk-812");
     expect(adviceLabel(mine[0]!)).toBe("Your agent read this work’s context");
   });

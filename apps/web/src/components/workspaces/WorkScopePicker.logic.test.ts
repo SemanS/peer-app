@@ -73,7 +73,6 @@ function node(id: string, name: string, tasks: ReadonlyArray<WorkTaskNode>): Wor
     areas: [{ name: null, tasks }],
     unsorted: [],
     context: undefined,
-    candidates: 0,
     tasks: [],
   };
 }

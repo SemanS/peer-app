@@ -32,8 +32,6 @@ import {
   PeerSettingsTool,
   PeerSettingsView,
   PeerSettingsWorkspaceUpdate,
-  agentMemoryOf,
-  isAgentMemory,
 } from "./settings.ts";
 
 const view = Schema.decodeUnknownExit(PeerSettingsView);
@@ -537,7 +535,6 @@ describe("the parts of the document the app reads", () => {
         },
       ],
       tools: ["postgres", { tool: "sentry", env: { DSN: "${secret:SENTRY_DSN}" } }],
-      knowledge: { kontext: true, company: false },
       capacity: {
         personal: "commercial",
         shared: {
@@ -653,33 +650,5 @@ describe("wiring", () => {
     expect(
       Exit.isFailure(invite({ workspace: "acme", email: "bob@acme.dev", role: "owner" })),
     ).toBe(true);
-  });
-});
-
-describe("a project's agents.memory", () => {
-  it("decodes with or without the field, keeping what a newer Hub adds", () => {
-    const base = {
-      name: "Booking",
-      members: ["*"],
-      leads: [],
-      repositories: [],
-      tools: [],
-      knowledge: { kontext: true, company: true },
-      capacity: { personal: "any" },
-    };
-    expect(project(base).agents).toBeUndefined();
-    expect(project({ ...base, agents: { memory: "personal", later: 1 } }).agents).toEqual({
-      memory: "personal",
-      later: 1,
-    });
-  });
-
-  it("is off unless the project says personal in a word this app knows", () => {
-    expect(agentMemoryOf({})).toBe("off");
-    expect(agentMemoryOf({ agents: { memory: "off" } })).toBe("off");
-    expect(agentMemoryOf({ agents: { memory: "personal" } })).toBe("personal");
-    expect(agentMemoryOf({ agents: { memory: "shared" } })).toBe("off");
-    expect(isAgentMemory("personal")).toBe(true);
-    expect(isAgentMemory("Personal")).toBe(false);
   });
 });

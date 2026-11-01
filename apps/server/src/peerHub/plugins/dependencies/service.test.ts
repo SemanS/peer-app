@@ -66,7 +66,6 @@ const coordination = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 describe("dependencies service and CLI", () => {
   it.effect(

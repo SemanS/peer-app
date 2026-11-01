@@ -54,7 +54,6 @@ const coordination: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [{ workspace: "acme", project: "pay", proposed: 2 }],
 };
 
 /** A plugin whose only contribution is a status slice. */
@@ -89,7 +88,6 @@ const legacyFields = (status: PeerHubStatus) => ({
   agents: status.agents,
   github: status.github,
   sharedThreads: status.sharedThreads,
-  candidates: status.coordination.candidates,
   sharedCapacity: status.workspaces[0]?.projects[0]?.sharedCapacity,
 });
 
@@ -99,7 +97,6 @@ const LEGACY_IDS: ReadonlyArray<PeerPluginId> = [
   "capacity",
   "requests",
   "observe",
-  "knowledge",
 ];
 
 describe("the Peer status", () => {
@@ -114,7 +111,6 @@ describe("the Peer status", () => {
         agents: { herdr: "not-running", list: [] },
         github: { cli: false, account: null, signIn: null, error: null },
         sharedThreads: [],
-        candidates: [{ workspace: "acme", project: "pay", proposed: 2 }],
         sharedCapacity: { enabled: false, instanceIds: [] },
       });
       assert.deepStrictEqual(published.plugins, []);
@@ -132,14 +128,12 @@ describe("the Peer status", () => {
           slicePlugin("requests", [{ workspace: "acme", request: request("two") }]),
           // A slice of another shape reads as the neutral value.
           slicePlugin("observe", ["peer:thread-2", 3]),
-          slicePlugin("knowledge", [{ workspace: "acme", project: "pay", proposed: 5 }]),
         ]);
         assert.deepStrictEqual(legacyFields(yield* status.publish), {
           requests: [{ workspace: "acme", request: request("two") }],
           agents: { herdr: "running", list: [], postHocSkipped: 1 },
           github: { cli: true, account: "bob", signIn: null, error: null },
           sharedThreads: [],
-          candidates: [{ workspace: "acme", project: "pay", proposed: 5 }],
           sharedCapacity: { enabled: true, instanceIds: ["plugin-key"] },
         });
 
@@ -150,7 +144,6 @@ describe("the Peer status", () => {
           agents: { herdr: "not-running", list: [] },
           github: { cli: false, account: null, signIn: null, error: null },
           sharedThreads: [],
-          candidates: [],
           sharedCapacity: { enabled: false, instanceIds: [] },
         });
         assert.deepStrictEqual(

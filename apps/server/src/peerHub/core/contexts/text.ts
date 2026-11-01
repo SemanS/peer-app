@@ -34,7 +34,7 @@ export function commandsText(
 ): string {
   const text = [
     `Peer knows this session, its project and task: run \`${cli}\`${path === undefined ? "" : ` (${path})`} as is, with no names or IDs.`,
-    `Before implementing, check the team index below for shared data, behavior or interfaces, and pick what bears on your work even if your person did not mention it: \`${cli} index [page]\` lists more, \`${cli} context <task>\` reads a context and records it as an input.${on("knowledge") ? ` \`${cli} knowledge <id or words>\` reads decisions.` : ""}${on("ask") ? ` \`${cli} ask <task> "<question>"\` reaches a task's agents.` : ""}`,
+    `Before implementing, check the team index below for shared data, behavior or interfaces, and pick what bears on your work even if your person did not mention it: \`${cli} index [page]\` lists more, \`${cli} context <task>\` reads a context and records it as an input.${on("ask") ? ` \`${cli} ask <task> "<question>"\` reaches a task's agents.` : ""}`,
     `When Peer announces a change, read it and recheck your code and tests. On an overlap: \`${cli} note "<text>"\`, \`${cli} resolve "<agreement>"\`. \`${cli} status\` shows where things stand; \`${cli}\` lists all commands.`,
     `When the work is verified, publish its shared context, then run \`${cli} review\`. A stale-input refusal: read the named contexts, recheck, retry. Never ask your person for Peer commands. \`${cli} done\` is only for work whose linked PRs have merged.`,
   ].join(" ");
@@ -61,7 +61,7 @@ export function contextSkill(
     `Ending a turn does not finish the work: it stays open until its PRs merge or a person closes its task. Before you stop, note the ${ref}, PR links, checks and the next step in your context. On resume read the team index and shared context, then ${recheck} and PR state.`,
     `Your private notes: ${path}, under about 60 lines, given back after a compaction or a resume. Keep the goal, what you do now, findings with exact files and symbols, decisions and why, what failed, what you need from whom. Under "## Team" note what you took from others (a work's id, version, one line).`,
     `At a subtask boundary, under "## For the team" keep 1-5 lines (- ...) for your work's keeper: an interface others use, a decision and why, a disproved hypothesis, a blocker, with exact sources. No secrets.`,
-    `Start a line with [project] when the project should keep it beyond this task (a rule the code relies on, a pitfall, a risk, a decision and why): Peer offers it to the project's people. Progress stays unmarked.`,
+    `Start a line with [project] when the project should keep it beyond this task (a rule the code relies on, a pitfall, a risk, a decision and why). Progress stays unmarked.`,
   ].join("\n");
 }
 
@@ -111,7 +111,7 @@ export function rosterChange(
 
 /** What a keeper hears, once, when the task whose context it keeps is closed. */
 export function closeOutText(subject: string): string {
-  return `Peer: ${subject} is done. Before its context goes quiet, start a bullet with [project] for what the project should keep from it: rules the code relies on, pitfalls, risks, decisions and why. Peer offers those lines to the project's people.`;
+  return `Peer: ${subject} is done. Before its context goes quiet, start a bullet with [project] for what the project should keep from it: rules the code relies on, pitfalls, risks, decisions and why.`;
 }
 
 /** A new session's working context, before its agent makes it its own. */

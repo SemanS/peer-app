@@ -8,7 +8,6 @@
  */
 import {
   PeerAgentRequest,
-  PeerCoordinationState,
   PeerGitHubState,
   PeerHubStatus,
   PeerProjectState,
@@ -84,9 +83,5 @@ export const LEGACY_PLACES: ReadonlyArray<LegacyPlace> = [
   legacyPlace("observe", Schema.Array(Schema.String), [], (status, sharedThreads) => ({
     ...status,
     sharedThreads,
-  })),
-  legacyPlace("knowledge", PeerCoordinationState.fields.candidates, [], (status, candidates) => ({
-    ...status,
-    coordination: { ...status.coordination, candidates },
   })),
 ];

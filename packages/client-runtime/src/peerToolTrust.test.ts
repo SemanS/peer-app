@@ -13,7 +13,6 @@ const local: PeerProject = {
   role: "member",
   members: [],
   repositories: [],
-  knowledge: { kontext: false, company: false },
   capacity: { personal: "any", personalHarnesses: [] },
   tools: [
     {

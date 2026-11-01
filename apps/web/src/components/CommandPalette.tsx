@@ -1746,44 +1746,6 @@ function OpenCommandPaletteDialog(props: {
   const taskSearchItems = useTaskSearchItems(
     searchAllProjects ? "all" : selectedProjectScope.scope,
   );
-  const knowledgeSearchItems: CommandPaletteActionItem[] = peerPlugins.some(
-    (plugin) => plugin.id === "knowledge",
-  )
-    ? (peerHub?.workspaces ?? []).flatMap((workspace) =>
-        workspace.projects.flatMap(({ project }) => {
-          const scope = `${workspace.slug}/${project.id}`;
-          if (
-            !searchAllProjects &&
-            selectedProjectScope.scope !== "all" &&
-            selectedProjectScope.scope !== scope
-          )
-            return [];
-          return [
-            {
-              kind: "action" as const,
-              value: `knowledge:${scope}`,
-              title: `Search knowledge in ${project.name}`,
-              description: `Knowledge · ${workspace.name} / ${project.name}`,
-              searchTerms: [
-                "knowledge",
-                "rules",
-                "decisions",
-                "conventions",
-                project.name,
-                workspace.name,
-              ],
-              icon: <TextSearchIcon className={ITEM_ICON_CLASS} />,
-              run: async () => {
-                await navigate({
-                  to: "/knowledge/$workspace/$project",
-                  params: { workspace: workspace.slug, project: project.id },
-                });
-              },
-            },
-          ];
-        }),
-      )
-    : [];
   const rootGroups = buildRootGroups({ actionItems, recentThreadItems });
   const settingsSearchItems: CommandPaletteActionItem[] = [
     ...searchSettings(deferredQuery, availableSettingsSearchItems).map(
@@ -1850,7 +1812,6 @@ function OpenCommandPaletteDialog(props: {
     linkedThreadSearch?.linkedThreads !== undefined && deferredQuery === linkedThreadSearch.query;
   const filteredGroups = filterCommandPaletteGroups({
     taskSearchItems,
-    knowledgeSearchItems,
     activeGroups,
     query: deferredQuery,
     isInSubmenu: currentView !== null,
@@ -3002,9 +2963,7 @@ function OpenCommandPaletteDialog(props: {
             Commands only
           </Button>
           <span className="text-xs text-muted-foreground">
-            {isActionsOnly
-              ? "Commands apply to the current view."
-              : "Tasks, chats, projects and knowledge"}
+            {isActionsOnly ? "Commands apply to the current view." : "Tasks, chats and projects"}
           </span>
         </div>
       ) : null}

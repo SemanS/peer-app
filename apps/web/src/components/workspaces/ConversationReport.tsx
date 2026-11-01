@@ -1,21 +1,11 @@
-import type { EnvironmentId, PeerConversationReport } from "@t3tools/contracts";
-import { useNavigate } from "@tanstack/react-router";
-import { ChevronRightIcon, LightbulbIcon } from "lucide-react";
+import type { PeerConversationReport } from "@t3tools/contracts";
+import { ChevronRightIcon } from "lucide-react";
 import { useState } from "react";
 
-import { useEnvironmentQuery } from "../../state/query";
-import { serverEnvironment } from "../../state/server";
-import { useAtomCommand } from "../../state/use-atom-command";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { Button } from "../ui/button";
-import { stackedThreadToast, toastManager } from "../ui/toast";
-import {
-  conversationExcerpts,
-  conversationTitle,
-  replySummary,
-} from "./conversations/conversations.logic";
+import { conversationTitle, replySummary } from "./conversations/conversations.logic";
 import { PeerSectionLabel } from "./PeerPageHeader";
-import { reportFailure } from "./workFeedback";
 
 /** Conversations shown before "Show all". */
 const SHOWN = 5;
@@ -30,23 +20,13 @@ const STATUS_LABEL: Readonly<Record<string, string>> = {
 /**
  * Recent outcomes on a status report: every conversation of the project (or the task) in the
  * agents' own words, newest first, kept current in the background. One line each; the agent's
- * reply is what it reports, not verified work. From here kontext can propose what in them the
- * project should keep.
+ * reply is what it reports, not verified work.
  */
 export function ConversationReport({
   report,
-  place,
   onOpenThread,
 }: {
   readonly report: PeerConversationReport;
-  /** Where to propose knowledge from; absent where this computer cannot. */
-  readonly place:
-    | {
-        readonly environmentId: EnvironmentId;
-        readonly workspace: string;
-        readonly project: string;
-      }
-    | undefined;
   readonly onOpenThread: (threadId: string) => void;
 }) {
   const [all, setAll] = useState(false);
@@ -124,81 +104,10 @@ export function ConversationReport({
             {all ? "Show fewer" : `Show all ${report.items.length}`}
           </Button>
         ) : null}
-        {place === undefined ? null : <ProposeKnowledge {...place} items={report.items} />}
         <span className="text-xs text-muted-foreground">
           Replies are the agents&apos; own reports, not verified work.
         </span>
       </div>
     </section>
-  );
-}
-
-/**
- * kontext reads these conversations for decisions, conventions and lessons the project should
- * keep, and for what contradicts an entry it keeps; each proposal waits in Knowledge › Review.
- * Offered only where the project keeps knowledge with kontext's model on this computer.
- */
-function ProposeKnowledge({
-  environmentId,
-  workspace,
-  project,
-  items,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly workspace: string;
-  readonly project: string;
-  readonly items: PeerConversationReport["items"];
-}) {
-  const harvest = useAtomCommand(serverEnvironment.peerHubHarvestContext, {
-    reportFailure: false,
-  });
-  const navigate = useNavigate();
-  const [reading, setReading] = useState(false);
-  const knowledge = useEnvironmentQuery(
-    serverEnvironment.peerHubKnowledgeStatus({ environmentId, input: { workspace, project } }),
-  ).data;
-  const excerpts = conversationExcerpts(items);
-  if (knowledge == null || knowledge.store !== true || !knowledge.llm || excerpts === null) {
-    return null;
-  }
-
-  const propose = async () => {
-    setReading(true);
-    const result = await harvest({
-      environmentId,
-      input: { workspace, project, scope: "project", conversations: excerpts.text },
-    });
-    setReading(false);
-    if (!reportFailure("Could not read them", result) || result._tag !== "Success") return;
-    const proposed = result.value.proposed;
-    toastManager.add(
-      stackedThreadToast({
-        type: "success",
-        title:
-          proposed === 0
-            ? "Nothing in them holds beyond the work"
-            : `${proposed} ${proposed === 1 ? "proposal" : "proposals"} waiting in Knowledge › Review`,
-        description: "People keep or dismiss them there; nothing is kept on its own.",
-        ...(proposed === 0
-          ? {}
-          : {
-              actionProps: {
-                children: "Review",
-                onClick: () =>
-                  void navigate({
-                    to: "/knowledge/$workspace/$project",
-                    params: { workspace, project },
-                  }),
-              },
-            }),
-      }),
-    );
-  };
-
-  return (
-    <Button size="xs" variant="outline" disabled={reading} onClick={() => void propose()}>
-      <LightbulbIcon aria-hidden className="text-peer-knowledge-foreground" />
-      {reading ? "Reading…" : "Propose knowledge from them"}
-    </Button>
   );
 }

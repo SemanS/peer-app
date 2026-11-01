@@ -16,7 +16,7 @@ it("runs post-review steps after commitment in order, bounds the budget and pres
       ...NO_PLUGINS,
       active: [
         {
-          id: "knowledge",
+          id: "observe",
           title: "one",
           contributions: {
             afterReview: ({ remainingMs }) =>

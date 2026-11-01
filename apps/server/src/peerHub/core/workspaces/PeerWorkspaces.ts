@@ -3,8 +3,8 @@
  * PeerWorkspaces: the workspaces this environment's person belongs to, and their checkouts here.
  *
  * A person signs in with a code the Hub mails, then joins the workspaces their address qualifies
- * for, or creates one. Each sync reads what every workspace says: its projects, their
- * repositories and its company knowledge. Repositories are cloned in the background, through the
+ * for, or creates one. Each sync reads what every workspace says: its projects and their
+ * repositories. Repositories are cloned in the background, through the
  * git host that owns them or with the person's own git sign-in, and opened as T3 projects. Plugins
  * hear of signing in and out, of each sync and of each workspace left (`PeerLifecycleEvent`), so
  * what they keep for a workspace follows it.
@@ -78,7 +78,6 @@ import {
   addressedRepository,
   cloneRepository,
   localRepository,
-  pullKnowledge,
   type SharedRepository,
 } from "./checkouts.ts";
 import { switchToJujutsu } from "./jujutsu.ts";
@@ -131,7 +130,7 @@ export class PeerWorkspaces extends Context.Service<
     readonly revokeMemberKeys: (
       input: PeerHubMemberKeysInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    /** Reads every workspace's manifest again; checkouts and knowledge follow in the background. */
+    /** Reads every workspace's manifest again; checkouts follow in the background. */
     readonly sync: Effect.Effect<PeerHubStatus, PeerHubError>;
     readonly createWorkspace: (
       input: PeerHubCreateWorkspaceInput,
@@ -202,7 +201,7 @@ const make = Effect.gen(function* () {
   const agents = yield* PeerAgents.PeerAgents;
   const projects = yield* ProjectService.ProjectService;
   const scope = yield* Effect.scope;
-  const { lock, knowledgePath, checkoutPath } = state;
+  const { lock, checkoutPath } = state;
   const hubApi = client.api;
   const publish = status.publish;
 
@@ -235,42 +234,6 @@ const make = Effect.gen(function* () {
           ),
         );
       }
-    });
-
-  /** Clones a workspace's company knowledge repository, or fast-forwards it. */
-  const refreshKnowledge = (
-    slug: string,
-    repository: { readonly repository: string; readonly branch: string },
-  ) =>
-    Effect.gen(function* () {
-      const path = knowledgePath(slug);
-      const checkout = yield* Effect.promise(() => checkoutState(path));
-      const exists = checkout.state === "ready";
-      const setKnowledge = (transient: Transient | null) =>
-        state.updateRuntime((s) => {
-          const knowledge = new Map(s.knowledge);
-          if (transient === null) knowledge.delete(slug);
-          else knowledge.set(slug, transient);
-          return { ...s, knowledge };
-        });
-      if (!isSafeGitRemote(repository.repository) || !isSafeGitRef(repository.branch)) {
-        yield* setKnowledge({
-          state: "error",
-          error: "The workspace gives an address git must not clone; ask an admin to fix it.",
-        });
-        return;
-      }
-      if (checkout.state === "unsupported") {
-        yield* setKnowledge({ state: "error", error: checkout.reason });
-        return;
-      }
-      if (!exists) yield* setKnowledge({ state: "cloning" });
-      yield* publish;
-      const result = yield* pullKnowledge(repository, path, exists).pipe(Effect.result);
-      // A failed pull keeps the last good checkout usable.
-      yield* setKnowledge(
-        result._tag === "Success" || exists ? null : { state: "error", error: result.failure },
-      );
     });
 
   const syncNow = Effect.gen(function* () {
@@ -333,10 +296,6 @@ const make = Effect.gen(function* () {
     // What plugins keep for workspaces and projects that no longer grant it goes away here too.
     yield* announce({ kind: "synced", workspaces });
 
-    for (const workspace of workspaces) {
-      const company = workspace.manifest?.knowledge.company;
-      if (company !== undefined) yield* background(refreshKnowledge(workspace.slug, company));
-    }
     yield* background(work.refresh().pipe(lock.withPermits(1)));
     return yield* publish;
   });

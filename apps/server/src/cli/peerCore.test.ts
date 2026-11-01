@@ -51,7 +51,6 @@ const coordination: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 const project = (id: string, url: string) => ({
@@ -60,7 +59,6 @@ const project = (id: string, url: string) => ({
   role: "member",
   members: [],
   repositories: [{ id: "app", url, branch: "main" }],
-  knowledge: { kontext: false, company: false },
   tools: [],
   capacity: { personal: "any", personalHarnesses: [] },
 });
@@ -69,7 +67,6 @@ const MANIFEST = {
   version: 2,
   workspace: { slug: "example", name: "Example", currency: "EUR" },
   member: { email: "cyril@freelance.example", name: "Cyril", role: "member" },
-  knowledge: {},
   projects: [
     project("webshop", "https://github.com/example/webshop.git"),
     project("billing", "https://github.com/example/billing.git"),

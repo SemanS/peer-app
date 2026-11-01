@@ -75,7 +75,6 @@ const PROJECT = {
   areas: [],
   unsorted: [],
   context: undefined,
-  candidates: 0,
   tasks: [{ id: "ord-1", title: "Menu" }],
 } as unknown as WorkProjectNode;
 

@@ -90,7 +90,6 @@ const schemas = {
   note: Schema.Struct({ text, overlap: optional(text) }),
   resolve: Schema.Struct({ text, overlap: optional(text) }),
   ask: Schema.Struct({ work: text, question: text }),
-  knowledge: Schema.Struct({ query: optional(text) }),
   task: Schema.Struct({
     action: optional(Schema.Literals(["list", "show", "add", "set", "remove"])),
     task: optional(text),
@@ -142,7 +141,7 @@ const definitions = [
     { work: string, cursor: string, limit: { type: "integer", minimum: 1, maximum: 100 } },
     [],
   ],
-  ["index", "Other work and project knowledge.", { page: { type: "integer", minimum: 1 } }, []],
+  ["index", "Other work on this project.", { page: { type: "integer", minimum: 1 } }, []],
   [
     "context",
     "Read shared work context and its version.",
@@ -197,7 +196,6 @@ const definitions = [
     { work: string, question: string },
     ["work", "question"],
   ],
-  ["knowledge", "Find decisions and conventions by words or id.", { query: string }, []],
   [
     "task",
     "Your project's task tree (groups, items), for your person: list, show (with runs), add, set, remove. task, under: key, id or title; under none: a root.",
@@ -350,8 +348,6 @@ export const CORE_AGENT_TOOLS: ReadonlyArray<PeerAgentTool> = definitions.map(
           return [...plain("text"), ...flag("overlap")];
         case "ask":
           return [...plain("work"), ...plain("question")];
-        case "knowledge":
-          return plain("query");
         case "share":
           return [...flag("workspace"), ...flag("name")];
         case "task": {

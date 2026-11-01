@@ -58,7 +58,6 @@ const status = {
     overlaps: [],
     findings: [],
     contexts: [],
-    candidates: [],
   },
   sharedThreads: [],
   syncing: false,

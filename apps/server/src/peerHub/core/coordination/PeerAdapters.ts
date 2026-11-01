@@ -333,12 +333,8 @@ const make = Effect.gen(function* () {
           name: told.name,
           how: told.how,
           why: told.why,
-          ...(told.entryKind === undefined ? {} : { entryKind: told.entryKind }),
-          ...(told.path === undefined ? {} : { path: told.path }),
           at: told.at,
         })),
-        // The knowledge plugin's slice, which core places here while it is active.
-        candidates: [],
         overlaps: snapshot.overlaps.map((overlap) => ({
           id: overlap.id,
           policy: overlap.policy,

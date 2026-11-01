@@ -71,7 +71,6 @@ const coordination = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 const setup = (run: Run, prs = 1, features?: Readonly<Record<string, number>>) =>
   Effect.gen(function* () {

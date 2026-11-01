@@ -22,7 +22,7 @@ type ReviewStatus = Pick<PeerHubStatus, "toolTrust"> & {
 export const TOOL_TRUST_OWNER_MESSAGE =
   "Approve tools and manage secrets on that computer, or from a device paired with owner access.";
 export const TOOL_TRUST_STDIO_NOTICE =
-  "Approval pins this definition, not the program it runs or files in the project or company knowledge checkout.";
+  "Approval pins this definition, not the program it runs or files in the project checkout.";
 export const TOOL_TRUST_CODEX_NOTICE =
   "Running Codex conversations keep a tool until their session restarts.";
 export const toolTrustStateLabel = {

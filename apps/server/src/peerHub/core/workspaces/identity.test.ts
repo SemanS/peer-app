@@ -45,7 +45,6 @@ describe("workspace identity through core", () => {
               overlaps: [],
               findings: [],
               contexts: [],
-              candidates: [],
             }),
           );
           const service = yield* PeerWorkspaces.PeerWorkspaces;

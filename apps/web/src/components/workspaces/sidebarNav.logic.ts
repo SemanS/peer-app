@@ -63,9 +63,7 @@ export interface SidebarNavCounts {
   /** Tasks: those not done. */
   readonly active: number | null;
   readonly done: number | null;
-  /** Knowledge: findings waiting to be kept or dismissed. */
-  readonly toKeep: number | null;
-  /** Whether a shared context exists, which Knowledge lists as its second row. */
+  /** Whether a shared context exists, which Activity lists as a row. */
   readonly sharedContext: boolean;
 }
 
@@ -80,7 +78,6 @@ export function sidebarNav(
     needs: shown(sidebarNeedsCount(tree, needs)),
     active: shown(total(activeTaskCount)),
     done: shown(total(doneTaskCount)),
-    toKeep: shown(total((project) => project.candidates)),
     sharedContext: tree.some(hasProjectContext),
   };
 }

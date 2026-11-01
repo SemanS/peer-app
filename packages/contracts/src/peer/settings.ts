@@ -148,8 +148,6 @@ export const PeerSettingsView = Schema.Struct({
   features: Schema.Struct({
     pathRules: Schema.Boolean,
     github: Schema.Boolean,
-    /** The Hub reads and writes a project's `agents.memory`; absent from a Hub from before it. */
-    agentMemory: Schema.optional(Schema.Boolean),
   }),
   people: Schema.Array(Schema.Struct({ ...PeerSettingsPerson.fields, role: Role })),
 });
@@ -418,7 +416,6 @@ export const PeerSettingsProject = keeping({
   repositories: Schema.Array(keeping({ id: Text, url: Text, branch: Text })),
   /** A tool's id, or the id with the project's own environment. */
   tools: Schema.Array(Schema.Union([Text, keeping({ tool: Text, env: Schema.optional(TextMap) })])),
-  knowledge: keeping({ kontext: Schema.Boolean, company: Schema.Boolean }),
   capacity: keeping({
     personal: Text,
     shared: Schema.optional(
@@ -435,20 +432,8 @@ export const PeerSettingsProject = keeping({
   coordination: Schema.optional(
     keeping({ policy: Text, paths: Schema.optional(Schema.Record(Schema.String, Text)) }),
   ),
-  /** `agents.memory` is off or personal: whether the project's agents keep a harness memory of their own. */
-  agents: Schema.optional(keeping({ memory: Text })),
 });
 export type PeerSettingsProject = typeof PeerSettingsProject.Type;
-
-/** What a project says of its agents' harness memory; a Hub from before it says nothing, which is `off`. */
-export const PeerAgentMemory = Schema.Literals(["off", "personal"]);
-export type PeerAgentMemory = typeof PeerAgentMemory.Type;
-export const isAgentMemory = (value: unknown): value is PeerAgentMemory =>
-  value === "off" || value === "personal";
-/** A project's policy as Peer applies it: what it does not say, or says in words this app does not know, is `off`. */
-export const agentMemoryOf = (project: {
-  readonly agents?: { readonly memory?: unknown } | undefined;
-}): PeerAgentMemory => (isAgentMemory(project.agents?.memory) ? project.agents.memory : "off");
 
 /** `tools.<id>`: an MCP server, remote (`url`, `headers`) or local (`command`, `args`, `env`). */
 export const PeerSettingsTool = keeping({

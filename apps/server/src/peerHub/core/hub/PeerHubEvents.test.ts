@@ -18,7 +18,7 @@ const EVENTS = [
   'event: plans\ndata: {"origin":"bob-laptop","plan":"q4"}\n\n',
   'event: gossip\ndata: {"origin":"bob-laptop"}\n\n',
   'event: requests\ndata: {"origin":"ana-laptop"}\n\n',
-  'event: knowledge.changed\ndata: {"origin":"ana-laptop","projectId":"pay","proposed":2}\n\n',
+  'event: roles.changed\ndata: {"origin":"ana-laptop","projectId":"pay","proposed":2}\n\n',
   'event: work\ndata: {"origin":"ana-laptop"}\n\n',
   'event: coord\ndata: {"origin":"bob-laptop"}\n\n',
   "event: resync\ndata: {}\n\n",
@@ -34,7 +34,6 @@ const coordination: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 type Heard = Queue.Queue<string>;
@@ -101,7 +100,7 @@ describe("the Hub's change pings", () => {
     Effect.gen(function* () {
       const { heard } = yield* following((heard) => [
         listening("requests", { changes: ["requests"] }, heard),
-        listening("knowledge", { changes: ["knowledge.changed"], ownEcho: true }, heard),
+        listening("roles", { changes: ["roles.changed"], ownEcho: true }, heard),
         listening("audit", { changes: ["requests"] }, heard, false),
         listening("ask", { changes: ["done"] }, heard),
         listening("observe", { changes: ["plans"] }, heard),
@@ -111,14 +110,14 @@ describe("the Hub's change pings", () => {
       // plugin hears nothing, not even `resync`.
       assert.deepStrictEqual(yield* nextHeard(heard, 12), [
         "requests resync acme - ",
-        "knowledge resync acme - ",
+        "roles resync acme - ",
         "ask resync acme - ",
         "observe resync acme - ",
         "requests requests acme bob-laptop ",
         "observe plans acme bob-laptop q4",
-        "knowledge knowledge.changed acme ana-laptop pay,2",
+        "roles roles.changed acme ana-laptop pay,2",
         "requests resync acme - ",
-        "knowledge resync acme - ",
+        "roles resync acme - ",
         "ask resync acme - ",
         "observe resync acme - ",
         "ask done acme - ",

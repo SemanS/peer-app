@@ -16,7 +16,6 @@ const base = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 describe("local coordination presentation", () => {

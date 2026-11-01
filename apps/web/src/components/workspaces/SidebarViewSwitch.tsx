@@ -12,6 +12,7 @@ import {
   sidebarSwitchChoice,
   sidebarSwitchValue,
   type SidebarTab,
+  storedSidebarTab,
   type SidebarView,
 } from "./SidebarViewSwitch.logic";
 import { usePeerHubStatus } from "./WorkspaceAccess";
@@ -20,11 +21,13 @@ import { sidebarViewForLocation } from "./sidebarRoutes.logic";
 export type { SidebarTab, SidebarView } from "./SidebarViewSwitch.logic";
 
 const StoredView = Schema.NullOr(Schema.Literals(["work", "threads"]));
+// `knowledge` is a tab this computer may still have stored.
 const StoredTab = Schema.Literals(["tasks", "knowledge", "activity"]);
 
 /** Which tab of the team's work the sidebar shows, remembered on this computer. */
 export function useSidebarTab(): readonly [SidebarTab, (tab: SidebarTab) => void] {
-  return useLocalStorage("peer:sidebar-tab", "tasks", StoredTab);
+  const [stored, setTab] = useLocalStorage("peer:sidebar-tab", "tasks", StoredTab);
+  return [storedSidebarTab(stored), setTab];
 }
 
 /** The chosen view; until someone chooses, Work for people in a workspace, Chats otherwise. */
@@ -54,8 +57,8 @@ export function useRememberSidebarRoute(): void {
 }
 
 /**
- * Work, Knowledge and Activity (the team's work, each with a purpose of its own) and, by its icon,
- * Chats (this computer's threads).
+ * Work and Activity (the team's work, each with a purpose of its own) and, by its icon, Chats (this
+ * computer's threads).
  */
 export function SidebarViewSwitch({
   view,

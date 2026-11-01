@@ -204,8 +204,6 @@ export interface WorkProjectNode {
   readonly unsorted: ReadonlyArray<WorkThreadNode>;
   /** The shared context of the project's work on no task. */
   readonly context: WorkContextNode | undefined;
-  /** Knowledge candidates waiting for people to keep or dismiss. */
-  readonly candidates: number;
   readonly tasks: ReadonlyArray<PeerTask>;
   /** Open rooms bound to no work item, newest first; none of them is among `areas` or `tasks`. */
   readonly chats?: ReadonlyArray<WorkTaskNode>;
@@ -809,10 +807,6 @@ function projectTree(input: {
       .map((entry) => keeping(projectContext)(entry.node))
       .sort(byActivity),
     context: projectContext,
-    candidates:
-      status.coordination.candidates.find(
-        (waiting) => waiting.workspace === workspace.slug && waiting.project === state.project.id,
-      )?.proposed ?? 0,
     tasks: items,
     chats: work.tasks
       .filter((task) => task.chat === true && task.status !== "done")
@@ -823,29 +817,26 @@ function projectTree(input: {
   };
 }
 
-/** What one agent did with the team's work and knowledge, as the work's page lists it. */
+/** What one agent did with the team's work, as the work's page lists it. */
 export interface WorkAdviceRow {
   readonly key: string;
   /** Whose agent it is, and what it is called. */
   readonly person: string;
   readonly mine: boolean;
   readonly agent: string;
-  readonly about: "work" | "knowledge";
-  /** A work's scope to open its page, or `kx:<id>` for an entry of the project's knowledge. */
+  /** A work's scope to open its page. */
   readonly scope: string;
   readonly name: string;
-  /** The agent read it or asked its agents, a model found it for the agent, or an entry governs files it changes. */
-  readonly how: "read" | "asked" | "found" | "governs";
+  /** The agent read it or asked its agents. */
+  readonly how: "read" | "asked";
   readonly why: string;
-  /** For knowledge: decision, convention, learning or incident, and where its file is. */
-  readonly entryKind: string | undefined;
-  readonly path: string | undefined;
   readonly at: string;
 }
 
 /**
- * What the agents on one work (a task, or the project's work on no task) did with the team's work
- * and the project's knowledge, newest first: people see what their agents rely on.
+ * What the agents on one work (a task, or the project's work on no task) did with the team's work,
+ * newest first: people see what their agents rely on. What an environment from before Peer dropped
+ * its knowledge tools says of them is left out.
  */
 export function adviceOnWork(input: {
   readonly status: PeerHubStatus;
@@ -866,19 +857,17 @@ export function adviceOnWork(input: {
       }
       const on = session.task === undefined ? "project" : `task:${session.task}`;
       if (on !== scope) return [];
+      if (advice.about !== "work" || (advice.how !== "read" && advice.how !== "asked")) return [];
       return [
         {
           key: `${advice.session}:${advice.scope}:${advice.at}`,
           person: state === undefined ? session.email : personName(state, session.email),
           mine: session.email === status.email,
           agent: session.label,
-          about: advice.about,
           scope: advice.scope,
           name: advice.name,
           how: advice.how,
           why: advice.why,
-          entryKind: advice.entryKind,
-          path: advice.path,
           at: advice.at,
         } satisfies WorkAdviceRow,
       ];
@@ -890,18 +879,7 @@ export function adviceOnWork(input: {
 /** What one row says, in a line: whose agent, and what it did. */
 export function adviceLabel(row: WorkAdviceRow): string {
   const who = row.mine ? "Your agent" : `${row.person}’s agent`;
-  const entry =
-    row.entryKind === undefined ? "an entry of the project" : `a ${row.entryKind} of the project`;
-  switch (row.how) {
-    case "read":
-      return `${who} read ${row.about === "knowledge" ? entry : "this work’s context"}`;
-    case "asked":
-      return `${who} asked this work’s agents`;
-    case "found":
-      return `${who} was pointed to ${row.about === "knowledge" ? entry : "this work"} by a model it asked`;
-    case "governs":
-      return `${who} was reminded of ${entry} that governs files it changes`;
-  }
+  return row.how === "read" ? `${who} read this work’s context` : `${who} asked this work’s agents`;
 }
 
 /**

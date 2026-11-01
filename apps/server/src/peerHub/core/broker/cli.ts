@@ -782,9 +782,9 @@ export async function runCli(
     case "task":
       return taskCommand(this.host, session, parsed, pluginTaskFacts(this.host, plugins, session));
     case "index": {
-      // The project's other work and what the plugins add (its `.ai`), as at a start but all of it.
+      // The project's other work, as at a start but all of it.
       await this.syncNow(session.workspace, 3000);
-      const index = await this.indexOf(session, plugins);
+      const index = this.indexOf(plugins);
       const all = this.indexWorks(session, Number.POSITIVE_INFINITY);
       const pages = Math.max(1, Math.ceil(all.length / INDEX_ALL));
       const page = Number(plain[0] ?? 1);
@@ -795,14 +795,12 @@ export async function runCli(
       const result =
         indexText({
           works,
-          knowledge: page === 1 ? this.indexSection(plugins, index.entries, 40, true) : null,
           now: Date.now(),
           cli: this.cli,
           shown: INDEX_ALL,
           full: true,
           on: index.on,
-        }) ??
-        `peer: no other work on this project now${plugins.indexSource === undefined ? "" : ", and no `.ai` knowledge in this checkout"}.`;
+        }) ?? "peer: no other work on this project now.";
       return `${result}${pages > 1 ? `\nPage ${page}/${pages}.${page < pages ? ` Next: ${this.cli} index ${page + 1}` : ""}` : ""}`;
     }
     default:

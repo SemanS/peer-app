@@ -23,7 +23,6 @@ export const emptyStatus = (): PeerHubStatus => ({
     overlaps: [],
     findings: [],
     contexts: [],
-    candidates: [],
   },
   sharedThreads: [],
   syncing: false,
@@ -40,7 +39,6 @@ export const richStatus = (): PeerHubStatus => ({
       allowedDomains: [],
       currency: "EUR",
       memberName: "Private sender",
-      companyKnowledge: null,
       lastSyncAt: null,
       error: null,
       projects: [
@@ -53,7 +51,6 @@ export const richStatus = (): PeerHubStatus => ({
             repositories: [],
             tools: [],
             capacity: { personal: "any", personalHarnesses: [] },
-            knowledge: { kontext: false, company: false },
           },
           repositories: [],
           tools: [],

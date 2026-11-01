@@ -122,7 +122,6 @@ function projectNode(
     areas: [{ name: area, tasks: [task] }],
     unsorted: [],
     context: undefined,
-    candidates: 0,
     tasks: [hub],
   };
 }

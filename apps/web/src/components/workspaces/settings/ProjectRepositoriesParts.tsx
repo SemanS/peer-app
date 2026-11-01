@@ -20,8 +20,6 @@ import {
 
 /** One repository as the page lists it. */
 export interface RepositoryRowModel extends RepositoryEntry {
-  /** The first repository holds the project's knowledge. */
-  readonly knowledge: boolean;
   /** The draft adds it. */
   readonly notSaved: boolean;
   readonly pr: "verified" | "reported";
@@ -182,7 +180,6 @@ function RepositoryRow({
       <div className="flex min-w-0 flex-1 basis-72 flex-col gap-0.5">
         <span className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm font-medium text-foreground">{row.id}</span>
-          {row.knowledge ? <Badge variant="knowledge">Project knowledge</Badge> : null}
           {row.notSaved ? <Badge variant="info">Not saved</Badge> : null}
           {row.jj.kind === "on" ? <Badge variant="info">Jujutsu</Badge> : null}
         </span>

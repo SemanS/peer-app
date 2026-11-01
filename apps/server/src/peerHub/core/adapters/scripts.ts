@@ -50,7 +50,7 @@ max_time=4
 if [ "$agent" = codex ]; then
   case "$event" in SessionEnd|Interrupt) max_time=2.5 ;; esac
 fi
-# Peer's own runs of an agent (kontext wording knowledge, say) are no agents at work.
+# Peer's own runs of an agent are no agents at work.
 [ "\${PEER_COORDINATION:-}" = off ] && exit 0
 # SessionStart exports reach Bash commands, not subsequent settings hooks.
 set --
@@ -121,12 +121,6 @@ export function hookCommand(path: string): string {
 
 /** Claude Code's tools that edit files or run commands. */
 const CLAUDE_EDITS = "Edit|Write|MultiEdit|NotebookEdit|Bash";
-/**
- * kontext's capture tool as Claude Code names it: its MCP server registers as `kontext`. Only this
- * one of kontext's tools, so no other call costs a hook.
- */
-export const KONTEXT_CAPTURE = "mcp__kontext__ctx_capture";
-
 /** The hook groups Claude Code needs for coordination, pointing at Peer's scripts. */
 export function claudeHookGroups(scripts: {
   readonly hook: string;
@@ -137,9 +131,8 @@ export function claudeHookGroups(scripts: {
     SessionStart: [{ hooks: [hook] }],
     UserPromptSubmit: [{ hooks: [hook] }],
     PreToolUse: [{ matcher: CLAUDE_EDITS, hooks: [hook] }],
-    // Bash too: agents edit with sed and friends, which Peer then reads from git. And kontext's
-    // capture, whose learning or decision without a check Peer asks about (knowledge plugin).
-    PostToolUse: [{ matcher: `${CLAUDE_EDITS}|${KONTEXT_CAPTURE}`, hooks: [hook] }],
+    // Bash too: agents edit with sed and friends, which Peer then reads from git.
+    PostToolUse: [{ matcher: CLAUDE_EDITS, hooks: [hook] }],
     // A step that ends in an error, a command that exits non-zero among them, gets no PostToolUse.
     PostToolUseFailure: [{ matcher: CLAUDE_EDITS, hooks: [hook] }],
     // A permission prompt: the agent waits for its person, it does not work.

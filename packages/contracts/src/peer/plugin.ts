@@ -15,7 +15,6 @@ export const PEER_PLUGIN_IDS = [
   "capacity",
   "requests",
   "observe",
-  "knowledge",
   "ask",
 
   "audit",

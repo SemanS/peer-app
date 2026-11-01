@@ -2,9 +2,8 @@
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
 /**
  * The board: the project's other works as an agent can hear of them, which it chooses its
- * context from (the index at its start, discovery at its steps, `peer index`), with what the
- * index source (knowledge's `.ai`) adds, and the copies of their shared contexts this computer
- * keeps for its agents.
+ * context from (the index at its start, discovery at its steps, `peer index`), and the copies of
+ * their shared contexts this computer keeps for its agents.
  *
  * @module peerHub/core/index/board
  */
@@ -17,7 +16,6 @@ import type { Advice, LocalSession, SessionIndex } from "../broker/sessions.ts";
 import { contextWritten, scopeOf } from "../contexts/text.ts";
 import { AGENT_NAMES, type AgentKind, claimedTask, taskClaim } from "../coordination/edits.ts";
 import type { HubCoordSession } from "../hub/coordApi.ts";
-import type { PeerIndexEntry } from "../plugin.ts";
 import {
   ASK_GIST_SHOWN,
   ASK_INDEX_SHOWN,
@@ -329,12 +327,10 @@ export function discoveryFor(
     this.record("index.asked", { session: session.id, kind: "reminder", works: [] });
     return askReminderText(this.cli);
   }
-  const knowledge = session.index.entries.length;
   const changed = session.told.size > 0;
   const text = askIndexText({
     works: fresh,
     changed,
-    knowledge: knowledge > 0,
     cli: this.cli,
     on: session.index.on,
   });
@@ -350,45 +346,13 @@ export function discoveryFor(
     works: fresh.slice(0, ASK_INDEX_SHOWN).map((entry) => entry.scope),
     told: gisted.map((entry) => entry.scope),
     versions: gisted.map((entry) => ({ scope: entry.scope, version: entry.version ?? 0 })),
-    knowledge,
   });
   return text;
 }
 
-/**
- * What the active plugins give a session's index now: the index source's entries for its
- * checkout (a read that fails keeps what was read before), and the commands Peer's texts may name.
- */
-export async function indexOf(
-  this: CoordinationBroker,
-  session: LocalSession,
-  plugins: PeerBrokerPlugins,
-): Promise<SessionIndex> {
-  const source = plugins.indexSource;
-  const entries =
-    source === undefined
-      ? []
-      : await this.host.run(source.entries(this.sessionView(session))).catch((error: unknown) => {
-          this.record("plugin.failed", { hook: "indexSource", reason: messageOf(error) });
-          return session.index.entries;
-        });
-  return { entries, on: commandsOn(plugins) };
-}
-
-/** The index source's part of an index (`full` for `peer index`); none should it fail. */
-export function indexSection(
-  this: CoordinationBroker,
-  plugins: PeerBrokerPlugins,
-  entries: ReadonlyArray<PeerIndexEntry>,
-  shown: number,
-  full = false,
-): string | null {
-  try {
-    return plugins.indexSource?.section(entries, shown, full) ?? null;
-  } catch (error) {
-    this.record("plugin.failed", { hook: "indexSource", reason: messageOf(error) });
-    return null;
-  }
+/** What the active plugins give a session's index now: the commands Peer's texts may name. */
+export function indexOf(plugins: PeerBrokerPlugins): SessionIndex {
+  return { on: commandsOn(plugins) };
 }
 
 /** Where another work's shared context is, for an agent that needs it, or null when none is written. */

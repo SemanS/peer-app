@@ -44,7 +44,6 @@ export interface ActivePlugin {
 /** The capability slots at most one plugin fills. */
 export type CapabilitySlot =
   | "runtime"
-  | "indexSource"
   | "gitHost"
   | "taskLauncher"
   | "requestAcceptor"

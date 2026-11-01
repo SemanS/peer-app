@@ -1,12 +1,11 @@
 /**
  * What a project's Basics tab shows and does, apart from how it draws (design artboard 05): the
- * values of its form read from the settings document, what the knowledge switches say, what typed
- * text becomes in the document, and what deleting the project says it takes with it.
+ * values of its form read from the settings document, what typed text becomes in the document,
+ * and what deleting the project says it takes with it.
  */
 import { getAt } from "@t3tools/client-runtime/peer-settings";
 
 import type { ReviewOperation } from "./reviewChanges.logic";
-import type { SettingsDocument } from "./settingsView.logic";
 
 /** The longest description the form takes. */
 export const DESCRIPTION_MAX = 300;
@@ -21,24 +20,16 @@ const textAt = (entry: unknown, path: ReadonlyArray<string>): string | undefined
   return typeof value === "string" ? value : undefined;
 };
 
-const flagAt = (entry: unknown, path: ReadonlyArray<string>): boolean | undefined => {
-  const value = getAt(entry, path);
-  return typeof value === "boolean" ? value : undefined;
-};
-
 /** What the Basics form edits. */
 export interface BasicsValues {
   readonly name: string;
   readonly client: string;
   readonly description: string;
-  readonly kontext: boolean;
-  readonly company: boolean;
 }
 
 /**
  * The form's values from the project's entry of the settings document; where the document is not
  * read (an older Hub, or a moment before it arrives) from what the manifest says of the project.
- * Knowledge is on unless the entry turns it off, as the Hub reads a project.
  */
 export function basicsValues(
   entry: unknown,
@@ -46,7 +37,6 @@ export function basicsValues(
     readonly name: string;
     readonly client?: string | undefined;
     readonly description?: string | undefined;
-    readonly knowledge: { readonly kontext: boolean; readonly company: boolean };
   },
 ): BasicsValues {
   if (!isMapping(entry)) {
@@ -55,16 +45,12 @@ export function basicsValues(
       // oxlint-disable-next-line t3code/no-rpc-permission-bypass -- `client` is the project's customer, not an RPC client.
       client: manifest.client ?? "",
       description: manifest.description ?? "",
-      kontext: manifest.knowledge.kontext,
-      company: manifest.knowledge.company,
     };
   }
   return {
     name: textAt(entry, ["name"]) ?? manifest.name,
     client: textAt(entry, ["client"]) ?? "",
     description: textAt(entry, ["description"]) ?? "",
-    kontext: flagAt(entry, ["knowledge", "kontext"]) ?? true,
-    company: flagAt(entry, ["knowledge", "company"]) ?? true,
   };
 }
 
@@ -86,71 +72,6 @@ export const descriptionCount = (text: string): string =>
   `${textLength(text)} / ${DESCRIPTION_MAX}`;
 
 export const NAME_REQUIRED = "A project needs a name.";
-
-/** The id of the first repository the project's entry lists, which holds its `.ai/` store. */
-export function firstRepositoryId(entry: unknown): string | undefined {
-  const repositories = getAt(entry, ["repositories"]);
-  if (!Array.isArray(repositories)) return undefined;
-  const first: unknown = repositories[0];
-  return isMapping(first) && typeof first.id === "string" && first.id !== "" ? first.id : undefined;
-}
-
-export function projectKnowledgeHint(repositoryId: string | undefined): string {
-  return repositoryId === undefined
-    ? "Decisions and conventions in .ai/ of its repository. Add a repository first."
-    : `Decisions and conventions in .ai/ of ${repositoryId}`;
-}
-
-/** Where the workspace keeps its shared knowledge. */
-export interface CompanyStore {
-  readonly repository: string;
-  /** Undefined where only the manifest says (it does not name the branch). */
-  readonly branch: string | undefined;
-}
-
-/**
- * The workspace's company knowledge store: what the settings document's `knowledge.company` says
- * (the Hub names its branch, `main` unless set), else, while the document is not read, the
- * repository the manifest lists. Null where the workspace has none.
- */
-export function companyStoreOf(
-  document: SettingsDocument | null,
-  manifest: { readonly repository: string } | null,
-): CompanyStore | null {
-  if (document === null) {
-    return manifest === null ? null : { repository: manifest.repository, branch: undefined };
-  }
-  const company = getAt(document, ["knowledge", "company"]);
-  if (!isMapping(company) || typeof company.repository !== "string" || company.repository === "") {
-    return null;
-  }
-  return {
-    repository: company.repository,
-    branch: typeof company.branch === "string" && company.branch !== "" ? company.branch : "main",
-  };
-}
-
-/**
- * A repository address as `owner/repo`, the way people name one: the path of a web or ssh address,
- * or of the scp form `git@host:owner/repo.git`, without `.git`. Anything else stays as written.
- */
-export function shortRepository(address: string): string {
-  const url = address.trim();
-  const path =
-    /^[a-z][a-z0-9+.-]*:\/\/[^/]+\/(.+)$/i.exec(url)?.[1] ??
-    /^(?:[A-Za-z0-9._-]+@)?[A-Za-z0-9.-]+:([^/\\:][^:]*)$/.exec(url)?.[1];
-  if (path === undefined) return url;
-  const short = path.replace(/\/+$/, "").replace(/\.git$/i, "");
-  return short === "" ? url : short;
-}
-
-export function companyKnowledgeHint(workspaceName: string, store: CompanyStore | null): string {
-  if (store === null) {
-    return `${workspaceName} has no shared knowledge store yet. Its admins add one in Workspace › General.`;
-  }
-  const where = shortRepository(store.repository);
-  return `${workspaceName}’s shared store · ${where}${store.branch === undefined ? "" : ` on ${store.branch}`}`;
-}
 
 const capital = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 

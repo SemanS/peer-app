@@ -426,7 +426,7 @@ export class CoordinationBroker {
     return [...this.sessions.values()].map((session) => this.sessionView(session));
   }
 
-  /** Each workspace's view as the hub last sent it, with what its features add (knowledge's candidates). */
+  /** Each workspace's view as the hub last sent it, with what its features add. */
   hubViews(): ReadonlyArray<{ readonly workspace: string; readonly view: HubCoordView }> {
     return [...this.views].map(([workspace, view]) => ({ workspace, view }));
   }
@@ -487,7 +487,7 @@ export class CoordinationBroker {
     return this.sync(workspace);
   }
 
-  /** Notes for people in Peer what a session did with the team's work or knowledge. */
+  /** Notes for people in Peer what a session did with the team's work. */
   adviseOn(sessionId: string, advice: PeerAdvice): void {
     const session = this.sessions.get(sessionId);
     if (session !== undefined) this.noteAdvice(session, { ...advice, at: Date.now() });
@@ -686,7 +686,6 @@ export class CoordinationBroker {
   noteAdvice = Board.noteAdvice;
   discoveryFor = Board.discoveryFor;
   indexOf = Board.indexOf;
-  indexSection = Board.indexSection;
   contextPointer = Board.contextPointer;
   mirrorBoard = Board.mirrorBoard;
   copyBoard = Board.copyBoard;

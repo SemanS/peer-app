@@ -26,7 +26,7 @@ import {
 } from "../coordination/edits.ts";
 import type { HubCoordSession, HubCoordView } from "../hub/coordApi.ts";
 import type { CommandsOn } from "../index/text.ts";
-import type { PeerIndexEntry, PeerRuntimeProvider, PeerSessionView } from "../plugin.ts";
+import type { PeerRuntimeProvider, PeerSessionView } from "../plugin.ts";
 import { checkoutKind } from "../vcs.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { RunClaim } from "./runs.ts";
@@ -172,7 +172,7 @@ export interface LocalSession {
       readonly refs?: ReadonlyArray<import("./pipeline.ts").PreparedDelivery>;
     }
   >;
-  /** What it did with the team's work and knowledge, newest last: people see it in Peer. */
+  /** What it did with the team's work, newest last: people see it in Peer. */
   readonly advice: Advice[];
   /** Plugins' own state for it (`PeerSessionView.local`); a new runtime generation drops it. */
   pluginState: Map<string, unknown>;
@@ -183,17 +183,15 @@ export interface LocalSession {
 }
 
 /**
- * What the active plugins give a session's index: the entries the index source (knowledge) has for
- * its checkout, and which plugin commands Peer's texts may name. Read before each step that may say
- * them, so the texts a step composes at once have them.
+ * What the active plugins give a session's index: which plugin commands Peer's texts may name. Read
+ * before each step that may say them, so the texts a step composes at once have them.
  */
 export interface SessionIndex {
-  readonly entries: ReadonlyArray<PeerIndexEntry>;
   readonly on: CommandsOn;
 }
 
-/** No index source and no plugin command, until a step reads what the plugins give. */
-export const NO_INDEX: SessionIndex = { entries: [], on: () => false };
+/** No plugin command, until a step reads what the plugins give. */
+export const NO_INDEX: SessionIndex = { on: () => false };
 
 /**
  * A work's context as an agent read it, to tell it what changed there since. A session Peer met
@@ -208,17 +206,15 @@ export interface ReadWork {
   toldAt: number;
 }
 
-/** What an agent did with the team's work and knowledge, or what Peer noted, for people to see in Peer. */
+/** What an agent did with the team's work, or what Peer noted, for people to see in Peer. */
 export interface Advice {
-  readonly about: "work" | "knowledge";
-  /** A work's scope, or `kx:<entry id>`. */
+  readonly about: "work";
+  /** A work's scope. */
   readonly scope: string;
   readonly name: string;
-  /** The agent read it, asked its agents, a model found it for it, or an entry governs files it changes. */
-  readonly how: "read" | "asked" | "found" | "governs";
+  /** The agent read it, or asked its agents. */
+  readonly how: "read" | "asked";
   readonly why: string;
-  readonly entryKind?: string;
-  readonly path?: string;
   readonly at: number;
 }
 

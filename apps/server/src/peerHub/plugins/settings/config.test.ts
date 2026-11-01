@@ -27,7 +27,6 @@ const project = (name: string, policy: string) => ({
   leads: ["ana@acme.test"],
   repositories: [{ id: "api", url: "https://github.com/acme/api.git", branch: "main" }],
   tools: ["postgres"],
-  knowledge: { kontext: true, company: true },
   capacity: { personal: "any" },
   coordination: { policy, paths: { "docs/**": "notify" } },
 });
@@ -125,7 +124,6 @@ const started = Effect.gen(function* () {
         overlaps: [],
         findings: [],
         contexts: [],
-        candidates: [],
       }),
     );
     yield* (yield* PeerHubClient).me;

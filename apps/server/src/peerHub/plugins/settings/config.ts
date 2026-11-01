@@ -79,15 +79,15 @@ function flagsOf(args: Words, valued: Words, bare: Words = []) {
 const FIELDS: Readonly<Record<string, ReadonlyArray<string>>> = {
   projects: [
     '# Fields: name, client, description, members (emails; "*" is everyone), leads (emails), areas, tools (catalog',
-    "#   ids), repositories [{id, url, branch}], knowledge {kontext, company} (true or false), capacity {personal:",
-    "#   <any|commercial|none>, shared {pool, budget {amount, period: <day|week|month>}, allocations {<email>: amount},",
-    '#   defaultAllocation}}, coordination {policy: <notify|coordinate|ask|exclusive>, paths {"<glob>": <the same>}},',
-    "#   agents {memory: <off|personal>}; paths need the policy, which decides every other path.",
+    "#   ids), repositories [{id, url, branch}], capacity {personal: <any|commercial|none>, shared {pool, budget",
+    "#   {amount, period: <day|week|month>}, allocations {<email>: amount}, defaultAllocation}}, coordination",
+    '#   {policy: <notify|coordinate|ask|exclusive>, paths {"<glob>": <the same>}}; paths need the policy, which',
+    "#   decides every other path.",
   ],
   workspace: [
     "# Fields: currency, people {<email>: {name, personal [{harness: <claude|codex|cursor|grok|opencode|antigravity>,",
-    "#   plan: <pro|max|plus|team|business|enterprise|api|other>}]}}, knowledge {company {repository, branch, store}},",
-    "#   gateway {kind: litellm, url, adminUrl, usdPerUnit}; each person's own entry under people is theirs.",
+    "#   plan: <pro|max|plus|team|business|enterprise|api|other>}]}}, gateway {kind: litellm, url, adminUrl,",
+    "#   usdPerUnit}; each person's own entry under people is theirs.",
   ],
 };
 const kindOf = (path: string) => (path === "workspace.yaml" ? "workspace" : path.split("/")[0]!);

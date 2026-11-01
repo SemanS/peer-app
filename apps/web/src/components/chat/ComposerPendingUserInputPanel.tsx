@@ -1,9 +1,4 @@
-import {
-  type EnvironmentId,
-  type ThreadId,
-  type RuntimeRequestId,
-  type ScopedThreadRef,
-} from "@t3tools/contracts";
+import { type RuntimeRequestId, type ScopedThreadRef } from "@t3tools/contracts";
 import { markdownProseDirection, textDirection } from "~/textDirection";
 import { memo, use, useEffect, useEffectEvent, useRef, useState } from "react";
 import { BackgroundThreadContext } from "./backgroundThread";
@@ -18,7 +13,6 @@ import { cn } from "~/lib/utils";
 import { isInSideChatPane } from "~/lib/sideChatPane";
 import { ComposerBanner } from "./ComposerBanner";
 import ChatMarkdown from "../ChatMarkdown";
-import { ProjectDecisionCheckbox } from "../workspaces/approval/ProjectDecisionCheckbox";
 
 interface PendingUserInputPanelProps {
   pendingUserInputs: PendingUserInput[];
@@ -31,8 +25,6 @@ interface PendingUserInputPanelProps {
   onToggleOption: (questionId: string, optionValue: string) => void;
   onAdvance: () => void;
   onDismiss: (requestId: RuntimeRequestId) => void;
-  /** The thread the question is in, so a Peer project can offer to keep the answer. */
-  peerThread?: { readonly environmentId: EnvironmentId; readonly threadId: ThreadId } | undefined;
 }
 
 export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserInputPanel({
@@ -46,7 +38,6 @@ export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserIn
   onToggleOption,
   onAdvance,
   onDismiss,
-  peerThread,
 }: PendingUserInputPanelProps) {
   if (pendingUserInputs.length === 0) return null;
   const activePrompt = pendingUserInputs[0];
@@ -65,7 +56,6 @@ export const ComposerPendingUserInputPanel = memo(function ComposerPendingUserIn
       onToggleOption={onToggleOption}
       onAdvance={onAdvance}
       onDismiss={onDismiss}
-      peerThread={peerThread}
     />
   );
 });
@@ -81,9 +71,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
   onToggleOption,
   onAdvance,
   onDismiss,
-  peerThread,
 }: {
-  peerThread: PendingUserInputPanelProps["peerThread"];
   prompt: PendingUserInput;
   cwd: string | undefined;
   threadRef: ScopedThreadRef;
@@ -338,13 +326,6 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
                 );
               })}
             </div>
-            {peerThread === undefined ? null : (
-              <ProjectDecisionCheckbox
-                environmentId={peerThread.environmentId}
-                threadId={peerThread.threadId}
-                requestId={prompt.requestId}
-              />
-            )}
           </ComposerBanner.Body>
         </ComposerBanner.Scroll>
       </CollapsiblePanel>

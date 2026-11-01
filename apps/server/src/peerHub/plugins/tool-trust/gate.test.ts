@@ -35,7 +35,6 @@ const project: PeerProject = {
   role: "member",
   members: [],
   repositories: [],
-  knowledge: { kontext: false, company: false },
   capacity: { personal: "any", personalHarnesses: [] },
   tools: [
     {
@@ -65,7 +64,6 @@ const coordination = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 const trustedCore = Effect.gen(function* () {
   const hub = yield* standInHub({
@@ -109,7 +107,6 @@ const trustedCore = Effect.gen(function* () {
         version: 2 as const,
         workspace: { slug: "acme", name: "Acme", currency: "EUR" as const },
         member: { email: "ana@acme.test", name: "Ana", role: "member" as const },
-        knowledge: {},
         projects: [{ ...project, tools: [tool] }],
       },
     };
@@ -228,7 +225,6 @@ describe("workspace gate through provider policy", () => {
             overlaps: [],
             findings: [],
             contexts: [],
-            candidates: [],
           }),
         );
         const member = {
@@ -237,7 +233,6 @@ describe("workspace gate through provider policy", () => {
             version: 2 as const,
             workspace: { slug: "acme", name: "Acme", currency: "EUR" as const },
             member: { email: "ana@acme.test", name: "Ana", role: "member" as const },
-            knowledge: {},
             projects: [{ ...project, tools: [tool] }],
           },
         };
@@ -306,7 +301,6 @@ describe("workspace gate through provider policy", () => {
             ]),
             roots: new Map(),
             sharedInstances: new Map(),
-            knowledgePaths: new Map(),
           });
         publish();
         yield* Effect.scoped(

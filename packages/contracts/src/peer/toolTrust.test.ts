@@ -16,7 +16,6 @@ describe("workspace tool trust contracts", () => {
       version: 2,
       workspace: { slug: "acme", name: "Acme", currency: "EUR" },
       member: { email: "ana@example.test", name: "Ana", role: "member" },
-      knowledge: {},
       projects: [],
     };
     expect(decodeManifest(manifest).workspace.appliedBy).toBeUndefined();

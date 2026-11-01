@@ -21,18 +21,11 @@ it("finds every index block Peer's texts make, at any hook, and nothing an agent
     hookEvent,
     answer: { hookSpecificOutput: { hookEventName: hookEvent, additionalContext } },
   });
-  const start = indexText({ works: [work], knowledge: null, now: 0, cli: "peer" })!;
-  const knowledgeOnly = indexText({
-    works: [],
-    knowledge: "Project knowledge, kept in `.ai` by its people (1 entry):",
-    now: 0,
-    cli: "peer",
-  })!;
-  const first = askIndexText({ works: [work], changed: false, knowledge: false, cli: "peer" })!;
-  const changed = askIndexText({ works: [work], changed: true, knowledge: false, cli: "peer" })!;
+  const start = indexText({ works: [work], now: 0, cli: "peer" })!;
+  const first = askIndexText({ works: [work], changed: false, cli: "peer" })!;
+  const changed = askIndexText({ works: [work], changed: true, cli: "peer" })!;
   const found = indexBlocks([
     hook("SessionStart", `You are Bob's agent here.\n\n${start}`),
-    hook("SessionStart", `You are Bob's agent here.\n\n${knowledgeOnly}`),
     hook("UserPromptSubmit", first),
     hook("PostToolUse", `Peer: Overlap eb843b with Ana's agent on src/pricing.ts.\n\n${changed}`),
     hook("PostToolUse", changed),
@@ -40,7 +33,7 @@ it("finds every index block Peer's texts make, at any hook, and nothing an agent
     {
       event: "cli",
       session: "codex:bob",
-      out: indexText({ works: [work], knowledge: null, now: 0, cli: "peer", full: true }),
+      out: indexText({ works: [work], now: 0, cli: "peer", full: true }),
     },
   ]);
   expect(found.blocks.map((block) => [block.hookEvent, block.kind])).toEqual([

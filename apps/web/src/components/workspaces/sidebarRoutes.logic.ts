@@ -25,8 +25,6 @@ const TASK_SCREENS: ReadonlySet<string> = new Set([
   "together",
   "workspace",
   "context",
-  "knowledge",
-  "memory",
   "team",
   "overlap",
   "observe",
@@ -101,7 +99,12 @@ export function routeForView(input: {
 }
 
 /** Screens this app no longer has: a person's last Work screen may still name one. */
-const GONE_SCREENS: ReadonlySet<string> = new Set(["integration", "team-usage"]);
+const GONE_SCREENS: ReadonlySet<string> = new Set([
+  "integration",
+  "team-usage",
+  "knowledge",
+  "memory",
+]);
 
 /** A remembered address worth going back to: a path on this app, nothing that leaves it. */
 function sanitizeRoute(value: unknown): string | undefined {
@@ -131,9 +134,8 @@ export function sanitizeRoutes(value: unknown): SidebarRoutes {
 /**
  * What the sidebar highlights for the open route, in `workTree` terms: a chat by its environment
  * and thread, an agent, a task (its page and its review both), a context, a colleague's thread, and
- * for the pages of a whole project `knowledge:` (Knowledge, Memory), `team:` (the Team page and
- * its owner map) or `changes:` (Changes, and the Operations and integration preview pages that open
- * from it). Null where the route is none of these.
+ * for the pages of a whole project `team:` (the Team page and its owner map) or `changes:` (Changes,
+ * and the Operations page that opens from it). Null where the route is none of these.
  */
 export function activeRouteKey(
   pathname: string,
@@ -146,9 +148,8 @@ export function activeRouteKey(
   if (workspace && project) {
     const root = pathname.split("/")[1];
     if (root === "team") return `team:${workspace}:${project}`;
-    if (root === "changes" || root === "operations" || root === "integration")
-      return `changes:${workspace}:${project}`;
-    return `knowledge:${workspace}:${project}`;
+    if (root === "changes" || root === "operations") return `changes:${workspace}:${project}`;
+    return null;
   }
   if (workspace && environment && thread) return `observe:${workspace}:${environment}:${thread}`;
   if (params.environmentId && params.threadId) return `${params.environmentId}:${params.threadId}`;

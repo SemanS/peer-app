@@ -11,7 +11,7 @@ import type { WorkProjectNode } from "./workTree.logic";
 
 /**
  * A project's signals: its open overlaps (core: agents on the same file), then what the active
- * plugins add (knowledge to keep, memory, announcements, held resources, …).
+ * plugins add (announcements, held resources, …).
  */
 export function projectSignals(
   status: PeerHubStatus,

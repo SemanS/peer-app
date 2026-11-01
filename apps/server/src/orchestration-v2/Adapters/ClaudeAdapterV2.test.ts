@@ -37,7 +37,6 @@ import {
   type ModelSelection,
   NodeId,
   type OrchestrationV2AppThread,
-  type PeerProject,
   type OrchestrationV2PendingBackgroundTask,
   OrchestrationV2ProviderThread,
   ProjectId,
@@ -80,7 +79,6 @@ import * as PortScanner from "../../preview/PortScanner.ts";
 import { attachmentRelativePath } from "../../attachmentStore.ts";
 import { WorkflowAgentTranscriptReadObserver } from "../workflowAgentTranscript.ts";
 import * as ServerConfig from "../../config.ts";
-import * as HubPolicy from "../../peerHub/hubPolicy.ts";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import { T3_CODE_DEVICE_TOOL_INSTRUCTIONS_WITH_TOOL_SEARCH } from "@t3tools/provider-core/server/orchestrationInstructions";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
@@ -532,55 +530,6 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
     });
 
     assert.deepEqual(overrides, {});
-  });
-
-  it("carries the workspace project's environment: auto memory off unless the project allows personal memory", () => {
-    const threadId = ThreadId.make("thread-claude-memory");
-    const project = (memory?: string): PeerProject => ({
-      id: "app",
-      name: "App",
-      role: "member",
-      members: [],
-      repositories: [],
-      tools: [],
-      knowledge: { kontext: false, company: false },
-      capacity: { personal: "any", personalHarnesses: [] },
-      ...(memory === undefined ? {} : { agents: { memory } }),
-    });
-    const bind = (memory?: string) => {
-      const bound = {
-        workspace: { slug: "acme", name: "Acme" },
-        project: project(memory),
-        repositoryPath: "/workspace",
-      };
-      HubPolicy.setHubPolicyState({
-        projects: new Map([["project-memory", bound]]),
-        roots: new Map([["/workspace", bound]]),
-        sharedInstances: new Map(),
-        knowledgePaths: new Map(),
-      });
-      HubPolicy.bindThreadProject(threadId, ProjectId.make("project-memory"));
-    };
-    try {
-      bind();
-      const off = ClaudeAdapterV2.claudeMcpQueryOverrides({
-        mcpSession: undefined,
-        readOnlySandbox: false,
-        threadId,
-      });
-      assert.deepEqual(off.environment, { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });
-      assert.include(off.appendSystemPrompt, "Acme project: App");
-      bind("personal");
-      const personal = ClaudeAdapterV2.claudeMcpQueryOverrides({
-        mcpSession: undefined,
-        readOnlySandbox: false,
-        threadId,
-      });
-      assert.isUndefined(personal.environment);
-      assert.include(personal.appendSystemPrompt, "Acme project: App");
-    } finally {
-      HubPolicy.setHubPolicyState(null);
-    }
   });
 
   it("preserves an explicit allowlist when no MCP session exists", () => {

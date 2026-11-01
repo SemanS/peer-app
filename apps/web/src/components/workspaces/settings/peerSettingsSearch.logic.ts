@@ -69,12 +69,6 @@ const WORKSPACE_ENTRIES: ReadonlyArray<Entry> = [
     terms: "domain dns txt verify email admit allowed domains join invite claim",
   },
   {
-    id: "company-knowledge",
-    title: "Company knowledge",
-    place: w("general"),
-    terms: "knowledge repository decisions conventions branch store",
-  },
-  {
     id: "workspace-yaml",
     title: "Workspace YAML",
     place: w("general"),
@@ -192,7 +186,7 @@ const COMPUTER_ENTRIES: ReadonlyArray<Entry> = [
     title: "Peer plugins",
     place: c("coordination"),
     terms:
-      "plugin plugins turn on off herdr github dependencies handoff requests observe knowledge memory announcements settle recipes forecast metrics usage digest impact ownership",
+      "plugin plugins turn on off herdr github dependencies handoff requests observe announcements settle ownership",
   },
   {
     id: "agent-coordination",
@@ -236,13 +230,7 @@ const PROJECT_ENTRIES: ReadonlyArray<Entry> = [
     id: "project-basics",
     title: "Project basics",
     place: p("basics"),
-    terms: "name client description id knowledge",
-  },
-  {
-    id: "project-knowledge",
-    title: "Project knowledge",
-    place: p("basics"),
-    terms: "knowledge kontext company agents read",
+    terms: "name client description id",
   },
   {
     id: "project-people",

@@ -395,7 +395,7 @@ describe("coordination tool sessions", () => {
     () => {
       const states: string[] = [];
       const extra = bindPlugin({
-        id: "knowledge",
+        id: "observe",
         title: "fixture",
         summary: "test",
         defaultEnabled: true,

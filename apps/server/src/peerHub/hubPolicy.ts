@@ -19,7 +19,6 @@
  * @module peerHub/hubPolicy
  */
 import {
-  agentMemoryOf,
   type PeerHarness,
   type PeerMcpServer,
   type PeerProject,
@@ -52,8 +51,6 @@ export interface HubPolicyState {
   readonly roots: ReadonlyMap<string, HubBoundProject>;
   /** Provider instance id → the workspace project it is billed to. */
   readonly sharedInstances: ReadonlyMap<string, HubSharedInstance>;
-  /** Workspace slug → its company knowledge checkout, once cloned. */
-  readonly knowledgePaths: ReadonlyMap<string, string>;
 }
 
 /** Workspace tools reach providers only through this fail-closed gate. */
@@ -216,27 +213,22 @@ export function projectAcceptsPersonal(
   return bound?.project.capacity.personal === "any";
 }
 
-/** Resolves ${project.root}, ${company.knowledge} and ${secret:NAME} in a tool value. */
+/** Resolves ${project.root} and ${secret:NAME} in a tool value. */
 export function resolveToolValue(
   value: string,
   context: {
     readonly projectRoot: string;
-    readonly companyKnowledge: string | null;
     readonly secrets: ReadonlyMap<string, string>;
   },
 ): string {
   return value.replace(/\$\{([^}]+)\}/g, (match, key: string) => {
     if (key === "project.root") return context.projectRoot;
-    if (key === "company.knowledge") return context.companyKnowledge ?? match;
     if (key.startsWith("secret:")) return context.secrets.get(key.slice("secret:".length)) ?? match;
     return match;
   });
 }
 
-function resolvedToolServers(
-  state: HubPolicyState,
-  bound: HubBoundProject,
-): Record<string, PeerMcpServer> {
+function resolvedToolServers(bound: HubBoundProject): Record<string, PeerMcpServer> {
   const servers: Record<string, PeerMcpServer> = {};
   for (const tool of bound.project.tools) {
     const decision = workspaceToolGate?.({
@@ -245,11 +237,7 @@ function resolvedToolServers(
       tool,
     });
     if (decision?.give !== true) continue;
-    const context = {
-      projectRoot: bound.repositoryPath,
-      companyKnowledge: state.knowledgePaths.get(bound.workspace.slug) ?? null,
-      secrets: decision.secrets,
-    };
+    const context = { projectRoot: bound.repositoryPath, secrets: decision.secrets };
     const values =
       tool.mcp.transport === "stdio"
         ? [tool.mcp.command, ...tool.mcp.args, ...Object.values(tool.mcp.env)]
@@ -264,16 +252,13 @@ function resolvedToolServers(
       continue;
     const mcp = tool.mcp;
     if (mcp.transport === "stdio") {
-      // Company knowledge needs its checkout; without it the server would answer from the wrong repo.
-      const env = Object.fromEntries(
-        Object.entries(mcp.env).map(([name, value]) => [name, resolveToolValue(value, context)]),
-      );
-      if (Object.values(env).some((value) => value.includes("${company.knowledge}"))) continue;
       servers[tool.id] = {
         transport: "stdio",
         command: resolveToolValue(mcp.command, context),
         args: mcp.args.map((arg) => resolveToolValue(arg, context)),
-        env,
+        env: Object.fromEntries(
+          Object.entries(mcp.env).map(([name, value]) => [name, resolveToolValue(value, context)]),
+        ),
       };
     } else {
       servers[tool.id] = {
@@ -310,7 +295,7 @@ export function claudeHubMcpServers(threadId: ThreadId): Record<string, ClaudeMc
   const found = boundProjectForThread(threadId);
   if (found === undefined) return {};
   const servers: Record<string, ClaudeMcpServer> = {};
-  for (const [id, server] of Object.entries(resolvedToolServers(found.state, found.bound))) {
+  for (const [id, server] of Object.entries(resolvedToolServers(found.bound))) {
     servers[id] =
       server.transport === "stdio"
         ? { type: "stdio", command: server.command, args: [...server.args], env: { ...server.env } }
@@ -327,7 +312,7 @@ export function codexHubMcpServers(threadId: ThreadId): Record<string, Record<st
   const found = boundProjectForThread(threadId);
   if (found === undefined) return {};
   const servers: Record<string, Record<string, unknown>> = {};
-  for (const [id, server] of Object.entries(resolvedToolServers(found.state, found.bound))) {
+  for (const [id, server] of Object.entries(resolvedToolServers(found.bound))) {
     if (server.transport === "stdio") {
       servers[id] = { command: server.command, args: [...server.args], env: { ...server.env } };
     } else if (server.transport === "http") {
@@ -337,38 +322,15 @@ export function codexHubMcpServers(threadId: ThreadId): Record<string, Record<st
   return servers;
 }
 
-/**
- * What the workspace project of a thread Peer starts adds to the agent's environment: with the
- * project's agents' harness memory `off`, Claude Code's auto memory is turned off for the session
- * (`CLAUDE_CODE_DISABLE_AUTO_MEMORY`, the SDK's documented switch), so the session neither loads
- * the person's memory index nor saves to it. A thread outside a workspace project gets nothing.
- */
-export function hubEnvironmentForThread(threadId: ThreadId): Record<string, string> {
-  const found = boundProjectForThread(threadId);
-  if (found === undefined || agentMemoryOf(found.bound.project) !== "off") return {};
-  return { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" };
-}
-
-/** A short system-prompt addition naming the project and its knowledge tools. */
+/** A short system-prompt addition naming the project. */
 export function hubInstructionsForThread(threadId: ThreadId): string {
   const found = boundProjectForThread(threadId);
   if (found === undefined) return "";
   const { project, workspace } = found.bound;
-  const tools = new Set(Object.keys(resolvedToolServers(found.state, found.bound)));
-  const lines = [
+  return [
     "",
     `## ${workspace.name} project: ${project.name}`,
     `This workspace belongs to the ${workspace.name} project "${project.name}".`,
-  ];
-  if (tools.has("kontext")) {
-    lines.push(
-      "Before changing code, call the kontext MCP tool ctx_brief with the paths you will touch; it returns the decisions and conventions the team approved for them.",
-    );
-  }
-  if (tools.has("company-knowledge")) {
-    lines.push(
-      `${workspace.name}-wide conventions are on the company-knowledge MCP server (the same kontext tools, answering from the shared store).`,
-    );
-  }
-  return `${lines.join("\n")}\n`;
+    "",
+  ].join("\n");
 }

@@ -403,7 +403,6 @@ const projectOf = (threads: Readonly<Record<string, ReadonlyArray<WorkThreadNode
     areas: [{ name: null, tasks: TASKS.map((task) => taskNode(task, threads[task.id])) }],
     unsorted: [],
     context: undefined,
-    candidates: 0,
     tasks: TASKS,
     ownership: undefined,
   }) satisfies WorkProjectNode;

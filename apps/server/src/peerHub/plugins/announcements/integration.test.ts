@@ -104,7 +104,6 @@ describe("announcements through the real plugin and broker", () => {
             overlaps: [],
             findings: [],
             contexts: [],
-            candidates: [],
           }),
         );
         const plugins = yield* PeerPlugins.pipe(Effect.provide(core));

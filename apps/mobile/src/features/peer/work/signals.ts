@@ -50,7 +50,7 @@ export const TONE_TINT: Readonly<Record<SignalTone, string>> = {
 
 /**
  * A project's signals: its open overlaps (core: agents on the same file), then what the active
- * plugins add (knowledge to keep, memory, announcements, held resources), as on web.
+ * plugins add (announcements, held resources), as on web.
  */
 export function projectSignals(
   status: PeerHubStatus,

@@ -41,7 +41,6 @@ it.effect("distinguishes unread from empty, keeps the last successful slice and 
         overlaps: [],
         findings: [],
         contexts: [],
-        candidates: [],
       }),
     );
     const built = yield* Layer.build(layer).pipe(Effect.provide(core));

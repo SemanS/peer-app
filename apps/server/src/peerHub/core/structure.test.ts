@@ -24,11 +24,7 @@ const PLUGIN_BUDGET = 1_000;
 const ENTRY_BUDGET = 150;
 /**
  * Plugins over the budget until a named change lands, each held to its size then, all its non-test
- * lines counted. A ceiling only falls. Memory's is its size when it was extracted, which its own
- * `boundary.test.ts` holds too. Slack's is its size when `add-slack-agent-threads` landed: a two-way
- * bridge (its waits, text cleaning, publisher, delivery and settings) that no toggle could split, and
- * two lines more since the 2026-10 upstream sync: one `catchTags` and one `nodeBuiltinImport` note
- * that the T3 lint rule and Effect diagnostic now ask of it. Jujutsu's is its size when
+ * lines counted. A ceiling only falls. Jujutsu's is its size when
  * `add-jujutsu-team-features` landed it (designs D2 to D7 and D12): the
  * workspace configuration, the snapshot and converge, protection and the stop, following, undo,
  * integrate and converge, with every jj call and parser in `client/`; `follow.ts` and
@@ -44,9 +40,7 @@ const ENTRY_BUDGET = 150;
 const CEILINGS: Readonly<Record<string, number>> = {
   handoff: 1728,
   jujutsu: 2354,
-  memory: 3_430,
   rooms: 2261,
-  slack: 1_369,
 };
 
 /**
@@ -58,10 +52,6 @@ const SHARED_HELPERS: ReadonlySet<string> = new Set([
   "peerHub/peerText.ts",
   // The git transports and refs Peer lets through.
   "peerHub/gitSafety.ts",
-  // Stateless kontext machine protocol shared by the independent knowledge and memory clients.
-  "peerHub/kontext.ts",
-  // The presentation type of a knowledge entry.
-  "peerHub/knowledgeEntry.ts",
   // A work's delivery and its pull requests.
   "peerHub/workLifecycle.ts",
   // What a failed clone means.
@@ -215,7 +205,7 @@ describe("Peer's line budgets", () => {
     assert.deepStrictEqual(over, []);
   });
 
-  it("hold memory, over the plugin budget, to its ceiling", () => {
+  it("hold the plugins over the budget to their ceilings", () => {
     for (const [id, ceiling] of Object.entries(CEILINGS)) {
       const own = plugins.find((plugin) => plugin.id === id)?.sources ?? [];
       assert.isAbove(own.length, 0, `plugins/${id}`);

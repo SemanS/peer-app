@@ -237,7 +237,6 @@ export function statusOf(setup: Setup = {}): PeerHubStatus {
         allowedDomains: [],
         currency: "EUR",
         memberName: "Slavo",
-        companyKnowledge: null,
         projects: [
           {
             project: {
@@ -246,7 +245,6 @@ export function statusOf(setup: Setup = {}): PeerHubStatus {
               role: setup.role ?? (viewer === SLAVO ? "lead" : "member"),
               members: [...(setup.members ?? MEMBERS)],
               repositories: [],
-              knowledge: { kontext: false, company: false },
               tools: [],
               capacity: { personal: "any", personalHarnesses: [] },
             },
@@ -297,7 +295,6 @@ export function statusOf(setup: Setup = {}): PeerHubStatus {
       overlaps: coordination ? [...(setup.overlaps ?? [overlap()])] : [],
       findings: [],
       contexts: [],
-      candidates: [],
     },
     sharedThreads: [],
     syncing: false,

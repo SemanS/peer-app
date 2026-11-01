@@ -129,10 +129,6 @@ const CoordView = Schema.Struct({
   findings: Schema.optional(Schema.Array(HubFinding)),
   /** Nor before shared contexts. */
   contexts: Schema.optional(Schema.Array(HubContext)),
-  /** How many knowledge candidates wait for people, per project: the Hub's knowledge feature adds it. */
-  candidates: Schema.optional(
-    Schema.Array(Schema.Struct({ project: Schema.String, proposed: Schema.Number })),
-  ),
   /**
    * The policy each project sets (see `PeerProjectPolicy`); a project without one is not listed, and a
    * hub from before project policies sends none. Read with `projectPolicy`: a newer hub may name a policy

@@ -27,7 +27,6 @@ const started = (answer: HubAnswer) =>
           overlaps: [],
           findings: [],
           contexts: [],
-          candidates: [],
         }),
       );
       return {

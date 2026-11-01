@@ -69,33 +69,6 @@ const setup = Effect.gen(function* () {
 
 describe("command permissions", () => {
   it.effect(
-    "requires the destination operate grant to challenge saved knowledge, run its check or draft a keep",
-    () =>
-      Effect.scoped(
-        Effect.gen(function* () {
-          const registry = yield* setup;
-          const challenge = createCommandPermissions(
-            runtime,
-            WS_METHODS.peerKnowledgeOpenChallenge,
-          );
-          const verify = createCommandPermissions(runtime, WS_METHODS.peerKnowledgeVerifyEntry);
-          const preview = createCommandPermissions(runtime, WS_METHODS.peerKnowledgePreview);
-          registry.set(sessions(env), AsyncResult.success(grant(false)));
-          expect(registry.get(challenge.permissionAtom(env))).toBe(false);
-          expect(registry.get(verify.permissionAtom(env))).toBe(false);
-          expect(registry.get(preview.permissionAtom(env))).toBe(false);
-          expect((yield* challenge.authorize(registry, env).pipe(Effect.flip))._tag).toBe(
-            "EnvironmentAuthorizationError",
-          );
-          registry.set(sessions(env), AsyncResult.success(grant(true)));
-          expect(registry.get(challenge.permissionAtom(env))).toBe(true);
-          expect(registry.get(verify.permissionAtom(env))).toBe(true);
-          expect(registry.get(preview.permissionAtom(env))).toBe(true);
-          yield* challenge.authorize(registry, env);
-        }),
-      ),
-  );
-  it.effect(
     "requires the destination operate grant to change a session role or start a review",
     () =>
       Effect.scoped(

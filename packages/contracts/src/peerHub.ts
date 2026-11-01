@@ -36,7 +36,6 @@ export * from "./peer/domains.ts";
 export * from "./peer/capacity.ts";
 export * from "./peer/github.ts";
 export * from "./peer/herdr.ts";
-export * from "./peer/knowledge.ts";
 export * from "./peer/observe.ts";
 export * from "./peer/requests.ts";
 
@@ -46,7 +45,7 @@ export * from "./peer/requests.ts";
  * People sign in with their email address (a one-time code), then join the
  * workspaces their address qualifies for — by its domain or by an invite —
  * or create one. A workspace declares projects, their repositories, agent
- * tools, knowledge and AI capacity; this environment provisions them
+ * tools and AI capacity; this environment provisions them
  * locally. The manifest mirrors the hub's
  * `GET /v1/workspaces/{slug}/manifest` (version 2). Unknown fields from a
  * newer hub are ignored on decode.
@@ -102,12 +101,6 @@ export const PeerProject = Schema.Struct({
   repositories: Schema.Array(
     Schema.Struct({ id: Schema.String, url: Schema.String, branch: Schema.String }),
   ),
-  knowledge: Schema.Struct({ kontext: Schema.Boolean, company: Schema.Boolean }),
-  /**
-   * The project's word on its agents' harness memory (`off` or `personal`); absent from a Hub from
-   * before it, or when the project says nothing, and read as `off` either way (`agentMemoryOf`).
-   */
-  agents: Schema.optional(Schema.Struct({ memory: Schema.String })),
   tools: Schema.Array(PeerTool),
   capacity: Schema.Struct({
     personal: PeerPersonalCapacityPolicy,
@@ -147,11 +140,6 @@ export const PeerManifest = Schema.Struct({
     email: Schema.String,
     name: Schema.String,
     role: PeerWorkspaceRole,
-  }),
-  knowledge: Schema.Struct({
-    company: Schema.optional(
-      Schema.Struct({ repository: Schema.String, branch: Schema.String, store: Schema.String }),
-    ),
   }),
   projects: Schema.Array(PeerProject),
   sharedKeys: Schema.optional(Schema.Array(PeerSharedKey)),
@@ -259,14 +247,6 @@ export const PeerWorkspaceState = Schema.Struct({
   /** Where the applied configuration came from, e.g. a registry commit. */
   revision: Schema.optional(Schema.String),
   memberName: Schema.String,
-  companyKnowledge: Schema.NullOr(
-    Schema.Struct({
-      repository: Schema.String,
-      path: Schema.String,
-      state: PeerCheckoutState,
-      error: Schema.optional(Schema.String),
-    }),
-  ),
   projects: Schema.Array(PeerProjectState),
   lastSyncAt: Schema.NullOr(Schema.String),
   error: Schema.NullOr(Schema.String),
@@ -565,10 +545,10 @@ export const PeerContextVersionText = Schema.Struct({
 export type PeerContextVersionText = typeof PeerContextVersionText.Type;
 
 /**
- * What one of this computer's agents did with the team's work and knowledge, or what Peer noted of
- * it: it read a work's shared context, asked its agents, a model found work for it (`peer find`),
- * or an entry of the project's `.ai` governs files it changes. People see it to trust, or correct,
- * what their agents rely on.
+ * What one of this computer's agents did with the team's work, or what Peer noted of it: it read a
+ * work's shared context, or asked its agents. People see it to trust, or correct, what their agents
+ * rely on. An environment from before Peer dropped its knowledge tools also says `knowledge`,
+ * `found` and `governs`, which a client decodes and only shows.
  */
 export const PeerAdvice = Schema.Struct({
   workspace: Schema.String,
@@ -576,18 +556,14 @@ export const PeerAdvice = Schema.Struct({
   /** The agent session: `claude:<session id>` or `codex:<session id>`. */
   session: Schema.String,
   about: Schema.Literals(["work", "knowledge"]),
-  /** A work: `task:<id>` or `project`. Knowledge: `kx:<entry id>`. */
+  /** A work: `task:<id>` or `project`. */
   scope: Schema.String,
-  /** How people name it: the work, or the knowledge entry's title. */
+  /** How people name it. */
   name: Schema.String,
-  /** The agent read it or asked its agents, a model found it for the agent, or an entry governs files it changes. */
+  /** The agent read it or asked its agents. */
   how: Schema.Literals(["read", "asked", "found", "governs"]),
   /** Why, in a sentence. */
   why: Schema.String,
-  /** For knowledge: decision, convention, learning or incident. */
-  entryKind: Schema.optional(Schema.String),
-  /** For knowledge: where the entry is, relative to the repository. */
-  path: Schema.optional(Schema.String),
   at: Schema.String,
 });
 export type PeerAdvice = typeof PeerAdvice.Type;
@@ -667,12 +643,8 @@ export const PeerCoordinationState = Schema.Struct({
   findings: Schema.Array(PeerFinding),
   /** The shared contexts of your projects' tasks, without their text. */
   contexts: Schema.Array(PeerWorkContext),
-  /** What this computer's agents did with the team's work and knowledge, newest first. */
+  /** What this computer's agents did with the team's work, newest first. */
   advice: Schema.optional(Schema.Array(PeerAdvice)),
-  /** How many knowledge candidates wait for people, per project. */
-  candidates: Schema.Array(
-    Schema.Struct({ workspace: Schema.String, project: Schema.String, proposed: Schema.Number }),
-  ),
 });
 export type PeerCoordinationState = typeof PeerCoordinationState.Type;
 

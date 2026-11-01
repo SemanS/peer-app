@@ -60,7 +60,6 @@ describe("dependency plugin lifecycle", () => {
             overlaps: [],
             findings: [],
             contexts: [],
-            candidates: [],
           }),
         );
         yield* PeerPlugins.startPlugins;

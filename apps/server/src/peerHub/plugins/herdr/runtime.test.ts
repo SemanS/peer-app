@@ -86,7 +86,6 @@ const ana = (
           overlaps: [],
           findings: [],
           contexts: [],
-          candidates: [],
         }),
       );
       const agents = yield* PeerAgents.PeerAgents;

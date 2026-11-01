@@ -126,7 +126,7 @@ const make = Effect.gen(function* () {
   const client = yield* PeerHubClient.PeerHubClient;
   const plugins = yield* PeerPlugins.PeerPlugins;
   const projects = yield* ProjectService.ProjectService;
-  const { environmentId, checkoutPath, knowledgePath } = state;
+  const { environmentId, checkoutPath } = state;
 
   const coordinationOf = yield* Ref.make<
     Option.Option<(s: RuntimeState) => Effect.Effect<PeerHubStatus["coordination"]>>
@@ -240,7 +240,6 @@ const make = Effect.gen(function* () {
       const hub = signedIn ? yield* client.hubInfo : undefined;
       const byProject = new Map<string, HubBoundProject>();
       const byRoot = new Map<string, HubBoundProject>();
-      const knowledgePaths = new Map<string, string>();
       const workspaces: PeerWorkspaceState[] = [];
       for (const workspace of s.persisted.workspaces) {
         const manifest = workspace.manifest;
@@ -255,13 +254,6 @@ const make = Effect.gen(function* () {
             if (projectId !== undefined) byProject.set(projectId, entry);
           }
         }
-        const knowledgeRepo = manifest?.knowledge.company;
-        const knowledgeTransient = s.knowledge.get(workspace.slug);
-        const knowledgeReady =
-          knowledgeRepo !== undefined &&
-          (yield* Effect.promise(() => checkoutState(knowledgePath(workspace.slug)))).state ===
-            "ready";
-        if (knowledgeReady) knowledgePaths.set(workspace.slug, knowledgePath(workspace.slug));
         workspaces.push({
           ...(workspace.edition === undefined ? {} : { edition: workspace.edition }),
           slug: workspace.slug,
@@ -275,17 +267,6 @@ const make = Effect.gen(function* () {
             ? {}
             : { revision: manifest.workspace.revision }),
           memberName: manifest?.member.name ?? s.persisted.email ?? "",
-          companyKnowledge:
-            knowledgeRepo === undefined
-              ? null
-              : {
-                  repository: knowledgeRepo.repository,
-                  path: knowledgePath(workspace.slug),
-                  state: knowledgeTransient?.state ?? (knowledgeReady ? "ready" : "missing"),
-                  ...(knowledgeTransient?.error === undefined
-                    ? {}
-                    : { error: knowledgeTransient.error }),
-                },
           projects: projectStates,
           lastSyncAt: workspace.lastSyncAt,
           error: s.workspaceErrors.get(workspace.slug) ?? null,
@@ -306,7 +287,7 @@ const make = Effect.gen(function* () {
       const policy =
         s.persisted.workspaces.length === 0 && sharedInstances.size === 0
           ? null
-          : { projects: byProject, roots: byRoot, sharedInstances, knowledgePaths };
+          : { projects: byProject, roots: byRoot, sharedInstances };
 
       return {
         policy,

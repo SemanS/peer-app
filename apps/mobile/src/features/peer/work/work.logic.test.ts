@@ -105,7 +105,6 @@ function computer(
       overlaps: [],
       findings: [],
       contexts: [],
-      candidates: [],
     },
     ...overrides,
   } as unknown as PeerHubStatus;

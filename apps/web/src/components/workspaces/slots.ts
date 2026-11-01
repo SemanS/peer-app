@@ -30,7 +30,6 @@ import { capacityWebPlugin } from "./capacity";
 import { githubWebPlugin } from "./github";
 import { herdrWebPlugin } from "./herdr";
 import { jujutsuWebPlugin } from "./jujutsu";
-import { knowledgeWebPlugin } from "./knowledge";
 import { observeWebPlugin } from "./observe";
 import { toolTrustWebPlugin } from "./tool-trust";
 import { mcpWebPlugin } from "./mcp";
@@ -50,7 +49,6 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   capacityWebPlugin,
   requestsWebPlugin,
   observeWebPlugin,
-  knowledgeWebPlugin,
 
   auditWebPlugin,
   toolTrustWebPlugin,

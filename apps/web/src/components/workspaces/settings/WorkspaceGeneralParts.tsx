@@ -1,8 +1,7 @@
 /**
- * The smaller parts of the workspace's General page (design artboard 14): the name, the company
- * knowledge fields over the page's draft, and the rows kept from the Workspaces page (its
- * configuration, its folder and Leave). The domains and the YAML card are `WorkspaceGeneralDomains`
- * and `WorkspaceGeneralYaml`.
+ * The smaller parts of the workspace's General page (design artboard 14): the name, and the rows
+ * kept from the Workspaces page (its configuration, its folder and Leave). The domains and the YAML
+ * card are `WorkspaceGeneralDomains` and `WorkspaceGeneralYaml`.
  */
 import type { EnvironmentId, PeerHubStatus, PeerWorkspaceState } from "@t3tools/contracts";
 import { useNavigate } from "@tanstack/react-router";
@@ -17,23 +16,7 @@ import { Input } from "../../ui/input";
 import { PeerStackedField } from "../PeerDialog";
 import { reportFailure } from "../workFeedback";
 import { HostedWorkspaceSettings } from "./PluginSlots";
-import {
-  branchTextProblem,
-  checkName,
-  configurationText,
-  repositoryTextProblem,
-  storeTextProblem,
-  NAME_MAX,
-} from "./workspaceGeneral.logic";
-
-/**
- * What a text field shows while the person types in it: what they typed, even where the draft does
- * not take it (an address that is not one). Leaving the field shows the draft's value again.
- */
-function useTyped(committed: string) {
-  const [typed, setTyped] = useState<string | null>(null);
-  return { shown: typed ?? committed, typed, type: setTyped, leave: () => setTyped(null) };
-}
+import { checkName, configurationText, NAME_MAX } from "./workspaceGeneral.logic";
 
 const problemClass = "text-xs text-destructive-foreground";
 
@@ -135,108 +118,6 @@ export interface KnowledgeFieldValues {
   readonly repository: string;
   readonly branch: string;
   readonly store: string;
-}
-
-/**
- * Repository, branch and folder of the company knowledge store. A value goes into the draft as soon
- * as it can be one; one that cannot says why and is not taken. Branch and folder need a repository;
- * leaving the repository empty takes the store away (no company knowledge).
- */
-export function KnowledgeFields({
-  values,
-  editable,
-  onRepository,
-  onBranch,
-  onStore,
-  onRemove,
-}: {
-  readonly values: KnowledgeFieldValues;
-  readonly editable: boolean;
-  readonly onRepository: (repository: string) => void;
-  readonly onBranch: (branch: string) => void;
-  readonly onStore: (store: string) => void;
-  readonly onRemove: () => void;
-}) {
-  const ids = [useId(), useId(), useId()] as const;
-  const repository = useTyped(values.repository);
-  const branch = useTyped(values.branch);
-  const store = useTyped(values.store);
-  const hasStore = values.repository !== "";
-  // What is saved was good enough for the Hub: only what is being typed can be wrong.
-  const repositoryProblem =
-    repository.typed === null ? null : repositoryTextProblem(repository.typed);
-  const branchProblem = branch.typed === null ? null : branchTextProblem(branch.typed);
-  const storeProblem = store.typed === null ? null : storeTextProblem(store.typed);
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_8rem_7rem]">
-        <PeerStackedField label="Repository" htmlFor={ids[0]}>
-          <Input
-            id={ids[0]}
-            font="mono"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="https://github.com/acme/knowledge"
-            value={repository.shown}
-            disabled={!editable}
-            aria-invalid={repositoryProblem !== null || undefined}
-            onChange={(event) => {
-              const text = event.target.value;
-              repository.type(text);
-              if (text.trim() !== "" && repositoryTextProblem(text) === null) onRepository(text);
-            }}
-            onBlur={() => {
-              if (repository.shown.trim() === "" && hasStore) onRemove();
-              repository.leave();
-            }}
-          />
-        </PeerStackedField>
-        <PeerStackedField label="Branch" htmlFor={ids[1]}>
-          <Input
-            id={ids[1]}
-            font="mono"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="main"
-            value={branch.shown}
-            disabled={!editable || !hasStore}
-            aria-invalid={branchProblem !== null || undefined}
-            onChange={(event) => {
-              const text = event.target.value;
-              branch.type(text);
-              if (text.trim() !== "" && branchTextProblem(text) === null) onBranch(text);
-            }}
-            onBlur={branch.leave}
-          />
-        </PeerStackedField>
-        <PeerStackedField label="Folder" htmlFor={ids[2]}>
-          <Input
-            id={ids[2]}
-            font="mono"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder=".ai"
-            value={store.shown}
-            disabled={!editable || !hasStore}
-            aria-invalid={storeProblem !== null || undefined}
-            onChange={(event) => {
-              const text = event.target.value;
-              store.type(text);
-              if (text.trim() !== "" && storeTextProblem(text) === null) onStore(text);
-            }}
-            onBlur={store.leave}
-          />
-        </PeerStackedField>
-      </div>
-      {[repositoryProblem, branchProblem, storeProblem].map((problem) =>
-        problem === null ? null : (
-          <p key={problem} role="alert" className={problemClass}>
-            {problem}
-          </p>
-        ),
-      )}
-    </div>
-  );
 }
 
 /**

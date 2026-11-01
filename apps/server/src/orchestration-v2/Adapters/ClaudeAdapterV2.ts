@@ -1771,21 +1771,14 @@ export function claudeMcpQueryOverrides(input: {
   readonly allowedTools?: ReadonlyArray<string>;
   readonly mcpServers?: ClaudeQueryOptions["mcpServers"];
   readonly appendSystemPrompt?: string;
-  /** What the workspace project adds to the session's environment (its agents' memory policy). */
-  readonly environment?: Readonly<Record<string, string>>;
 } {
   const session = input.mcpSession;
-  // Tools, instructions and environment of the Peer workspace project this thread belongs to, if any.
+  // Tools and instructions of the Peer workspace project this thread belongs to, if any.
   const hubServers =
     input.threadId === undefined ? {} : HubPolicy.claudeHubMcpServers(input.threadId);
   const hubInstructions =
     input.threadId === undefined ? "" : HubPolicy.hubInstructionsForThread(input.threadId);
-  const hubEnvironment =
-    input.threadId === undefined ? {} : HubPolicy.hubEnvironmentForThread(input.threadId);
-  const hub = {
-    ...(hubInstructions === "" ? {} : { appendSystemPrompt: hubInstructions }),
-    ...(Object.keys(hubEnvironment).length === 0 ? {} : { environment: hubEnvironment }),
-  };
+  const hub = hubInstructions === "" ? {} : { appendSystemPrompt: hubInstructions };
   if (session === undefined) {
     return {
       ...(input.allowedTools === undefined ? {} : { allowedTools: input.allowedTools }),
@@ -10398,7 +10391,6 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
                   ? yield* resolveSubagentPromptCacheTtl(turnInput.runtimePolicy.cwd)
                   : undefined,
               ),
-              ...mcpOverrides.environment,
             },
             tools: queryPolicy.tools ?? CLAUDE_CODE_PRESET_TOOLS,
             ...(mcpOverrides.allowedTools === undefined

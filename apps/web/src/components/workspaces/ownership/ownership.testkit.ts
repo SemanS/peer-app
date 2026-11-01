@@ -224,7 +224,6 @@ export function statusFor(email: string, looking: Looking = {}): PeerHubStatus {
       enabled: looking.coordination ?? true,
       sessions: looking.coordination === false ? [] : (looking.sessions ?? []),
       overlaps: looking.coordination === false ? [] : (looking.overlaps ?? []),
-      candidates: [],
       contexts: [],
       findings: [],
     },
@@ -288,7 +287,6 @@ export function workProject(email: string, looking: Looking = {}): WorkProjectNo
     })),
     unsorted: [],
     context: undefined,
-    candidates: 0,
     tasks: [...tasks],
     ownership: projectOwnership(status, workspace, state.project),
   };

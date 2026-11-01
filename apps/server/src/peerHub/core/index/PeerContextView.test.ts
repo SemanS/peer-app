@@ -122,7 +122,6 @@ function serving(
           environmentId: EnvironmentId.make("test-environment"),
           workspaceRoot: "",
           hubHome: "",
-          knowledgePath: () => "",
           current: () => runtime,
           lock: Semaphore.makeUnsafe(1),
           checkoutPath: () => "",

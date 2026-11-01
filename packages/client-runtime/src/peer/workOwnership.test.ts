@@ -149,7 +149,6 @@ function ordering(
     areas: [{ name: "Payments", tasks }],
     unsorted: [],
     context: undefined,
-    candidates: 0,
     tasks: tasks.map((entry) => hubTask(entry.id, { area: "Payments" })),
     ownership,
     ...more,
@@ -499,7 +498,6 @@ describe("the work tree", () => {
     role: "lead" as const,
     members: MEMBERS,
     repositories: [],
-    knowledge: { kontext: false, company: false },
     tools: [],
     capacity: { personal: "any" as const, personalHarnesses: [] },
   };
@@ -516,7 +514,6 @@ describe("the work tree", () => {
         allowedDomains: [],
         currency: "EUR",
         memberName: "Eva",
-        companyKnowledge: null,
         projects: [
           {
             project,
@@ -552,7 +549,6 @@ describe("the work tree", () => {
       overlaps: [],
       findings: [],
       contexts: [],
-      candidates: [],
     },
     sharedThreads: [],
     syncing: false,

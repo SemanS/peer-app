@@ -65,7 +65,7 @@ export function PeerPageHeader({
   /** The project the page is in; its mark comes from `colorKey` (`<workspace>/<project>`). */
   readonly project?: { readonly name: string; readonly colorKey: string } | undefined;
   readonly task?: { readonly key?: string | undefined; readonly title: string } | undefined;
-  /** What the page is: the thread, "Task context", "Knowledge to keep", … */
+  /** What the page is: the thread, "Task context", … */
   readonly page: ReactNode;
   /** Right after the page's name, e.g. how many wait. */
   readonly after?: ReactNode;

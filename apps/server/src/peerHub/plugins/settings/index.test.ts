@@ -39,7 +39,6 @@ const coordination: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 const WS = "/v1/workspaces/acme";

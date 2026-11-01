@@ -22,8 +22,6 @@ describe("viewOfPath", () => {
       "/together/group-1",
       "/workspace/set-1",
       "/context/acme/app/task:t-1",
-      "/knowledge/acme/app",
-      "/memory/acme/app",
       "/team/acme/app",
       "/overlap/acme/app/o-1",
       "/observe/acme/laptop/th-1",
@@ -208,10 +206,8 @@ describe("activeRouteKey", () => {
     expect(activeRouteKey("/work", {})).toBeNull();
   });
 
-  it("lights up Knowledge for its own pages and the Team page for its own, not Knowledge", () => {
+  it("lights up the Team page for its own", () => {
     const project = { workspace: "acme", project: "app" };
-    expect(activeRouteKey("/knowledge/acme/app", project)).toBe("knowledge:acme:app");
-    expect(activeRouteKey("/memory/acme/app", project)).toBe("knowledge:acme:app");
     expect(activeRouteKey("/team/acme/app", project)).toBe("team:acme:app");
   });
 

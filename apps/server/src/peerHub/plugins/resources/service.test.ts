@@ -27,7 +27,6 @@ const project = {
   role: "member" as const,
   members: [],
   repositories: [],
-  knowledge: { kontext: false, company: false },
   tools: [],
   capacity: { personal: "any" as const, personalHarnesses: [] },
 };
@@ -73,7 +72,6 @@ describe("resource service on the environment Hub session", () => {
               version: 2,
               workspace: { slug: "acme", name: "Acme", currency: "EUR" },
               member: { email: "ana@acme.test", name: "Ana", role: "member" },
-              knowledge: {},
               projects: [project],
             },
           })),
@@ -88,7 +86,6 @@ describe("resource service on the environment Hub session", () => {
             overlaps: [],
             findings: [],
             contexts: [],
-            candidates: [],
           }),
         );
         let service: PeerResources["Service"] | undefined;
@@ -246,7 +243,6 @@ describe("resource service on the environment Hub session", () => {
             overlaps: [],
             findings: [],
             contexts: [],
-            candidates: [],
           }),
         );
         yield* state.updatePersisted((p) => ({
@@ -257,7 +253,6 @@ describe("resource service on the environment Hub session", () => {
               version: 2,
               workspace: { slug: "acme", name: "Acme", currency: "EUR" },
               member: { email: "ana@acme.test", name: "Ana", role: "member" },
-              knowledge: {},
               projects: [project],
             },
           })),

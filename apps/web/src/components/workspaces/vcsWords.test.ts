@@ -54,7 +54,6 @@ function project(
     areas: [],
     unsorted: threads,
     context: undefined,
-    candidates: 0,
     tasks: [],
     ...(vcs === undefined ? {} : { vcs }),
   };

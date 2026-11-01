@@ -199,7 +199,6 @@ export const changesSeed = (hubUrl: string, email: string = BOB) =>
           version: 2,
           workspace: { slug: "acme", name: "Acme", currency: "EUR" },
           member: { email, name: NAMES[email] ?? email, role: "member" },
-          knowledge: {},
           projects: [
             {
               id: "app",
@@ -207,7 +206,6 @@ export const changesSeed = (hubUrl: string, email: string = BOB) =>
               role: "member",
               members: [ANA, BOB, EVA].map((member) => ({ email: member, name: NAMES[member] })),
               repositories: [{ id: "api", url: "https://github.com/acme/api.git", branch: "main" }],
-              knowledge: { kontext: false, company: false },
               tools: [],
               capacity: { personal: "any", personalHarnesses: [] },
             },
@@ -230,7 +228,6 @@ const COORDINATION: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 /** What a test makes its Hub do: the rows it serves, and the answer to a report. */

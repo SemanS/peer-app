@@ -22,7 +22,6 @@ export function needsYouView(status: PeerHubStatus): PeerHubStatus {
     mcp: undefined,
     workspaces: status.workspaces.map((workspace) => ({
       ...workspace,
-      companyKnowledge: null,
       projects: workspace.projects.map((project) => ({
         ...project,
         tools: [],
@@ -51,7 +50,6 @@ export function needsYouView(status: PeerHubStatus): PeerHubStatus {
       advice: [],
       findings: [],
       contexts: [],
-      candidates: [],
       codexHookHomes: undefined,
       sessions: status.coordination.sessions
         .filter((s) => ids.has(s.id))

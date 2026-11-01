@@ -64,7 +64,6 @@ const COORDINATION: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 const seed = (hubUrl: string) =>
@@ -82,7 +81,6 @@ const seed = (hubUrl: string) =>
           version: 2,
           workspace: { slug: "acme", name: "Acme", currency: "EUR" },
           member: { email: BOB, name: "Bob", role: "member" },
-          knowledge: {},
           projects: [
             {
               id: "app",
@@ -93,7 +91,6 @@ const seed = (hubUrl: string) =>
                 { email: EVA, name: "Eva" },
               ],
               repositories: [{ id: "api", url: "https://github.com/acme/api.git", branch: "main" }],
-              knowledge: { kontext: false, company: false },
               tools: [],
               capacity: { personal: "any", personalHarnesses: [] },
             },

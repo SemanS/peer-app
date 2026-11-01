@@ -1,8 +1,8 @@
 // @effect-diagnostics nodeBuiltinImport:off - clones into the person's own checkouts.
 /**
  * Checkouts of workspace repositories on this computer: cloning one, through the git host that
- * owns its address or with git's own sign-in (SSH keys, the keychain); keeping a workspace's
- * company knowledge current; and reading what sharing a repository gives the workspace.
+ * owns its address or with git's own sign-in (SSH keys, the keychain); and reading what sharing a
+ * repository gives the workspace.
  *
  * @module peerHub/core/workspaces/checkouts
  */
@@ -66,37 +66,6 @@ export const cloneRepository = (
           : host.explain(runOutput(failure), repo),
     });
     if (via !== null) yield* via.configure(path);
-  });
-
-/**
- * A workspace's company knowledge cloned into `path`, or fast-forwarded where it `exists`; fails
- * with why not.
- */
-export const pullKnowledge = (
-  repository: { readonly repository: string; readonly branch: string },
-  path: string,
-  exists: boolean,
-) =>
-  Effect.tryPromise({
-    try: async () => {
-      if (exists) {
-        await run("git", ["-C", path, "pull", "--ff-only", "--quiet"], {
-          timeoutMs: GIT_TIMEOUT_MS,
-        });
-        return;
-      }
-      await NodeFSP.mkdir(NodePath.dirname(path), { recursive: true });
-      await run(
-        "git",
-        ["clone", "--quiet", "--branch", repository.branch, "--", repository.repository, path],
-        { timeoutMs: GIT_TIMEOUT_MS },
-      );
-    },
-    catch: (failure) =>
-      explainCloneFailure(runOutput(failure), {
-        url: repository.repository,
-        branch: repository.branch,
-      }),
   });
 
 /** What sharing gives the workspace: one repository, and where it is checked out here if it is. */

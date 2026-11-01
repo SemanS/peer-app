@@ -59,7 +59,6 @@ import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$e
 import { Route as ChatTeamWorkspaceProjectRouteImport } from './routes/_chat.team.$workspace.$project'
 import { Route as ChatSettingsPeerSplatRouteImport } from './routes/_chat.settings.peer.$'
 import { Route as ChatOperationsWorkspaceProjectRouteImport } from './routes/_chat.operations.$workspace.$project'
-import { Route as ChatKnowledgeWorkspaceProjectRouteImport } from './routes/_chat.knowledge.$workspace.$project'
 import { Route as ChatChangesWorkspaceProjectRouteImport } from './routes/_chat.changes.$workspace.$project'
 import { Route as ChatTaskWorkspaceProjectTaskRouteImport } from './routes/_chat.task.$workspace.$project.$task'
 import { Route as ChatSettingsPeerComputerSectionRouteImport } from './routes/_chat.settings.peer.computer.$section'
@@ -327,12 +326,6 @@ const ChatOperationsWorkspaceProjectRoute =
     path: '/operations/$workspace/$project',
     getParentRoute: () => ChatRoute,
   } as any)
-const ChatKnowledgeWorkspaceProjectRoute =
-  ChatKnowledgeWorkspaceProjectRouteImport.update({
-    id: '/knowledge/$workspace/$project',
-    path: '/knowledge/$workspace/$project',
-    getParentRoute: () => ChatRoute,
-  } as any)
 const ChatChangesWorkspaceProjectRoute =
   ChatChangesWorkspaceProjectRouteImport.update({
     id: '/changes/$workspace/$project',
@@ -442,7 +435,6 @@ export interface FileRoutesByFullPath {
   '/together/$group': typeof ChatTogetherGroupRoute
   '/workspace/$setId': typeof ChatWorkspaceSetIdRoute
   '/changes/$workspace/$project': typeof ChatChangesWorkspaceProjectRoute
-  '/knowledge/$workspace/$project': typeof ChatKnowledgeWorkspaceProjectRoute
   '/operations/$workspace/$project': typeof ChatOperationsWorkspaceProjectRoute
   '/settings/peer/$': typeof ChatSettingsPeerSplatRoute
   '/team/$workspace/$project': typeof ChatTeamWorkspaceProjectRoute
@@ -504,7 +496,6 @@ export interface FileRoutesByTo {
   '/together/$group': typeof ChatTogetherGroupRoute
   '/workspace/$setId': typeof ChatWorkspaceSetIdRoute
   '/changes/$workspace/$project': typeof ChatChangesWorkspaceProjectRoute
-  '/knowledge/$workspace/$project': typeof ChatKnowledgeWorkspaceProjectRoute
   '/operations/$workspace/$project': typeof ChatOperationsWorkspaceProjectRoute
   '/settings/peer/$': typeof ChatSettingsPeerSplatRoute
   '/team/$workspace/$project': typeof ChatTeamWorkspaceProjectRoute
@@ -568,7 +559,6 @@ export interface FileRoutesById {
   '/_chat/together/$group': typeof ChatTogetherGroupRoute
   '/_chat/workspace/$setId': typeof ChatWorkspaceSetIdRoute
   '/_chat/changes/$workspace/$project': typeof ChatChangesWorkspaceProjectRoute
-  '/_chat/knowledge/$workspace/$project': typeof ChatKnowledgeWorkspaceProjectRoute
   '/_chat/operations/$workspace/$project': typeof ChatOperationsWorkspaceProjectRoute
   '/_chat/settings/peer/$': typeof ChatSettingsPeerSplatRoute
   '/_chat/team/$workspace/$project': typeof ChatTeamWorkspaceProjectRoute
@@ -632,7 +622,6 @@ export interface FileRouteTypes {
     | '/together/$group'
     | '/workspace/$setId'
     | '/changes/$workspace/$project'
-    | '/knowledge/$workspace/$project'
     | '/operations/$workspace/$project'
     | '/settings/peer/$'
     | '/team/$workspace/$project'
@@ -694,7 +683,6 @@ export interface FileRouteTypes {
     | '/together/$group'
     | '/workspace/$setId'
     | '/changes/$workspace/$project'
-    | '/knowledge/$workspace/$project'
     | '/operations/$workspace/$project'
     | '/settings/peer/$'
     | '/team/$workspace/$project'
@@ -757,7 +745,6 @@ export interface FileRouteTypes {
     | '/_chat/together/$group'
     | '/_chat/workspace/$setId'
     | '/_chat/changes/$workspace/$project'
-    | '/_chat/knowledge/$workspace/$project'
     | '/_chat/operations/$workspace/$project'
     | '/_chat/settings/peer/$'
     | '/_chat/team/$workspace/$project'
@@ -1134,13 +1121,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatOperationsWorkspaceProjectRouteImport
       parentRoute: typeof ChatRoute
     }
-    '/_chat/knowledge/$workspace/$project': {
-      id: '/_chat/knowledge/$workspace/$project'
-      path: '/knowledge/$workspace/$project'
-      fullPath: '/knowledge/$workspace/$project'
-      preLoaderRoute: typeof ChatKnowledgeWorkspaceProjectRouteImport
-      parentRoute: typeof ChatRoute
-    }
     '/_chat/changes/$workspace/$project': {
       id: '/_chat/changes/$workspace/$project'
       path: '/changes/$workspace/$project'
@@ -1314,7 +1294,6 @@ interface ChatRouteChildren {
   ChatTogetherGroupRoute: typeof ChatTogetherGroupRoute
   ChatWorkspaceSetIdRoute: typeof ChatWorkspaceSetIdRoute
   ChatChangesWorkspaceProjectRoute: typeof ChatChangesWorkspaceProjectRoute
-  ChatKnowledgeWorkspaceProjectRoute: typeof ChatKnowledgeWorkspaceProjectRoute
   ChatOperationsWorkspaceProjectRoute: typeof ChatOperationsWorkspaceProjectRoute
   ChatTeamWorkspaceProjectRoute: typeof ChatTeamWorkspaceProjectRoute
   ChatContextWorkspaceProjectScopeRoute: typeof ChatContextWorkspaceProjectScopeRoute
@@ -1338,7 +1317,6 @@ const ChatRouteChildren: ChatRouteChildren = {
   ChatTogetherGroupRoute: ChatTogetherGroupRoute,
   ChatWorkspaceSetIdRoute: ChatWorkspaceSetIdRoute,
   ChatChangesWorkspaceProjectRoute: ChatChangesWorkspaceProjectRoute,
-  ChatKnowledgeWorkspaceProjectRoute: ChatKnowledgeWorkspaceProjectRoute,
   ChatOperationsWorkspaceProjectRoute: ChatOperationsWorkspaceProjectRoute,
   ChatTeamWorkspaceProjectRoute: ChatTeamWorkspaceProjectRoute,
   ChatContextWorkspaceProjectScopeRoute: ChatContextWorkspaceProjectScopeRoute,

@@ -545,10 +545,6 @@
       "types": "./src/peer/vcsWords.ts",
       "default": "./src/peer/vcsWords.ts"
     },
-    "./peer/knowledge": {
-      "types": "./src/peer/knowledge.ts",
-      "default": "./src/peer/knowledge.ts"
-    },
     "./peer/observe": {
       "types": "./src/peer/observe.ts",
       "default": "./src/peer/observe.ts"

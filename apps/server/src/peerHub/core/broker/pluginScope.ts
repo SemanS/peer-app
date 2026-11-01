@@ -27,7 +27,5 @@ export function pluginsForWorkspace(
     reportSessions: plugins.reportSessions.filter((entry) => !remote.has(entry.plugin)),
     runtime: active.find((plugin) => plugin.contributions.runtime !== undefined)?.contributions
       .runtime,
-    indexSource: active.find((plugin) => plugin.contributions.indexSource !== undefined)
-      ?.contributions.indexSource,
   };
 }

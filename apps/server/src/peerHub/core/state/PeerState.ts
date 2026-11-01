@@ -223,8 +223,6 @@ export interface RuntimeState {
   readonly workspaceErrors: ReadonlyMap<string, string>;
   /** Checkout path → an in-flight clone or its failure. */
   readonly checkouts: ReadonlyMap<string, Transient>;
-  /** Workspace slug → its knowledge clone in flight or failed. */
-  readonly knowledge: ReadonlyMap<string, Transient>;
   /** "workspace/project" → its areas, tasks and other environments' threads, as the hub last said. */
   readonly work: ReadonlyMap<string, ProjectWork>;
   /** This computer's last local report, retained even when its Hub cannot answer. */
@@ -340,10 +338,8 @@ export class PeerState extends Context.Service<
     readonly environmentId: EnvironmentId;
     /** Where workspace projects are checked out. */
     readonly workspaceRoot: string;
-    /** Peer's own files under the T3 home: company knowledge clones, shared capacity homes. */
+    /** Peer's own files under the T3 home: shared capacity homes. */
     readonly hubHome: string;
-    /** Where a workspace's company knowledge is cloned. */
-    readonly knowledgePath: (workspace: string) => string;
     readonly read: Effect.Effect<RuntimeState>;
     /** The state now, for callbacks that run outside Effect (the coordination broker's). */
     readonly current: () => RuntimeState;
@@ -448,7 +444,6 @@ const make = Effect.gen(function* () {
     error: null,
     workspaceErrors: new Map(),
     checkouts: new Map(),
-    knowledge: new Map(),
     work: new Map(),
     localThreads: new Map(),
   });
@@ -675,7 +670,6 @@ const make = Effect.gen(function* () {
     environmentId,
     workspaceRoot,
     hubHome,
-    knowledgePath: (workspace) => NodePath.join(hubHome, workspace, "knowledge"),
     read: Ref.get(ref),
     current: () => Ref.getUnsafe(ref),
     updatePersisted,

@@ -34,7 +34,6 @@ const coordination: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 interface Resumed {

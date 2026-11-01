@@ -143,7 +143,6 @@ export const paymentsSeed = (hubUrl: string) =>
           version: 2,
           workspace: { slug: "acme", name: "Acme", currency: "EUR" },
           member: { email: "ana@acme.test", name: "Ana", role: "member" },
-          knowledge: {},
           projects: [
             {
               id: "pay",
@@ -151,7 +150,6 @@ export const paymentsSeed = (hubUrl: string) =>
               role: "lead",
               members: [],
               repositories: [{ id: "api", url: "https://github.com/acme/api.git", branch: "main" }],
-              knowledge: { kontext: false, company: false },
               tools: [],
               capacity: { personal: "any", personalHarnesses: [] },
             },

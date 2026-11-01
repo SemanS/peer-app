@@ -191,8 +191,7 @@ export async function beforeTool(
   if (files.length === 0) {
     // Its own contexts only: Claude Code edits them unasked. Codex takes no "allow" without a
     // rewrite, and asks for them through PermissionRequest instead. A file elsewhere outside the
-    // repository is not Peer's to let through: its person's permission settings decide; a plugin
-    // may still deny one it knows (a harness's memory), and only a deny counts there.
+    // repository is not Peer's to let through: its person's permission settings decide.
     const paths = this.editedPaths(session, body);
     const own = paths.length > 0 && paths.every((path) => this.keptBy(session, path));
     if (session.agent === "claude" && own)
@@ -203,19 +202,6 @@ export async function beforeTool(
           permissionDecisionReason: "The agent's own working context",
         },
       };
-    const ctx = this.toolContext(session, body, "pre-tool", remainingMs(step));
-    if (ctx.outside !== undefined) {
-      const theirs = await verdicts(step, ctx, "edits", verdictBudgetMs);
-      const denied = theirs.find((said) => said.verdict.decision === "deny");
-      if (denied !== undefined) {
-        this.record("plugin.denied", {
-          plugin: denied.plugin,
-          session: session.id,
-          outside: ctx.outside,
-        });
-        return editHookAnswer(session.agent, [verdictAnswer(denied, [])])?.output ?? null;
-      }
-    }
     return this.newsContext("PreToolUse", session, step, body);
   }
   // Plugins judge the edit after core's local checks and before the hub hears of it: a plugin's

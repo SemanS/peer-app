@@ -138,10 +138,6 @@ export const brokerPlugins = Effect.gen(function* () {
       active.map((plugin) => plugin.contributions),
       "runtime",
     ),
-    indexSource: PeerPlugins.capability(
-      active.map((plugin) => plugin.contributions),
-      "indexSource",
-    ),
     reportSessions: reporting.flatMap(({ id, contributions }) =>
       contributions.reportSessions === undefined
         ? []

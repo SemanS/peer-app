@@ -23,7 +23,6 @@ import { CapacityPlugin } from "../plugins/capacity/index.ts";
 import { GitHubPlugin } from "../plugins/github/index.ts";
 import { HerdrPlugin } from "../plugins/herdr/index.ts";
 import { JujutsuPlugin } from "../plugins/jujutsu/index.ts";
-import { KnowledgePlugin } from "../plugins/knowledge/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
 import { OwnershipPlugin } from "../plugins/ownership/index.ts";
 import { RolesPlugin } from "../plugins/roles/index.ts";
@@ -73,7 +72,6 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   CapacityPlugin,
   RequestsPlugin,
   ObservePlugin,
-  KnowledgePlugin,
   AskPlugin,
 
   AuditPlugin,

@@ -26,13 +26,7 @@ import type { WorkActions } from "./useWorkActions";
 import type { AgentNeed, WorkProjectNode, WorkTaskNode } from "./workTree.logic";
 
 /** Signals another place already holds: a tab of their own, Needs your attention, the project menu. */
-const PLACED_SIGNALS: ReadonlySet<string> = new Set([
-  "overlaps",
-  "knowledge",
-  "memory",
-  "team",
-  "changes",
-]);
+const PLACED_SIGNALS: ReadonlySet<string> = new Set(["overlaps", "team", "changes"]);
 
 /**
  * The open project in the Work tab: what holds now (its announcement, what it has in place), then

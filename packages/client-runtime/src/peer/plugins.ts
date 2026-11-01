@@ -17,7 +17,6 @@ const PRE_PLUGIN_FEATURES: ReadonlySet<string> = new Set<PeerPluginId>([
   "capacity",
   "requests",
   "observe",
-  "knowledge",
   "ask",
 ]);
 

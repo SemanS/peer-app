@@ -23,7 +23,7 @@ import {
 } from "../contexts/text.ts";
 import { closerOf, newsFor } from "../coordination/news.ts";
 import type { HubFinding } from "../hub/coordApi.ts";
-import { INDEX_ALL, INDEX_SHOWN, indexText, KNOWLEDGE_SHOWN } from "../index/text.ts";
+import { INDEX_ALL, INDEX_SHOWN, indexText } from "../index/text.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
 import {
@@ -174,7 +174,7 @@ export async function startedContext(
   // The project's other work, and where to read each: the index the agent chooses from. Its
   // hook waits a few seconds at most: copies still on their way are named by `peer context`.
   await Promise.race([this.mirrorBoard(session.workspace), sleepMs(BOARD_START_WAIT_MS)]);
-  session.index = await this.indexOf(session, plugins);
+  session.index = this.indexOf(plugins);
   const works = this.indexWorks(session, INDEX_ALL);
   // A new conversation, or one that was compacted, knows nothing of the others' work yet: what
   // each builds comes with its next ask.
@@ -208,7 +208,6 @@ export async function startedContext(
         : {}),
     index: indexText({
       works,
-      knowledge: this.indexSection(plugins, session.index.entries, KNOWLEDGE_SHOWN),
       now: Date.now(),
       cli: this.cli,
       shown: INDEX_SHOWN,
@@ -233,7 +232,6 @@ export async function startedContext(
     saved: saved?.length ?? 0,
     findings: findings.map((finding) => finding.id),
     index: works.slice(0, INDEX_SHOWN).map((entry) => entry.scope),
-    knowledge: session.index.entries.length,
     bytes: text.length,
   });
   return text;

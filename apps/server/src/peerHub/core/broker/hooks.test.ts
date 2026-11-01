@@ -209,7 +209,7 @@ describe("the broker's hooks", () => {
         ...NO_PLUGINS,
         active: [
           {
-            id: "knowledge",
+            id: "observe",
             title: "Knowledge",
             contributions: {
               hooks: { preCompact: () => Effect.succeed("Keep the price invariant.") },
@@ -254,7 +254,7 @@ describe("the broker's hooks", () => {
       policy: () => "coordinate",
       plugins: async () => ({
         ...NO_PLUGINS,
-        active: [{ id: "knowledge", title: "fake", contributions }],
+        active: [{ id: "observe", title: "fake", contributions }],
       }),
     }));
     try {

@@ -7,7 +7,7 @@ import * as Result from "effect/Result";
 import { neutral } from "../../peerText.ts";
 import type { PeerSessionView } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";
-import { commandArguments, commandsOn, pluginCommand } from "./cli.ts";
+import { commandArguments, pluginCommand } from "./cli.ts";
 import { hubRead, refused, usage } from "./cliContract.ts";
 import { headerOf } from "./server.ts";
 import { pluginsForWorkspace } from "./pluginScope.ts";
@@ -17,7 +17,6 @@ export const PUBLIC_COMMANDS = new Set([
   "status",
   "index",
   "context",
-  "knowledge",
   "log",
   "current",
   "archive",
@@ -64,10 +63,8 @@ export async function publicCli(
     },
   };
   const plugins = pluginsForWorkspace(await broker.plugins(), workspace);
-  if (pluginCommand(plugins, command) !== undefined) {
-    const owned = pluginCommand(plugins, command);
-    if (owned === undefined)
-      throw refused("knowledge is unavailable on this computer", "use peer index or the Peer app.");
+  const owned = pluginCommand(plugins, command);
+  if (owned !== undefined) {
     if ("refusal" in owned)
       throw refused(
         owned.refusal.replace(/^peer: /, ""),
@@ -166,21 +163,14 @@ export async function publicCli(
       ...agents.map((agent) => broker.boardAgent(workspace, agent)),
       ...rows,
     ].join("\n");
-  const entries =
-    plugins.indexSource === undefined
-      ? []
-      : await broker.host.run(plugins.indexSource.entries(session));
   const page = Number(parsed.plain[0] ?? 1);
   const pages = Math.max(1, Math.ceil(rows.length / 12));
   if (!Number.isInteger(page) || page < 1 || page > pages)
     throw usage(`choose an index page from 1 to ${pages}`, "run peer index <page>.");
-  const knowledge = page === 1 ? broker.indexSection(plugins, entries, 40, true) : null;
   return (
     [
       ...rows.slice((page - 1) * 12, page * 12),
-      ...(knowledge ? [knowledge] : []),
       ...(agents.length > 0 ? agents.map((agent) => broker.boardAgent(workspace, agent)) : []),
-    ].join("\n") ||
-    `peer: no work on this project now.${commandsOn(plugins)("knowledge") ? " Use peer knowledge for its knowledge." : ""}`
+    ].join("\n") || "peer: no work on this project now."
   );
 }

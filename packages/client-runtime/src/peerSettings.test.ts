@@ -564,7 +564,6 @@ describe("the document", () => {
           leads: [],
           repositories: [],
           tools: ["postgres"],
-          knowledge: { kontext: true, company: true },
           capacity: { personal: "any" },
           future: { kept: true },
         },

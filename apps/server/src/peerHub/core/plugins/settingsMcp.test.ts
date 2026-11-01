@@ -27,7 +27,6 @@ const project = {
   leads: ["ana@acme.test"],
   repositories: [],
   tools: [],
-  knowledge: { kontext: true, company: true },
   capacity: { personal: "any" },
   coordination: { policy: "notify" },
 };
@@ -109,7 +108,6 @@ it.effect("serves peer config to an agent without a shell, through the active pl
           overlaps: [],
           findings: [],
           contexts: [],
-          candidates: [],
         }),
       );
       yield* (yield* PeerHubClient).me;

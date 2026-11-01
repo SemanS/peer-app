@@ -1,13 +1,10 @@
-import { getAt } from "@t3tools/client-runtime/peer-settings";
-
 import { serverEnvironment } from "../../../../state/server";
 import { useAtomCommand } from "../../../../state/use-atom-command";
 import { SettingsSearchTarget, SettingsSection } from "../../../settings/settingsLayout";
 import { EMAIL_DOMAINS_TARGET } from "../../workspaceAccess.logic";
 import { ProjectMark } from "../../signals";
 import { failureMessage } from "../../WorkspaceAccess";
-import { NotSaved, OwnersNote, PageSection, SettingsReadError } from "../CapacityCoordinationParts";
-import { DraftSaveBar } from "../DraftBar";
+import { PageSection, SettingsReadError } from "../CapacityCoordinationParts";
 import { GitHubChecksCard } from "../IntegrationsGitHub";
 import type { WorkspacePageProps } from "../pageProps";
 import { ownLimit } from "../../workspaceMembers.logic";
@@ -15,42 +12,27 @@ import { GITHUB_ANCHOR, isWorkspaceAdmin, workspaceRoleBadge } from "../peerSett
 import { PeerSettingsPage, RequirePlugin } from "../PeerSettingsPage";
 import { HostedWorkspaceSettings } from "../PluginSlots";
 import { SettingsUnavailableNote } from "../SettingsUnavailable";
-import { useSettingsDraft } from "../useSettingsDraft";
 import { useSettingsView } from "../useSettingsView";
 import { DomainsSection } from "../WorkspaceGeneralDomains";
-import { KnowledgeFields, NameField, WorkspaceRows } from "../WorkspaceGeneralParts";
+import { NameField, WorkspaceRows } from "../WorkspaceGeneralParts";
 import { YamlCard } from "../WorkspaceGeneralYaml";
-import {
-  branchEdit,
-  knowledgeStatus,
-  knowledgeUseOf,
-  knowledgeUseOfManifest,
-  readCompany,
-  removeCompanyEdit,
-  repositoryEdit,
-  storeEdit,
-  type Edit,
-} from "../workspaceGeneral.logic";
 
 /**
  * A workspace's General page (design artboard 14): its name, the email domains that let colleagues
- * in on their own, the company knowledge store, its settings as YAML to export and import, and for
- * admins GitHub's PR checks (against a Hub without the settings feature, the setup they always had).
- * Admins rename the workspace, set the store and use YAML; only owners change domains; everyone
- * else reads. The store goes into a draft that a review saves, the name and the domains are the
- * Hub's own calls and take effect at once. Without the settings feature on the Hub the page shows
- * what the manifest says and nothing is editable.
+ * in on their own, its settings as YAML to export and import, and for admins GitHub's PR checks
+ * (against a Hub without the settings feature, the setup they always had). Admins rename the
+ * workspace and use YAML; only owners change domains; everyone else reads. The name and the domains
+ * are the Hub's own calls and take effect at once. Without the settings feature on the Hub the page
+ * shows what the manifest says and nothing is editable.
  */
 export function WorkspaceGeneral({ environmentId, status, workspace }: WorkspacePageProps) {
   const view = useSettingsView(workspace.slug);
-  const draft = useSettingsDraft(view, { slice: ["knowledge", "company"] });
   const rename = useAtomCommand(serverEnvironment.peerSettings.updateWorkspace, {
     reportFailure: false,
   });
   const sync = useAtomCommand(serverEnvironment.peerHubSync, { reportFailure: false });
   const admin = isWorkspaceAdmin(workspace.role);
   const available = view.hubHasSettings;
-  // The document is what the knowledge fields and the project counts read; until it is read, the manifest's.
   const document = available ? view.document : null;
 
   const saveName = async (name: string): Promise<string | null> => {
@@ -60,27 +42,6 @@ export function WorkspaceGeneral({ environmentId, status, workspace }: Workspace
     void sync({ environmentId, input: {} });
     return null;
   };
-
-  const company = readCompany(draft.value);
-  const manifestStore = workspace.companyKnowledge;
-  const fields =
-    document !== null
-      ? {
-          repository: company?.repository ?? "",
-          branch: company?.branch ?? "",
-          store: company?.store ?? "",
-        }
-      : {
-          repository: manifestStore?.repository ?? "",
-          branch: "",
-          store: manifestStore?.path ?? "",
-        };
-  const canEditKnowledge = document !== null && view.canChange(["knowledge"]);
-  const write = (edit: Edit) => draft.set(edit.path, edit.value);
-  const use =
-    document === null
-      ? knowledgeUseOfManifest(workspace.projects)
-      : knowledgeUseOf(getAt(document, ["projects"]));
 
   return (
     <PeerSettingsPage
@@ -116,33 +77,6 @@ export function WorkspaceGeneral({ environmentId, status, workspace }: Workspace
           </PageSection>
         </SettingsSearchTarget>
 
-        <PageSection
-          title="Company knowledge"
-          aside={draft.dirty > 0 ? <NotSaved /> : undefined}
-          description="One repository of decisions and conventions every project’s agents can read. Each computer keeps a clone."
-        >
-          <KnowledgeFields
-            values={fields}
-            editable={canEditKnowledge}
-            onRepository={(repository) => write(repositoryEdit(company, repository))}
-            onBranch={(branch) => write(branchEdit(branch))}
-            onStore={(store) => write(storeEdit(store))}
-            onRemove={() => write(removeCompanyEdit)}
-          />
-          <p className="text-xs text-muted-foreground">
-            {fields.repository === ""
-              ? "No company knowledge yet. Add a repository so every project’s agents can read it."
-              : knowledgeStatus({
-                  clone: manifestStore?.state,
-                  error: manifestStore?.error,
-                  use,
-                })}
-          </p>
-          {document !== null && !canEditKnowledge ? (
-            <OwnersNote owners={view.ownersOf(["knowledge"])} />
-          ) : null}
-        </PageSection>
-
         {admin && available ? (
           <YamlCard environmentId={environmentId} workspace={workspace} view={view} />
         ) : null}
@@ -177,8 +111,6 @@ export function WorkspaceGeneral({ environmentId, status, workspace }: Workspace
           revision={view.revision}
         />
       </div>
-
-      <DraftSaveBar draft={draft} scope={workspace.name} label={`${workspace.name} · General`} />
     </PeerSettingsPage>
   );
 }

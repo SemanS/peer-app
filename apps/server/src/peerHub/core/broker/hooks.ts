@@ -368,7 +368,7 @@ export async function answerHook(
   const step = () => this.pipelineStep(session, plugins, due, adapter?.deliveries);
   // What the plugins give its index (the project's `.ai`) is read before the steps that name it.
   if (["UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure"].includes(event)) {
-    session.index = await this.indexOf(session, plugins);
+    session.index = this.indexOf(plugins);
   }
   switch (event) {
     case "SessionStart": {
@@ -636,10 +636,6 @@ export function toolContext(
   const answered =
     event === "post-tool" && (mcp || tool === "Bash") ? responseText(body.tool_response) : "";
   const edited = this.editedPaths(session, body);
-  const outside =
-    event === "pre-tool"
-      ? edited.filter((path) => inRepository(session, path) === null && !this.keptBy(session, path))
-      : [];
   return {
     session: this.sessionView(session),
     event,
@@ -648,7 +644,6 @@ export function toolContext(
       const file = inRepository(session, path);
       return file === null ? [] : [file];
     }),
-    ...(outside.length === 0 ? {} : { outside }),
     ...(typeof input?.command === "string" ? { command: input.command } : {}),
     ...(mcp && typeof input === "object" && input !== null && !Array.isArray(input)
       ? { input }

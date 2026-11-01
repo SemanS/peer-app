@@ -122,7 +122,6 @@ export const agreementsSeed = (hubUrl: string, email: string = ANA) =>
           version: 2,
           workspace: { slug: "acme", name: "Acme", currency: "EUR" },
           member: { email, name: NAMES[email] ?? email, role: "member" },
-          knowledge: {},
           projects: [
             {
               id: "app",
@@ -133,7 +132,6 @@ export const agreementsSeed = (hubUrl: string, email: string = ANA) =>
                 name: NAMES[member],
               })),
               repositories: [{ id: "api", url: "https://github.com/acme/api.git", branch: "main" }],
-              knowledge: { kontext: false, company: false },
               tools: [],
               capacity: { personal: "any", personalHarnesses: [] },
             },
@@ -188,7 +186,6 @@ export const COORDINATION: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 const task = (id: string, key: string, title: string, createdBy: string): PeerTask => ({

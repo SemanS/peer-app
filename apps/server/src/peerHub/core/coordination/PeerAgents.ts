@@ -38,17 +38,15 @@ import {
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import type { CoordinationView } from "./edits.ts";
 
-/** What an agent did with the team's work or knowledge, for people to see in Peer. */
+/** What an agent did with the team's work, for people to see in Peer. */
 export interface PeerAdvice {
-  readonly about: "work" | "knowledge";
-  /** A work's scope, or `kx:<entry id>`. */
+  readonly about: "work";
+  /** A work's scope. */
   readonly scope: string;
   readonly name: string;
-  /** It read it, asked its agents, a model found it for it, or an entry governs files it changes. */
-  readonly how: "read" | "asked" | "found" | "governs";
+  /** It read it, or asked its agents. */
+  readonly how: "read" | "asked";
   readonly why: string;
-  readonly entryKind?: string;
-  readonly path?: string;
 }
 
 const isHubError = Schema.is(PeerHubError);
@@ -149,10 +147,7 @@ export class PeerAgents extends Context.Service<
     readonly view: (workspace: string) => Effect.Effect<CoordinationView>;
     /** The workspaces whose view changes, as they change. */
     readonly viewChanges: Stream.Stream<string>;
-    /**
-     * Each workspace's coordination view as the Hub last sent it, with what the Hub's features add
-     * to it (knowledge's waiting candidates).
-     */
+    /** Each workspace's coordination view as the Hub last sent it. */
     readonly hubViews: Effect.Effect<
       ReadonlyArray<{ readonly workspace: string; readonly view: HubCoordView }>
     >;
@@ -172,7 +167,7 @@ export class PeerAgents extends Context.Service<
       readonly text: string;
       readonly op: string;
     }) => Effect.Effect<void, PeerHubError>;
-    /** Notes for people in Peer what a session did with the team's work or knowledge. */
+    /** Notes for people in Peer what a session did with the team's work. */
     readonly advise: (session: string, advice: PeerAdvice) => Effect.Effect<void>;
     /** A line in the coordination log; a plugin's events start with its id. */
     readonly log: (event: string, fields: Readonly<Record<string, unknown>>) => Effect.Effect<void>;

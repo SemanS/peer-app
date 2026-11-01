@@ -31,7 +31,7 @@ describe("complete plugin text receipts", () => {
     const fixture = await brokerFixture(() => ({
       plugins: async () => ({
         ...NO_PLUGINS,
-        active: on ? [{ id: "knowledge", title: "fake", contributions }] : [],
+        active: on ? [{ id: "observe", title: "fake", contributions }] : [],
       }),
     }));
     try {
@@ -75,7 +75,7 @@ describe("complete plugin text receipts", () => {
     const fixture = await brokerFixture(() => ({
       plugins: async () => ({
         ...NO_PLUGINS,
-        active: [{ id: "knowledge", title: "fake", contributions }],
+        active: [{ id: "observe", title: "fake", contributions }],
       }),
     }));
     try {
@@ -105,7 +105,7 @@ describe("complete plugin text receipts", () => {
     const fixture = await brokerFixture(() => ({
       plugins: async () => ({
         ...NO_PLUGINS,
-        active: [{ id: "knowledge", title: "fake", contributions }],
+        active: [{ id: "observe", title: "fake", contributions }],
       }),
     }));
     const post = (path: string, body: Record<string, unknown>) =>
@@ -179,7 +179,7 @@ describe("complete plugin text receipts", () => {
     const fixture = await brokerFixture(() => ({
       plugins: async () => ({
         ...NO_PLUGINS,
-        active: [{ id: "knowledge", title: "fake", contributions }],
+        active: [{ id: "observe", title: "fake", contributions }],
       }),
     }));
     try {
@@ -221,7 +221,7 @@ describe("complete plugin text receipts", () => {
     const fixture = await brokerFixture(() => ({
       plugins: async () => ({
         ...NO_PLUGINS,
-        active: [{ id: "knowledge", title: "fake", contributions }],
+        active: [{ id: "observe", title: "fake", contributions }],
       }),
     }));
     try {
@@ -258,7 +258,7 @@ describe("complete plugin text receipts", () => {
     const fixture = await brokerFixture(() => ({
       plugins: async () => ({
         ...NO_PLUGINS,
-        active: [{ id: "knowledge", title: "fake", contributions }],
+        active: [{ id: "observe", title: "fake", contributions }],
       }),
     }));
     try {
@@ -301,7 +301,7 @@ describe("complete plugin text receipts", () => {
     const fixture = await brokerFixture(() => ({
       plugins: async () => ({
         ...NO_PLUGINS,
-        active: [{ id: "knowledge", title: "fake", contributions }],
+        active: [{ id: "observe", title: "fake", contributions }],
       }),
     }));
     try {

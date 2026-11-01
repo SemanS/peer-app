@@ -80,7 +80,6 @@ const project: WorkProjectNode = {
   ],
   unsorted: [],
   context: undefined,
-  candidates: 0,
   tasks: [g, a, b, c, r].map((task) => hubTask(task.id, { executable: task.executable })),
 };
 

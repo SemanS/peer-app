@@ -38,7 +38,6 @@ const project = (nodes: ReadonlyArray<WorkTaskNode>): WorkProjectNode =>
     areas: [{ name: null, tasks: nodes }],
     unsorted: [],
     context: undefined,
-    candidates: 0,
     tasks: nodes.map(hubTask),
   }) as WorkProjectNode;
 

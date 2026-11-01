@@ -32,7 +32,6 @@ const workspace = (slug = "acme", tool = tracker) => ({
         role: "member" as const,
         members: [],
         repositories: [],
-        knowledge: { kontext: false, company: false },
         capacity: { personal: "any" as const, personalHarnesses: [] },
         tools: [tool],
       },

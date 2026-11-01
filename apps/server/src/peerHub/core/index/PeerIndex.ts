@@ -1,10 +1,9 @@
 /**
  * PeerIndex: what an agent chooses its context from, as plugins read it: the other works on its
- * project, and the entries the active index source (knowledge's `.ai`) has for its checkout.
+ * project.
  *
  * The coordination broker keeps the works while coordination is on; PeerCoordination hands it over
- * here as it starts and stops it. While coordination is off there are none, and while no active
- * plugin fills the index source there are no entries.
+ * here as it starts and stops it. While coordination is off there are none.
  *
  * @module peerHub/core/index/PeerIndex
  */
@@ -13,8 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import type { CoordinationBroker } from "../broker/Broker.ts";
-import type { PeerIndexEntry, PeerSessionView } from "../plugin.ts";
-import * as PeerPlugins from "../plugins/PeerPlugins.ts";
+import type { PeerSessionView } from "../plugin.ts";
 
 /**
  * How plugins name works as the index does: a work's scope (`task:<id>`, or `project`) and the task
@@ -46,8 +44,6 @@ export class PeerIndex extends Context.Service<
   {
     /** The other works on a session's project, those with agents at work on them first. */
     readonly works: (session: PeerSessionView) => Effect.Effect<ReadonlyArray<PeerIndexWork>>;
-    /** The index source's entries for a session's checkout, newest first; none without one. */
-    readonly entries: (session: PeerSessionView) => Effect.Effect<ReadonlyArray<PeerIndexEntry>>;
     /**
      * The work a handle names in a project (`task:<id>`, or `project`): a task by its key or id,
      * also one the Hub knows of before Peer's list of tasks does; none when nothing has it.
@@ -70,8 +66,7 @@ export class PeerIndex extends Context.Service<
   }
 >()("t3/peerHub/core/index/PeerIndex") {}
 
-const make = Effect.gen(function* () {
-  const plugins = yield* PeerPlugins.PeerPlugins;
+const make = Effect.sync(() => {
   let broker: CoordinationBroker | null = null;
   return PeerIndex.of({
     works: (session) => Effect.sync(() => broker?.worksFor(session.id) ?? []),
@@ -81,11 +76,6 @@ const make = Effect.gen(function* () {
       Effect.sync(() => broker?.subjectOf(workspace, project, scope) ?? scope),
     pointer: (workspace, project, scope) =>
       Effect.sync(() => broker?.contextPointer(workspace, project, scope) ?? null),
-    entries: (session) =>
-      Effect.gen(function* () {
-        const source = PeerPlugins.capability(yield* plugins.contributions, "indexSource");
-        return source === undefined ? [] : yield* source.entries(session);
-      }),
     attach: (next) =>
       Effect.sync(() => {
         broker = next;

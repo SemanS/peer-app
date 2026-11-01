@@ -1,8 +1,41 @@
-import { PEER_HARVEST_CONVERSATIONS_MAX, type PeerConversationReport } from "@t3tools/contracts";
-
-import { plainSummary } from "../knowledge/knowledge.logic";
+import type { PeerConversationReport } from "@t3tools/contracts";
 
 type Item = PeerConversationReport["items"][number];
+
+/** Words a heading only names a part with; a summary starts after them. */
+const SECTION_HEADING =
+  /^#{1,6}\s+(?:overview|summary|context|background|description|decision|rationale|details|notes|why|what)\b:?\s*/i;
+
+/**
+ * Markdown as plain prose people read: headings, code marks, links, emphasis and list marks
+ * removed, cut at a sentence or word near `max`. Agents keep the Markdown; this is only its gist.
+ */
+export function plainSummary(markdown: string, max = 220): string {
+  const text = markdown
+    .replace(/```[\s\S]*?(?:```|$)/g, " ")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    // A heading on its own line names a part; the prose under it says what it holds.
+    .filter((line, _index, lines) => !(/^#{1,6}\s/.test(line) && lines.length > 1))
+    .join(" ")
+    .replace(SECTION_HEADING, "")
+    .replace(/#{1,6}\s+/g, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/(\*\*|__)(.+?)\1/g, "$2")
+    .replace(/(^|[\s(])[*_]([^*_\s][^*_]*?)[*_](?=[\s).,;:!?]|$)/g, "$1$2")
+    .replace(/(^|\s)(?:[-*+]|\d+[.)])\s+/g, "$1")
+    .replace(/(^|\s)>\s+/g, "$1")
+    .replace(/\s*\|\s*/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max);
+  const sentence = cut.search(/[.!?](?=\s)[^.!?]*$/);
+  if (sentence >= max / 2) return cut.slice(0, sentence + 1);
+  const word = cut.lastIndexOf(" ");
+  return `${(word >= max / 2 ? cut.slice(0, word) : cut).replace(/[\s,;:–-]+$/, "")}…`;
+}
 
 /**
  * Text a provider puts before the person's words (Codex's injected AGENTS.md, a tag block), which
@@ -29,31 +62,3 @@ export function conversationTitle(item: Item): string {
 /** The agent's reply in a sentence or two: what it says it did. */
 export const replySummary = (item: Item) =>
   item.response === null ? null : plainSummary(item.response, 200);
-
-/**
- * The conversations a person is looking at, as text kontext reads for what the project should keep:
- * each one's title, the latest request and the agent's reply, newest first, cut to what the Hub
- * accepts. Conversations with neither are left out; null when none has any.
- */
-export function conversationExcerpts(
-  items: ReadonlyArray<Item>,
-  max = PEER_HARVEST_CONVERSATIONS_MAX,
-): { readonly text: string; readonly read: number } | null {
-  const parts: string[] = [];
-  let length = 0;
-  for (const item of items) {
-    if (item.request === null && item.response === null) continue;
-    const part = [
-      `## ${conversationTitle(item)}`,
-      item.request === null ? null : `Request: ${item.request}`,
-      item.response === null ? null : `Agent reply: ${item.response}`,
-    ]
-      .filter((line) => line !== null)
-      .join("\n");
-    const added = part.length + (parts.length === 0 ? 0 : 2);
-    if (length + added > max) break;
-    parts.push(part);
-    length += added;
-  }
-  return parts.length === 0 ? null : { text: parts.join("\n\n"), read: parts.length };
-}

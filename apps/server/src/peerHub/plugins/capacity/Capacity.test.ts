@@ -34,7 +34,6 @@ const coordination: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 /** A project of acme with shared capacity. */
@@ -44,7 +43,6 @@ const sharedProject = (id: string, name: string) => ({
   role: "lead",
   members: [],
   repositories: [],
-  knowledge: { kontext: false, company: false },
   tools: [],
   capacity: {
     personal: "any",
@@ -75,7 +73,6 @@ const seed = (hubUrl: string) =>
           version: 2,
           workspace: { slug: "acme", name: "Acme", currency: "EUR" },
           member: { email: "ana@acme.test", name: "Ana", role: "member" },
-          knowledge: {},
           projects: [sharedProject("pay", "Payments"), sharedProject("ops", "Operations")],
         },
         lastSyncAt: null,
@@ -271,7 +268,6 @@ it.effect("rotates near-expiry keys, keeps providers on failed reads, and drops 
       version: 2,
       workspace: { slug: "acme", name: "Acme", currency: "EUR" },
       member: { email: "ana@acme.test", name: "Ana", role: "member" },
-      knowledge: {},
       projects: [sharedProject("pay", "Payments")],
       sharedKeys: revoking
         ? []

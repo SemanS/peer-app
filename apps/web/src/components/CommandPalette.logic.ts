@@ -555,7 +555,6 @@ export function filterCommandPaletteGroups(input: {
   projectSearchItems: ReadonlyArray<CommandPaletteActionItem>;
   settingsSearchItems?: ReadonlyArray<CommandPaletteActionItem>;
   taskSearchItems?: ReadonlyArray<CommandPaletteActionItem>;
-  knowledgeSearchItems?: ReadonlyArray<CommandPaletteActionItem>;
   threadSearchItems: ReadonlyArray<CommandPaletteActionItem>;
   /** Threads whose messages match, best first; threads already listed are skipped. */
   threadMessageItems?: ReadonlyArray<CommandPaletteActionItem>;
@@ -621,13 +620,6 @@ export function filterCommandPaletteGroups(input: {
         value: "projects-search",
         label: "Projects",
         items: input.projectSearchItems,
-      });
-    }
-    if (input.knowledgeSearchItems && input.knowledgeSearchItems.length > 0) {
-      searchableGroups.push({
-        value: "knowledge-search",
-        label: "Knowledge",
-        items: input.knowledgeSearchItems,
       });
     }
     if (input.settingsSearchItems && input.settingsSearchItems.length > 0) {

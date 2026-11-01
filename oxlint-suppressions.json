@@ -35,11 +35,6 @@
       "count": 2
     }
   },
-  "apps/mobile/src/features/peer/knowledge/SavedKnowledge.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
   "apps/mobile/src/features/peer/needs-you/NeedsYouCards.tsx": {
     "t3code/no-ambiguous-detail-navigation": {
       "count": 1
@@ -167,11 +162,6 @@
     }
   },
   "apps/server/scripts/peer-lab/jujutsu.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/scripts/peer-lab/knowledge.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -483,7 +473,7 @@
       "count": 1
     },
     "t3code/no-wall-clock-in-tests": {
-      "count": 5
+      "count": 4
     }
   },
   "apps/server/src/peerHub/core/broker/pipeline.ts": {
@@ -627,9 +617,6 @@
   "apps/server/src/peerHub/core/index/PeerIndex.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 1
     }
   },
   "apps/server/src/peerHub/core/index/board.test.ts": {
@@ -639,7 +626,7 @@
   },
   "apps/server/src/peerHub/core/index/board.ts": {
     "t3code/no-low-value-comments": {
-      "count": 2
+      "count": 1
     }
   },
   "apps/server/src/peerHub/core/index/text.ts": {
@@ -648,11 +635,6 @@
     },
     "t3code/no-low-value-comments": {
       "count": 3
-    }
-  },
-  "apps/server/src/peerHub/core/local.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
     }
   },
   "apps/server/src/peerHub/core/localCoordination/LocalAuthority.scale.test.ts": {
@@ -756,7 +738,7 @@
       "count": 1
     },
     "t3code/prefer-effect-fn": {
-      "count": 3
+      "count": 2
     }
   },
   "apps/server/src/peerHub/core/workspaces/checkouts.ts": {
@@ -781,11 +763,6 @@
   },
   "apps/server/src/peerHub/hubPolicy.ts": {
     "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/kontext.test.ts": {
-    "t3code/no-test-timeout-or-unreasoned-skip": {
       "count": 1
     }
   },
@@ -1231,106 +1208,6 @@
     }
   },
   "apps/server/src/peerHub/plugins/jujutsu/verdicts.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/Knowledge.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/Knowledge.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 11
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/challenges.integration.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/client/capture.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/client/challengeFlows.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 12
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/client/challenges.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/client/changes.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/client/drift.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 3
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/client/flows.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/client/keeping.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 3
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/client/memory.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/client/proof.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/client/resolve.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/client/reviewChecks.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/client/store.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/knowledge/knowledgeIndex.ts": {
-    "t3code/no-em-dash-copy": {
-      "count": 1
-    },
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -1958,44 +1835,6 @@
       "count": 3
     }
   },
-  "apps/web/src/components/workspaces/knowledge/Flows.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 3
-    }
-  },
-  "apps/web/src/components/workspaces/knowledge/KeepOperations.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/knowledge/KeepOperations.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/knowledge/KnowledgeView.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/knowledge/SavedKnowledge.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 7
-    }
-  },
-  "apps/web/src/components/workspaces/knowledge/SavedKnowledge.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/knowledge/knowledge.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
-    }
-  },
   "apps/web/src/components/workspaces/ownership/AreasBoard.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -2439,11 +2278,6 @@
       "count": 2
     }
   },
-  "apps/web/src/components/workspaces/sidebarRoutes.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/signals.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -2516,11 +2350,6 @@
     }
   },
   "packages/client-runtime/src/peer/handoff.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "packages/client-runtime/src/peer/knowledge.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -2611,11 +2440,6 @@
   "packages/contracts/src/peer/handoff.ts": {
     "t3code/no-low-value-comments": {
       "count": 2
-    }
-  },
-  "packages/contracts/src/peer/knowledge.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
     }
   },
   "packages/contracts/src/peer/ownership.ts": {

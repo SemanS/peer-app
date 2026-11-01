@@ -41,7 +41,6 @@ import type {
 import type {
   PeerCommand,
   PeerContributions,
-  PeerIndexSource,
   PeerReviewFacts,
   PeerRuntimeProvider,
 } from "../plugin.ts";
@@ -73,8 +72,6 @@ export interface PeerBrokerPlugins {
   }>;
   /** The runtime that runs agents beside Peer's own threads (herdr), if one does. */
   readonly runtime: PeerRuntimeProvider | undefined;
-  /** What adds entries to an agent's index (knowledge's `.ai`), if anything does. */
-  readonly indexSource: PeerIndexSource | undefined;
   /** What plugins add to each coordination report (herdr's observations), in order. */
   readonly reportSessions: ReadonlyArray<{
     readonly plugin: string;
@@ -87,7 +84,6 @@ export const NO_PLUGINS: PeerBrokerPlugins = {
   active: [],
   commands: [],
   runtime: undefined,
-  indexSource: undefined,
   reportSessions: [],
 };
 

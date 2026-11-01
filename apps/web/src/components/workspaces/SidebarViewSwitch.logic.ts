@@ -13,13 +13,16 @@ export const SIDEBAR_VIEW_LABELS: Readonly<Record<SidebarView, string>> = {
 };
 
 /** What the sidebar shows of the team's work: each answers its own question, none repeats another. */
-export type SidebarTab = "tasks" | "knowledge" | "activity";
+export type SidebarTab = "tasks" | "activity";
 
 export const SIDEBAR_TABS: ReadonlyArray<{ readonly id: SidebarTab; readonly label: string }> = [
   { id: "tasks", label: "Work" },
-  { id: "knowledge", label: "Knowledge" },
   { id: "activity", label: "Activity" },
 ];
+
+/** The tab a computer has stored: one that is gone (Knowledge) reads as Work. */
+export const storedSidebarTab = (stored: string): SidebarTab =>
+  stored === "activity" ? "activity" : "tasks";
 
 /** The switch's one value: a tab of the team's work, or the chats. */
 export function sidebarSwitchValue(view: SidebarView, tab: SidebarTab): SidebarTab | "chats" {

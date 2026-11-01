@@ -6,7 +6,6 @@ import {
   capacityRejection,
   claudeHubMcpServers,
   codexHubMcpServers,
-  hubEnvironmentForThread,
   hubInstructionsForThread,
   projectAcceptsPersonal,
   resolveToolValue,
@@ -29,23 +28,11 @@ function project(
     role: "member",
     members: [{ email: "ana@acme.test", name: "Ana" }],
     repositories: [{ id: "app", url: "git@example.test:app.git", branch: "main" }],
-    knowledge: { kontext: true, company: true },
     tools: [
       {
         id: "kontext",
         name: "kontext",
         mcp: { transport: "stdio", command: "kontext", args: ["mcp"], env: {} },
-        requires: [],
-      },
-      {
-        id: "company-knowledge",
-        name: "Acme knowledge",
-        mcp: {
-          transport: "stdio",
-          command: "kontext",
-          args: ["mcp"],
-          env: { KONTEXT_DIR: "${company.knowledge}" },
-        },
         requires: [],
       },
       {
@@ -73,7 +60,6 @@ function state(
   projects: ReadonlyArray<readonly [string, PeerProject]>,
   options: {
     readonly shared?: ReadonlyArray<readonly [string, string]>;
-    readonly knowledge?: string | null;
   } = {},
 ): HubPolicyState {
   const bound = new Map(
@@ -82,7 +68,6 @@ function state(
       { workspace: ACME, project: p, repositoryPath: `/work/acme/${p.id}/app` },
     ]),
   );
-  const knowledge = options.knowledge === undefined ? "/hub/acme/knowledge" : options.knowledge;
   return {
     projects: bound,
     roots: new Map([...bound.values()].map((entry) => [entry.repositoryPath, entry])),
@@ -92,7 +77,6 @@ function state(
         { workspace: ACME, projectId },
       ]),
     ),
-    knowledgePaths: new Map(knowledge === null ? [] : [["acme", knowledge]]),
   };
 }
 
@@ -246,63 +230,28 @@ describe("capacityRejection", () => {
   });
 });
 
-describe("agent memory", () => {
-  it("turns Claude Code's auto memory off for a thread of a project whose agents keep none", () => {
-    const thread = ThreadId.make("memory-off");
-    setHubPolicyState(state([["t3-kw", project()]]));
-    bindThreadProject(thread, ProjectId.make("t3-kw"));
-    // A project that says nothing, or one from a Hub before the field, is `off`.
-    assert.deepEqual(hubEnvironmentForThread(thread), { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });
-    setHubPolicyState(state([["t3-kw", { ...project(), agents: { memory: "off" } }]]));
-    assert.deepEqual(hubEnvironmentForThread(thread), { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });
-    // Words this app does not know are `off` too, never `personal`.
-    setHubPolicyState(state([["t3-kw", { ...project(), agents: { memory: "shared" } }]]));
-    assert.deepEqual(hubEnvironmentForThread(thread), { CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" });
-  });
-
-  it("adds nothing for a personal policy or a thread outside a workspace project", () => {
-    const thread = ThreadId.make("memory-personal");
-    setHubPolicyState(state([["t3-kw", { ...project(), agents: { memory: "personal" } }]]));
-    bindThreadProject(thread, ProjectId.make("t3-kw"));
-    assert.deepEqual(hubEnvironmentForThread(thread), {});
-    assert.deepEqual(hubEnvironmentForThread(ThreadId.make("unbound")), {});
-    setHubPolicyState(null);
-    assert.deepEqual(hubEnvironmentForThread(thread), {});
-  });
-});
-
 describe("agent tools", () => {
   it("fails closed without the gate and never advertises held tools", () => {
     const thread = ThreadId.make("held");
     setHubPolicyState(state([["t3-kw", project()]]));
     bindThreadProject(thread, ProjectId.make("t3-kw"));
     assert.deepEqual(claudeHubMcpServers(thread), {});
-    assert.notMatch(hubInstructionsForThread(thread), /ctx_brief/);
     const previous = process.env.TRACKER_TOKEN;
     process.env.TRACKER_TOKEN = "ambient";
     try {
       setWorkspaceToolGate(({ tool }) =>
         tool.id === "kontext" ? { give: false } : { give: true, secrets: new Map() },
       );
-      assert.deepEqual(Object.keys(claudeHubMcpServers(thread)), [
-        "company-knowledge",
-        "atlassian",
-      ]);
-      assert.notMatch(hubInstructionsForThread(thread), /ctx_brief/);
+      assert.deepEqual(Object.keys(claudeHubMcpServers(thread)), ["atlassian"]);
     } finally {
       if (previous === undefined) delete process.env.TRACKER_TOKEN;
       else process.env.TRACKER_TOKEN = previous;
     }
   });
 
-  it("resolves project, knowledge and secret placeholders", () => {
-    const context = {
-      projectRoot: "/work/kw",
-      companyKnowledge: "/hub/acme/knowledge",
-      secrets: new Map([["TOKEN", "s3cret"]]),
-    };
+  it("resolves project and secret placeholders", () => {
+    const context = { projectRoot: "/work/kw", secrets: new Map([["TOKEN", "s3cret"]]) };
     assert.equal(resolveToolValue("${project.root}/x", context), "/work/kw/x");
-    assert.equal(resolveToolValue("${company.knowledge}", context), "/hub/acme/knowledge");
     assert.equal(resolveToolValue("Bearer ${secret:TOKEN}", context), "Bearer s3cret");
     assert.equal(resolveToolValue("${secret:MISSING}", context), "${secret:MISSING}");
     assert.equal(resolveToolValue("${unknown}", context), "${unknown}");
@@ -316,17 +265,12 @@ describe("agent tools", () => {
     process.env.TRACKER_TOKEN = "ambient";
     try {
       const claude = claudeHubMcpServers(threadId);
-      assert.deepEqual(Object.keys(claude), [
-        "kontext",
-        "company-knowledge",
-        "atlassian",
-        "tracker",
-      ]);
-      assert.deepEqual(claude["company-knowledge"], {
+      assert.deepEqual(Object.keys(claude), ["kontext", "atlassian", "tracker"]);
+      assert.deepEqual(claude.kontext, {
         type: "stdio",
         command: "kontext",
         args: ["mcp"],
-        env: { KONTEXT_DIR: "/hub/acme/knowledge" },
+        env: {},
       });
       assert.deepEqual(claude.tracker, {
         type: "http",
@@ -334,22 +278,13 @@ describe("agent tools", () => {
         headers: { Authorization: "Bearer t0ken" },
       });
       // Codex has no SSE transport.
-      assert.deepEqual(Object.keys(codexHubMcpServers(threadId)), [
-        "kontext",
-        "company-knowledge",
-        "tracker",
-      ]);
-      assert.match(hubInstructionsForThread(threadId), /Acme project "Kirkwood"[\s\S]*ctx_brief/);
+      assert.deepEqual(Object.keys(codexHubMcpServers(threadId)), ["kontext", "tracker"]);
+      assert.include(hubInstructionsForThread(threadId), 'Acme project "Kirkwood"');
+      // A tool of the project is the person's: Peer says nothing about how to use it.
+      assert.notInclude(hubInstructionsForThread(threadId), "kontext");
     } finally {
       delete process.env.TRACKER_TOKEN;
     }
-  });
-
-  it("leaves out company knowledge until its checkout exists", () => {
-    const threadId = ThreadId.make("thread-2");
-    setHubPolicyState(state([["t3-kw", project()]], { knowledge: null }));
-    bindThreadProject(threadId, ProjectId.make("t3-kw"));
-    assert.notInclude(Object.keys(claudeHubMcpServers(threadId)), "company-knowledge");
   });
 
   it("gives threads outside workspace projects nothing", () => {

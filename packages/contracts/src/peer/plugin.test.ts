@@ -47,7 +47,6 @@ const statusBeforePlugins = {
     overlaps: [],
     findings: [],
     contexts: [],
-    candidates: [],
   },
   sharedThreads: [],
   syncing: false,

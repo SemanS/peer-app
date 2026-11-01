@@ -4,8 +4,6 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   NAME_MAX,
   NOT_CHECKED,
-  branchEdit,
-  branchTextProblem,
   checkName,
   checkNewDomain,
   checkOutcome,
@@ -14,18 +12,8 @@ import {
   configurationText,
   domainNote,
   domainRows,
-  knowledgeStatus,
-  knowledgeUseOf,
-  knowledgeUseOfManifest,
   mailDomainOf,
-  normalizeStore,
-  readCompany,
-  removeCompanyEdit,
   removeDomainWords,
-  repositoryEdit,
-  repositoryTextProblem,
-  storeEdit,
-  storeTextProblem,
   withDomain,
   withoutDomain,
   type DomainClaim,
@@ -298,108 +286,6 @@ describe("a domain another workspace holds", () => {
     };
     expect(claimNote(proved)).toContain("proved it with DNS, so it can’t be taken over");
     expect(claimOutcome(proved).text).toContain("Ask its owners to release it");
-  });
-});
-
-describe("company knowledge", () => {
-  it("is read with the Hub's defaults for the branch and the folder", () => {
-    expect(readCompany({ repository: "https://github.com/acme/knowledge" })).toEqual({
-      repository: "https://github.com/acme/knowledge",
-      branch: "main",
-      store: ".ai",
-    });
-    expect(
-      readCompany({ repository: "git@x:a/b.git", branch: "release", store: "docs/ai" }),
-    ).toEqual({ repository: "git@x:a/b.git", branch: "release", store: "docs/ai" });
-  });
-
-  it("is none without a repository", () => {
-    expect(readCompany(undefined)).toBeUndefined();
-    expect(readCompany({ repository: "" })).toBeUndefined();
-    expect(readCompany({ branch: "main" })).toBeUndefined();
-    expect(readCompany(["x"])).toBeUndefined();
-  });
-
-  it("accepts the repository addresses the Hub would, and says what a clone address is like", () => {
-    expect(repositoryTextProblem("https://github.com/acme/knowledge")).toBeNull();
-    expect(repositoryTextProblem("git@github.com:acme/knowledge.git")).toBeNull();
-    expect(repositoryTextProblem("")).toBeNull();
-    expect(repositoryTextProblem("--upload-pack=x")).toBe(
-      "Enter a clone address, like https://github.com/acme/knowledge.",
-    );
-    expect(repositoryTextProblem("acme knowledge")).not.toBeNull();
-  });
-
-  it("accepts the branches the Hub would", () => {
-    expect(branchTextProblem("main")).toBeNull();
-    expect(branchTextProblem("release/2026")).toBeNull();
-    expect(branchTextProblem("-x")).not.toBeNull();
-    expect(branchTextProblem("a..b")).not.toBeNull();
-  });
-
-  it("takes a folder inside the repository", () => {
-    expect(normalizeStore(".ai")).toBe(".ai");
-    expect(normalizeStore(" docs/ai/ ")).toBe("docs/ai");
-    expect(normalizeStore("./docs")).toBe("docs");
-    expect(normalizeStore("../outside")).toBeUndefined();
-    expect(normalizeStore("/etc")).toBeUndefined();
-    expect(storeTextProblem("../outside")).toBe("A folder inside the repository, like .ai.");
-    expect(storeTextProblem("docs/ai")).toBeNull();
-  });
-
-  it("makes the whole entry for a first repository, and changes only the address after that", () => {
-    expect(repositoryEdit(undefined, " https://github.com/acme/knowledge ")).toEqual({
-      path: [],
-      value: { repository: "https://github.com/acme/knowledge", branch: "main", store: ".ai" },
-    });
-    expect(
-      repositoryEdit(
-        { repository: "https://old", branch: "main", store: ".ai" },
-        "https://github.com/acme/knowledge",
-      ),
-    ).toEqual({ path: ["repository"], value: "https://github.com/acme/knowledge" });
-    expect(removeCompanyEdit).toEqual({ path: [], value: undefined });
-    expect(branchEdit(" release ")).toEqual({ path: ["branch"], value: "release" });
-    expect(storeEdit("docs/ai/")).toEqual({ path: ["store"], value: "docs/ai" });
-  });
-
-  it("counts the projects that use it, on unless a project turns it off", () => {
-    expect(
-      knowledgeUseOf({
-        a: { knowledge: { kontext: true, company: true } },
-        b: { knowledge: { company: false } },
-        c: {},
-        d: { knowledge: { company: true } },
-      }),
-    ).toEqual({ on: 3, total: 4 });
-    expect(knowledgeUseOf(undefined)).toEqual({ on: 0, total: 0 });
-    expect(
-      knowledgeUseOfManifest([
-        { project: { knowledge: { company: true } } },
-        { project: { knowledge: { company: false } } },
-      ]),
-    ).toEqual({ on: 1, total: 2 });
-  });
-
-  it("says where it is cloned and how many projects use it", () => {
-    expect(knowledgeStatus({ clone: "ready", use: { on: 3, total: 4 } })).toBe(
-      "Cloned on this computer · on in 3 of 4 projects",
-    );
-    expect(knowledgeStatus({ clone: "ready", use: { on: 1, total: 1 } })).toBe(
-      "Cloned on this computer · on in 1 of 1 project",
-    );
-    expect(knowledgeStatus({ clone: "cloning", use: { on: 0, total: 0 } })).toBe(
-      "Cloning on this computer…",
-    );
-    expect(knowledgeStatus({ clone: "missing", use: { on: 2, total: 2 } })).toBe(
-      "Not cloned on this computer yet · on in 2 of 2 projects",
-    );
-    expect(knowledgeStatus({ clone: "error", error: "no access", use: { on: 0, total: 0 } })).toBe(
-      "Could not clone on this computer: no access",
-    );
-    expect(knowledgeStatus({ clone: undefined, use: { on: 1, total: 3 } })).toBe(
-      "on in 1 of 3 projects",
-    );
   });
 });
 

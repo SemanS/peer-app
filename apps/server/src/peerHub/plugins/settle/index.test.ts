@@ -24,7 +24,6 @@ const coordination: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 describe("the settle plugin's status and setting", () => {

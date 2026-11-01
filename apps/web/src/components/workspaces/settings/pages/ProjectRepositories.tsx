@@ -65,16 +65,11 @@ export function ProjectRepositories({ environmentId, status, workspace, state }:
   );
   const unsaved = draft.dirty > 0;
   const checksOn = githubChecksOn(status, workspace.slug);
-  // The first repository holds the project's knowledge, while the project keeps any.
-  const knowledge = inDocument
-    ? draft.get(["knowledge", "kontext"]) !== false
-    : project.knowledge.kontext;
-  const rows: ReadonlyArray<RepositoryRowModel> = listed.map((entry, index) => {
+  const rows: ReadonlyArray<RepositoryRowModel> = listed.map((entry) => {
     const here = state.repositories.find((repository) => repository.id === entry.id);
     const jj = jjView(here, status.jj);
     return {
       ...entry,
-      knowledge: index === 0 && knowledge,
       notSaved: unsaved && !saved.some((repository) => repository.id === entry.id),
       pr: prVerification(entry.url, checksOn),
       clone: cloneView(here),

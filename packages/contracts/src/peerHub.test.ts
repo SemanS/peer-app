@@ -34,7 +34,6 @@ const statusBeforeHubInfo = {
     overlaps: [],
     findings: [],
     contexts: [],
-    candidates: [],
   },
   sharedThreads: [],
   syncing: false,

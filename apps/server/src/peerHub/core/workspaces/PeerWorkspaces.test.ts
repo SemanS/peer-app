@@ -44,7 +44,6 @@ const coordination: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 /** Acme's manifest: a Payments project whose one repository is at `url`. */
@@ -52,7 +51,6 @@ const manifest = (url: string) => ({
   version: 2,
   workspace: { slug: "acme", name: "Acme", currency: "EUR" },
   member: { email: "ana@acme.test", name: "Ana", role: "member" },
-  knowledge: {},
   projects: [
     {
       id: "pay",
@@ -60,7 +58,6 @@ const manifest = (url: string) => ({
       role: "lead",
       members: [],
       repositories: [{ id: "api", url, branch: "main" }],
-      knowledge: { kontext: false, company: false },
       tools: [],
       capacity: { personal: "any", personalHarnesses: [] },
     },

@@ -3169,11 +3169,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     onToggleOption={onSelectActivePendingUserInputOption}
                     onAdvance={onAdvanceActivePendingUserInput}
                     onDismiss={onDismissActivePendingUserInput}
-                    peerThread={
-                      activeThreadId === null
-                        ? undefined
-                        : { environmentId, threadId: activeThreadId }
-                    }
                   />
                 ) : !isComposerCollapsedMobile && showPlanFollowUpPrompt && activeProposedPlan ? (
                   <ComposerPlanFollowUpBanner

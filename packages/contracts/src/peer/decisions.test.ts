@@ -84,7 +84,6 @@ describe("what the coordination status says of policies and path rules", () => {
     overlaps: [],
     findings: [],
     contexts: [],
-    candidates: [],
   };
 
   it("lists each workspace's project policies, and nothing for an environment from before them", () => {

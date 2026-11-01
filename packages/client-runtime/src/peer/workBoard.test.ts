@@ -89,7 +89,6 @@ function project(
     areas: [{ name: null, tasks }],
     unsorted,
     context: undefined,
-    candidates: 0,
     tasks: hubTasks,
   };
 }

@@ -17,7 +17,7 @@ describe("generic plugin command replies and context ledgers", () => {
         ...NO_PLUGINS,
         active: [
           {
-            id: "knowledge",
+            id: "observe",
             title: "dummy",
             contributions: {
               commandReply: (session) =>

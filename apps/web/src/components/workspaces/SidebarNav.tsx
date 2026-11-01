@@ -1,12 +1,11 @@
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { FileTextIcon, LightbulbIcon, type LucideIcon } from "lucide-react";
+import { FileTextIcon, type LucideIcon } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 
 import { usePullRequestsSupported } from "../../state/environments";
 import { readPullRequestListPreferences } from "../pullRequest/pullRequestListPreferences";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
-import { Badge } from "../ui/badge";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "../ui/sidebar";
 import { projectSignals } from "./ProjectSignals";
 import { pluginNavRows } from "./sidebarNav.logic";
@@ -71,17 +70,16 @@ function useGo() {
   };
 }
 
-/**
- * The Knowledge tab of one project: what holds beyond a single task. What a task learned shows on
- * that task; here is the project's saved knowledge, its current context and its memory.
- */
-export function ProjectKnowledgeNav({
+/** The Activity tab's rows: where work moves as changes and pull requests, and the project's context. */
+export function ProjectActivityNav({
+  environmentId,
   status,
   project,
   plugins,
   activeThread,
   sharedContext,
 }: {
+  readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
   readonly project: WorkProjectNode;
   readonly plugins: ReadonlyArray<PeerWebPlugin>;
@@ -89,72 +87,7 @@ export function ProjectKnowledgeNav({
   readonly sharedContext: boolean;
 }) {
   const { navigate, go } = useGo();
-  const signals = projectSignals(status, project, plugins);
-  const knowledge = signals.find((signal) => signal.id === "knowledge");
-  const memory = signals.find((signal) => signal.id === "memory");
   const contextOpen = `context:${project.workspace}:${project.projectId}:project`;
-  return (
-    <SidebarMenu aria-label={`Knowledge of ${project.name}`}>
-      {knowledge === undefined ? null : (
-        <NavRow
-          icon={LightbulbIcon}
-          label="Saved knowledge"
-          active={activeThread === `knowledge:${project.workspace}:${project.projectId}`}
-          trailing={
-            knowledge.count === null || knowledge.count <= 0 ? undefined : (
-              <Badge variant="knowledge" size="sm">
-                {knowledge.chip?.(knowledge.count) ?? `${knowledge.count}`}
-              </Badge>
-            )
-          }
-          onClick={() => go(() => knowledge.open?.(navigate))}
-        />
-      )}
-      {!sharedContext ? null : (
-        <NavRow
-          icon={FileTextIcon}
-          label="Project context"
-          active={activeThread === contextOpen}
-          onClick={() =>
-            go(() =>
-              navigate({
-                to: "/context/$workspace/$project/$scope",
-                params: {
-                  workspace: project.workspace,
-                  project: project.projectId,
-                  scope: "project",
-                },
-              }),
-            )
-          }
-        />
-      )}
-      {memory === undefined ? null : (
-        <NavRow
-          icon={memory.icon}
-          label={memory.label}
-          onClick={() => go(() => memory.open?.(navigate))}
-        />
-      )}
-    </SidebarMenu>
-  );
-}
-
-/** The Activity tab's rows: where work moves as changes and pull requests. */
-export function ProjectActivityNav({
-  environmentId,
-  status,
-  project,
-  plugins,
-  activeThread,
-}: {
-  readonly environmentId: EnvironmentId;
-  readonly status: PeerHubStatus;
-  readonly project: WorkProjectNode;
-  readonly plugins: ReadonlyArray<PeerWebPlugin>;
-  readonly activeThread: string | null;
-}) {
-  const { navigate, go } = useGo();
   const pullRequestsSupported = usePullRequestsSupported();
   const onPullRequests = useLocation({
     select: (location) => location.pathname === "/pull-requests",
@@ -203,6 +136,25 @@ export function ProjectActivityNav({
           }
         />
       ) : null}
+      {!sharedContext ? null : (
+        <NavRow
+          icon={FileTextIcon}
+          label="Project context"
+          active={activeThread === contextOpen}
+          onClick={() =>
+            go(() =>
+              navigate({
+                to: "/context/$workspace/$project/$scope",
+                params: {
+                  workspace: project.workspace,
+                  project: project.projectId,
+                  scope: "project",
+                },
+              }),
+            )
+          }
+        />
+      )}
     </SidebarMenu>
   );
 }

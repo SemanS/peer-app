@@ -82,7 +82,6 @@ export * from "./peer/github.rpc.ts";
 export * from "./peer/capacity.rpc.ts";
 export * from "./peer/requests.rpc.ts";
 export * from "./peer/observe.rpc.ts";
-export * from "./peer/knowledge.rpc.ts";
 export * from "./peer/settings.ts";
 export * from "./peer/settings.rpc.ts";
 

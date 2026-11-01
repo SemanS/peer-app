@@ -41,7 +41,6 @@ const coordination: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 /** A Codex agent herdr runs, idle in pane w1:p1 with its own session. */

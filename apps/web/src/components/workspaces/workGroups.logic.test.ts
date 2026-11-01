@@ -74,7 +74,6 @@ function project(
     areas,
     unsorted: [],
     context: undefined,
-    candidates: 0,
     tasks,
   };
 }

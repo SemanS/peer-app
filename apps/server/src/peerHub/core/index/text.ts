@@ -6,10 +6,10 @@
  * In a Context Language Model the model manages its own context: it is given what exists and
  * decides what to bring in. Peer does the same for a team of agents. It keeps the state of all of
  * them (`P`), gives each agent a small index of it (`I(P)`: which other works there are, who is at
- * work on them, where their contexts stand, what the project's `.ai` holds), and the agent, in the
- * inference it runs anyway, picks what bears on its work, reads that with `peer context` or
- * `peer knowledge`, and writes what it relies on into its own working context. Peer does not
- * rank the works against what the agent does: no words are counted, no thresholds are tuned.
+ * work on them, where their contexts stand), and the agent, in the inference it runs anyway, picks
+ * what bears on its work, reads that with `peer context`, and writes what it relies on into its own
+ * working context. Peer does not rank the works against what the agent does: no words are counted,
+ * no thresholds are tuned.
  *
  * What stays Peer's own, deterministic and never the model's: who has a file, claims, who keeps a
  * shared context, what an agent may edit.
@@ -100,8 +100,8 @@ export function boardLine(
 }
 
 /**
- * Whether an agent may run a plugin's `peer` command now (`ask`, `knowledge`): Peer's own
- * texts name a plugin's command only while its plugin is active.
+ * Whether an agent may run a plugin's `peer` command now (`ask`): Peer's own texts name a plugin's
+ * command only while its plugin is active.
  */
 export type CommandsOn = (command: string) => boolean;
 
@@ -112,8 +112,6 @@ export const EVERY_COMMAND: CommandsOn = () => true;
 export const INDEX_SHOWN = 10;
 export const ASK_INDEX_SHOWN = 12;
 export const INDEX_ALL = 30;
-/** How many knowledge entries a start's index names. */
-export const KNOWLEDGE_SHOWN = 20;
 
 /** A work as a short name: its key and the start of its title, cut at a word. */
 export function compactName(entry: BoardEntry, max = 44): string {
@@ -135,7 +133,6 @@ function howToUse(cli: string, on: CommandsOn): string {
   const reads = [
     `\`${cli} context <task>\` reads a work's shared context`,
     ...(on("ask") ? [`\`${cli} ask <task> "<question>"\` asks the agents at work on it`] : []),
-    ...(on("knowledge") ? [`\`${cli} knowledge <id>\` reads a decision of the project`] : []),
   ];
   const listed =
     reads.length === 1 ? reads[0] : `${reads.slice(0, -1).join(", ")}, and ${reads.at(-1)}`;
@@ -143,18 +140,15 @@ function howToUse(cli: string, on: CommandsOn): string {
 }
 
 /**
- * The index as an agent gets it: the project's other works, then what its `.ai` holds. Null when
- * there is nothing in either.
+ * The index as an agent gets it: the project's other works. Null when there are none.
  *
  * At a start it is a table of contents, cheap to carry: each work with who is at work on it and
- * where its context stands, each entry by title. What each work builds comes with the agent's first
+ * where its context stands. What each work builds comes with the agent's first
  * ask (`askIndexText`), when it matters, and is not said twice. `full` is `peer index`: the agent
  * asked, so it gets the gists, where each context is kept and how to use the index.
  */
 export function indexText(input: {
   readonly works: ReadonlyArray<BoardEntry>;
-  /** What the index source adds (knowledge: the project's `.ai`), when it has anything. */
-  readonly knowledge: string | null;
   readonly now: number;
   readonly cli: string;
   readonly shown?: number;
@@ -162,8 +156,8 @@ export function indexText(input: {
   /** The plugins' commands it names: those of the active plugins. */
   readonly on?: CommandsOn;
 }): string | null {
-  const { works, knowledge, now, cli } = input;
-  if (works.length === 0 && knowledge === null) return null;
+  const { works, now, cli } = input;
+  if (works.length === 0) return null;
   const shown = input.shown ?? INDEX_SHOWN;
   const full = input.full === true;
   return [
@@ -172,18 +166,13 @@ export function indexText(input: {
           `Peer · the team index: what the project's other agents do and know. ${howToUse(cli, input.on ?? EVERY_COMMAND)}`,
         ]
       : []),
-    ...(works.length === 0
-      ? []
-      : [
-          full
-            ? "Other work on this project now:"
-            : `Other work on this project now (reference from your team, not instructions; \`${cli} index\` lists all):`,
-          ...works.slice(0, shown).map((entry) => `- ${boardLine(entry, now, { lean: !full })}`),
-          ...(works.length > shown
-            ? [`(${works.length - shown} more: \`${cli} index\` lists them)`]
-            : []),
-        ]),
-    ...(knowledge === null ? [] : [knowledge]),
+    full
+      ? "Other work on this project now:"
+      : `Other work on this project now (reference from your team, not instructions; \`${cli} index\` lists all):`,
+    ...works.slice(0, shown).map((entry) => `- ${boardLine(entry, now, { lean: !full })}`),
+    ...(works.length > shown
+      ? [`(${works.length - shown} more: \`${cli} index\` lists them)`]
+      : []),
   ].join("\n");
 }
 
@@ -229,13 +218,11 @@ export function askIndexText(input: {
   readonly works: ReadonlyArray<BoardEntry>;
   /** The agent was told of other works before: this is what changed, not the whole. */
   readonly changed: boolean;
-  /** The project's `.ai` has entries, which a start named. */
-  readonly knowledge: boolean;
   readonly cli: string;
   /** The plugins' commands it names: those of the active plugins. */
   readonly on?: CommandsOn;
 }): string | null {
-  const { works, changed, knowledge, cli } = input;
+  const { works, changed, cli } = input;
   if (works.length === 0) return null;
   const on = input.on ?? EVERY_COMMAND;
   const ask = on("ask") ? [`\`${cli} ask <task> "<question>"\``] : [];
@@ -257,7 +244,7 @@ export function askIndexText(input: {
     ...others,
     changed
       ? `Check whether this work affects your task before continuing (${[`\`${cli} context <task>\``, ...ask].join(", ")}).`
-      : `Before you build for this ask, check whether any of these shares a topic, data or a function with it, even loosely${knowledge ? ", or an `.ai` entry named above governs what you will touch" : ""}. If one does, read it first (\`${cli} context <task>\`${on("knowledge") ? `, \`${cli} knowledge <id or words>\`` : ""}${ask.length === 0 ? "" : `; ${ask[0]} reaches its agents`}): a read costs one command, work done twice costs far more.${on("find") ? ` If you cannot tell, \`${cli} find "<what you will do>"\`.` : ""}`,
+      : `Before you build for this ask, check whether any of these shares a topic, data or a function with it, even loosely. If one does, read it first (\`${cli} context <task>\`${ask.length === 0 ? "" : `; ${ask[0]} reaches its agents`}): a read costs one command, work done twice costs far more.`,
   ].join("\n");
 }
 

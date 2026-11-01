@@ -14,7 +14,6 @@ export function peerMcpFixture(thread: ThreadId, root = "/workspace") {
     members: [],
     repositories: [],
     tools: [],
-    knowledge: { kontext: false, company: false },
     capacity: { personal: "any", personalHarnesses: [] },
   };
   const bound = { workspace: { slug: "acme", name: "Acme" }, project, repositoryPath: root };
@@ -22,7 +21,6 @@ export function peerMcpFixture(thread: ThreadId, root = "/workspace") {
     projects: new Map([["project-mcp", bound]]),
     roots: new Map([[root, bound]]),
     sharedInstances: new Map(),
-    knowledgePaths: new Map(),
   });
   bindThreadProject(thread, ProjectId.make("project-mcp"));
   setPluginMcpProviders([

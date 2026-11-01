@@ -92,14 +92,6 @@ export function approvalSignals(input: {
   return null;
 }
 
-/** The line an answer gets when the person marks it as a project decision. */
-export const PROJECT_DECISION_LINE = "Record this decision in your context marked [project].";
-
-/** The answer as the agent gets it: the person's words, and the request to record the decision. */
-export function answerWithDecision(text: string, checked: boolean): string {
-  return checked ? `${text.trimEnd()}\n\n${PROJECT_DECISION_LINE}` : text;
-}
-
 /**
  * Deny with a note: the approval is declined first, and only once that worked does the note go to
  * the agent as the person's next message. An empty note sends nothing.

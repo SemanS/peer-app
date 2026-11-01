@@ -39,7 +39,6 @@ const coordination: PeerHubStatus["coordination"] = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 
 /** What `gh auth status --json hosts` prints while Ana is signed in to github.com. */

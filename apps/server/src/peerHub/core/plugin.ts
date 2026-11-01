@@ -228,7 +228,6 @@ export interface PeerContributions {
   readonly turnOff?: Effect.Effect<void, PeerHubError>;
   // Capability slots: at most one plugin fills each, and core works without them.
   readonly runtime?: PeerRuntimeProvider;
-  readonly indexSource?: PeerIndexSource;
   readonly gitHost?: PeerGitHost;
   /**
    * Adds sessions to a coordination report: herdr's observations. The plugin that fills `runtime`
@@ -346,8 +345,8 @@ export interface PeerHooks {
      * the session pushes a change that builds on a teammate's unmerged bookmark, so it should use
      * that bookmark as the pull request's `--base`) (G8, "nothing lands unread"). A landing step (a `git commit`, `git push`, `gh pr create` or `gh pr merge` in its
      * shell, or `peer review` or `peer done`) then stops once to give the agent this text, and the
-     * same step again runs. Advice never sets it: impact, forecast, plans, dependencies,
-     * announcements and knowledge reach the agent as at any other step. A notice marks its text told
+     * same step again runs. Advice never sets it: dependencies and announcements reach the agent
+     * as at any other step. A notice marks its text told
      * when it reads it, as any notice does, so the stop and the next ordinary step never both say it.
      */
     readonly landing?: boolean;
@@ -435,12 +434,6 @@ export interface PeerToolContext extends PeerHookContext {
   readonly tool: string;
   /** Repository-relative files the call edits (pre) or edited (post). */
   readonly paths: ReadonlyArray<string>;
-  /**
-   * Absolute paths the call is about to edit outside the repository and outside Peer's own files
-   * (a harness's memory, say). Before the call only; a plugin may deny such an edit, and a deny is
-   * all core takes of what plugins say of them.
-   */
-  readonly outside?: ReadonlyArray<string>;
   /** The shell command, for Bash. */
   readonly command?: string;
   /** What an MCP tool (`mcp__<server>__<tool>`) was called with. */
@@ -709,39 +702,6 @@ export interface PeerRequestAcceptor {
     readonly instruction?: string;
     readonly fallback: string;
   }) => Effect.Effect<{ readonly prompt: string }, PeerHubError>;
-}
-
-/** One entry an index source adds to core's index: a `.ai` knowledge entry, say. */
-export interface PeerIndexEntry {
-  readonly id: string;
-  /** decision, convention, learning or incident. */
-  readonly kind: string;
-  readonly title: string;
-  readonly status: string | undefined;
-  readonly date: string | undefined;
-  readonly summary: string;
-  readonly tags: ReadonlyArray<string>;
-  /** The paths and globs it governs, relative to the repository. */
-  readonly paths: ReadonlyArray<string>;
-  /** Where it is, relative to the repository. */
-  readonly file: string;
-  /** The start of its text. */
-  readonly body: string;
-}
-
-/** Fills core's index (knowledge): entries for the index, start text and `peer find`. */
-export interface PeerIndexSource {
-  /** What stands in a session's checkout, newest first; read again when old. */
-  readonly entries: (session: PeerSessionView) => Effect.Effect<ReadonlyArray<PeerIndexEntry>>;
-  /**
-   * The entries as the index names `shown` of them: by title at a session's start, whole with the
-   * ids that read them when the agent asked for the index (`full`); null when there are none.
-   */
-  readonly section: (
-    entries: ReadonlyArray<PeerIndexEntry>,
-    shown: number,
-    full?: boolean,
-  ) => string | null;
 }
 
 /** Clones, explains and finds pull requests for the repositories it owns (github). */

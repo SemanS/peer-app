@@ -39,8 +39,6 @@ export type HubFeatures = Readonly<Record<string, number>>;
 export const LEGACY_HUB_FEATURES: HubFeatures = {
   requests: 1,
   observe: 1,
-  knowledge: 1,
-  memory: 1,
 };
 
 /** The features a `/v1/me` answer lists; a Hub without a catalog serves the legacy set. */

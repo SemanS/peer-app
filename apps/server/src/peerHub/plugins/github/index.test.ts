@@ -40,7 +40,6 @@ describe("GitHub delivery plugin", () => {
             overlaps: [],
             findings: [],
             contexts: [],
-            candidates: [],
           }),
         );
         yield* PeerPlugins.startPlugins.pipe(

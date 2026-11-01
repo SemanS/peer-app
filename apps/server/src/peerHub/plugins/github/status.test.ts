@@ -16,7 +16,6 @@ const coordination = {
   overlaps: [],
   findings: [],
   contexts: [],
-  candidates: [],
 };
 describe("GitHub verification status", () => {
   it.effect(

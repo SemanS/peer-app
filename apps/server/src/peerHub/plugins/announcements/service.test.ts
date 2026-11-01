@@ -29,7 +29,6 @@ const appProject = {
   role: "member" as const,
   members: [],
   repositories: [],
-  knowledge: { kontext: false, company: false },
   tools: [],
   capacity: { personal: "any" as const, personalHarnesses: [] },
 };
@@ -79,7 +78,6 @@ describe("announcement service", () => {
               overlaps: [],
               findings: [],
               contexts: [],
-              candidates: [],
             };
           }),
         );
@@ -91,7 +89,6 @@ describe("announcement service", () => {
               version: 2,
               workspace: { slug: "acme", name: "Acme", currency: "EUR" },
               member: { email: "ana@acme.test", name: "Ana", role: "member" },
-              knowledge: {},
               projects: [appProject],
             },
           })),
@@ -213,7 +210,6 @@ describe("announcement service", () => {
             version: 2,
             workspace: { slug: "acme", name: "Acme", currency: "EUR" },
             member: { email: "ana@acme.test", name: "Ana", role: "member" },
-            knowledge: {},
             projects: [appProject],
           },
         })),

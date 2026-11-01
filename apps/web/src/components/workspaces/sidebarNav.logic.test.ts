@@ -67,7 +67,6 @@ function project(
     areas: [{ name: "Orders", tasks }],
     unsorted,
     context: undefined,
-    candidates: 0,
     tasks: tasks.map((t) => hubTask(t.id, t.done ? "done" : "open")),
   };
 }
@@ -120,7 +119,6 @@ describe("sidebarNav", () => {
   const done = [task("x", { done: true }), task("y", { status: "done" })];
   const ordering = {
     ...project([...open, task("h", { threads: [thread("t1", { status: "blocked" })] })]),
-    candidates: 2,
   };
 
   it("counts active and done tasks apart and never 9 together", () => {
@@ -129,10 +127,9 @@ describe("sidebarNav", () => {
     expect(nav.done).toBe(2);
   });
 
-  it("counts what waits on the person, and what is to keep", () => {
+  it("counts what waits on the person", () => {
     const nav = sidebarNav([ordering], []);
     expect(nav.needs).toBe(1);
-    expect(nav.toKeep).toBe(2);
   });
 
   it("hides every count that is zero", () => {
@@ -140,14 +137,12 @@ describe("sidebarNav", () => {
       needs: null,
       active: 1,
       done: null,
-      toKeep: null,
       sharedContext: false,
     });
     expect(sidebarNav([], [])).toEqual({
       needs: null,
       active: null,
       done: null,
-      toKeep: null,
       sharedContext: false,
     });
   });
@@ -180,7 +175,7 @@ describe("pluginNavRows", () => {
   });
 
   it("adds no row for signals that name none", () => {
-    expect(pluginNavRows([signal("overlaps"), signal("knowledge")])).toEqual([]);
+    expect(pluginNavRows([signal("overlaps"), signal("team")])).toEqual([]);
   });
 
   it("lists the rows of the signals that name one, in order", () => {

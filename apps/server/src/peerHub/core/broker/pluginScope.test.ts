@@ -44,19 +44,19 @@ it("refuses a public Hub command from a local checkout before running it", async
     }),
     plugins: async () => ({
       ...NO_PLUGINS,
-      active: [{ id: "knowledge", title: "Knowledge", requiresHub: true, contributions: {} }],
+      active: [{ id: "agreements", title: "Agreements", requiresHub: true, contributions: {} }],
       commands: [
         {
-          plugin: "knowledge",
+          plugin: "agreements",
           command: {
-            name: "knowledge",
-            usage: "knowledge",
-            summary: "Read team knowledge",
+            name: "agreements",
+            usage: "agreements",
+            summary: "Read team agreements",
             public: true,
             run: () =>
               Effect.sync(() => {
                 ran = true;
-                return "Team knowledge";
+                return "Team agreements";
               }),
           },
         },
@@ -65,43 +65,9 @@ it("refuses a public Hub command from a local checkout before running it", async
   }));
   try {
     await expect(
-      fixture.broker.runCli("knowledge", [], { "x-peer-cwd": fixture.root }),
+      fixture.broker.runCli("agreements", [], { "x-peer-cwd": fixture.root }),
     ).rejects.toMatchObject({ outcome: "refused" });
     expect(ran).toBe(false);
-  } finally {
-    await fixture.dispose();
-  }
-});
-
-it("keeps Hub index contributions out of public local checkout reads", async () => {
-  let read = false;
-  const indexSource = {
-    entries: () =>
-      Effect.sync(() => {
-        read = true;
-        return [];
-      }),
-    section: () => "Team knowledge",
-  };
-  const fixture = await brokerFixture((host) => ({
-    placeOf: async () => ({
-      workspace: PEER_LOCAL_WORKSPACE,
-      project: "app",
-      root: host.scriptsDir,
-    }),
-    plugins: async () => ({
-      ...NO_PLUGINS,
-      active: [
-        { id: "knowledge", title: "Knowledge", requiresHub: true, contributions: { indexSource } },
-      ],
-      indexSource,
-    }),
-  }));
-  try {
-    expect(await fixture.broker.runCli("index", [], { "x-peer-cwd": fixture.root })).not.toContain(
-      "Team knowledge",
-    );
-    expect(read).toBe(false);
   } finally {
     await fixture.dispose();
   }

@@ -3,18 +3,16 @@ import * as Schema from "effect/Schema";
 import { TrimmedNonEmptyString } from "../baseSchemas.ts";
 
 /**
- * Peer's settings plugin: workspace and project settings changed in the app, with their history
- * (the Hub's `settings` feature), and agents proposing changes that owners review. Everything here
- * mirrors the Hub's wire contract field for field (camelCase, times as RFC 3339 strings, a `path`
- * an array of strings). Names of open vocabularies (a line's scope kind, when a change applies,
- * where a revision came from, a diagnostic's severity) are plain strings, so an app of one age
- * reads a Hub of another; the values known today are listed beside them.
+ * Peer's settings plugin: workspace and project settings changed in the app (the Hub's `settings`
+ * feature). Everything here mirrors the Hub's wire contract field for field (camelCase, times as
+ * RFC 3339 strings, a `path` an array of strings). Names of open vocabularies (a line's scope kind,
+ * when a change applies, a diagnostic's severity) are plain strings, so an app of one age reads a
+ * Hub of another; the values known today are listed beside them.
  */
 export const PEER_SETTINGS_PLUGIN = {
   id: "settings",
   title: "Workspace settings",
-  summary:
-    "Change workspace and project settings in the app, keep their history, and let agents propose changes for owners to review.",
+  summary: "Change workspace and project settings in the app, or through your agent.",
   hubFeature: { id: "settings", revision: 1 },
   commandNames: ["config"],
 } as const;
@@ -26,11 +24,11 @@ const Count = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(
 const Seq = Count;
 const NullableText = Schema.optional(Schema.NullOr(Schema.String));
 
-/** A person as the Hub names them in lines, revisions and proposals. */
+/** A person as the Hub names them in lines and revisions. */
 export const PeerSettingsPerson = Schema.Struct({ email: Text, name: Text });
 export type PeerSettingsPerson = typeof PeerSettingsPerson.Type;
 
-/** A node of the settings document: `["projects","booking","coordination","paths","migrations/**"]`. */
+/** A node of the settings document: `["projects","booking","name"]`. */
 export const PeerSettingsPath = Schema.Array(Text);
 export type PeerSettingsPath = typeof PeerSettingsPath.Type;
 
@@ -47,8 +45,8 @@ export const PeerSettingsScope = Schema.Struct({
 export type PeerSettingsScope = typeof PeerSettingsScope.Type;
 
 /**
- * One change in words (`Booking · Coordination: notify → coordinate`), as the Hub writes it. A line
- * that says one thing has no `from` (`Booking · Project: created`, `Webhook · Ops: paused`).
+ * One change in words (`Booking · Name: Booking → Bookings`), as the Hub writes it. A line that says
+ * one thing has no `from` (`Booking · Project: created`).
  */
 export const PeerSettingsLine = Schema.Struct({
   path: PeerSettingsPath,
@@ -59,7 +57,7 @@ export const PeerSettingsLine = Schema.Struct({
 });
 export type PeerSettingsLine = typeof PeerSettingsLine.Type;
 
-/** A line's change: `notify → coordinate`, or `created` for a line that says one thing. */
+/** A line's change: `Booking → Bookings`, or `created` for a line that says one thing. */
 export const settingsLineChange = (line: Pick<PeerSettingsLine, "from" | "to">): string =>
   line.from === undefined ? line.to : `${line.from} → ${line.to}`;
 
@@ -87,7 +85,7 @@ export const PeerSettingsDiagnostic = Schema.Struct({
 });
 export type PeerSettingsDiagnostic = typeof PeerSettingsDiagnostic.Type;
 
-/** When a kind of change takes effect; `kind` is next-edit, after-approval, after-sync, on-sync, clone or now. */
+/** When a kind of change takes effect; `kind` is after-approval, on-sync, clone or now. */
 export const PeerSettingsApplies = Schema.Struct({ kind: Text, text: Text });
 export type PeerSettingsApplies = typeof PeerSettingsApplies.Type;
 
@@ -108,28 +106,6 @@ export const PeerSettingsRevision = Schema.Struct({
   message: NullableText,
 });
 export type PeerSettingsRevision = typeof PeerSettingsRevision.Type;
-
-/** A revision in the history: `source` is app, cli, proposal, import, revert, seed or gap. */
-export const PeerSettingsRevisionEntry = Schema.Struct({
-  ...PeerSettingsRevision.fields,
-  source: Text,
-  proposal: NullableText,
-  lines: Schema.Array(PeerSettingsLine),
-});
-export type PeerSettingsRevisionEntry = typeof PeerSettingsRevisionEntry.Type;
-
-/** One revision, with what only admins get: the files it changed and a unified diff of each. */
-export const PeerSettingsRevisionDetail = Schema.Struct({
-  ...PeerSettingsRevisionEntry.fields,
-  files: Schema.optional(Schema.Array(Schema.Struct({ path: Text, diff: Text }))),
-});
-export type PeerSettingsRevisionDetail = typeof PeerSettingsRevisionDetail.Type;
-
-export const PeerSettingsHistoryPage = Schema.Struct({
-  revisions: Schema.Array(PeerSettingsRevisionEntry),
-  next: Schema.optional(Schema.NullOr(Seq)),
-});
-export type PeerSettingsHistoryPage = typeof PeerSettingsHistoryPage.Type;
 
 /** What the caller owns: every workspace setting (`admin`), the domains too (`owner`), these projects. */
 export const PeerSettingsRights = Schema.Struct({
@@ -178,8 +154,7 @@ export const PeerSettingsSaved = Schema.Struct({
 export type PeerSettingsSaved = typeof PeerSettingsSaved.Type;
 
 /**
- * What a change, revert, import or applied proposal comes to, as the app
- * answers it. A dry run is a `preview`, a save is `saved`. The Hub's refusals are results too, not
+ * What a change comes to, as the app answers it. A dry run is a `preview`, a save is `saved`. The Hub's refusals are results too, not
  * errors, because each is a way these flows go that a person resolves: `conflict` (409
  * `settings_conflict`, the preview with `conflicts` to settle), `forbidden` (403 `settings_forbidden`,
  * the refused paths and who may change them) and `invalid` (422 `invalid_settings`, the
@@ -200,71 +175,15 @@ export const PeerSettingsChangeResult = Schema.Union([
 ]);
 export type PeerSettingsChangeResult = typeof PeerSettingsChangeResult.Type;
 
-/** Who proposed it: an agent on a person's behalf (`kind` is `agent`). */
-export const PeerSettingsVia = Schema.Struct({
-  kind: Text,
-  agent: Schema.optional(Text),
-  thread: Schema.optional(Text),
-});
-export type PeerSettingsVia = typeof PeerSettingsVia.Type;
-
-/** A proposal: `state` is pending, applied, declined, withdrawn or expired. */
-export const PeerSettingsProposal = Schema.Struct({
-  id: Text,
-  by: PeerSettingsPerson,
-  via: Schema.optional(Schema.NullOr(PeerSettingsVia)),
-  at: Text,
-  base: Seq,
-  message: Text,
-  instruction: NullableText,
-  lines: Schema.Array(PeerSettingsLine),
-  scopes: Schema.Array(Text),
-  owners: Text,
-  state: Text,
-  decidedBy: Schema.optional(Schema.NullOr(PeerSettingsPerson)),
-  decidedAt: NullableText,
-  reason: NullableText,
-  revision: Schema.optional(Schema.NullOr(Seq)),
-  /** The caller proposed it. */
-  mine: Schema.Boolean,
-  /** The caller owns everything it touches, so may save or decline it. */
-  canDecide: Schema.Boolean,
-  /** Warnings of the configuration check, when the Hub sends them. */
-  diagnostics: Schema.optional(Schema.Array(PeerSettingsDiagnostic)),
-});
-export type PeerSettingsProposal = typeof PeerSettingsProposal.Type;
-
-export const PeerSettingsProposals = Schema.Struct({
-  proposals: Schema.Array(PeerSettingsProposal),
-});
-export type PeerSettingsProposals = typeof PeerSettingsProposals.Type;
-
-/** A proposal was made, or the Hub could not take it (`forbidden` or `invalid`, as for a change). */
-export const PeerSettingsProposeResult = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("proposed"), proposal: PeerSettingsProposal }),
-  Schema.Struct({
-    kind: Schema.Literal("forbidden"),
-    refused: Schema.Array(PeerSettingsRefusal),
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("invalid"),
-    diagnostics: Schema.Array(PeerSettingsDiagnostic),
-  }),
-]);
-export type PeerSettingsProposeResult = typeof PeerSettingsProposeResult.Type;
-
-/** A secret's name, when it was last stored and by whom, and what uses it. */
+/** A secret's name, and when it was last stored and by whom. */
 export const PeerSettingsSecretsView = Schema.Struct({
   secrets: Schema.Array(
     Schema.Struct({
       name: Text,
       at: NullableText,
       by: Schema.optional(Schema.NullOr(PeerSettingsPerson)),
-      usedBy: Schema.Array(Text),
     }),
   ),
-  /** Names something refers to that nobody stored. */
-  missing: Schema.Array(Schema.Struct({ name: Text, usedBy: Schema.Array(Text) })),
 });
 export type PeerSettingsSecretsView = typeof PeerSettingsSecretsView.Type;
 
@@ -280,13 +199,6 @@ export const PeerSettingsDomainCheck = Schema.Struct({
   record: Schema.optional(Text),
 });
 export type PeerSettingsDomainCheck = typeof PeerSettingsDomainCheck.Type;
-
-export const PeerSettingsExport = Schema.Struct({
-  revision: Schema.Struct({ seq: Seq, commit: Text }),
-  /** File path → its YAML, plus `.peer-revision` holding `<seq> <commit>`. */
-  files: Schema.Record(Schema.String, Schema.String),
-});
-export type PeerSettingsExport = typeof PeerSettingsExport.Type;
 
 /** The workspace after a rename or a change of domains. */
 export const PeerSettingsWorkspace = Schema.Struct({
@@ -312,28 +224,9 @@ export const PeerSettingsWorkspaceUpdate = Schema.Union([
 ]);
 export type PeerSettingsWorkspaceUpdate = typeof PeerSettingsWorkspaceUpdate.Type;
 
-/** A secret was removed, or something still uses it (409 `secret_in_use`) and `force` is needed. */
-export const PeerSettingsDeleteSecretResult = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("deleted") }),
-  Schema.Struct({ kind: Schema.Literal("in-use"), usedBy: Schema.Array(Text) }),
-]);
-export type PeerSettingsDeleteSecretResult = typeof PeerSettingsDeleteSecretResult.Type;
-
-/** Per workspace, what the status says without a request: the revision and who needs to decide. */
+/** Per workspace, what the status says without a request: its revision. */
 export const PeerSettingsStatus = Schema.Struct({
-  workspaces: Schema.Array(
-    Schema.Struct({
-      workspace: Text,
-      revision: Seq,
-      /** Pending proposals the signed-in person may save or decline. */
-      pendingProposals: Count,
-      /**
-       * Pending proposals the signed-in person made, so a proposer's banner reads again once one is
-       * decided or withdrawn. Absent from an environment from before it.
-       */
-      ownProposals: Schema.optional(Count),
-    }),
-  ),
+  workspaces: Schema.Array(Schema.Struct({ workspace: Text, revision: Seq })),
 });
 export type PeerSettingsStatus = typeof PeerSettingsStatus.Type;
 
@@ -347,7 +240,7 @@ const TextMap = Schema.Record(Schema.String, Schema.String);
 export const PeerSettingsPersonEntry = keeping({ name: Schema.optional(Text) });
 export type PeerSettingsPersonEntry = typeof PeerSettingsPersonEntry.Type;
 
-/** `projects.<id>`. A policy is notify, coordinate, ask or exclusive. */
+/** `projects.<id>`. */
 export const PeerSettingsProject = keeping({
   name: Text,
   description: Schema.optional(Text),
@@ -359,7 +252,6 @@ export const PeerSettingsProject = keeping({
   repositories: Schema.Array(keeping({ id: Text, url: Text, branch: Text })),
   /** A tool's id, or the id with the project's own environment. */
   tools: Schema.Array(Schema.Union([Text, keeping({ tool: Text, env: Schema.optional(TextMap) })])),
-  coordination: Schema.optional(keeping({ policy: Text })),
 });
 export type PeerSettingsProject = typeof PeerSettingsProject.Type;
 
@@ -415,105 +307,8 @@ export const PeerSettingsChangeInput = Schema.Struct({
 });
 export type PeerSettingsChangeInput = typeof PeerSettingsChangeInput.Type;
 
-export const PeerSettingsHistoryInput = Schema.Struct({
-  workspace: Workspace,
-  /** `workspace`, `project:<id>` or `person:<email>`. */
-  scope: Schema.optional(TrimmedNonEmptyString),
-  before: Schema.optional(Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))),
-  limit: Schema.optional(
-    Schema.Number.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 50 })),
-  ),
-  /** The revision the caller knows of; a newer one reads the page again (the Hub ignores it). */
-  revision: Schema.optional(Seq),
-});
-export type PeerSettingsHistoryInput = typeof PeerSettingsHistoryInput.Type;
-
-export const PeerSettingsHistoryEntryInput = Schema.Struct({
-  workspace: Workspace,
-  seq: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
-});
-export type PeerSettingsHistoryEntryInput = typeof PeerSettingsHistoryEntryInput.Type;
-
-export const PeerSettingsRevertInput = Schema.Struct({
-  ...PeerSettingsHistoryEntryInput.fields,
-  message: Schema.optional(Message),
-  dryRun: Schema.optional(Schema.Boolean),
-  ...Settling,
-});
-export type PeerSettingsRevertInput = typeof PeerSettingsRevertInput.Type;
-
-/**
- * YAML files to import, as `exportYaml` gives them (file path → text, `.peer-revision` included):
- * the app turns them into the Hub's bundle. Without `base`, `.peer-revision` names it; without
- * either, the files overwrite the head and every difference is listed.
- */
-export const PeerSettingsImportInput = Schema.Struct({
-  workspace: Workspace,
-  files: Schema.Record(Schema.String, Schema.String),
-  base: Schema.optional(Seq),
-  message: Schema.optional(Message),
-  dryRun: Schema.optional(Schema.Boolean),
-  ...Settling,
-});
-export type PeerSettingsImportInput = typeof PeerSettingsImportInput.Type;
-
 export const PeerSettingsWorkspaceInput = Schema.Struct({ workspace: Workspace });
 export type PeerSettingsWorkspaceInput = typeof PeerSettingsWorkspaceInput.Type;
-
-export const PeerSettingsProposalsInput = Schema.Struct({
-  workspace: Workspace,
-  /** Pending, applied, declined, withdrawn or expired; every proposal without it. */
-  state: Schema.optional(TrimmedNonEmptyString),
-  /**
-   * What `status.settings` says of the workspace, which only keys the query (the Hub ignores them):
-   * the proposals the caller decides, the ones they made, and the settings revision. The list is
-   * read again when any of them is not the one it was read at.
-   */
-  waiting: Schema.optional(Count),
-  own: Schema.optional(Count),
-  revision: Schema.optional(Seq),
-});
-export type PeerSettingsProposalsInput = typeof PeerSettingsProposalsInput.Type;
-
-export const PeerSettingsProposeInput = Schema.Struct({
-  workspace: Workspace,
-  base: Seq,
-  set: Schema.Array(PeerSettingsSet).check(Schema.isMaxLength(200)),
-  /** Why: one line, required. */
-  message: TrimmedNonEmptyString.check(Schema.isMaxLength(300)),
-  /** What the person asked. */
-  instruction: Schema.optional(Schema.String.check(Schema.isMaxLength(2_000))),
-  via: Schema.optional(
-    Schema.Struct({
-      kind: Schema.Literal("agent"),
-      agent: TrimmedNonEmptyString.check(Schema.isMaxLength(80)),
-      thread: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(200))),
-    }),
-  ),
-  /** What an ask without changes is about, such as `project:booking`. */
-  scope: Schema.optional(TrimmedNonEmptyString),
-});
-export type PeerSettingsProposeInput = typeof PeerSettingsProposeInput.Type;
-
-export const PeerSettingsProposalInput = Schema.Struct({
-  workspace: Workspace,
-  id: TrimmedNonEmptyString,
-});
-export type PeerSettingsProposalInput = typeof PeerSettingsProposalInput.Type;
-
-export const PeerSettingsApplyProposalInput = Schema.Struct({
-  ...PeerSettingsProposalInput.fields,
-  message: Schema.optional(Message),
-  dryRun: Schema.optional(Schema.Boolean),
-  ...Settling,
-});
-export type PeerSettingsApplyProposalInput = typeof PeerSettingsApplyProposalInput.Type;
-
-export const PeerSettingsDeclineProposalInput = Schema.Struct({
-  ...PeerSettingsProposalInput.fields,
-  reason: Schema.optional(Schema.String.check(Schema.isMaxLength(300))),
-});
-export type PeerSettingsDeclineProposalInput = typeof PeerSettingsDeclineProposalInput.Type;
 
 /** A workspace secret's name: letters, digits, `-` and `_`, up to 64 characters. */
 const SecretName = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9_-]{1,64}$/));
@@ -528,8 +323,6 @@ export type PeerSettingsPutSecretInput = typeof PeerSettingsPutSecretInput.Type;
 export const PeerSettingsDeleteSecretInput = Schema.Struct({
   workspace: Workspace,
   name: SecretName,
-  /** Remove it although something still uses it. */
-  force: Schema.optional(Schema.Boolean),
 });
 export type PeerSettingsDeleteSecretInput = typeof PeerSettingsDeleteSecretInput.Type;
 

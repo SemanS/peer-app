@@ -21,7 +21,7 @@ export function SettingsUnavailableNote() {
         : reason === "waiting"
           ? "Changing settings here waits for the Peer Hub to answer."
           : reason === "off"
-            ? "Changing settings here is turned off on this environment. Its owner turns it on in Coordination & plugins."
+            ? "Changing settings here is turned off on this environment. Its owner turns it on in Plugins."
             : reason === "locked"
               ? "Changing settings here is forced off by the environment operator."
               : "Changing settings here is not available on this environment."}

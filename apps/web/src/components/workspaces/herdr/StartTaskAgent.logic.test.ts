@@ -45,14 +45,14 @@ describe("the launch guidance per herdr state", () => {
   it("says Peer's herdr is off, without the install link", () => {
     expect(guidance({ source: "none", state: "off" })).toEqual({
       blocked:
-        "Peer's herdr is off. Turn it on in Settings → Peer → Coordination & plugins, or start your own herdr.",
+        "Peer's herdr is off. Turn it on in Settings → Peer → Plugins, or start your own herdr.",
       installLink: false,
     });
   });
 
   it("gives the reason a failed herdr gave, without the install link", () => {
     expect(guidance({ source: "none", state: "failed", reason: "It exited at once." })).toEqual({
-      blocked: "It exited at once. Restart it in Settings → Peer → Coordination & plugins.",
+      blocked: "It exited at once. Restart it in Settings → Peer → Plugins.",
       installLink: false,
     });
   });

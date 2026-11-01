@@ -2,13 +2,12 @@ import { assert, describe, it } from "@effect/vitest";
 import { PeerHubError } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
-import { bundleOf, readMapping, renderYaml, settingsFiles } from "./files.ts";
+import { readMapping, renderYaml, settingsFiles } from "./files.ts";
 
 const project = {
   name: "Booking",
   members: ["*"],
   leads: ["eva@acme.dev"],
-  coordination: { policy: "coordinate" },
 };
 const document = {
   currency: "EUR",
@@ -90,74 +89,5 @@ describe("reading a file", () => {
       refusal(() => readMapping("projects/a.yaml", bomb)),
       /^projects\/a\.yaml: /,
     );
-  });
-});
-
-describe("the bundle the Hub imports", () => {
-  const files = {
-    "workspace.yaml":
-      "name: Acme\nallowedDomains: [acme.dev]\ncurrency: EUR\npeople:\n  ana@acme.dev:\n    name: Ana\n",
-    "projects/booking.yaml": "name: Booking\nmembers: ['*']\n",
-    "projects/camp.yml": "name: Camp-bot\n",
-    "tools/postgres.yaml": "name: Postgres\n",
-    ".peer-revision": "42 3f2a9c1e\n",
-  };
-
-  it("splits workspace.yaml and the directories, and takes the base from .peer-revision", () => {
-    assert.deepStrictEqual(bundleOf(files), {
-      bundle: {
-        settings: { name: "Acme", allowedDomains: ["acme.dev"] },
-        config: {
-          currency: "EUR",
-          people: { "ana@acme.dev": { name: "Ana" } },
-          projects: { booking: { name: "Booking", members: ["*"] }, camp: { name: "Camp-bot" } },
-          tools: { postgres: { name: "Postgres" } },
-        },
-      },
-      base: 42,
-    });
-    assert.strictEqual(bundleOf(files, 40).base, 40);
-    assert.isUndefined(bundleOf({ "workspace.yaml": "currency: EUR\n" }).base);
-    assert.isUndefined(bundleOf({ "workspace.yaml": "", ".peer-revision": "latest\n" }).base);
-  });
-
-  it("takes no part of the workspace's own from a file that has none, and ignores other files", () => {
-    const bare = bundleOf({
-      "workspace.yaml": "currency: USD\n",
-      "README.md": "# not settings",
-      "projects/Bad Name.yaml": "name: x\n",
-      "projects/nested/deep.yaml": "name: x\n",
-      ".git/config": "[core]",
-    });
-    assert.deepStrictEqual(bare.bundle, {
-      settings: {},
-      config: { currency: "USD", projects: {}, tools: {} },
-    });
-  });
-
-  it("refuses files without workspace.yaml, or with a file that is not YAML, naming it", () => {
-    assert.match(
-      refusal(() => bundleOf({ "projects/a.yaml": "name: A\n" })),
-      /no workspace\.yaml/,
-    );
-    assert.match(
-      refusal(() => bundleOf({ "workspace.yaml": "a: [" })),
-      /^workspace\.yaml: /,
-    );
-    assert.match(
-      refusal(() => bundleOf({ "workspace.yaml": "", "tools/x.yaml": "- list\n" })),
-      /tools\/x\.yaml must hold one mapping/,
-    );
-  });
-
-  it("brings back what the files were made of", () => {
-    const rendered = Object.fromEntries(
-      settingsFiles(document).map(({ path, value }) => [path, renderYaml(value)]),
-    );
-    const { bundle } = bundleOf(rendered);
-    assert.deepStrictEqual(bundle.config.projects, document.projects);
-    assert.deepStrictEqual(bundle.config.tools, document.tools);
-    assert.deepStrictEqual(bundle.config.people, document.people);
-    assert.strictEqual(bundle.config.currency, "EUR");
   });
 });

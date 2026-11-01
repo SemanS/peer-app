@@ -226,7 +226,6 @@ export function WorkspacePeople({ environmentId, status, workspace }: WorkspaceP
     <PeerSettingsPage
       title="People"
       description="Manage who works with you and what they can access."
-      askLast
     >
       <section className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">

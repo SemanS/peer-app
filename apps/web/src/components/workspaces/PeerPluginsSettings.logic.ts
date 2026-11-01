@@ -17,7 +17,7 @@ import {
  */
 type PluginRowState = "on" | "off" | "hub" | "waiting";
 
-/** One plugin as Settings → Peer → Coordination & plugins shows it. */
+/** One plugin as Settings → Peer → Plugins shows it. */
 export interface PluginRow {
   readonly id: string;
   readonly title: string;

@@ -110,12 +110,12 @@ describe("why an agent cannot start in herdr", () => {
     expect(blocker({ state: "starting" })).toBe("herdr is starting on this computer");
     expect(blocker({ state: "stopping" })).toBe("herdr is restarting on this computer");
     expect(blocker({ state: "off" })).toBe(
-      "Peer's herdr is off. Turn it on in Settings → Peer → Coordination & plugins, or start your own herdr.",
+      "Peer's herdr is off. Turn it on in Settings → Peer → Plugins, or start your own herdr.",
     );
     expect(
       blocker({ state: "failed", reason: "herdr exited right after it started (code 1)." }),
     ).toBe(
-      "herdr exited right after it started (code 1). Restart it in Settings → Peer → Coordination & plugins.",
+      "herdr exited right after it started (code 1). Restart it in Settings → Peer → Plugins.",
     );
     expect(blocker({ state: "unavailable" })).toBe(
       "Install and start herdr on the selected environment, then try again.",

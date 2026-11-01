@@ -937,7 +937,7 @@
       "count": 1
     },
     "t3code/prefer-effect-fn": {
-      "count": 4
+      "count": 3
     }
   },
   "apps/server/src/peerHub/plugins/settings/service.ts": {
@@ -945,7 +945,7 @@
       "count": 1
     },
     "t3code/prefer-effect-fn": {
-      "count": 2
+      "count": 1
     }
   },
   "apps/server/src/peerHub/plugins/tool-trust/trustStore.ts": {
@@ -1140,11 +1140,6 @@
       "count": 3
     }
   },
-  "apps/web/src/components/workspaces/settings/AskAgent.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/InviteDialog.test.tsx": {
     "t3code/require-disposable-render": {
       "count": 2
@@ -1168,17 +1163,12 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/settings/Proposals.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/ReviewChangesDialog.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
     },
     "t3code/no-unreasoned-state-sync": {
-      "count": 2
+      "count": 1
     }
   },
   "apps/web/src/components/workspaces/settings/ToolCatalogEditor.tsx": {
@@ -1214,14 +1204,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/settings/pages/ProjectAreas.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/pages/ProjectRepositories.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1233,11 +1215,6 @@
     }
   },
   "apps/web/src/components/workspaces/settings/pages/ToolCatalog.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/settings/pages/WorkspaceGeneral.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -1277,11 +1254,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/settings/settingsView.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/shared.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1308,11 +1280,6 @@
   "apps/web/src/components/workspaces/settings/workspaceGeneral.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/settings/workspaceGeneralYaml.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
     }
   },
   "apps/web/src/components/workspaces/settings/workspacePeople.logic.ts": {

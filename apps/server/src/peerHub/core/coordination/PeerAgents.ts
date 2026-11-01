@@ -168,7 +168,7 @@ const make = Effect.gen(function* () {
         if (broker === null)
           throw refused(
             "coordination is not running",
-            "turn coordination on in Settings → Peer → Coordination & plugins.",
+            "turn coordination on in Settings → Peer → Plugins.",
           );
         return run(broker);
       },

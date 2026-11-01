@@ -1,25 +1,22 @@
 /**
- * What the review of a change shows and sends, apart from how it draws: the operations a review
- * runs, the call each one makes as a dry run and as a save, the step an answer leads to, the notes
- * under "Before you save", and the sentences of the conflict and saved views (design artboard 03).
+ * What the review of a change shows and sends, apart from how it draws: the call it makes as a dry
+ * run and as a save, the step an answer leads to, the notes under "Before you save", and the
+ * sentences of the conflict and saved views (design artboard 03).
  */
+import { settingsLineChange } from "@t3tools/contracts";
 import type {
-  PeerSettingsApplyProposalInput,
   PeerSettingsApplies,
   PeerSettingsChangeInput,
   PeerSettingsChangeResult,
   PeerSettingsConflict,
   PeerSettingsDiagnostic,
-  PeerSettingsImportInput,
   PeerSettingsLine,
   PeerSettingsPath,
   PeerSettingsPreview,
   PeerSettingsRefusal,
-  PeerSettingsRevertInput,
   PeerSettingsSaved,
   PeerSettingsSet,
 } from "@t3tools/contracts";
-import { settingsLineChange } from "@t3tools/contracts";
 
 import { setAt } from "@t3tools/client-runtime/peer-settings";
 
@@ -27,27 +24,12 @@ import type { SettingsDocument } from "./settingsView.logic";
 
 type Path = ReadonlyArray<string>;
 
-/**
- * What a review is of. Every one is a change on the Hub's head that the review first runs as a dry
- * run: a draft's sets against the revision it started from, the inverse of a revision, YAML files, or
- * a proposal an owner applies.
- */
-export type ReviewOperation =
-  | {
-      readonly kind: "save";
-      readonly workspace: string;
-      readonly base: number;
-      readonly set: ReadonlyArray<PeerSettingsSet>;
-    }
-  | { readonly kind: "revert"; readonly workspace: string; readonly seq: number }
-  | {
-      readonly kind: "import";
-      readonly workspace: string;
-      /** File path → YAML, as `exportYaml` gives them. */
-      readonly files: Readonly<Record<string, string>>;
-      readonly base?: number | undefined;
-    }
-  | { readonly kind: "proposal"; readonly workspace: string; readonly id: string };
+/** What a review is of: a draft's sets against the revision it started from. */
+export interface ReviewOperation {
+  readonly workspace: string;
+  readonly base: number;
+  readonly set: ReadonlyArray<PeerSettingsSet>;
+}
 
 /** How conflicts were settled: `force` takes my value, `drop` keeps theirs. */
 export interface Settle {
@@ -72,17 +54,14 @@ export const WHY_MAX = 300;
 export type ReviewMode = "preview" | "save";
 
 /** The command to run and the input to give it. */
-export type ChangeCall =
-  | { readonly command: "preview"; readonly input: PeerSettingsChangeInput }
-  | { readonly command: "save"; readonly input: PeerSettingsChangeInput }
-  | { readonly command: "revert"; readonly input: PeerSettingsRevertInput }
-  | { readonly command: "importYaml"; readonly input: PeerSettingsImportInput }
-  | { readonly command: "applyProposal"; readonly input: PeerSettingsApplyProposalInput };
+export interface ChangeCall {
+  readonly command: ReviewMode;
+  readonly input: PeerSettingsChangeInput;
+}
 
 /**
- * The call an operation makes. A draft's changes have a command for each mode; the others are the
- * save's own command with `dryRun` for the preview. The reason and how conflicts were settled go
- * with both, so the preview after "Discard mine" shows what the save will do.
+ * The call a review makes. The reason and how conflicts were settled go with both modes, so the
+ * preview after "Discard mine" shows what the save will do.
  */
 export function changeCall(
   operation: ReviewOperation,
@@ -90,45 +69,17 @@ export function changeCall(
   extras: { readonly message: string; readonly settle: Settle },
 ): ChangeCall {
   const message = extras.message.trim();
-  const settling = {
-    ...(message === "" ? {} : { message }),
-    ...(extras.settle.force.length === 0 ? {} : { force: extras.settle.force }),
-    ...(extras.settle.drop.length === 0 ? {} : { drop: extras.settle.drop }),
+  return {
+    command: mode,
+    input: {
+      workspace: operation.workspace,
+      base: operation.base,
+      set: operation.set,
+      ...(message === "" ? {} : { message }),
+      ...(extras.settle.force.length === 0 ? {} : { force: extras.settle.force }),
+      ...(extras.settle.drop.length === 0 ? {} : { drop: extras.settle.drop }),
+    },
   };
-  const dry = mode === "preview" ? { dryRun: true } : {};
-  switch (operation.kind) {
-    case "save":
-      return {
-        command: mode,
-        input: {
-          workspace: operation.workspace,
-          base: operation.base,
-          set: operation.set,
-          ...settling,
-        },
-      };
-    case "revert":
-      return {
-        command: "revert",
-        input: { workspace: operation.workspace, seq: operation.seq, ...dry, ...settling },
-      };
-    case "import":
-      return {
-        command: "importYaml",
-        input: {
-          workspace: operation.workspace,
-          files: operation.files,
-          ...(operation.base === undefined ? {} : { base: operation.base }),
-          ...dry,
-          ...settling,
-        },
-      };
-    case "proposal":
-      return {
-        command: "applyProposal",
-        input: { workspace: operation.workspace, id: operation.id, ...dry, ...settling },
-      };
-  }
 }
 
 /** The document a draft's sets make of `document`: a `null` value removes the node. */
@@ -469,79 +420,10 @@ export const conflictTitle = (names: ReadonlyArray<string>, scope: string, when:
   `${joinNames(names)} saved ${scope} ${when}`;
 
 /**
- * The words of a review that depend on what is under review: a draft is "yours" and goes back to
- * editing, a proposal, a revert or imported files belong to someone or something else and are
- * cancelled or kept at theirs.
- */
-export interface ReviewWords {
-  /** The button that leaves the review without saving. */
-  readonly back: string;
-  /** What the changes under review are called beside "theirs" in the conflict view. */
-  readonly mine: string;
-  /** The conflict view's button that gives the changes up. */
-  readonly discard: string;
-  /** How the conflict view says where the changes started. */
-  readonly started: string;
-  /** Whose the changes are, in lower case: "your changes", "the proposal’s changes". */
-  readonly owner: string;
-  /** What to do about paths that are not the person's to change. */
-  readonly forbidden: string;
-  /** The Hub takes a reason for it, which the review asks for ("Why"). */
-  readonly why: boolean;
-}
-
-export function reviewWords(kind: ReviewOperation["kind"]): ReviewWords {
-  switch (kind) {
-    case "save":
-      return {
-        back: "Back to editing",
-        mine: "Yours",
-        discard: "Discard mine",
-        started: "You started from",
-        owner: "your",
-        forbidden: "Undo those changes to save the rest, or ask the people named to make them.",
-        why: true,
-      };
-    case "import":
-      return {
-        back: "Cancel",
-        mine: "Imported",
-        discard: "Keep theirs",
-        started: "The files started from",
-        owner: "the import’s",
-        forbidden:
-          "Take those changes out of the files to import the rest, or ask the people named to make them.",
-        why: true,
-      };
-    case "proposal":
-      return {
-        back: "Cancel",
-        mine: "Proposed",
-        discard: "Keep theirs",
-        started: "The proposal started from",
-        owner: "the proposal’s",
-        forbidden: "Ask the people named to apply it.",
-        why: true,
-      };
-    case "revert":
-      return {
-        back: "Cancel",
-        mine: "Revert",
-        discard: "Keep theirs",
-        started: "The revert started from",
-        owner: "the revert’s",
-        forbidden: "Ask the people named to revert them.",
-        why: true,
-      };
-  }
-}
-
-/**
  * The conflict view's opening: where the changes started, where the head is, and how many of them
  * touch what others saved ("Four of your changes don’t touch Eva’s. One does:").
  */
 export function conflictIntro(input: {
-  readonly kind: ReviewOperation["kind"];
   readonly base: number;
   readonly head: number;
   readonly scope: string;
@@ -550,17 +432,15 @@ export function conflictIntro(input: {
   readonly conflicts: number;
 }): string {
   const { untouched, conflicts, names } = input;
-  const words = reviewWords(input.kind);
-  const where = `${words.started} revision ${input.base}, ${input.scope} is now at ${input.head}.`;
+  const where = `You started from revision ${input.base}, ${input.scope} is now at ${input.head}.`;
   const theirs = names.length === 1 ? `${names[0]}’s` : "theirs";
   if (untouched === 0) {
-    const owner = capital(words.owner);
     return conflicts === 1
-      ? `${where} ${owner} change touches the same setting ${joinNames(names)} changed:`
-      : `${where} ${owner} ${conflicts} changes touch the same settings ${joinNames(names)} changed:`;
+      ? `${where} Your change touches the same setting ${joinNames(names)} changed:`
+      : `${where} Your ${conflicts} changes touch the same settings ${joinNames(names)} changed:`;
   }
   const rest = conflicts === 1 ? "One does:" : `${capital(countInWords(conflicts))} do:`;
-  const some = `${capital(countInWords(untouched))} of ${words.owner} changes ${untouched === 1 ? "doesn’t" : "don’t"} touch ${theirs}.`;
+  const some = `${capital(countInWords(untouched))} of your changes ${untouched === 1 ? "doesn’t" : "don’t"} touch ${theirs}.`;
   return `${where} ${some} ${rest}`;
 }
 
@@ -569,28 +449,6 @@ export function noopText(kept: ReadonlyArray<string>): string {
   return kept.length === 0
     ? "Nothing would change: the settings already read this way."
     : `Nothing left to save: the settings keep what ${joinNames(kept)} saved.`;
-}
-
-/** What else the conflicting revisions changed, which stays: their lines that touch none of my conflicts. */
-export function theirOtherLines(
-  revisions: ReadonlyArray<{ readonly lines: ReadonlyArray<PeerSettingsLine> }>,
-  conflicts: ReadonlyArray<PeerSettingsConflict>,
-): ReadonlyArray<PeerSettingsLine> {
-  return revisions
-    .flatMap((revision) => revision.lines)
-    .filter((line) => !conflicts.some((conflict) => related(conflict.path, line.path)));
-}
-
-/** "Eva’s other change stays: Path rule · docs/**: notify → none." */
-export function otherChangeText(
-  names: ReadonlyArray<string>,
-  lines: ReadonlyArray<PeerSettingsLine>,
-) {
-  if (lines.length === 0) return null;
-  const who = names.length === 1 ? `${names[0]}’s` : "Their";
-  return `${who} other ${lines.length === 1 ? "change stays" : "changes stay"}: ${lines
-    .map((line) => `${line.label}: ${settingsLineChange(line)}`)
-    .join("; ")}.`;
 }
 
 export const savedTitle = (saved: PeerSettingsSaved): string =>

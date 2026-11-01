@@ -235,7 +235,7 @@ describe("a Claude Code agent in herdr that reports no transcript", () => {
     Effect.gen(function* () {
       const peers = fakeHerdrProcess(fakeHerdrWorld({ peer: { version: "0.9.3", agents: [] } }));
       const hint = (yield* hintWith(peers, "peer")) ?? "";
-      assert.match(hint, /Settings → Peer → Coordination & plugins$/);
+      assert.match(hint, /Settings → Peer → Plugins$/);
       assert.notInclude(hint, "herdr integration install");
     }),
   );

@@ -30,17 +30,14 @@ import {
   mergedNote,
   mergeSettle,
   noopText,
-  otherChangeText,
   refusalText,
   related,
-  reviewWords,
   saveLabel,
   savedTitle,
   scopeNameOf,
   settlement,
   stepFor,
   theirNames,
-  theirOtherLines,
   toolApprovalNotes,
   untouchedCount,
   type ReviewOperation,
@@ -101,7 +98,6 @@ const migrations = conflictAt(["projects", "booking", "coordination", "paths", "
 
 describe("the call a review makes", () => {
   const save: ReviewOperation = {
-    kind: "save",
     workspace: "acme",
     base: 41,
     set: [{ path: ["projects", "booking", "coordination", "policy"], value: "coordinate" }],
@@ -126,46 +122,6 @@ describe("the call a review makes", () => {
       const call = changeCall(save, mode, { message: "", settle });
       expect(call.input).toMatchObject({ force: [["a"]], drop: [["b"], ["c"]] });
     }
-  });
-
-  it("previews a revert, an import and an applied proposal as dry runs of the commands that save them", () => {
-    expect(
-      changeCall({ kind: "revert", workspace: "acme", seq: 43 }, "preview", {
-        message: "",
-        settle: NO_SETTLE,
-      }),
-    ).toEqual({ command: "revert", input: { workspace: "acme", seq: 43, dryRun: true } });
-    expect(
-      changeCall({ kind: "revert", workspace: "acme", seq: 43 }, "save", {
-        message: "Back",
-        settle: NO_SETTLE,
-      }),
-    ).toEqual({ command: "revert", input: { workspace: "acme", seq: 43, message: "Back" } });
-    expect(
-      changeCall(
-        { kind: "import", workspace: "acme", files: { "workspace.yaml": "x" } },
-        "preview",
-        {
-          message: "",
-          settle: NO_SETTLE,
-        },
-      ),
-    ).toEqual({
-      command: "importYaml",
-      input: { workspace: "acme", files: { "workspace.yaml": "x" }, dryRun: true },
-    });
-    expect(
-      changeCall({ kind: "import", workspace: "acme", files: {}, base: 40 }, "save", {
-        message: "",
-        settle: NO_SETTLE,
-      }),
-    ).toEqual({ command: "importYaml", input: { workspace: "acme", files: {}, base: 40 } });
-    expect(
-      changeCall({ kind: "proposal", workspace: "acme", id: "p_1" }, "preview", {
-        message: "",
-        settle: NO_SETTLE,
-      }),
-    ).toEqual({ command: "applyProposal", input: { workspace: "acme", id: "p_1", dryRun: true } });
   });
 });
 
@@ -411,56 +367,7 @@ describe("when settings were saved after the changes started and nothing conflic
   });
 });
 
-describe("what a review is of changes its words", () => {
-  it("speaks of editing only for a draft", () => {
-    expect(reviewWords("save")).toMatchObject({
-      back: "Back to editing",
-      mine: "Yours",
-      discard: "Discard mine",
-    });
-    for (const kind of ["proposal", "revert", "import"] as const) {
-      expect(reviewWords(kind).back).toBe("Cancel");
-      expect(reviewWords(kind).discard).toBe("Keep theirs");
-    }
-    expect(reviewWords("proposal").mine).toBe("Proposed");
-    expect(reviewWords("proposal").forbidden).toBe("Ask the people named to apply it.");
-  });
-
-  it("asks for a reason wherever the Hub takes one", () => {
-    for (const kind of ["save", "proposal", "revert", "import"] as const) {
-      expect(reviewWords(kind).why).toBe(true);
-    }
-  });
-
-  it("opens a proposal's conflict without calling it the owner's own", () => {
-    expect(
-      conflictIntro({
-        kind: "proposal",
-        base: 41,
-        head: 42,
-        scope: "Booking",
-        names: ["Eva"],
-        untouched: 2,
-        conflicts: 1,
-      }),
-    ).toBe(
-      "The proposal started from revision 41, Booking is now at 42. Two of the proposal’s changes don’t touch Eva’s. One does:",
-    );
-    expect(
-      conflictIntro({
-        kind: "revert",
-        base: 41,
-        head: 42,
-        scope: "Booking",
-        names: ["Eva"],
-        untouched: 0,
-        conflicts: 1,
-      }),
-    ).toBe(
-      "The revert started from revision 41, Booking is now at 42. The revert’s change touches the same setting Eva changed:",
-    );
-  });
-
+describe("a review left with nothing", () => {
   it("says what a review left with nothing says, by whose changes were kept", () => {
     expect(noopText([])).toBe("Nothing would change: the settings already read this way.");
     expect(noopText(["Eva"])).toBe("Nothing left to save: the settings keep what Eva saved.");
@@ -599,34 +506,6 @@ describe("a conflict", () => {
     );
     expect(countInWords(4)).toBe("four");
     expect(countInWords(12)).toBe("12");
-  });
-
-  it("keeps what else their revisions changed, apart from what I conflict with", () => {
-    const theirOther = line(
-      ["projects", "booking", "coordination", "paths", "docs/**"],
-      "Path rule · docs/**",
-      "notify",
-      "none",
-    );
-    const lines = theirOtherLines(
-      [
-        {
-          lines: [
-            theirOther,
-            line(migrations.path, "Path rule · migrations/**", "none", "coordinate"),
-          ],
-        },
-      ],
-      [migrations],
-    );
-    expect(lines).toEqual([theirOther]);
-    expect(otherChangeText(["Eva"], lines)).toBe(
-      "Eva’s other change stays: Path rule · docs/**: notify → none.",
-    );
-    expect(otherChangeText(["Eva", "Bob"], [theirOther, theirOther])).toBe(
-      "Their other changes stay: Path rule · docs/**: notify → none; Path rule · docs/**: notify → none.",
-    );
-    expect(otherChangeText(["Eva"], [])).toBeNull();
   });
 });
 

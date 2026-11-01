@@ -2,7 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   canChangePath,
-  proposalsKey,
   knownRevision,
   ownersOfPath,
   personName,
@@ -104,8 +103,8 @@ describe("what the status says of a workspace", () => {
   const status = {
     settings: {
       workspaces: [
-        { workspace: "acme", revision: 42, pendingProposals: 2, ownProposals: 1 },
-        { workspace: "camp", revision: 7, pendingProposals: 0 },
+        { workspace: "acme", revision: 42 },
+        { workspace: "camp", revision: 7 },
       ],
     },
   };
@@ -114,29 +113,5 @@ describe("what the status says of a workspace", () => {
     expect(knownRevision(status, "acme")).toBe(42);
     expect(knownRevision(status, "unknown")).toBeUndefined();
     expect(knownRevision({}, "acme")).toBeUndefined();
-  });
-
-  it("keys the proposals by the ones the person decides, the ones they made and the revision", () => {
-    expect(proposalsKey(status, "acme")).toEqual({ waiting: 2, own: 1, revision: 42 });
-  });
-
-  it("changes the key when a proposal the person made is decided or withdrawn, which moves no revision", () => {
-    const before = proposalsKey(status, "acme");
-    const after = proposalsKey(
-      {
-        settings: {
-          workspaces: [{ workspace: "acme", revision: 42, pendingProposals: 2, ownProposals: 0 }],
-        },
-      },
-      "acme",
-    );
-    expect(after).not.toEqual(before);
-    expect(after.revision).toBe(before.revision);
-  });
-
-  it("keys nothing it is not told: an environment that does not count their own, or says nothing", () => {
-    expect(proposalsKey(status, "camp")).toEqual({ waiting: 0, revision: 7 });
-    expect(proposalsKey(status, "unknown")).toEqual({});
-    expect(proposalsKey({}, "acme")).toEqual({});
   });
 });

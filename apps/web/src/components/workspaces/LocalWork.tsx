@@ -148,7 +148,7 @@ export function LocalWork({
         <Button
           size="xs"
           variant="outline"
-          onClick={() => void settings({ kind: "computer", section: "coordination" })}
+          onClick={() => void settings({ kind: "computer", section: "plugins" })}
         >
           Coordination settings
         </Button>

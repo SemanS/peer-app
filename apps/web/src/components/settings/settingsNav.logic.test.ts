@@ -81,7 +81,7 @@ describe("the one settings navigation", () => {
 
   it("puts Peer's pages and the app's own together under This computer and App", () => {
     expect(labels("computer")).toEqual([
-      "Coordination & plugins",
+      "Plugins",
       "Tool trust",
       "Providers",
       "Threads",
@@ -197,7 +197,7 @@ describe("with no workspace", () => {
       nav({ workspace: null, signedOut }).groups.find((group) => group.id === "computer")?.items;
     for (const signedOut of [false, true])
       expect(computer(signedOut)?.map((item) => item.label)).toEqual([
-        "Coordination & plugins",
+        "Plugins",
         "Tool trust",
         "Providers",
         "Threads",

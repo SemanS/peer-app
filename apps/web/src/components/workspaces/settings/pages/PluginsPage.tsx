@@ -1,22 +1,22 @@
 import { useEnvironment } from "../../../../state/environments";
 import { SettingsRow, SettingsSection } from "../../../settings/settingsLayout";
 import { CoordinationControls } from "../../Coordination";
-import { PeerPluginsSection } from "../CoordinationAndPluginsParts";
+import { PeerPluginsSection } from "../PluginsParts";
 import type { ComputerPageProps } from "../pageProps";
 import { PeerSettingsPage } from "../PeerSettingsPage";
 import { HostedSettings } from "../PluginSlots";
 
 /**
- * This computer's coordination and plugins: first what decides whether its agents take part at
- * all (the switch, Claude Code and Codex hooks, Codex's trust) with the settings plugins bring
- * (herdr, GitHub CLI and the rest), then the Peer plugins folded, as most people never change one. These are this computer's own, so
- * whoever uses it sees them whatever workspace is open.
+ * This computer's plugins: first what decides whether its agents take part at all (the switch,
+ * Claude Code and Codex hooks, Codex's trust) with the settings plugins bring, then the Peer plugins
+ * folded, as most people never change one. These are this computer's own, so whoever uses it sees
+ * them whatever workspace is open.
  */
-export function CoordinationAndPlugins({ environmentId, status }: ComputerPageProps) {
+export function PluginsPage({ environmentId, status }: ComputerPageProps) {
   const environment = useEnvironment(environmentId);
   return (
     <PeerSettingsPage
-      title="Coordination & plugins"
+      title="Plugins"
       description={environment === null ? "This computer" : `This computer · ${environment.label}`}
     >
       <SettingsSection title="Agent coordination" hideTitle>
@@ -26,7 +26,7 @@ export function CoordinationAndPlugins({ environmentId, status }: ComputerPagePr
         >
           <CoordinationControls environmentId={environmentId} status={status} />
         </SettingsRow>
-        <HostedSettings host="coordination" environmentId={environmentId} status={status} />
+        <HostedSettings host="plugins" environmentId={environmentId} status={status} />
       </SettingsSection>
       <details>
         <summary className="cursor-pointer text-sm text-muted-foreground">Peer plugins</summary>

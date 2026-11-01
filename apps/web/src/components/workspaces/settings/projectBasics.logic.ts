@@ -121,5 +121,5 @@ export const confirmsDeletion = (typed: string, id: string): boolean => typed.tr
 
 /** The change that deletes a project: its node set to nothing, against the revision the page read. */
 export function deleteOperation(workspace: string, base: number, id: string): ReviewOperation {
-  return { kind: "save", workspace, base, set: [{ path: ["projects", id], value: null }] };
+  return { workspace, base, set: [{ path: ["projects", id], value: null }] };
 }

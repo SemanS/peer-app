@@ -108,7 +108,6 @@ describe("deleting a project", () => {
 
   it("sets the project's node to nothing, against the revision read", () => {
     expect(deleteOperation("acme", 42, "booking")).toEqual({
-      kind: "save",
       workspace: "acme",
       base: 42,
       set: [{ path: ["projects", "booking"], value: null }],

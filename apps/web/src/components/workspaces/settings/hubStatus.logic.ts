@@ -107,7 +107,7 @@ const FEATURES: ReadonlyArray<Feature> = [
 
 const KNOWN: ReadonlySet<string> = new Set(FEATURES.map((feature) => feature.id));
 
-const OFF_HERE = "Turned off on this computer. Its owner turns it on in Coordination & plugins.";
+const OFF_HERE = "Turned off on this computer. Its owner turns it on in Plugins.";
 
 interface Context {
   readonly plugins: ReadonlyArray<PeerPluginState>;
@@ -226,7 +226,7 @@ export function featuresFootnote(rows: ReadonlyArray<FeatureRow>): string {
   const base =
     "“Not available” is the Hub’s: its operator turned the feature off, or the Hub needs an update, and the row says which.";
   return rows.some((feature) => feature.state === "off-here")
-    ? `${base} “Off” is a choice made on this computer, in Coordination & plugins.`
+    ? `${base} “Off” is a choice made on this computer, in Plugins.`
     : base;
 }
 

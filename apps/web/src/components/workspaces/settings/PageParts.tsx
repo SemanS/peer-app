@@ -1,7 +1,6 @@
 /**
- * The small parts a project's Capacity and Coordination pages share: a section with its heading,
- * the mark on what the draft changed, who changes what a person only reads, and the line for
- * settings that could not be read.
+ * The small parts settings pages share: a section with its heading, the mark on what the draft
+ * changed, who changes what a person only reads, and the line for settings that could not be read.
  */
 import { useId, type ReactNode } from "react";
 

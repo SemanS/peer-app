@@ -54,11 +54,11 @@ const settingsView = (seq: number) => ({
   people: [{ ...eva, role: "member" }],
 });
 const line = {
-  path: ["projects", "booking", "coordination", "policy"],
+  path: ["projects", "booking", "name"],
   scope: { kind: "project", id: "booking", name: "Booking" },
-  label: "Coordination",
-  from: "notify",
-  to: "coordinate",
+  label: "Name",
+  from: "Booking",
+  to: "Bookings",
 };
 const dryRun = {
   base: 41,
@@ -66,29 +66,10 @@ const dryRun = {
   lines: [line],
   conflicts: [],
   diagnostics: [],
-  applies: [{ kind: "next-edit", text: "Policy and path rules: from the next file edit" }],
+  applies: [{ kind: "now", text: "At once" }],
   noop: false,
 };
-const proposal = (id: string, canDecide: boolean) => ({
-  id,
-  by: eva,
-  via: { kind: "agent", agent: "codex" },
-  at: "2026-10-11T12:00:00Z",
-  base: 42,
-  message: "Migrations must not run twice",
-  instruction: null,
-  lines: [line],
-  scopes: ["project:booking"],
-  owners: "Booking's leads and admins",
-  state: "pending",
-  decidedBy: null,
-  decidedAt: null,
-  reason: null,
-  revision: null,
-  mine: !canDecide,
-  canDecide,
-});
-const set = [{ path: ["projects", "booking", "coordination", "policy"], value: "coordinate" }];
+const set = [{ path: ["projects", "booking", "name"], value: "Bookings" }];
 const refusal = (code: string, details: unknown) => ({
   error: { code, message: "Refused.", details },
 });
@@ -172,14 +153,12 @@ describe("Settings through core", () => {
       const on = serving(answer);
       on({});
       yield* learn;
-      // The plugin reads the settings and the pending proposals in the background too, and after
-      // each write; `last` is the last call that is none of those.
+      // The plugin reads the settings in the background too, and after each write; `last` is the
+      // last call that is none of those.
       const refresh = (call?: {
         readonly method?: string | undefined;
         readonly url?: string | undefined;
-      }) =>
-        call?.method === "GET" &&
-        (call.url === `${WS}/settings` || call.url === `${WS}/settings/proposals?state=pending`);
+      }) => call?.method === "GET" && call.url === `${WS}/settings`;
       const last = () => {
         const call = hub.calls.findLast((c) => !refresh(c));
         return [call?.method, call?.url?.replace(WS, "") || "/", call?.body ?? ""].join(" ").trim();
@@ -194,7 +173,7 @@ describe("Settings through core", () => {
       assert.isAbove(reads("/settings"), viewReads);
 
       on(dryRun);
-      const forced = [["projects", "booking", "coordination", "paths", "migrations/**"]];
+      const forced = [["projects", "booking", "name"]];
       const previewed = yield* client["peer.settings.preview"]({
         workspace: "acme",
         base: 41,
@@ -210,131 +189,6 @@ describe("Settings through core", () => {
       const saved = yield* client["peer.settings.save"]({ workspace: "acme", base: 41, set });
       assert.strictEqual(saved.kind, "saved");
       assert.strictEqual(last(), `POST /settings/changes ${JSON.stringify({ base: 41, set })}`);
-
-      on({ revisions: [], next: null });
-      yield* client["peer.settings.history"]({
-        workspace: "acme",
-        scope: "project:booking",
-        before: 40,
-        limit: 50,
-      });
-      assert.strictEqual(
-        last(),
-        "GET /settings/history?scope=project%3Abooking&before=40&limit=50",
-      );
-      on({ ...settingsView(43).revision, source: "app", proposal: null, lines: [line] });
-      yield* client["peer.settings.historyEntry"]({ workspace: "acme", seq: 43 });
-      assert.strictEqual(last(), "GET /settings/history/43");
-
-      on(dryRun);
-      const reverting = { workspace: "acme", seq: 43 } as const;
-      assert.strictEqual(
-        (yield* client["peer.settings.revert"]({ ...reverting, dryRun: true })).kind,
-        "preview",
-      );
-      assert.strictEqual(
-        last(),
-        `POST /settings/revert ${JSON.stringify({ seq: 43, dryRun: true })}`,
-      );
-      assert.strictEqual(
-        (yield* client["peer.settings.revert"]({ ...reverting, message: "Undo" })).kind,
-        "saved",
-      );
-      assert.strictEqual(
-        last(),
-        `POST /settings/revert ${JSON.stringify({ seq: 43, message: "Undo" })}`,
-      );
-
-      // YAML files become the bundle the Hub imports, and `.peer-revision` names its base.
-      yield* client["peer.settings.importYaml"]({
-        workspace: "acme",
-        files: {
-          "workspace.yaml": "currency: EUR\n",
-          "projects/booking.yaml": "name: Booking\n",
-          ".peer-revision": "42 3f2a\n",
-        },
-        dryRun: true,
-      });
-      assert.strictEqual(
-        last(),
-        `POST /settings/import ${JSON.stringify({
-          base: 42,
-          bundle: {
-            settings: {},
-            config: {
-              currency: "EUR",
-              projects: { booking: { name: "Booking" } },
-              tools: {},
-            },
-          },
-          dryRun: true,
-        })}`,
-      );
-      const calls = hub.calls.length;
-      const incomplete = yield* client["peer.settings.importYaml"]({
-        workspace: "acme",
-        files: { "projects/booking.yaml": "name: Booking\n" },
-      }).pipe(Effect.result);
-      assert.isTrue(Result.isFailure(incomplete));
-      assert.strictEqual(hub.calls.length, calls);
-
-      on({ revision: { seq: 42, commit: "3f2a" }, files: { "workspace.yaml": "currency: EUR\n" } });
-      const exported = yield* client["peer.settings.exportYaml"]({ workspace: "acme" });
-      assert.strictEqual(exported.revision.seq, 42);
-      assert.strictEqual(last(), "GET /settings/export");
-
-      on({ proposals: [proposal("p_1", true)] });
-      const proposalReads = reads("/settings/proposals?state=pending");
-      yield* client["peer.settings.proposals"]({ workspace: "acme", state: "pending", waiting: 1 });
-      assert.isAbove(reads("/settings/proposals?state=pending"), proposalReads);
-      on(proposal("p_1", false), 201);
-      const proposed = yield* client["peer.settings.propose"]({
-        workspace: "acme",
-        base: 42,
-        set,
-        message: "Migrations must not run twice",
-        instruction: "make migrations exclusive",
-        via: { kind: "agent", agent: "codex" },
-      });
-      assert.strictEqual(proposed.kind, "proposed");
-      assert.strictEqual(
-        last(),
-        `POST /settings/proposals ${JSON.stringify({
-          base: 42,
-          set,
-          message: "Migrations must not run twice",
-          instruction: "make migrations exclusive",
-          via: { kind: "agent", agent: "codex" },
-        })}`,
-      );
-      on(dryRun);
-      const applied = yield* client["peer.settings.applyProposal"]({
-        workspace: "acme",
-        id: "p/1",
-        dryRun: true,
-      });
-      assert.strictEqual(applied.kind, "preview");
-      assert.strictEqual(
-        last(),
-        `POST /settings/proposals/p%2F1/apply ${JSON.stringify({ dryRun: true })}`,
-      );
-      on({ ...proposal("p_1", true), state: "declined", reason: "No" });
-      yield* client["peer.settings.declineProposal"]({
-        workspace: "acme",
-        id: "p_1",
-        reason: "No",
-      });
-      assert.strictEqual(
-        last(),
-        `POST /settings/proposals/p_1/decline ${JSON.stringify({ reason: "No" })}`,
-      );
-      on(null, 204);
-      const withdrawn = yield* client["peer.settings.withdrawProposal"]({
-        workspace: "acme",
-        id: "p_1",
-      });
-      assert.deepStrictEqual(withdrawn, {});
-      assert.strictEqual(last(), "DELETE /settings/proposals/p_1");
 
       on({
         secrets: [{ name: "litellm-master-key", at: null, by: null, usedBy: [] }],
@@ -358,10 +212,9 @@ describe("Settings through core", () => {
       const deleted = yield* client["peer.settings.deleteSecret"]({
         workspace: "acme",
         name: "TEAMS_ALERTS_URL",
-        force: true,
       });
-      assert.deepStrictEqual(deleted, { kind: "deleted" });
-      assert.strictEqual(last(), "DELETE /secrets/TEAMS_ALERTS_URL?force=true");
+      assert.deepStrictEqual(deleted, {});
+      assert.strictEqual(last(), "DELETE /secrets/TEAMS_ALERTS_URL");
 
       on({ domain: "acme-studio.com", record: "peer-hub-verify=7f3c", state: "listed" });
       const record = yield* client["peer.settings.domainRecord"]({
@@ -400,14 +253,14 @@ describe("Settings through core", () => {
       yield* learn;
       const input = { workspace: "acme", base: 41, set } as const;
       const conflict = {
-        path: ["projects", "booking", "coordination", "policy"],
-        label: "Coordination",
-        base: "notify",
-        mine: "ask",
-        theirs: "coordinate",
-        baseText: "notify",
-        mineText: "ask",
-        theirsText: "coordinate",
+        path: ["projects", "booking", "name"],
+        label: "Name",
+        base: "Booking",
+        mine: "Bookings",
+        theirs: "Reservations",
+        baseText: "Booking",
+        mineText: "Bookings",
+        theirsText: "Reservations",
         theirsBy: eva,
         theirsAt: "2026-10-11T12:02:00Z",
         theirsSeq: 42,
@@ -430,22 +283,8 @@ describe("Settings through core", () => {
       on(refusal("invalid_settings", { diagnostics }), 422);
       const invalid = yield* client["peer.settings.preview"](input);
       assert.deepStrictEqual(invalid.kind === "invalid" ? invalid.diagnostics : [], diagnostics);
-      const proposedInvalid = yield* client["peer.settings.propose"]({ ...input, message: "Why" });
-      assert.strictEqual(proposedInvalid.kind, "invalid");
-      on(refusal("settings_forbidden", { refused }), 403);
-      const proposedForbidden = yield* client["peer.settings.propose"]({
-        ...input,
-        message: "Why",
-      });
-      assert.strictEqual(proposedForbidden.kind, "forbidden");
 
-      // A secret that is in use, and a domain another workspace holds.
-      on(refusal("secret_in_use", { usedBy: ["Tool · Postgres"] }), 409);
-      const inUse = yield* client["peer.settings.deleteSecret"]({
-        workspace: "acme",
-        name: "POSTGRES_URL",
-      });
-      assert.deepStrictEqual(inUse, { kind: "in-use", usedBy: ["Tool · Postgres"] });
+      // A domain another workspace holds.
       const holder = { slug: "other", name: "Other", verified: true };
       on(
         refusal("domain_claimed", {
@@ -500,20 +339,16 @@ describe("Settings through core", () => {
             ? [200, meAnswer({ settings: 1 })]
             : url === `${WS}/settings`
               ? [200, settingsView(seq)]
-              : url === `${WS}/settings/proposals?state=pending`
-                ? [200, { proposals: [proposal("p_1", true), proposal("p_2", false)] }]
-                : [200, { ...dryRun, revision: { seq: 43, commit: "x", at: "x" } }],
+              : [200, { ...dryRun, revision: { seq: 43, commit: "x", at: "x" } }],
       };
       const { status, plugins, client, learn, core } = yield* settingsOn(answer);
       yield* learn;
       const slice = Effect.map(status.publish, (published) => published.settings?.workspaces);
       seq = 43;
-      // A save is read back at once: the status names the new revision and what waits for the person.
+      // A save is read back at once: the status names the new revision.
       const saved = yield* client["peer.settings.save"]({ workspace: "acme", base: 42, set });
       assert.strictEqual(saved.kind, "saved");
-      assert.deepStrictEqual(yield* slice, [
-        { workspace: "acme", revision: 43, pendingProposals: 1, ownProposals: 1 },
-      ]);
+      assert.deepStrictEqual(yield* slice, [{ workspace: "acme", revision: 43 }]);
       // The service forgets it on request, and keeps only the workspaces it is told to.
       const settings = yield* PeerSettings.pipe(Effect.provide(layer), Effect.provide(core));
       yield* settings.view("acme");
@@ -534,7 +369,6 @@ describe("Settings in the status", () => {
   it.live("is read when the plugin starts and follows the Hub's pings", () =>
     Effect.gen(function* () {
       let seq = 42;
-      let waiting: Array<unknown> = [proposal("p_1", true), proposal("p_2", false)];
       const hub = yield* standInHub({
         current: (url) =>
           url === "/v1/me"
@@ -543,9 +377,7 @@ describe("Settings in the status", () => {
               ? { events: ": connected\n\n", open: true }
               : url === `${WS}/settings`
                 ? [200, settingsView(seq)]
-                : url === `${WS}/settings/proposals?state=pending`
-                  ? [200, { proposals: waiting }]
-                  : [404, {}],
+                : [404, {}],
       });
       const core = yield* Layer.build(
         coreLayer(yield* seedState(signedInSeed(hub.url)), {
@@ -558,16 +390,9 @@ describe("Settings in the status", () => {
         yield* status.coordinationFrom(() => Effect.succeed(coordination));
         yield* (yield* PeerHubClient).me;
         yield* PeerPlugins.startPlugins;
-        const reaches = (revision: number, pending: number, own: number) =>
+        const reaches = (revision: number) =>
           status.changes.pipe(
-            Stream.filter((published) => {
-              const row = published.settings?.workspaces[0];
-              return (
-                row?.revision === revision &&
-                row.pendingProposals === pending &&
-                row.ownProposals === own
-              );
-            }),
+            Stream.filter((published) => published.settings?.workspaces[0]?.revision === revision),
             Stream.take(1),
             Stream.runDrain,
             Effect.timeout("10 seconds"),
@@ -579,24 +404,15 @@ describe("Settings in the status", () => {
             projectsChanged: Effect.void,
           })
           .pipe(Effect.forkScoped);
-        // Read as the plugin starts: the proposal the person may decide, and the one they made.
-        yield* reaches(42, 1, 1);
+        yield* reaches(42);
         // A ping of the settings brings the new revision into the status.
         seq = 43;
         hub.push(`${WS}/events`, 'event: settings\ndata: {"seq":43}\n\n');
-        yield* reaches(43, 1, 1);
-        // A ping of the proposals brings the new counts: the one they decide is declined...
-        waiting = [proposal("p_2", false)];
-        hub.push(`${WS}/events`, 'event: settings.proposal\ndata: {"id":"p_1"}\n\n');
-        yield* reaches(43, 0, 1);
-        // ...and the one they made is withdrawn, which no revision tells.
-        waiting = [];
-        hub.push(`${WS}/events`, 'event: settings.proposal\ndata: {"id":"p_2"}\n\n');
-        yield* reaches(43, 0, 0);
-        // The status holds counts and ids, nothing of the settings themselves.
+        yield* reaches(43);
+        // The status holds ids, nothing of the settings themselves.
         assert.strictEqual(
           JSON.stringify((yield* status.publish).settings),
-          '{"workspaces":[{"workspace":"acme","revision":43,"pendingProposals":0,"ownProposals":0}]}',
+          '{"workspaces":[{"workspace":"acme","revision":43}]}',
         );
       }).pipe(Effect.provide(core));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

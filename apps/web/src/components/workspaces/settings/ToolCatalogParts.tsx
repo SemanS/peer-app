@@ -13,7 +13,7 @@ import { Button } from "../../ui/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "../../ui/dialog";
 import { Input } from "../../ui/input";
 import { PeerDialogBody, PeerDialogFooter, PeerStackedField } from "../PeerDialog";
-import { NotSaved } from "./CapacityCoordinationParts";
+import { NotSaved } from "./PageParts";
 import {
   checkNewTool,
   deleteWords,

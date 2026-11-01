@@ -1,12 +1,4 @@
-import type {
-  PeerSettingsProposal,
-  PeerSettingsProposeInput,
-  PeerSettingsProposeResult,
-  PeerWorkspaceRole,
-} from "@t3tools/contracts";
-
-/** What a member's request to be added to a project says, as the admins read it. */
-export const ASK_TO_BE_ADDED = "Please add me to a project";
+import type { PeerWorkspaceRole } from "@t3tools/contracts";
 
 /** An admin of the workspace, as the person may be told to ask them. */
 export interface WorkspaceAdmin {
@@ -52,7 +44,6 @@ export function memberWords(input: {
       admins.length === 0
         ? adding
         : `${adding} Admins in ${workspaceName}: ${listNames(admins.map((admin) => admin.name))}.`,
-    ask: admins.length === 0 ? "Ask an admin to add you" : `Ask ${admins[0]!.name} to add you`,
   };
 }
 
@@ -62,35 +53,4 @@ export function adminWords(input: { readonly workspaceName: string; readonly sev
     title: input.several ? `Set up ${input.workspaceName}` : "Set up your workspace",
     text: "Four steps get it ready for your team. Each opens the page that does it.",
   };
-}
-
-/**
- * The request: a proposal without changes, which the Hub addresses to the workspace's admins. It
- * names the revision the person last read, as every proposal does.
- */
-export function askInput(workspace: string, base: number): PeerSettingsProposeInput {
-  return { workspace, base, set: [], message: ASK_TO_BE_ADDED, scope: "workspace" };
-}
-
-/** Whether the person already has a request to be added waiting: one without changes, theirs. */
-export function alreadyAsked(proposals: ReadonlyArray<PeerSettingsProposal>): boolean {
-  return proposals.some(
-    (proposal) =>
-      proposal.mine &&
-      proposal.state === "pending" &&
-      proposal.lines.length === 0 &&
-      proposal.message === ASK_TO_BE_ADDED,
-  );
-}
-
-/** What went wrong with a request the Hub answered but did not take, in a line; null when it took it. */
-export function askRefusal(result: PeerSettingsProposeResult): string | null {
-  switch (result.kind) {
-    case "proposed":
-      return null;
-    case "forbidden":
-      return "Peer could not send the request to the admins.";
-    case "invalid":
-      return result.diagnostics[0]?.message ?? "Peer could not send the request to the admins.";
-  }
 }

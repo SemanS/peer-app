@@ -9,18 +9,10 @@ import {
   PeerDomainRecord,
   PeerSettingsChangeInput,
   PeerSettingsChangeResult,
-  PeerSettingsDeleteSecretResult,
-  PeerSettingsExport,
-  PeerSettingsHistoryPage,
   PeerSettingsPersonEntry,
   PeerSettingsPreview,
   PeerSettingsProject,
-  PeerSettingsProposal,
-  PeerSettingsProposalsInput,
-  PeerSettingsProposeInput,
-  PeerSettingsProposeResult,
   PeerSettingsPutSecretInput,
-  PeerSettingsRevisionDetail,
   PeerSettingsSaved,
   PeerSettingsSecretsView,
   PeerSettingsStatus,
@@ -34,17 +26,9 @@ const view = Schema.decodeUnknownExit(PeerSettingsView);
 const preview = Schema.decodeUnknownExit(PeerSettingsPreview);
 const saved = Schema.decodeUnknownExit(PeerSettingsSaved);
 const result = Schema.decodeUnknownExit(PeerSettingsChangeResult);
-const history = Schema.decodeUnknownExit(PeerSettingsHistoryPage);
-const detail = Schema.decodeUnknownExit(PeerSettingsRevisionDetail);
-const proposal = Schema.decodeUnknownExit(PeerSettingsProposal);
 const secrets = Schema.decodeUnknownExit(PeerSettingsSecretsView);
 const changeInput = Schema.decodeUnknownExit(PeerSettingsChangeInput);
-const proposeInput = Schema.decodeUnknownExit(PeerSettingsProposeInput);
-const proposalsInput = Schema.decodeUnknownExit(PeerSettingsProposalsInput);
-const proposeResult = Schema.decodeUnknownExit(PeerSettingsProposeResult);
-const deleteResult = Schema.decodeUnknownExit(PeerSettingsDeleteSecretResult);
 const domainRecord = Schema.decodeUnknownExit(PeerDomainRecord);
-const exported = Schema.decodeUnknownExit(PeerSettingsExport);
 const workspaceUpdate = Schema.decodeUnknownExit(PeerSettingsWorkspaceUpdate);
 const status = Schema.decodeUnknownExit(PeerSettingsStatus);
 const project = Schema.decodeUnknownSync(PeerSettingsProject);
@@ -55,21 +39,21 @@ const invite = Schema.decodeUnknownExit(PeerHubInviteInput);
 
 const eva = { email: "eva@acme.dev", name: "Eva" };
 const line: unknown = {
-  path: ["projects", "booking", "coordination", "policy"],
+  path: ["projects", "booking", "name"],
   scope: { kind: "project", id: "booking", name: "Booking" },
-  label: "Coordination",
-  from: "notify",
-  to: "coordinate",
+  label: "Name",
+  from: "Booking",
+  to: "Bookings",
 };
 const conflict: unknown = {
-  path: ["projects", "booking", "coordination", "paths", "migrations/**"],
-  label: "Path rule · migrations/**",
+  path: ["projects", "booking", "name"],
+  label: "Name",
   base: null,
-  mine: "exclusive",
-  theirs: "coordinate",
+  mine: "Bookings",
+  theirs: "Reservations",
   baseText: "none",
-  mineText: "exclusive",
-  theirsText: "coordinate",
+  mineText: "Bookings",
+  theirsText: "Reservations",
   theirsBy: eva,
   theirsAt: "2026-10-11T12:02:00Z",
   theirsSeq: 42,
@@ -82,11 +66,11 @@ const dryRun = {
   diagnostics: [
     {
       severity: "warning",
-      at: "projects.booking.capacity.shared.allocations",
-      message: "allocations commit 650 but the budget is 600",
+      at: "projects.booking.leads",
+      message: "lead eva is not a member",
     },
   ],
-  applies: [{ kind: "next-edit", text: "Policy and path rules: from the next file edit" }],
+  applies: [{ kind: "now", text: "At once" }],
   noop: false,
 };
 const revision = {
@@ -222,30 +206,7 @@ describe("POST /settings/changes", () => {
   });
 });
 
-describe("history, proposals and supporting routes", () => {
-  const entry = {
-    ...revision,
-    seq: 43,
-    source: "app",
-    proposal: null,
-    lines: [line],
-  };
-
-  it("reads the history page and one revision, files for admins only", () => {
-    expect(Exit.isSuccess(history({ revisions: [entry], next: 39 }))).toBe(true);
-    expect(Exit.isSuccess(history({ revisions: [], next: null }))).toBe(true);
-    expect(
-      Exit.isSuccess(history({ revisions: [{ ...entry, source: "future", proposal: "p_1" }] })),
-    ).toBe(true);
-    const admin = detail({
-      ...entry,
-      files: [{ path: "projects/booking.yaml", diff: "@@ -1 +1 @@\n-notify\n+coordinate\n" }],
-    });
-    expect(Exit.isSuccess(admin) && admin.value.files?.[0]?.path).toBe("projects/booking.yaml");
-    const member = detail(entry);
-    expect(Exit.isSuccess(member) && member.value.files).toBeUndefined();
-  });
-
+describe("supporting routes", () => {
   it("reads lines as the Hub writes them: one thing said, a workspace's without an id", () => {
     const created = {
       path: ["projects", "camp-bot"],
@@ -255,158 +216,47 @@ describe("history, proposals and supporting routes", () => {
       text: "Camp-bot · Project: created",
     };
     const secondLine = {
-      path: ["gateway"],
+      path: ["currency"],
       scope: { kind: "workspace", name: "Workspace" },
-      label: "Gateway",
+      label: "Currency",
       from: "none",
-      to: "set up",
-      text: "Workspace · Gateway: none → set up",
+      to: "EUR",
+      text: "Workspace · Currency: none → EUR",
     };
-    const page = history({ revisions: [{ ...entry, lines: [created, secondLine] }], next: null });
-    expect(Exit.isSuccess(page)).toBe(true);
-    const [one, two] = Exit.isSuccess(page) ? (page.value.revisions[0]?.lines ?? []) : [];
+    const read = preview({ ...dryRun, lines: [created, secondLine] });
+    expect(Exit.isSuccess(read)).toBe(true);
+    const [one, two] = Exit.isSuccess(read) ? read.value.lines : [];
     expect(one && settingsLineChange(one)).toBe("created");
-    expect(two && settingsLineChange(two)).toBe("none → set up");
+    expect(two && settingsLineChange(two)).toBe("none → EUR");
     expect(two?.scope.id).toBeUndefined();
   });
 
-  it("reads a proposal as the Hub sends it, nulls included", () => {
-    const answer = proposal({
-      id: "p_1",
-      by: { email: "ana@acme.dev", name: "Ana" },
-      via: { kind: "agent", agent: "codex", thread: "t1" },
-      at: "2026-10-11T12:00:00Z",
-      base: 42,
-      message: "Migrations must not run twice",
-      instruction: "make migrations exclusive in Booking",
-      lines: [line],
-      scopes: ["project:booking"],
-      owners: "Booking's leads and admins",
-      state: "pending",
-      decidedBy: null,
-      decidedAt: null,
-      reason: null,
-      revision: null,
-      mine: true,
-      canDecide: false,
+  it("reads secrets as the Hub sends them, with what it keeps for one release", () => {
+    const read = secrets({
+      secrets: [
+        { name: "litellm-master-key", at: "2026-10-11T08:00:00Z", by: eva, usedBy: [] },
+        { name: "unused", at: null, by: null },
+      ],
+      missing: [],
     });
-    expect(Exit.isSuccess(answer) && answer.value.via?.agent).toBe("codex");
-    expect(
-      Exit.isSuccess(
-        proposal({
-          id: "p_2",
-          by: eva,
-          via: null,
-          at: "x",
-          base: 1,
-          message: "m",
-          instruction: null,
-          lines: [],
-          scopes: [],
-          owners: "admins",
-          state: "applied",
-          decidedBy: eva,
-          decidedAt: "x",
-          reason: null,
-          revision: 43,
-          mine: false,
-          canDecide: true,
-        }),
-      ),
-    ).toBe(true);
-  });
-
-  it("takes a proposal only with its reason, and its limits", () => {
-    const base = {
-      workspace: "acme",
-      base: 42,
-      set: [{ path: ["projects", "booking"], value: { name: "Booking" } }],
-    };
-    expect(
-      Exit.isSuccess(
-        proposeInput({ ...base, message: "Why", via: { kind: "agent", agent: "codex" } }),
-      ),
-    ).toBe(true);
-    expect(Exit.isFailure(proposeInput(base))).toBe(true);
-    expect(Exit.isFailure(proposeInput({ ...base, message: "  " }))).toBe(true);
-    expect(Exit.isFailure(proposeInput({ ...base, message: "x".repeat(301) }))).toBe(true);
-    expect(
-      Exit.isFailure(proposeInput({ ...base, message: "Why", instruction: "x".repeat(2_001) })),
-    ).toBe(true);
-    expect(
-      Exit.isFailure(
-        proposeInput({ ...base, message: "Why", via: { kind: "person", agent: "x" } }),
-      ),
-    ).toBe(true);
-    expect(
-      Exit.isSuccess(
-        proposeResult({
-          kind: "proposed",
-          proposal: {
-            id: "p",
-            by: eva,
-            at: "x",
-            base: 1,
-            message: "m",
-            lines: [],
-            scopes: [],
-            owners: "admins",
-            state: "pending",
-            mine: true,
-            canDecide: false,
-          },
-        }),
-      ),
-    ).toBe(true);
-  });
-
-  it("reads secrets with what uses them, and the ones nobody stored", () => {
-    expect(
-      Exit.isSuccess(
-        secrets({
-          secrets: [
-            {
-              name: "litellm-master-key",
-              at: "2026-10-11T08:00:00Z",
-              by: eva,
-              usedBy: ["Shared capacity · the gateway"],
-            },
-            { name: "unused", at: null, by: null, usedBy: [] },
-          ],
-          missing: [
-            { name: "TEAMS_ALERTS_URL", usedBy: ["Webhook “Teams alerts” · off until set"] },
-          ],
-        }),
-      ),
-    ).toBe(true);
+    expect(Exit.isSuccess(read) && read.value.secrets.map(({ name }) => name)).toEqual([
+      "litellm-master-key",
+      "unused",
+    ]);
     const name = (value: string) => putSecretInput({ workspace: "acme", name: value, value: "s" });
     expect(Exit.isSuccess(name("litellm-master-key"))).toBe(true);
     expect(Exit.isSuccess(name("TEAMS_ALERTS_URL"))).toBe(true);
     expect(Exit.isFailure(name("has space"))).toBe(true);
     expect(Exit.isFailure(name("a".repeat(65)))).toBe(true);
-    expect(Exit.isSuccess(deleteResult({ kind: "in-use", usedBy: ["Shared capacity"] }))).toBe(
-      true,
-    );
   });
 
-  it("reads the domain record and the export", () => {
+  it("reads the domain record", () => {
     expect(
       Exit.isSuccess(
         domainRecord({
           domain: "acme-studio.com",
           record: "peer-hub-verify=7f3c",
           state: "listed",
-        }),
-      ),
-    ).toBe(true);
-    expect(
-      Exit.isSuccess(
-        exported({
-          revision: { seq: 42, commit: revision.commit },
-          files: {
-            "workspace.yaml": "currency: EUR\n",
-            ".peer-revision": `42 ${revision.commit}\n`,
-          },
         }),
       ),
     ).toBe(true);
@@ -453,12 +303,10 @@ describe("the parts of the document the app reads", () => {
         },
       ],
       tools: ["postgres", { tool: "sentry", env: { DSN: "${secret:SENTRY_DSN}" } }],
-      coordination: { policy: "coordinate" },
       futureField: { deep: [1, 2] },
     });
     expect(read.futureField).toEqual({ deep: [1, 2] });
     expect(read.repositories[0]?.futureRepo).toBe(1);
-    expect(read.coordination?.policy).toBe("coordinate");
     expect(read.tools).toHaveLength(2);
   });
 
@@ -483,49 +331,11 @@ describe("wiring", () => {
   it("places the status slice in its own optional field", () => {
     const is = Schema.is(Schema.Struct(peerPluginStatusFields));
     expect(is({})).toBe(true);
-    expect(
-      is({ settings: { workspaces: [{ workspace: "acme", revision: 42, pendingProposals: 1 }] } }),
-    ).toBe(true);
-    expect(is({ settings: { workspaces: [{ workspace: "acme", revision: 42 }] } })).toBe(false);
-    expect(
-      Exit.isFailure(
-        status({ workspaces: [{ workspace: "acme", revision: -1, pendingProposals: 0 }] }),
-      ),
-    ).toBe(true);
-  });
-
-  it("counts the person's own pending proposals beside those they decide, as an environment may not", () => {
-    const own = status({
-      workspaces: [{ workspace: "acme", revision: 42, pendingProposals: 1, ownProposals: 2 }],
-    });
-    expect(Exit.isSuccess(own) && own.value.workspaces[0]?.ownProposals).toBe(2);
-    const before = status({
-      workspaces: [{ workspace: "acme", revision: 42, pendingProposals: 1 }],
-    });
-    expect(Exit.isSuccess(before) && before.value.workspaces[0]?.ownProposals).toBeUndefined();
-    expect(
-      Exit.isFailure(
-        status({
-          workspaces: [{ workspace: "acme", revision: 42, pendingProposals: 0, ownProposals: -1 }],
-        }),
-      ),
-    ).toBe(true);
-  });
-
-  it("keys the proposals query by what the status says, all of it optional", () => {
-    expect(Exit.isSuccess(proposalsInput({ workspace: "acme", state: "pending" }))).toBe(true);
-    const keyed = proposalsInput({
-      workspace: "acme",
-      state: "pending",
-      waiting: 1,
-      own: 2,
-      revision: 43,
-    });
-    expect(
-      Exit.isSuccess(keyed) && [keyed.value.waiting, keyed.value.own, keyed.value.revision],
-    ).toEqual([1, 2, 43]);
-    expect(Exit.isFailure(proposalsInput({ workspace: "acme", own: -1 }))).toBe(true);
-    expect(Exit.isFailure(proposalsInput({ workspace: "acme", revision: 1.5 }))).toBe(true);
+    expect(is({ settings: { workspaces: [{ workspace: "acme", revision: 42 }] } })).toBe(true);
+    expect(is({ settings: { workspaces: [{ workspace: "acme" }] } })).toBe(false);
+    expect(Exit.isFailure(status({ workspaces: [{ workspace: "acme", revision: -1 }] }))).toBe(
+      true,
+    );
   });
 
   it("invites with a role of member or admin, member when none is given", () => {

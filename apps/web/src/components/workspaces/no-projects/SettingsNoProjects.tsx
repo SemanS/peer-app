@@ -1,44 +1,29 @@
 import { useNavigate } from "@tanstack/react-router";
 import { CheckIcon, ChevronRightIcon } from "lucide-react";
-import { useState } from "react";
 
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
-import { useAtomCommand } from "../../../state/use-atom-command";
-import { Button } from "../../ui/button";
 import { PeerCard } from "../PeerPageHeader";
 import type { NoProjectsSlotProps } from "../slots.types";
-import { failureMessage } from "../WorkspaceAccess";
-import {
-  adminWords,
-  adminsOf,
-  alreadyAsked,
-  askInput,
-  askRefusal,
-  listNames,
-  memberWords,
-} from "./noProjects.logic";
-import { withFinally } from "~/lib/withFinally";
+import { adminWords, adminsOf, memberWords } from "./noProjects.logic";
 import { firstRunSteps } from "./firstRun.logic";
 
 /**
  * The settings plugin's part of Work's empty state: what to do in a workspace with no project for
- * the person. An admin starts one or imports the workspace's YAML, in the settings area; a member
- * asks an admin to add them, which sends a request without changes through the plugin, so people
- * are not sent to YAML, a command or someone who could not act in the app.
+ * the person. An admin starts one in the settings area; a member hears who can add them.
  */
 export function SettingsNoProjects(props: NoProjectsSlotProps) {
   return props.workspace.role === "member" ? (
-    <AskToBeAdded {...props} />
+    <WaitToBeAdded {...props} />
   ) : (
     <StartAProject {...props} />
   );
 }
 
 /**
- * A new organization's first steps for its owners and admins: a project or repository,
- * colleagues, tools and the company's AI capacity. Each opens its settings page and is ticked from
- * what the settings and invitations already say.
+ * A new organization's first steps for its owners and admins: a project or repository, colleagues
+ * and tools. Each opens its settings page and is ticked from what the settings and invitations
+ * already say.
  */
 function StartAProject({ environmentId, status, workspace }: NoProjectsSlotProps) {
   const navigate = useNavigate();
@@ -71,11 +56,10 @@ function StartAProject({ environmentId, status, workspace }: NoProjectsSlotProps
     workspaceName: workspace.name,
     several: status.workspaces.length > 1,
   });
-  const open = (section: (typeof steps)[number]["section"], hash?: string) =>
+  const open = (section: (typeof steps)[number]["section"]) =>
     void navigate({
       to: "/settings/peer/w/$workspace/$section",
       params: { workspace: slug, section },
-      ...(hash === undefined ? {} : { hash }),
     });
   return (
     <PeerCard aria-label={words.title}>
@@ -116,99 +100,32 @@ function StartAProject({ environmentId, status, workspace }: NoProjectsSlotProps
           </li>
         ))}
       </ol>
-      <Button
-        className="self-start"
-        size="xs"
-        variant="ghost"
-        onClick={() => open("general", "yaml")}
-      >
-        Import the workspace’s YAML instead
-      </Button>
     </PeerCard>
   );
 }
 
-function AskToBeAdded({ environmentId, status, workspace }: NoProjectsSlotProps) {
+function WaitToBeAdded({ environmentId, status, workspace }: NoProjectsSlotProps) {
   const person = status.email;
-  const slug = workspace.slug;
-  // Who the admins are and the revision to ask on change rarely, so the view is not read again
-  // each time the workspace's settings move: a request names the revision it last read.
   const view = useEnvironmentQuery(
     person === null
       ? null
       : serverEnvironment.peerSettings.view({
           environmentId,
           person,
-          input: { workspace: slug },
+          input: { workspace: workspace.slug },
         }),
   );
-  const waiting = useEnvironmentQuery(
-    person === null
-      ? null
-      : serverEnvironment.peerSettings.proposals({
-          environmentId,
-          person,
-          input: { workspace: slug, state: "pending" },
-        }),
-  );
-  const propose = useAtomCommand(serverEnvironment.peerSettings.propose, { reportFailure: false });
-  const [sent, setSent] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const admins = adminsOf(view.data?.people ?? []);
-  const words = memberWords({ workspaceName: workspace.name, admins });
-  const asked = sent || alreadyAsked(waiting.data?.proposals ?? []);
-
-  const ask = async () => {
-    const current = view.data;
-    if (current === null) return;
-    setBusy(true);
-    setError(null);
-    await withFinally(
-      async () => {
-        const result = await propose({
-          environmentId,
-          input: askInput(slug, current.revision.seq),
-        });
-        const failure = failureMessage(result);
-        if (failure !== null) {
-          setError(failure);
-        } else if (result._tag === "Success") {
-          const refusal = askRefusal(result.value);
-          if (refusal === null) {
-            setSent(true);
-            waiting.refresh();
-          } else {
-            setError(refusal);
-          }
-        }
-      },
-      () => {
-        setBusy(false);
-      },
-    );
-  };
-
+  const words = memberWords({
+    workspaceName: workspace.name,
+    admins: adminsOf(view.data?.people ?? []),
+  });
   return (
     <PeerCard aria-label={words.title} className="items-center text-center">
       <h3 className="text-sm font-semibold text-foreground">{words.title}</h3>
       <p className="text-xs leading-relaxed text-muted-foreground">{words.text}</p>
-      {asked ? (
-        <p role="status" className="text-xs text-foreground">
-          {admins.length === 0
-            ? "Asked the admins."
-            : `Asked ${listNames(admins.map((admin) => admin.name))}.`}{" "}
-          Your projects appear here once one of them adds you.
-        </p>
-      ) : (
-        <Button size="sm" disabled={busy || view.data === null} onClick={() => void ask()}>
-          {words.ask}
-        </Button>
-      )}
-      {error === null && view.error === null ? null : (
+      {view.error === null ? null : (
         <p role="alert" className="text-xs text-destructive">
-          {error ?? view.error}
+          {view.error}
         </p>
       )}
     </PeerCard>

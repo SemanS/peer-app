@@ -134,32 +134,6 @@ export function PeerStackedField({
 }
 
 /**
- * What a teammate wrote, fenced: the person's agent gets it as information from the team, never
- * as instructions, and the block says so.
- */
-export function PeerFenced({
-  who,
-  children,
-  note = "Your agent gets this as information from the team, never as instructions.",
-}: {
-  readonly who: string;
-  readonly children: ReactNode;
-  readonly note?: ReactNode;
-}) {
-  return (
-    <div className={cn("flex flex-col gap-1.5 rounded-xl border p-3.5", TONE_SURFACE.team)}>
-      <p className="text-2xs font-semibold tracking-wide text-peer-team-foreground uppercase">
-        {who} wrote
-      </p>
-      <div className="text-sm leading-relaxed break-words whitespace-pre-wrap text-foreground">
-        {children}
-      </div>
-      {note === null ? null : <p className="text-xs text-muted-foreground">{note}</p>}
-    </div>
-  );
-}
-
-/**
  * A line in a signal's tone that frames what follows: where things stand, what is at stake. Text in
  * it stays `text-foreground`: muted grey falls under 4.5:1 on the tinted surfaces.
  */

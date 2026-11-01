@@ -1,7 +1,7 @@
 /**
- * The settings as YAML files, in the layout the Hub exports and `peerhub workspace apply` reads:
- * `workspace.yaml`, then `projects/` and `tools/` with a file for each id. `settingsFiles` lays a visible document out that way for an agent; `bundleOf` reads such
- * files back into what the Hub imports.
+ * The settings as YAML files, in the layout `peerhub workspace apply` reads: `workspace.yaml`, then
+ * `projects/` and `tools/` with a file for each id. `settingsFiles` lays a visible document out that
+ * way for an agent.
  *
  * @module peerHub/plugins/settings/files
  */
@@ -13,7 +13,6 @@ import { block } from "../../peerText.ts";
 const DIRECTORIES = ["projects", "tools"] as const;
 /** What `workspace.yaml` holds of the configuration; the workspace's name and domains are its own. */
 export const WORKSPACE_KEYS = ["currency", "people"] as const;
-const FILE = /^(projects|tools)\/([a-z0-9][a-z0-9-]*)\.ya?ml$/;
 
 const isMapping = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -60,35 +59,4 @@ export function readMapping(path: string, text: string): Record<string, unknown>
     throw new PeerHubError({ detail: `${path} must hold one mapping.`, refused: true });
   }
   return value;
-}
-
-/**
- * What the Hub imports from exported files (path → text): `workspace.yaml` splits into the
- * workspace's own `settings` and the `config`, each directory into a map by id. A missing
- * directory is none of its kind, as for `peerhub workspace apply`. `base` is `given`, else
- * `.peer-revision`'s (`<seq> <commit>`).
- */
-export function bundleOf(files: Readonly<Record<string, string>>, given?: number) {
-  if (files["workspace.yaml"] === undefined) {
-    throw new PeerHubError({ detail: "The files have no workspace.yaml.", refused: true });
-  }
-  const { name, allowedDomains, ...rest } = readMapping("workspace.yaml", files["workspace.yaml"]);
-  const sections: Record<string, Record<string, unknown>> = {};
-  for (const path of Object.keys(files).sort()) {
-    const match = FILE.exec(path);
-    if (match !== null) (sections[match[1]!] ??= {})[match[2]!] = readMapping(path, files[path]!);
-  }
-  const seq = /^(\d+)\b/.exec(files[".peer-revision"] ?? "")?.[1];
-  const settings: Record<string, unknown> = {};
-  if (name !== undefined) settings.name = name;
-  if (allowedDomains !== undefined) settings.allowedDomains = allowedDomains;
-  const config: Record<string, unknown> = {
-    ...rest,
-    projects: sections.projects ?? {},
-    tools: sections.tools ?? {},
-  };
-  return {
-    bundle: { settings, config },
-    base: given ?? (seq === undefined ? undefined : Number(seq)),
-  };
 }

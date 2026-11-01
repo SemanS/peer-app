@@ -1,8 +1,8 @@
 /**
  * The settings feature's Hub endpoints (`api.md` of the Hub repository is their wire contract), one
  * function for each route. What the Hub refuses in a way a person settles is a result, not an
- * error: a conflict, a path someone may not change, a configuration that does not check, a secret
- * still in use, a domain another workspace holds.
+ * error: a conflict, a path someone may not change, a configuration that does not check, a domain
+ * another workspace holds.
  *
  * @module peerHub/plugins/settings/client/hub
  */
@@ -12,20 +12,17 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import type * as PeerHubClient from "../../../core/hub/PeerHubClient.ts";
-import { bundleOf } from "../files.ts";
 
 type Answer = Schema.Top & { readonly DecodingServices: never };
 
 /** A body that is nothing: a `204`, or `{ "ok": true }`. */
 const Nothing = Schema.NullOr(Schema.Struct({}));
-const isPeerHubError = Schema.is(C.PeerHubError);
 const decodePreview = Schema.decodeUnknownOption(C.PeerSettingsPreview);
-/** What a refusal's details hold: the paths refused, the diagnostics, or what still uses a secret. */
+/** What a refusal's details hold: the paths refused, or the diagnostics. */
 const decodeDetails = Schema.decodeUnknownOption(
   Schema.Struct({
     refused: Schema.optional(Schema.Array(C.PeerSettingsRefusal)),
     diagnostics: Schema.optional(Schema.Array(C.PeerSettingsDiagnostic)),
-    usedBy: Schema.optional(Schema.Array(Schema.String)),
   }),
 );
 const decodeClaim = Schema.decodeUnknownOption(
@@ -50,9 +47,11 @@ const rejection = (status: 403 | 422, code: string, details: unknown) => {
     : undefined;
 };
 
-/** What a change, revert, import or applied proposal sends besides what it names. */
+/** What a change sends besides what it names. */
 const settle = (
-  input: Pick<C.PeerSettingsRevertInput, "message" | "dryRun" | "force" | "drop">,
+  input: Pick<C.PeerSettingsChangeInput, "message" | "force" | "drop"> & {
+    readonly dryRun: boolean;
+  },
 ) => ({
   ...(input.message?.trim() ? { message: input.message.trim() } : {}),
   ...(input.dryRun === true ? { dryRun: true } : {}),
@@ -60,13 +59,6 @@ const settle = (
   ...(input.drop?.length ? { drop: input.drop } : {}),
 });
 
-const query = (fields: Readonly<Record<string, string | number | undefined>>) => {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(fields)) {
-    if (value !== undefined) params.set(key, String(value));
-  }
-  return params.size === 0 ? "" : `?${params}`;
-};
 const segment = encodeURIComponent;
 
 export const settingsHub = (client: PeerHubClient.PeerHubClient["Service"]) => {
@@ -124,89 +116,11 @@ export const settingsHub = (client: PeerHubClient.PeerHubClient["Service"]) => {
       },
       saving,
     );
-  const proposal = (input: C.PeerSettingsProposalInput, rest = "") =>
-    `/settings/proposals/${segment(input.id)}${rest}`;
 
   return {
     view: (workspace: string) => read(C.PeerSettingsView, workspace, "/settings"),
     preview: changes(false),
     save: changes(true),
-    history: (input: C.PeerSettingsHistoryInput) =>
-      read(
-        C.PeerSettingsHistoryPage,
-        input.workspace,
-        `/settings/history${query({ scope: input.scope, before: input.before, limit: input.limit })}`,
-      ),
-    historyEntry: (input: C.PeerSettingsHistoryEntryInput) =>
-      read(C.PeerSettingsRevisionDetail, input.workspace, `/settings/history/${input.seq}`),
-    revert: (input: C.PeerSettingsRevertInput) =>
-      change(
-        input.workspace,
-        "/settings/revert",
-        { seq: input.seq, ...settle(input) },
-        input.dryRun !== true,
-      ),
-    importYaml: (input: C.PeerSettingsImportInput) =>
-      Effect.try({
-        try: () => bundleOf(input.files, input.base),
-        catch: (error) =>
-          isPeerHubError(error)
-            ? error
-            : new C.PeerHubError({ detail: "Those files could not be read.", refused: true }),
-      }).pipe(
-        Effect.flatMap(({ bundle, base }) =>
-          change(
-            input.workspace,
-            "/settings/import",
-            { ...(base === undefined ? {} : { base }), bundle, ...settle(input) },
-            input.dryRun !== true,
-          ),
-        ),
-      ),
-    exportYaml: ({ workspace }: C.PeerSettingsWorkspaceInput) =>
-      read(C.PeerSettingsExport, workspace, "/settings/export"),
-    proposals: (input: C.PeerSettingsProposalsInput) =>
-      read(
-        C.PeerSettingsProposals,
-        input.workspace,
-        `/settings/proposals${query({ state: input.state })}`,
-      ),
-    propose: (input: C.PeerSettingsProposeInput) =>
-      client
-        .request<typeof C.PeerSettingsProposal, C.PeerSettingsProposeResult>(
-          C.PeerSettingsProposal,
-          {
-            workspace: input.workspace,
-            path: "/settings/proposals",
-            method: "POST",
-            body: {
-              base: input.base,
-              set: input.set,
-              message: input.message,
-              ...(input.instruction?.trim() ? { instruction: input.instruction.trim() } : {}),
-              ...(input.via === undefined ? {} : { via: input.via }),
-              ...(input.scope === undefined ? {} : { scope: input.scope }),
-            },
-            rejected: rejection,
-          },
-        )
-        .pipe(
-          Effect.map((answer): C.PeerSettingsProposeResult =>
-            "kind" in answer ? answer : { kind: "proposed", proposal: answer },
-          ),
-        ),
-    applyProposal: (input: C.PeerSettingsApplyProposalInput) =>
-      change(input.workspace, proposal(input, "/apply"), settle(input), input.dryRun !== true),
-    declineProposal: (input: C.PeerSettingsDeclineProposalInput) =>
-      send(
-        C.PeerSettingsProposal,
-        input.workspace,
-        "POST",
-        proposal(input, "/decline"),
-        input.reason?.trim() ? { reason: input.reason.trim() } : {},
-      ),
-    withdrawProposal: (input: C.PeerSettingsProposalInput) =>
-      send(Nothing, input.workspace, "DELETE", proposal(input)).pipe(Effect.as({})),
     secrets: ({ workspace }: C.PeerSettingsWorkspaceInput) =>
       read(C.PeerSettingsSecretsView, workspace, "/settings/secrets"),
     putSecret: (input: C.PeerSettingsPutSecretInput) =>
@@ -214,25 +128,9 @@ export const settingsHub = (client: PeerHubClient.PeerHubClient["Service"]) => {
         value: input.value,
       }).pipe(Effect.as({})),
     deleteSecret: (input: C.PeerSettingsDeleteSecretInput) =>
-      client
-        .request<typeof Nothing, C.PeerSettingsDeleteSecretResult>(Nothing, {
-          workspace: input.workspace,
-          path: `/secrets/${segment(input.name)}${query({ force: input.force === true ? "true" : undefined })}`,
-          method: "DELETE",
-          conflict: (code, details) => {
-            const usedBy = Option.getOrUndefined(decodeDetails(details))?.usedBy;
-            return code === "secret_in_use" && usedBy !== undefined
-              ? { kind: "in-use", usedBy }
-              : undefined;
-          },
-        })
-        .pipe(
-          Effect.map((answer): C.PeerSettingsDeleteSecretResult =>
-            answer !== null && "kind" in answer && answer.kind === "in-use"
-              ? answer
-              : { kind: "deleted" },
-          ),
-        ),
+      send(Nothing, input.workspace, "DELETE", `/secrets/${segment(input.name)}`).pipe(
+        Effect.as({}),
+      ),
     domainRecord: (input: C.PeerSettingsDomainInput) =>
       read(C.PeerDomainRecord, input.workspace, `/domains/${segment(input.domain)}/record`),
     verifyDomain: (input: C.PeerSettingsDomainInput) =>

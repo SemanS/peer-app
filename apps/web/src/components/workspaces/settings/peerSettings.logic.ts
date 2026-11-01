@@ -27,22 +27,15 @@ export const WORKSPACE_SECTIONS = [
 ] as const;
 export type WorkspaceSection = (typeof WORKSPACE_SECTIONS)[number];
 
-export const PROJECT_TABS = [
-  "basics",
-  "people",
-  "tasks",
-  "repositories",
-  "tools",
-  "history",
-] as const;
+export const PROJECT_TABS = ["basics", "people", "repositories", "tools"] as const;
 export type ProjectTab = (typeof PROJECT_TABS)[number];
 
-export const COMPUTER_SECTIONS = ["card", "coordination", "tool-trust"] as const;
+export const COMPUTER_SECTIONS = ["card", "plugins", "tool-trust"] as const;
 export type ComputerSection = (typeof COMPUTER_SECTIONS)[number];
 
 export const DEFAULT_WORKSPACE_SECTION: WorkspaceSection = "general";
 export const DEFAULT_PROJECT_TAB: ProjectTab = "basics";
-export const DEFAULT_COMPUTER_SECTION: ComputerSection = "coordination";
+export const DEFAULT_COMPUTER_SECTION: ComputerSection = "plugins";
 
 export const WORKSPACE_SECTION_LABELS: Readonly<Record<WorkspaceSection, string>> = {
   general: "General",
@@ -57,15 +50,13 @@ export const WORKSPACE_SECTION_LABELS: Readonly<Record<WorkspaceSection, string>
 export const PROJECT_TAB_LABELS: Readonly<Record<ProjectTab, string>> = {
   basics: "Basics",
   people: "People",
-  tasks: "Tasks",
   repositories: "Repositories",
   tools: "Tools",
-  history: "History",
 };
 
 export const COMPUTER_SECTION_LABELS: Readonly<Record<ComputerSection, string>> = {
   card: "Your card",
-  coordination: "Coordination & plugins",
+  plugins: "Plugins",
   "tool-trust": "Tool trust",
 };
 
@@ -343,11 +334,11 @@ export function environmentIsComing(
  */
 type SlotKind = "settings" | "alwaysSettings" | "workspaceSettings";
 
-export type SlotHost = "coordination" | "general" | "people" | "audit" | "tool-trust";
+export type SlotHost = "plugins" | "general" | "people" | "audit" | "tool-trust";
 
 const SLOT_HOMES: Readonly<Record<SlotKind, SlotHost>> = {
-  settings: "coordination",
-  alwaysSettings: "coordination",
+  settings: "plugins",
+  alwaysSettings: "plugins",
   workspaceSettings: "general",
 };
 

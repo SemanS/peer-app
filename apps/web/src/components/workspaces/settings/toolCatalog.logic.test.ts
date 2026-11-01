@@ -682,7 +682,6 @@ describe("deleting a tool", () => {
       id: "jira",
     });
     expect(operation).toEqual({
-      kind: "save",
       workspace: "acme",
       base: 42,
       set: [

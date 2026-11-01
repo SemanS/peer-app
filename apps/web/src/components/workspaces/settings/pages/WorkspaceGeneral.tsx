@@ -4,7 +4,7 @@ import { SettingsSearchTarget } from "../../../settings/settingsLayout";
 import { EMAIL_DOMAINS_TARGET } from "../../workspaceAccess.logic";
 import { ProjectMark } from "../../signals";
 import { failureMessage } from "../../WorkspaceAccess";
-import { PageSection, SettingsReadError } from "../CapacityCoordinationParts";
+import { PageSection, SettingsReadError } from "../PageParts";
 import type { WorkspacePageProps } from "../pageProps";
 import { ownLimit } from "../../workspaceMembers.logic";
 import { isWorkspaceAdmin, workspaceRoleBadge } from "../peerSettings.logic";
@@ -13,14 +13,12 @@ import { SettingsUnavailableNote } from "../SettingsUnavailable";
 import { useSettingsView } from "../useSettingsView";
 import { DomainsSection } from "../WorkspaceGeneralDomains";
 import { NameField, WorkspaceRows } from "../WorkspaceGeneralParts";
-import { YamlCard } from "../WorkspaceGeneralYaml";
 
 /**
- * A workspace's General page (design artboard 14): its name, the email domains that let colleagues
- * in on their own, and its settings as YAML to export and import. Admins rename the workspace and
- * use YAML; only owners change domains; everyone else reads. The name and the domains
- * are the Hub's own calls and take effect at once. Without the settings feature on the Hub the page
- * shows what the manifest says and nothing is editable.
+ * A workspace's General page (design artboard 14): its name and the email domains that let colleagues
+ * in on their own. Admins rename the workspace; only owners change domains; everyone else reads. The
+ * name and the domains are the Hub's own calls and take effect at once. Without the settings feature
+ * on the Hub the page shows what the manifest says and nothing is editable.
  */
 export function WorkspaceGeneral({ environmentId, status, workspace }: WorkspacePageProps) {
   const view = useSettingsView(workspace.slug);
@@ -73,10 +71,6 @@ export function WorkspaceGeneral({ environmentId, status, workspace }: Workspace
             />
           </PageSection>
         </SettingsSearchTarget>
-
-        {admin && available ? (
-          <YamlCard environmentId={environmentId} workspace={workspace} view={view} />
-        ) : null}
 
         <WorkspaceRows
           environmentId={environmentId}

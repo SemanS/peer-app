@@ -1,10 +1,9 @@
 /**
  * Settings on this environment: the Hub's settings feature on the signed-in session, and what the
  * status says of it without a request. Each workspace's visible settings are kept in memory and
- * read again when the Hub pings `settings`, when it pings `settings.proposal` (the pending count
- * the person decides), after a sync, after every write here and, for a missed ping, every five
- * minutes. The status carries each workspace's revision and pending counts (the proposals the
- * person decides, and their own), so a client reads the view and the proposals again when they change.
+ * read again when the Hub pings `settings`, after a sync, after every write here and, for a missed
+ * ping, every five minutes. The status carries each workspace's revision, so a client reads the view
+ * again when it changes.
  *
  * @module peerHub/plugins/settings/service
  */
@@ -33,7 +32,7 @@ export class PeerSettings extends Context.Service<
     readonly view: (workspace: string) => Effect.Effect<PeerSettingsView, PeerHubError>;
     /** `view` as a client asks for it; its `revision` only tells the query from an older one. */
     readonly get: (input: PeerSettingsGetInput) => Effect.Effect<PeerSettingsView, PeerHubError>;
-    /** The status slice: counts and ids only. */
+    /** The status slice: ids and revisions only. */
     readonly status: Effect.Effect<PeerSettingsStatus>;
     /** Reads a workspace soon; a burst of these reads it once. */
     readonly readSoon: (workspace: string) => Effect.Effect<void>;
@@ -51,11 +50,8 @@ const make = Effect.gen(function* () {
   const state = yield* PeerState.PeerState;
   const status = yield* PeerStatus.PeerStatus;
   const hub = settingsHub(yield* PeerHubClient.PeerHubClient);
-  /** Workspace → its visible settings, and how many pending proposals its person decides and made. */
+  /** Workspace → its visible settings. */
   const views = yield* Ref.make<ReadonlyMap<string, PeerSettingsView>>(new Map());
-  const waiting = yield* Ref.make<ReadonlyMap<string, readonly [deciding: number, own: number]>>(
-    new Map(),
-  );
   const changed = yield* Queue.unbounded<string>();
   /** A read that began before `forget` must not bring back what was forgotten. */
   let generation = 0;
@@ -71,35 +67,17 @@ const make = Effect.gen(function* () {
       }
       return read;
     });
-  const readProposals = (workspace: string) =>
-    Effect.gen(function* () {
-      const before = generation;
-      const { proposals } = yield* hub.proposals({ workspace, state: "pending" });
-      const counts = [
-        proposals.filter((proposal) => proposal.canDecide).length,
-        proposals.filter((proposal) => proposal.mine).length,
-      ] as const;
-      if (before === generation) {
-        yield* Ref.update(waiting, (all) => new Map(all).set(workspace, counts));
-      }
-    });
   /** A read in the background: one the Hub does not answer leaves what was read before. */
-  const read = (workspace: string) =>
-    Effect.all(
-      [view(workspace).pipe(Effect.ignore), readProposals(workspace).pipe(Effect.ignore)],
-      {
-        concurrency: "unbounded",
-        discard: true,
-      },
-    );
+  const read = (workspace: string) => view(workspace).pipe(Effect.ignore);
   const refresh = (workspace: string) =>
     read(workspace).pipe(Effect.andThen(status.publish), Effect.asVoid);
 
   const keepOnly: PeerSettings["Service"]["keepOnly"] = (workspaces) => {
     const keep = new Set(workspaces);
-    const only = <A>(all: ReadonlyMap<string, A>) =>
-      new Map([...all].filter(([workspace]) => keep.has(workspace)));
-    return Ref.update(views, only).pipe(Effect.andThen(Ref.update(waiting, only)));
+    return Ref.update(
+      views,
+      (all) => new Map([...all].filter(([workspace]) => keep.has(workspace))),
+    );
   };
   const slugs = Effect.map(state.workspaces, (workspaces) => workspaces.map(({ slug }) => slug));
   const readAll = Effect.gen(function* () {
@@ -125,17 +103,15 @@ const make = Effect.gen(function* () {
   });
 
   /**
-   * What a write leaves behind once it took effect: the settings and proposals as they are now. A
-   * dry run, or a change the Hub refused as a result (a conflict, a path, a diagnostic), took none.
+   * What a write leaves behind once it took effect: the settings as they are now. A change the Hub
+   * refused as a result (a conflict, a path, a diagnostic) took none.
    */
   const written =
     (workspace: string) =>
     <A extends object, E>(effect: Effect.Effect<A, E>) =>
       effect.pipe(
         Effect.tap((result) =>
-          !("kind" in result) || result.kind === "saved" || result.kind === "proposed"
-            ? refresh(workspace)
-            : Effect.void,
+          !("kind" in result) || result.kind === "saved" ? refresh(workspace) : Effect.void,
         ),
       );
 
@@ -143,19 +119,13 @@ const make = Effect.gen(function* () {
     ...hub,
     view,
     get: (input) => view(input.workspace),
-    status: Effect.gen(function* () {
-      const counts = yield* Ref.get(waiting);
-      return {
-        workspaces: [...(yield* Ref.get(views))]
-          .map(([workspace, { revision }]) => ({
-            workspace,
-            revision: revision.seq,
-            pendingProposals: counts.get(workspace)?.[0] ?? 0,
-            ownProposals: counts.get(workspace)?.[1] ?? 0,
-          }))
+    status: Ref.get(views).pipe(
+      Effect.map((all) => ({
+        workspaces: [...all]
+          .map(([workspace, { revision }]) => ({ workspace, revision: revision.seq }))
           .sort((a, b) => a.workspace.localeCompare(b.workspace)),
-      };
-    }),
+      })),
+    ),
     readSoon: (workspace) => Queue.offer(changed, workspace).pipe(Effect.asVoid),
     queueAll: Effect.flatMap(slugs, (workspaces) =>
       Effect.forEach(workspaces, (workspace) => Queue.offer(changed, workspace), { discard: true }),
@@ -164,17 +134,10 @@ const make = Effect.gen(function* () {
     forget: Effect.gen(function* () {
       generation++;
       yield* Ref.set(views, new Map());
-      yield* Ref.set(waiting, new Map());
       yield* Queue.clear(changed);
     }),
     keepOnly,
     save: (input) => hub.save(input).pipe(written(input.workspace)),
-    revert: (input) => hub.revert(input).pipe(written(input.workspace)),
-    importYaml: (input) => hub.importYaml(input).pipe(written(input.workspace)),
-    applyProposal: (input) => hub.applyProposal(input).pipe(written(input.workspace)),
-    propose: (input) => hub.propose(input).pipe(written(input.workspace)),
-    declineProposal: (input) => hub.declineProposal(input).pipe(written(input.workspace)),
-    withdrawProposal: (input) => hub.withdrawProposal(input).pipe(written(input.workspace)),
   });
 });
 

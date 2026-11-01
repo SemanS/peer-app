@@ -82,7 +82,7 @@ describe("the area's addresses", () => {
     expect(isWorkspaceSection("audit")).toBe(true);
     expect(isWorkspaceSection("integrations")).toBe(false);
     expect(isWorkspaceSection("project")).toBe(false);
-    expect(isProjectTab("history")).toBe(true);
+    expect(isProjectTab("tools")).toBe(true);
     expect(isProjectTab("plans")).toBe(false);
     expect(isComputerSection("tool-trust")).toBe(true);
     expect(isComputerSection("general")).toBe(false);
@@ -92,7 +92,7 @@ describe("the area's addresses", () => {
 describe("which workspace the navigation shows", () => {
   const workspaces = [{ slug: "acme" }, { slug: "beta" }];
   const onBeta: PeerSettingsLocation = { kind: "workspace", workspace: "beta", section: "people" };
-  const onComputer: PeerSettingsLocation = { kind: "computer", section: "coordination" };
+  const onComputer: PeerSettingsLocation = { kind: "computer", section: "plugins" };
 
   it("follows the page, else the one used last, else the first", () => {
     expect(currentNavWorkspace(workspaces, onBeta, "acme")?.slug).toBe("beta");
@@ -276,9 +276,9 @@ describe("where plugin settings are hosted", () => {
   });
 
   it("sends every other slot to its kind's home, so no plugin's settings go missing", () => {
-    expect(slotHost("settings", "herdr")).toBe("coordination");
-    expect(slotHost("settings", "a-plugin-from-the-future")).toBe("coordination");
-    expect(slotHost("alwaysSettings", "impact")).toBe("coordination");
+    expect(slotHost("settings", "herdr")).toBe("plugins");
+    expect(slotHost("settings", "a-plugin-from-the-future")).toBe("plugins");
+    expect(slotHost("alwaysSettings", "impact")).toBe("plugins");
     expect(slotHost("workspaceSettings", "a-plugin-from-the-future")).toBe("general");
   });
 });

@@ -1,33 +1,24 @@
 /**
  * What the Secrets page shows and asks, apart from how it draws (design artboard 18): the rows of
- * its table from what the Hub lists (the secrets stored, with what uses each, and the names
- * something refers to that nobody stored), when a value was stored, and the words of the deletion
- * that says what stops. Values never appear here: the Hub never returns one.
+ * its table from what the Hub lists and when a value was stored. Values never appear here: the Hub
+ * never returns one.
  */
 import type { PeerSettingsPerson, PeerSettingsSecretsView } from "@t3tools/contracts";
 
 export const SECRETS_DESCRIPTION =
   "Sealed on the Hub. Once saved, a value is never shown again; you can replace or delete it.";
 
-/** What a secret that nothing refers to says in the "Used by" column. */
-export const NOTHING_USES_IT = "Nothing uses it";
-
 /** The longest value the Hub seals. */
 export const SECRET_VALUE_MAX = 8_192;
 
-/** One row of the table: a stored secret, or a name that something uses and nobody stored. */
+/** One row of the table: a stored secret. */
 export interface SecretRow {
   readonly name: string;
-  readonly stored: boolean;
-  /** What uses it, one sentence each, as the Hub writes them; empty where nothing does. */
-  readonly uses: ReadonlyArray<string>;
-  /** "2 Oct": the day the value was stored; null where the Hub does not say, and for a missing one. */
+  /** "2 Oct": the day the value was stored; null where the Hub does not say. */
   readonly when: string | null;
   /** Who stored it. */
   readonly by: string | null;
 }
-
-const compareNames = (a: SecretRow, b: SecretRow) => a.name.localeCompare(b.name);
 
 /**
  * "2 Oct", and "2 Oct 2025" for another year than `now`'s, in English whatever the host's locale
@@ -59,11 +50,7 @@ export function storedDate(
     : `${stored.day} ${stored.month} ${stored.year}`;
 }
 
-/**
- * The table's rows: names that something refers to and nobody stored first, since they are what
- * needs doing; then the secrets something uses; then the ones nothing uses, which are only there
- * to be deleted. Each group by name.
- */
+/** The table's rows, by name. */
 export function secretRows(
   view: PeerSettingsSecretsView,
   options: {
@@ -73,10 +60,8 @@ export function secretRows(
   } = {},
 ): ReadonlyArray<SecretRow> {
   const now = options.now ?? new Date();
-  const stored: SecretRow[] = view.secrets.map((secret) => ({
+  const rows: SecretRow[] = view.secrets.map((secret) => ({
     name: secret.name,
-    stored: true,
-    uses: secret.usedBy,
     when: storedDate(secret.at, {
       now,
       ...(options.timeZone === undefined ? {} : { timeZone: options.timeZone }),
@@ -86,70 +71,19 @@ export function secretRows(
         ? null
         : (options.nameOf?.(secret.by) ?? secret.by.name),
   }));
-  const names = new Set(stored.map((row) => row.name));
-  const missing: SecretRow[] = view.missing
-    .filter((entry) => !names.has(entry.name))
-    .map((entry) => ({
-      name: entry.name,
-      stored: false,
-      uses: entry.usedBy,
-      when: null,
-      by: null,
-    }));
-  return [
-    ...missing.toSorted(compareNames),
-    ...stored.filter((row) => row.uses.length > 0).toSorted(compareNames),
-    ...stored.filter((row) => row.uses.length === 0).toSorted(compareNames),
-  ];
+  return rows.toSorted((a, b) => a.name.localeCompare(b.name));
 }
-
-/** The "Used by" cell: what uses the secret, or that nothing does. */
-export const usesOf = (row: Pick<SecretRow, "uses">): ReadonlyArray<string> =>
-  row.uses.length === 0 ? [NOTHING_USES_IT] : row.uses;
 
 /** The "Value" cell: where the value stands. Never the value. */
-export function valueText(row: Pick<SecretRow, "stored" | "when">): string {
-  if (!row.stored) return "Missing";
-  return row.when === null ? "Stored" : `Stored · ${row.when}`;
-}
+export const valueText = (row: Pick<SecretRow, "when">): string =>
+  row.when === null ? "Stored" : `Stored · ${row.when}`;
 
 /** Who stored the value, for the cell's tooltip. */
 export const storedBy = (row: Pick<SecretRow, "by">): string | null =>
   row.by === null ? null : `Stored by ${row.by}`;
 
-export const valueDialogTitle = (row: Pick<SecretRow, "name" | "stored">): string =>
-  row.stored ? `Replace ${row.name}` : `Set ${row.name}`;
-
 /** What saving a value does, in the dialog under its field. */
 export const VALUE_DIALOG_NOTE = "Saved on the Hub and sealed. It is never shown again.";
-
-/** What stops when a secret something uses goes. */
-export function impactOf(use: string): string {
-  return `${use} stops working until the secret is set again.`;
-}
-
-export interface DeleteWords {
-  readonly title: string;
-  /** What uses the secret and what stops with it; empty where nothing uses it. */
-  readonly impacts: ReadonlyArray<{ readonly use: string; readonly impact: string }>;
-  /** The line for a secret nothing uses; null while something does. */
-  readonly nothing: string | null;
-  /** "Delete" for a secret nothing uses; "Delete anyway" while something does. */
-  readonly confirm: string;
-}
-
-export function deleteWords(secret: {
-  readonly name: string;
-  readonly uses: ReadonlyArray<string>;
-}): DeleteWords {
-  const used = secret.uses.length > 0;
-  return {
-    title: `Delete ${secret.name}?`,
-    impacts: secret.uses.map((use) => ({ use, impact: impactOf(use) })),
-    nothing: used ? null : "Nothing uses it, so nothing stops.",
-    confirm: used ? "Delete anyway" : "Delete",
-  };
-}
 
 /** What a successful save or deletion tells the person. */
 export const storedMessage = (name: string): string => `Stored ${name}`;

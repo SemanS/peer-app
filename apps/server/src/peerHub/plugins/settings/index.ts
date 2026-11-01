@@ -1,7 +1,6 @@
 /**
- * The settings plugin: workspace and project settings changed in the app, with their history (the
- * Hub's `settings` feature, which keeps them while the plugin is off), and agents proposing
- * changes that owners review (`peer config`).
+ * The settings plugin: workspace and project settings changed in the app (the Hub's `settings`
+ * feature, which keeps them while the plugin is off) or by an agent for its person (`peer config`).
  *
  * @module peerHub/plugins/settings
  */
@@ -27,7 +26,7 @@ export const SettingsPlugin = bindPlugin({
       commands: [configCommand(service)],
       agentTools: configTools,
       hubChanges: {
-        changes: ["settings", "settings.proposal"],
+        changes: ["settings"],
         onPing: (ping) => service.readSoon(ping.workspace),
       },
       status: { read: service.status },
@@ -42,22 +41,6 @@ export const SettingsPlugin = bindPlugin({
             [m.peerSettingsGet]: on(m.peerSettingsGet, service.get),
             [m.peerSettingsPreview]: on(m.peerSettingsPreview, service.preview),
             [m.peerSettingsSave]: on(m.peerSettingsSave, service.save),
-            [m.peerSettingsHistory]: on(m.peerSettingsHistory, service.history),
-            [m.peerSettingsHistoryEntry]: on(m.peerSettingsHistoryEntry, service.historyEntry),
-            [m.peerSettingsRevert]: on(m.peerSettingsRevert, service.revert),
-            [m.peerSettingsImportYaml]: on(m.peerSettingsImportYaml, service.importYaml),
-            [m.peerSettingsExportYaml]: on(m.peerSettingsExportYaml, service.exportYaml),
-            [m.peerSettingsProposals]: on(m.peerSettingsProposals, service.proposals),
-            [m.peerSettingsPropose]: on(m.peerSettingsPropose, service.propose),
-            [m.peerSettingsApplyProposal]: on(m.peerSettingsApplyProposal, service.applyProposal),
-            [m.peerSettingsDeclineProposal]: on(
-              m.peerSettingsDeclineProposal,
-              service.declineProposal,
-            ),
-            [m.peerSettingsWithdrawProposal]: on(
-              m.peerSettingsWithdrawProposal,
-              service.withdrawProposal,
-            ),
             [m.peerSettingsSecrets]: on(m.peerSettingsSecrets, service.secrets),
             [m.peerSettingsPutSecret]: on(m.peerSettingsPutSecret, service.putSecret),
             [m.peerSettingsDeleteSecret]: on(m.peerSettingsDeleteSecret, service.deleteSecret),

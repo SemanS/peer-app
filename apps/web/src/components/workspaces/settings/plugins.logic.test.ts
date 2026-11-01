@@ -1,7 +1,7 @@
 import type { PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { hubOffPlugins, pluginViews, type PluginView } from "./coordinationAndPlugins.logic";
+import { hubOffPlugins, pluginViews, type PluginView } from "./plugins.logic";
 
 const plugin = (id: string, extra: Partial<PeerPluginState> = {}): PeerPluginState => ({
   id,

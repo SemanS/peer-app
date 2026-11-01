@@ -245,7 +245,7 @@ export interface NewProjectInput {
 /**
  * The project the form creates: its name, the client and description when given, the whole
  * workspace or the creator and the people chosen, the creator as its only lead and the repository
- * when there is one. Everything else (areas, tools, capacity, coordination) the Hub defaults.
+ * when there is one. Everything else the Hub defaults.
  */
 export function newProjectValue(input: NewProjectInput): Record<string, unknown> {
   // oxlint-disable-next-line t3code/no-rpc-permission-bypass -- `client` is the project's customer, not an RPC client.
@@ -281,7 +281,6 @@ export function createOperation(input: {
   readonly project: NewProjectInput;
 }): ReviewOperation {
   return {
-    kind: "save",
     workspace: input.workspace,
     base: input.base,
     set: [{ path: ["projects", input.id], value: newProjectValue(input.project) }],

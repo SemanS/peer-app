@@ -85,7 +85,7 @@ export type PeerCore =
 export interface PeerPluginInfo {
   /** Kebab-case; its folder, contract files, web and mobile entries and Hub feature use it too. */
   readonly id: PeerPluginId;
-  /** Its name in Settings → Peer → Coordination & plugins. */
+  /** Its name in Settings → Peer → Plugins. */
   readonly title: string;
   readonly summary: string;
   readonly defaultEnabled: boolean;

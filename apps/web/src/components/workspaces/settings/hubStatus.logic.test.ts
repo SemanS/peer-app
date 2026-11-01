@@ -226,7 +226,7 @@ describe("what the app cannot tell", () => {
     expect(byId(rows({ plugins: off }), "observe")).toMatchObject({
       state: "off-here",
       label: "Off",
-      effect: "Turned off on this computer. Its owner turns it on in Coordination & plugins.",
+      effect: "Turned off on this computer. Its owner turns it on in Plugins.",
     });
   });
 
@@ -252,7 +252,7 @@ describe("around the table", () => {
       entry.id === "observe" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
     );
     expect(featuresFootnote(rows({ plugins: off }))).toContain(
-      "“Off” is a choice made on this computer, in Coordination & plugins.",
+      "“Off” is a choice made on this computer, in Plugins.",
     );
   });
 

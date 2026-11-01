@@ -71,7 +71,7 @@ export async function route(
         if (owned.refused !== undefined)
           throw refused(
             `${command} is turned off on this environment`,
-            "ask your person to enable the plugin in Settings → Peer → Coordination & plugins.",
+            "ask your person to enable the plugin in Settings → Peer → Plugins.",
           );
         const out = await this.host.run(
           Effect.result(

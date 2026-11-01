@@ -647,7 +647,6 @@ export function deleteToolOperation(input: {
 }): ReviewOperation {
   const users = readProjects(input.document).filter((project) => project.tools.includes(input.id));
   return {
-    kind: "save",
     workspace: input.workspace,
     base: input.base,
     set: [

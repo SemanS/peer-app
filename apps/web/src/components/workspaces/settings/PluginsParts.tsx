@@ -1,6 +1,6 @@
 /**
  * The parts of this computer's Plugins page: the Peer plugins with where each one's state comes
- * from. They draw what `coordinationAndPlugins.logic` works out.
+ * from. They draw what `plugins.logic` works out.
  */
 import type { EnvironmentId, PeerHubStatus } from "@t3tools/contracts";
 import { useState } from "react";
@@ -8,8 +8,8 @@ import { useState } from "react";
 import { ConnectionBadge } from "../../settings/ConnectionStatus";
 import { Switch } from "../../ui/switch";
 import { usePeerPluginControl } from "../usePeerPluginControl";
-import { PageSection } from "./CapacityCoordinationParts";
-import { hubOffPlugins, pluginViews, type PluginView } from "./coordinationAndPlugins.logic";
+import { PageSection } from "./PageParts";
+import { hubOffPlugins, pluginViews, type PluginView } from "./plugins.logic";
 
 /** A plugin's status in the one language every connection speaks, and where it comes from. */
 function PluginChip({ view }: { readonly view: PluginView }) {

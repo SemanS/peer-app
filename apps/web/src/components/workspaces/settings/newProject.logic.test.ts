@@ -281,7 +281,6 @@ describe("the project the form creates", () => {
       project: input(),
     });
     expect(operation).toMatchObject({
-      kind: "save",
       workspace: "acme",
       base: 41,
       set: [{ path: ["projects", "northwind-loyalty"], value: { name: "Northwind loyalty" } }],

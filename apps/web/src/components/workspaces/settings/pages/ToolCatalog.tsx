@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { serverEnvironment } from "../../../../state/server";
 import { useAtomCommand } from "../../../../state/use-atom-command";
-import { OwnersNote, SettingsReadError } from "../CapacityCoordinationParts";
+import { OwnersNote, SettingsReadError } from "../PageParts";
 import type { WorkspacePageProps } from "../pageProps";
 import { isWorkspaceAdmin } from "../peerSettings.logic";
 import { PeerSettingsPage } from "../PeerSettingsPage";

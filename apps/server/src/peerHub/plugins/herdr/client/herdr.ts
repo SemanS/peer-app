@@ -360,9 +360,7 @@ export function herdrViewHint(
   source: PeerHerdrRuntime["source"],
 ): string {
   const install =
-    source === "peer"
-      ? "Settings → Peer → Coordination & plugins"
-      : "herdr integration install claude";
+    source === "peer" ? "Settings → Peer → Plugins" : "herdr integration install claude";
   return [
     terminal.kind === "notIdle" ? herdrNotIdleHint(agent.status) : undefined,
     agent.agent === "claude"

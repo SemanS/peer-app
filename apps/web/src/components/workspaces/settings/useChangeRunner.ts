@@ -21,24 +21,9 @@ export function useChangeRunner() {
   const options = { reportFailure: false };
   const preview = useAtomCommand(serverEnvironment.peerSettings.preview, options);
   const save = useAtomCommand(serverEnvironment.peerSettings.save, options);
-  const revert = useAtomCommand(serverEnvironment.peerSettings.revert, options);
-  const importYaml = useAtomCommand(serverEnvironment.peerSettings.importYaml, options);
-  const applyProposal = useAtomCommand(serverEnvironment.peerSettings.applyProposal, options);
   return async (call: ChangeCall): Promise<ChangeOutcome> => {
-    const settled = await (() => {
-      switch (call.command) {
-        case "preview":
-          return preview({ environmentId, input: call.input });
-        case "save":
-          return save({ environmentId, input: call.input });
-        case "revert":
-          return revert({ environmentId, input: call.input });
-        case "importYaml":
-          return importYaml({ environmentId, input: call.input });
-        case "applyProposal":
-          return applyProposal({ environmentId, input: call.input });
-      }
-    })();
+    const command = call.command === "save" ? save : preview;
+    const settled = await command({ environmentId, input: call.input });
     if (settled._tag === "Success") return { ok: true, result: settled.value };
     return { ok: false, message: failureMessage(settled) ?? "The request was interrupted." };
   };

@@ -7,21 +7,16 @@ import { PeerSettingsRedirect } from "./peerSettingsLinks";
 import { DEFAULT_PROJECT_TAB, isProjectTab, type ProjectTab } from "./peerSettings.logic";
 import type { ProjectPageProps } from "./pageProps";
 import { ProjectBasics } from "./pages/ProjectBasics";
-import { ProjectHistory } from "./pages/ProjectHistory";
 import { ProjectPeople } from "./pages/ProjectPeople";
 import { ProjectRepositories } from "./pages/ProjectRepositories";
-import { ProjectTasks } from "./pages/ProjectTasks";
 import { ProjectTools } from "./pages/ProjectTools";
 import { ProjectHeader } from "./ProjectHeader";
-import { ProposalsBanner } from "./Proposals";
 
 const PAGES: Readonly<Record<ProjectTab, ComponentType<ProjectPageProps>>> = {
   basics: ProjectBasics,
   people: ProjectPeople,
-  tasks: ProjectTasks,
   repositories: ProjectRepositories,
   tools: ProjectTools,
-  history: ProjectHistory,
 };
 
 /** `/settings/peer/w/<workspace>/project/<id>/<tab>`: the project's header over one of its tabs. */
@@ -60,7 +55,6 @@ export function ProjectTabRoute({
   return (
     <PeerSettingsFrame key={`${workspace.slug}/${state.project.id}`}>
       <ProjectHeader workspace={workspace} state={state} tab={tab} />
-      <ProposalsBanner />
       <Page environmentId={environmentId} status={status} workspace={workspace} state={state} />
     </PeerSettingsFrame>
   );

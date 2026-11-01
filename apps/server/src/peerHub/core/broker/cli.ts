@@ -194,7 +194,7 @@ async function namedCaller(
   if (session === undefined)
     throw refused(
       `Peer has no registered agent session ${id} (hooks not installed or not trusted, the directory is outside a workspace project, or the session ended)`,
-      "install and trust Peer's hooks for this agent in Settings → Peer → Coordination & plugins, then start a new session in the project.",
+      "install and trust Peer's hooks for this agent in Settings → Peer → Plugins, then start a new session in the project.",
     );
   const token = headerOf(headers, "x-peer-session-token");
   if (

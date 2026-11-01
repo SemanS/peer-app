@@ -2,16 +2,11 @@ import type { PeerSettingsSecretsView } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  NOTHING_USES_IT,
-  deleteWords,
   deletedMessage,
-  impactOf,
   secretRows,
   storedBy,
   storedDate,
   storedMessage,
-  usesOf,
-  valueDialogTitle,
   valueText,
 } from "./secrets.logic";
 
@@ -20,25 +15,13 @@ const options = { now: NOW, timeZone: "UTC" } as const;
 
 const slavo = { email: "slavo@acme.dev", name: "Slavo" };
 
-/** The design's table: a tool's key, a webhook's URL that nobody stored, its signing key, a leftover. */
 const view: PeerSettingsSecretsView = {
   secrets: [
-    {
-      name: "OPS_SIGNING_KEY",
-      at: "2026-10-05T09:30:00Z",
-      by: slavo,
-      usedBy: ["Webhook “Ops” · signature"],
-    },
-    {
-      name: "litellm-master-key",
-      at: "2026-10-02T10:00:00Z",
-      by: slavo,
-      usedBy: ["Tool · Postgres"],
-    },
-    { name: "OLD_JIRA_HOOK", at: "2026-08-12T08:00:00Z", by: null, usedBy: [] },
-    { name: "POSTGRES_URL", at: "2026-09-28T16:45:00Z", usedBy: ["Tool · Postgres"] },
+    { name: "OPS_SIGNING_KEY", at: "2026-10-05T09:30:00Z", by: slavo },
+    { name: "litellm-master-key", at: "2026-10-02T10:00:00Z", by: slavo },
+    { name: "OLD_JIRA_HOOK", at: "2026-08-12T08:00:00Z", by: null },
+    { name: "POSTGRES_URL", at: "2026-09-28T16:45:00Z" },
   ],
-  missing: [{ name: "TEAMS_ALERTS_URL", usedBy: ["Webhook “Teams alerts” · off until set"] }],
 };
 
 describe("the date a value was stored", () => {
@@ -68,29 +51,18 @@ describe("the date a value was stored", () => {
 describe("the rows", () => {
   const rows = secretRows(view, options);
 
-  it("put what needs doing first, then what is used, then what is not, each by name", () => {
+  it("list the secrets by name", () => {
     expect(rows.map((row) => row.name)).toEqual([
-      "TEAMS_ALERTS_URL",
       "litellm-master-key",
+      "OLD_JIRA_HOOK",
       "OPS_SIGNING_KEY",
       "POSTGRES_URL",
-      "OLD_JIRA_HOOK",
     ]);
-  });
-
-  it("mark what nobody stored, with what waits for it and no date", () => {
-    expect(rows[0]).toEqual({
-      name: "TEAMS_ALERTS_URL",
-      stored: false,
-      uses: ["Webhook “Teams alerts” · off until set"],
-      when: null,
-      by: null,
-    });
   });
 
   it("carry the day a value was stored and who stored it", () => {
     const master = rows.find((row) => row.name === "litellm-master-key");
-    expect(master).toMatchObject({ stored: true, when: "2 Oct", by: "Slavo" });
+    expect(master).toMatchObject({ when: "2 Oct", by: "Slavo" });
     expect(rows.find((row) => row.name === "OLD_JIRA_HOOK")).toMatchObject({
       when: "12 Aug",
       by: null,
@@ -102,20 +74,8 @@ describe("the rows", () => {
     expect(named.find((row) => row.name === "litellm-master-key")?.by).toBe("Slavo (admin)");
   });
 
-  it("list a name once when the Hub lists it as stored and as missing", () => {
-    const both = secretRows(
-      {
-        secrets: [{ name: "KEY", at: null, usedBy: [] }],
-        missing: [{ name: "KEY", usedBy: ["Webhook “Ops” · signature"] }],
-      },
-      options,
-    );
-    expect(both).toHaveLength(1);
-    expect(both[0]?.stored).toBe(true);
-  });
-
   it("are none for a Hub with no secrets", () => {
-    expect(secretRows({ secrets: [], missing: [] }, options)).toEqual([]);
+    expect(secretRows({ secrets: [] }, options)).toEqual([]);
   });
 });
 
@@ -123,15 +83,9 @@ describe("what a row says", () => {
   const rows = secretRows(view, options);
   const row = (name: string) => rows.find((candidate) => candidate.name === name)!;
 
-  it("says what uses a secret, or that nothing does", () => {
-    expect(usesOf(row("POSTGRES_URL"))).toEqual(["Tool · Postgres"]);
-    expect(usesOf(row("OLD_JIRA_HOOK"))).toEqual([NOTHING_USES_IT]);
-  });
-
   it("says where the value stands, never the value", () => {
     expect(valueText(row("litellm-master-key"))).toBe("Stored · 2 Oct");
-    expect(valueText(row("TEAMS_ALERTS_URL"))).toBe("Missing");
-    expect(valueText({ stored: true, when: null })).toBe("Stored");
+    expect(valueText({ when: null })).toBe("Stored");
   });
 
   it("says who stored it only when the Hub says", () => {
@@ -139,50 +93,8 @@ describe("what a row says", () => {
     expect(storedBy(row("OLD_JIRA_HOOK"))).toBeNull();
   });
 
-  it("titles the dialog by what it does to the value", () => {
-    expect(valueDialogTitle(row("litellm-master-key"))).toBe("Replace litellm-master-key");
-    expect(valueDialogTitle(row("TEAMS_ALERTS_URL"))).toBe("Set TEAMS_ALERTS_URL");
-  });
-
   it("confirms the stored and deleted secrets by name", () => {
     expect(storedMessage("OPS_SIGNING_KEY")).toBe("Stored OPS_SIGNING_KEY");
     expect(deletedMessage("OLD_JIRA_HOOK")).toBe("Deleted OLD_JIRA_HOOK");
-  });
-});
-
-describe("what stops when a secret goes", () => {
-  it.each([
-    ["The nightly export", "The nightly export stops working until the secret is set again."],
-  ])("says of %j: %s", (use, impact) => {
-    expect(impactOf(use)).toBe(impact);
-  });
-
-  it("deletes a secret nothing uses with a plain Delete", () => {
-    expect(deleteWords({ name: "OLD_JIRA_HOOK", uses: [] })).toEqual({
-      title: "Delete OLD_JIRA_HOOK?",
-      impacts: [],
-      nothing: "Nothing uses it, so nothing stops.",
-      confirm: "Delete",
-    });
-  });
-
-  it("lists every use of one that is used, and asks for Delete anyway", () => {
-    const words = deleteWords({
-      name: "ops-url",
-      uses: ["Tool · Postgres", "The nightly export"],
-    });
-    expect(words.title).toBe("Delete ops-url?");
-    expect(words.nothing).toBeNull();
-    expect(words.confirm).toBe("Delete anyway");
-    expect(words.impacts).toEqual([
-      {
-        use: "Tool · Postgres",
-        impact: "Tool · Postgres stops working until the secret is set again.",
-      },
-      {
-        use: "The nightly export",
-        impact: "The nightly export stops working until the secret is set again.",
-      },
-    ]);
   });
 });

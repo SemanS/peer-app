@@ -94,23 +94,3 @@ export function knownRevision(
 ): number | undefined {
   return status.settings?.workspaces.find((entry) => entry.workspace === workspace)?.revision;
 }
-
-/**
- * What the status says of a workspace's proposals, which keys the proposals query so that it reads
- * again when any of it changes: how many the person decides, how many they made (a proposal
- * decided or withdrawn changes that, with no revision to tell it, which is how a proposer's banner
- * learns of it) and the settings revision (a proposal applied moves that). Nothing while the
- * status says nothing of the workspace, and no `own` from an environment that does not count them.
- */
-export function proposalsKey(
-  status: Pick<PeerHubStatus, "settings">,
-  workspace: string,
-): { readonly waiting?: number; readonly own?: number; readonly revision?: number } {
-  const row = status.settings?.workspaces.find((entry) => entry.workspace === workspace);
-  if (row === undefined) return {};
-  return {
-    waiting: row.pendingProposals,
-    ...(row.ownProposals === undefined ? {} : { own: row.ownProposals }),
-    revision: row.revision,
-  };
-}

@@ -1,17 +1,10 @@
-import type {
-  PeerSettingsConflict,
-  PeerSettingsLine,
-  PeerSettingsPreview,
-  PeerSettingsSaved,
-} from "@t3tools/contracts";
+import type { PeerSettingsLine, PeerSettingsPreview, PeerSettingsSaved } from "@t3tools/contracts";
 import { ArrowRightIcon } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { useNowMinute } from "../../../hooks/useNowMinute";
 import { useClientSettings } from "../../../hooks/useSettings";
 import { cn } from "../../../lib/utils";
-import { serverEnvironment } from "../../../state/server";
-import { useAtomQueryRunner } from "../../../state/use-atom-query-runner";
 import { formatShortTimestamp } from "../../../timestampFormat";
 import { Button } from "../../ui/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "../../ui/dialog";
@@ -26,7 +19,6 @@ import {
 } from "../PeerDialog";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import { TONE_SURFACE, TONE_TEXT } from "../signals";
-import { usePeerSettings } from "./PeerSettingsContext";
 import {
   NO_SETTLE,
   WHY_MAX,
@@ -49,15 +41,12 @@ import {
   mergedNote,
   mergeSettle,
   noopText,
-  otherChangeText,
   refusalText,
-  reviewWords,
   saveLabel,
   savedTitle,
   settlement,
   stepFor,
   theirNames,
-  theirOtherLines,
   untouchedCount,
   type Choice,
   type Note,
@@ -193,37 +182,7 @@ function ReviewBody({
   );
 }
 
-/** What else the revisions I conflict with changed, which stays: read once the conflict is on screen. */
-function useTheirOtherChanges(workspace: string, conflicts: ReadonlyArray<PeerSettingsConflict>) {
-  const { environmentId, status } = usePeerSettings();
-  const read = useAtomQueryRunner(serverEnvironment.peerSettings.historyEntry, {
-    reportFailure: false,
-  });
-  const [lines, setLines] = useState<ReadonlyArray<PeerSettingsLine>>([]);
-  useEffect(() => {
-    let current = true;
-    const person = status.email;
-    if (person === null) return undefined;
-    const seqs = [...new Set(conflicts.map(({ theirsSeq }) => theirsSeq))];
-    void Promise.all(
-      seqs.map((seq) => read({ environmentId, person, input: { workspace, seq } })),
-    ).then((results) => {
-      if (!current) return;
-      const revisions = results.flatMap((result) =>
-        result._tag === "Success" ? [result.value] : [],
-      );
-      setLines(theirOtherLines(revisions, conflicts));
-    });
-    return () => {
-      current = false;
-    };
-  }, [conflicts, environmentId, read, status.email, workspace]);
-  return lines;
-}
-
 function ConflictBody({
-  workspace,
-  kind,
   scope,
   preview,
   choices,
@@ -231,8 +190,6 @@ function ConflictBody({
   onChoose,
   nameOf,
 }: {
-  readonly workspace: string;
-  readonly kind: ReviewOperation["kind"];
   readonly scope: string;
   readonly preview: PeerSettingsPreview;
   readonly choices: Readonly<Record<string, Choice>>;
@@ -242,14 +199,10 @@ function ConflictBody({
 }) {
   const { conflicts } = preview;
   const names = theirNames(conflicts, nameOf);
-  const theirOther = useTheirOtherChanges(workspace, conflicts);
-  const other = otherChangeText(names, theirOther);
-  const words = reviewWords(kind);
   return (
     <>
       <p className="text-sm text-muted-foreground">
         {conflictIntro({
-          kind,
           base: preview.base,
           head: preview.head.seq,
           scope,
@@ -276,7 +229,7 @@ function ConflictBody({
               <label className="flex cursor-pointer items-center gap-2.5 text-sm">
                 <Radio value="mine" />
                 <span>
-                  {words.mine}: <span className="font-semibold">{conflict.mineText}</span>
+                  Yours: <span className="font-semibold">{conflict.mineText}</span>
                 </span>
               </label>
               <label className="flex cursor-pointer items-center gap-2.5 text-sm">
@@ -289,7 +242,6 @@ function ConflictBody({
           </fieldset>
         );
       })}
-      {other === null ? null : <p className="text-xs text-muted-foreground">{other}</p>}
     </>
   );
 }
@@ -332,7 +284,7 @@ export function ReviewChangesDialog({
   readonly operation: ReviewOperation;
   /** What the changes are to, in the title: "Booking". */
   readonly scope: string;
-  /** Under the title: who proposed the changes, which revision they revert. */
+  /** Under the title: what saving does beyond its lines ("Deleting the project for everyone."). */
   readonly context?: ReactNode;
   /** The Hub saved the changes; the page drops its draft here. */
   readonly onSaved?: ((saved: PeerSettingsSaved, outcome: SavedOutcome) => void) | undefined;
@@ -355,7 +307,6 @@ export function ReviewChangesDialog({
   // The minute the review last looked at the clock, for "2 minutes ago" in the conflict view.
   const now = Date.parse(`${useNowMinute()}:00Z`);
 
-  const words = reviewWords(operation.kind);
   const show = (outcome: ChangeOutcome, mode: ReviewMode, used: Settle) => {
     setBusy(false);
     if (!outcome.ok) {
@@ -403,12 +354,7 @@ export function ReviewChangesDialog({
   const close = () => {
     if (!busy) onClose();
   };
-  const document =
-    view.document === null
-      ? null
-      : operation.kind === "save"
-        ? applySets(view.document, operation.set)
-        : view.document;
+  const document = view.document === null ? null : applySets(view.document, operation.set);
   const toolContext = { document, workspacePeople: view.people.length };
 
   const body = (() => {
@@ -425,7 +371,7 @@ export function ReviewChangesDialog({
             </PeerDialogBody>
             <PeerDialogFooter>
               <Button variant="outline" onClick={close}>
-                {words.back}
+                Back to editing
               </Button>
             </PeerDialogFooter>
           </>
@@ -460,12 +406,12 @@ export function ReviewChangesDialog({
                     ...checkNotes(preview, toolContext),
                   ]}
                 />
-                {isNoop(preview) || !words.why ? null : (
+                {isNoop(preview) ? null : (
                   <PeerStackedField label="Why" htmlFor={`${formId}-why`}>
                     <Input
                       id={`${formId}-why`}
                       maxLength={WHY_MAX}
-                      placeholder="Why? It goes into the history"
+                      placeholder="Why? It goes into the audit log"
                       value={message}
                       disabled={busy}
                       onChange={(event) => setMessage(event.target.value)}
@@ -479,7 +425,7 @@ export function ReviewChangesDialog({
             </PeerDialogBody>
             <PeerDialogFooter>
               <Button variant="outline" disabled={busy} onClick={close}>
-                {words.back}
+                Back to editing
               </Button>
               {isNoop(preview) ? (
                 <Button
@@ -510,8 +456,6 @@ export function ReviewChangesDialog({
             />
             <PeerDialogBody>
               <ConflictBody
-                workspace={operation.workspace}
-                kind={operation.kind}
                 scope={scope}
                 preview={preview}
                 choices={choices}
@@ -532,7 +476,7 @@ export function ReviewChangesDialog({
                   check(next);
                 }}
               >
-                {words.discard}
+                Discard mine
               </Button>
               <Button disabled={busy} onClick={() => save(settlement(preview.conflicts, choices))}>
                 {busy ? "Saving…" : `Save on top of revision ${preview.head.seq}`}
@@ -551,11 +495,13 @@ export function ReviewChangesDialog({
                   <li key={refusal.path.join("/")}>{refusalText(refusal)}</li>
                 ))}
               </ul>
-              <p className="text-sm text-muted-foreground">{words.forbidden}</p>
+              <p className="text-sm text-muted-foreground">
+                Undo those changes to save the rest, or ask the people named to make them.
+              </p>
             </PeerDialogBody>
             <PeerDialogFooter>
               <Button variant="outline" onClick={onClose}>
-                {words.back}
+                Back to editing
               </Button>
             </PeerDialogFooter>
           </>
@@ -586,7 +532,7 @@ export function ReviewChangesDialog({
             </PeerDialogBody>
             <PeerDialogFooter>
               <Button variant="outline" onClick={onClose}>
-                {words.back}
+                Back to editing
               </Button>
             </PeerDialogFooter>
           </>
@@ -617,7 +563,7 @@ export function ReviewChangesDialog({
             </PeerDialogBody>
             <PeerDialogFooter>
               <Button variant="outline" onClick={onClose}>
-                {words.back}
+                Back to editing
               </Button>
               <Button onClick={() => check(settle)}>Try again</Button>
             </PeerDialogFooter>

@@ -120,21 +120,15 @@ const WORKSPACE_ENTRIES: ReadonlyArray<Entry> = [
 /** This computer's own pages, whatever workspace is open. */
 const COMPUTER_ENTRIES: ReadonlyArray<Entry> = [
   {
-    id: "coordination-default",
-    title: "Your coordination default",
-    place: c("coordination"),
-    terms: "notify coordinate ask default policy coordination",
-  },
-  {
     id: "peer-plugins",
     title: "Peer plugins",
-    place: c("coordination"),
+    place: c("plugins"),
     terms: "plugin plugins turn on off herdr github observe",
   },
   {
     id: "agent-coordination",
     title: "Agent coordination",
-    place: c("coordination"),
+    place: c("plugins"),
     terms: "coordination hooks claude mod codex trust experimental",
   },
   {
@@ -168,12 +162,6 @@ const PROJECT_ENTRIES: ReadonlyArray<Entry> = [
     terms: "members leads lead invite add person role people",
   },
   {
-    id: "project-tasks",
-    title: "Project tasks",
-    place: p("tasks"),
-    terms: "tasks task group groups order tree area areas",
-  },
-  {
     id: "project-repositories",
     title: "Repositories",
     place: p("repositories"),
@@ -184,12 +172,6 @@ const PROJECT_ENTRIES: ReadonlyArray<Entry> = [
     title: "Project tools",
     place: p("tools"),
     terms: "tools mcp add from catalog project",
-  },
-  {
-    id: "project-history",
-    title: "Project history",
-    place: p("history"),
-    terms: "history revision changes audit",
   },
 ];
 

@@ -17,11 +17,9 @@ import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { reasonText } from "../PeerPluginsSettings.logic";
-import { AskAgentOfThisPage } from "./AskAgent";
 import { useOptionalPeerSettings } from "./PeerSettingsContext";
 import { useOpenPeerSettings } from "./peerSettingsLinks";
 import type { RoleBadge } from "./peerSettings.logic";
-import { ProposalsBanner } from "./Proposals";
 
 /** What follows the person across the area: workspaces they lost, and a sync that failed. */
 function PeerSettingsNotices() {
@@ -69,16 +67,13 @@ export function RoleBadgePill({ badge }: { readonly badge: RoleBadge }) {
 }
 
 /**
- * A page with a title, as the design gives workspace pages: the name, the person's role, one line,
- * "Ask an agent" where the page has settings to change, and under them the proposals that wait for
- * what the page shows.
+ * A page with a title, as the design gives workspace pages: the name, the person's role, one line.
  */
 export function PeerSettingsPage({
   title,
   description,
   mark,
   badge,
-  askLast = false,
   children,
 }: {
   readonly title: string;
@@ -86,24 +81,17 @@ export function PeerSettingsPage({
   /** Before the title: the workspace's mark on its General page. */
   readonly mark?: ReactNode;
   readonly badge?: RoleBadge | undefined;
-  /** "Ask an agent" under the page, where its everyday actions come first. */
-  readonly askLast?: boolean;
   readonly children?: ReactNode;
 }) {
   return (
     <PeerSettingsFrame>
-      <div className="flex flex-col gap-6">
-        <WorkspacePageIntro
-          title={title}
-          description={description}
-          leading={mark}
-          meta={badge === undefined ? undefined : <RoleBadgePill badge={badge} />}
-        />
-        {askLast ? null : <AskAgentOfThisPage />}
-      </div>
-      <ProposalsBanner />
+      <WorkspacePageIntro
+        title={title}
+        description={description}
+        leading={mark}
+        meta={badge === undefined ? undefined : <RoleBadgePill badge={badge} />}
+      />
       {children}
-      {askLast ? <AskAgentOfThisPage /> : null}
     </PeerSettingsFrame>
   );
 }
@@ -140,9 +128,9 @@ function PluginOffNote({
         <Button
           size="sm"
           variant="outline"
-          onClick={() => void open({ kind: "computer", section: "coordination" })}
+          onClick={() => void open({ kind: "computer", section: "plugins" })}
         >
-          Open Coordination & plugins
+          Open Plugins
         </Button>
       ) : null}
     </div>

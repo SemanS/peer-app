@@ -1484,7 +1484,7 @@ const refuseHooksWhileRunning = (stateDir: string) =>
     if (owner === null) return;
     return yield* fail(
       owner.kind === "app"
-        ? "Peer is running: install the hooks in Settings → This computer → Coordination & plugins."
+        ? "Peer is running: install the hooks in Settings → This computer → Plugins."
         : "Peer Core is running: run peer core stop first.",
     );
   });

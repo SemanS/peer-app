@@ -14,7 +14,7 @@ interface Reviewing {
  * Opens the review of a change from a page: `open(operation)` starts one, and `dialog` is what to
  * render (it is null while none is open). A draft's operation is `useSettingsDraft().operation`;
  * `onSaved` is where the page drops its draft (`draft.saved`). `scope` is what the changes are to,
- * in the title ("Booking"); a review of another thing (a revision to revert, a proposal) says its own.
+ * in the title ("Booking").
  */
 export function useReviewChanges({
   scope,
@@ -42,7 +42,7 @@ export function useReviewChanges({
           scope={reviewing.scope}
           context={reviewing.context}
           onSaved={onSaved}
-          onNothingToSave={reviewing.operation.kind === "save" ? onNothingToSave : undefined}
+          onNothingToSave={onNothingToSave}
           onClose={() => setReviewing(null)}
         />
       ),

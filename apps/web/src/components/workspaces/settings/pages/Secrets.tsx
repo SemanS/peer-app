@@ -14,9 +14,9 @@ import { SettingsUnavailableNote } from "../SettingsUnavailable";
 import { useSettingsView } from "../useSettingsView";
 
 /**
- * The workspace's secrets (design artboard 18): names and what uses them, where each value stands,
- * and storing, replacing or deleting one. Admins only; the Hub seals every value and never shows
- * one again. Against a Hub without the settings feature there is no list to read.
+ * The workspace's secrets (design artboard 18): names, where each value stands, and replacing or
+ * deleting one. Admins only; the Hub seals every value and never shows one again. Against a Hub
+ * without the settings feature there is no list to read.
  */
 export function Secrets({ environmentId, status, workspace }: WorkspacePageProps) {
   return (

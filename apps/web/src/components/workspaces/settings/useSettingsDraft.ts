@@ -120,6 +120,6 @@ export function useSettingsDraft(
     operation:
       current === null || dirty === 0
         ? null
-        : { kind: "save", workspace: view.workspace, base: current.revision, set: sets() },
+        : { workspace: view.workspace, base: current.revision, set: sets() },
   };
 }

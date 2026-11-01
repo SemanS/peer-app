@@ -1,7 +1,6 @@
 // @effect-diagnostics globalDate:off nodeBuiltinImport:off - explicit hook fallback logs in wall-clock time.
 /* oxlint-disable oxc/no-this-in-exported-function -- A broker method re-exported by hooks.ts, bound on Broker.ts. */
 import type * as NodeHttp from "node:http";
-import { publishesWork } from "../../handoffCommands.ts";
 import {
   agentNamed,
   editedFiles,
@@ -18,8 +17,7 @@ import { inRepository } from "./sessions.ts";
 import { fallbackAnswers } from "./fallbackPolicies.ts";
 /**
  * What a tool call hears when Peer did not decide it before the hook's deadline: the plugins'
- * fallbacks first, then core's explicit fallback (G7). Publishing is stopped, since the inputs
- * it hands over were not verified; an edit goes by its policy.
+ * fallbacks first, then core's explicit fallback (G7): an edit goes by its policy.
  */
 export function unverifiedTool(
   this: CoordinationBroker,
@@ -30,7 +28,6 @@ export function unverifiedTool(
   const mutations = editedFiles(body.tool_name, body.tool_input);
   const input = body.tool_input as Record<string, unknown> | null;
   const shell = body.tool_name === "Bash";
-  const publication = shell && typeof input?.command === "string" && publishesWork(input.command);
   const agent = agentNamed(headerOf(headers, "x-peer-agent"));
   const session = this.sessions.get(`${agent}:${String(body.session_id)}`);
   // A landing step whose hook missed its deadline: what waits for the agent comes at its next step.
@@ -46,16 +43,6 @@ export function unverifiedTool(
     return editHookAnswer(agent, [verdictAnswer(denied, call?.paths ?? [])])?.output ?? null;
   }
   const asks = theirs.map((said) => verdictAnswer(said, call?.paths ?? []));
-  if (publication) {
-    return {
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason:
-          "Peer could not verify shared input versions before the deadline. Retry publishing.",
-      },
-    };
-  }
   if (mutations.length === 0) return editHookAnswer(agent, asks)?.output ?? null;
   const policy =
     session === undefined

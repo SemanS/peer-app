@@ -7,7 +7,7 @@ import { activeOrganization } from "@t3tools/client-runtime/peer-organizations";
 import { PEER_LOCAL_WORKSPACE, type PeerHubStatus } from "@t3tools/contracts";
 
 import { isLocalScope } from "./projectScope.logic";
-import { ALL_PROJECTS } from "./workBoard.logic";
+import { ALL_PROJECTS } from "@t3tools/client-runtime/peer/work";
 
 /**
  * The status as Work reads it: only the active organization's workspace, so its tasks, projects

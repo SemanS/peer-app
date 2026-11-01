@@ -1,7 +1,7 @@
 import { useAtomValue } from "@effect/atom-react";
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
 import type { EnvironmentThreadShell } from "@t3tools/client-runtime/state/models";
-import { useLocation, useParams } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 
 import { deriveProviderEntriesByEnvironment } from "../../providerInstances";
 import { useProjects, useThreadShells } from "../../state/entities";
@@ -34,11 +34,7 @@ export function useWorkData() {
   const projects = useProjects();
   const now = useRelativeTimeTick(30_000);
   const actions = useWorkActions(environmentId);
-  const pathname = useLocation({ select: (location) => location.pathname });
-  const activeThread = useParams({
-    strict: false,
-    select: (params) => activeRouteKey(pathname, params),
-  });
+  const activeThread = useParams({ strict: false, select: activeRouteKey });
   const tree =
     status === null
       ? []

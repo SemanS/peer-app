@@ -185,7 +185,7 @@ export function PeerCallout({
 }
 
 /** What happens next, under the actions or under the form. */
-export function PeerFootnote({ children }: { readonly children: ReactNode }) {
+function PeerFootnote({ children }: { readonly children: ReactNode }) {
   return <p className="text-xs text-muted-foreground">{children}</p>;
 }
 

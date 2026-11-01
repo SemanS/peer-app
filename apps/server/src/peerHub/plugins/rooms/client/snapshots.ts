@@ -22,7 +22,7 @@ const READ_MS = 4_000;
 const FETCH_MS = 20_000;
 const FETCH_GAP_MS = 60_000;
 
-const KEY = /^(message-[1-9]\d*|handoff-[0-9a-f]{12}-[0-9a-f]{12})$/;
+const KEY = /^message-[1-9]\d*$/;
 /** Git's empty tree: what a change on top of nothing is compared to. */
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const Facts = Schema.fromJsonString(
@@ -35,7 +35,7 @@ const Facts = Schema.fromJsonString(
 );
 const decodeFacts = Schema.decodeUnknownSync(Facts);
 
-type Here = Omit<Extract<PeerRoomSnapshot, { state: "here" }>, "handoff">;
+type Here = Extract<PeerRoomSnapshot, { state: "here" }>;
 
 const git = (gitDir: string, args: ReadonlyArray<string>, timeoutMs = READ_MS) =>
   run("git", ["--git-dir", gitDir, ...args], { timeoutMs, raw: true });
@@ -155,19 +155,6 @@ async function sincePrevious(
   return from === undefined
     ? undefined
     : { seq: previous, ...(await readLines(gitDir, from, head)) };
-}
-
-/** The run's newest handoff pin here, as a key. */
-export async function newestHandoff(gitDir: string, place: RoomPlace, prefix: string) {
-  const answer = await git(gitDir, [
-    "for-each-ref",
-    "--sort=-creatordate",
-    "--count=1",
-    "--format=%(refname:lstrip=-1)",
-    `${snapshotPrefix(place)}/${prefix}*`,
-  ]).catch(() => "");
-  const key = answer.trim();
-  return key === "" ? undefined : key;
 }
 
 const RunFacts = Schema.fromJsonString(

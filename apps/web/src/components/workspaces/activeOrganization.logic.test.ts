@@ -6,7 +6,7 @@ import {
   scopeAfterSwitch,
   staleWorkspaceKeys,
 } from "./activeOrganization.logic";
-import { ALL_PROJECTS } from "./workBoard.logic";
+import { ALL_PROJECTS } from "@t3tools/client-runtime/peer/work";
 
 const status = (...slugs: ReadonlyArray<string>) => ({
   workspaces: slugs.map((slug) => ({ slug, name: slug })),

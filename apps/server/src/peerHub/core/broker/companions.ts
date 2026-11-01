@@ -1,7 +1,7 @@
 /**
  * A run across a workspace's projects edits in checkouts of other projects. There its edits go
  * through a companion session of the other project, on that project's task: its own place, claims,
- * overlaps, run and handoff, so nothing in coordination needs a second path. Hooks reach it from
+ * overlaps and run, so nothing in coordination needs a second path. Hooks reach it from
  * the session that edits; `peer` reaches it when run from that folder.
  *
  * @module peerHub/core/broker/companions

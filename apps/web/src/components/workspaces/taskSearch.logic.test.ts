@@ -3,10 +3,35 @@ import {
   filterCommandPaletteGroups,
   findHighlightedCommandPaletteItem,
 } from "../CommandPalette.logic";
-import { BOB, workProject } from "./ownership/ownership.testkit";
 import { taskSearchItems } from "./taskSearch.logic";
+import type { WorkProjectNode } from "./workTree.logic";
 
-const project = workProject(BOB);
+const project = {
+  workspace: "acme",
+  workspaceName: "Acme",
+  projectId: "ordering",
+  name: "Ordering demo",
+  areas: [
+    {
+      name: null,
+      tasks: [
+        {
+          id: "vl7",
+          key: "VL7",
+          title: "Old title",
+          done: false,
+          status: "idle",
+          threads: [],
+          removable: true,
+          context: undefined,
+        },
+      ],
+    },
+  ],
+  unsorted: [],
+  context: undefined,
+  tasks: [],
+} satisfies WorkProjectNode;
 function search(query: string, options: { actions?: boolean; submenu?: boolean } = {}) {
   const unstarted = {
     ...project.areas[0]!.tasks[0]!,

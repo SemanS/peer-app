@@ -48,7 +48,7 @@ export interface NestedRow<T> {
  * whose ancestors all show elsewhere stays where the list put it. A collapsed row hides what sits
  * under it. `ancestorsOf` names a row's ancestors, the nearest first, by the same ids as `idOf`.
  */
-export function nestRows<T>(input: {
+function nestRows<T>(input: {
   readonly items: ReadonlyArray<T>;
   readonly idOf: (item: T) => string;
   readonly ancestorsOf: (item: T) => ReadonlyArray<string>;

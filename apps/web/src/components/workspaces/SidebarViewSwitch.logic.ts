@@ -1,4 +1,4 @@
-import { ALL_PROJECTS } from "./workBoard.logic";
+import { ALL_PROJECTS } from "@t3tools/client-runtime/peer/work";
 
 /**
  * What the sidebar lists: the team's tasks or this computer's chats. The stored values predate

@@ -21,7 +21,7 @@ import { SignalCount } from "../signals";
 import { useOpenScopedChats } from "../useOpenScopedChats";
 import { projectCheckout } from "../useOpenWorkspaceProject";
 import { useWorkData } from "../useWorkData";
-import { inScope, projectScopeKey } from "../workBoard.logic";
+import { inScope, projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import { WorkNoProjects } from "../WorkNoProjects";
 import { WorkScopePicker } from "../WorkScopePicker";
 import { roomTaskLabel } from "./roomSlots.logic";

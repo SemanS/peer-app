@@ -20,7 +20,7 @@ import { WorkSectionLabel, WorkHereContext } from "./marks";
 import { ProjectMark, SignalCount } from "./signals";
 import type { PeerWebPlugin } from "./slots.types";
 import { useWorkData } from "./useWorkData";
-import { ALL_PROJECTS, projectScopeKey } from "./workBoard.logic";
+import { ALL_PROJECTS, projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import type { WorkProjectNode } from "./workTree.logic";
 import { sharedRoomsOf } from "./rooms/sharedRoom.logic";
 

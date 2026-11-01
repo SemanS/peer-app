@@ -16,7 +16,6 @@ import * as Roles from "./Roles.ts";
 import { roleCommand } from "./cli.ts";
 import { roleTools, rolesRpc } from "./client/transport.ts";
 import { tellings } from "./tell.ts";
-import { reviewRefusal } from "./text.ts";
 import { judge } from "./verdicts.ts";
 
 export const RolesPlugin = bindPlugin({
@@ -37,8 +36,6 @@ export const RolesPlugin = bindPlugin({
         ),
       ],
       agentTools: roleTools,
-      beforeReview: ({ session }) =>
-        Effect.succeed(roles.roleOf(session) === "review" ? reviewRefusal : null),
       hooks: {
         sessionStart: tell.start,
         postTool: tell.postTool,

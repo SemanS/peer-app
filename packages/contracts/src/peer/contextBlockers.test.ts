@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { contextBlockerText, writtenBlockers } from "./contextBlockers.ts";
+import { contextBlockerText } from "./contextBlockers.ts";
 
 describe("reported blockers", () => {
   it.each([
@@ -36,15 +36,5 @@ describe("reported blockers", () => {
         "None for the import. Feature tasks intentionally remain open. Deployment needs a key.",
       ),
     ).toBe("Deployment needs a key.");
-  });
-
-  it("reads only the Blockers of a context, and an explicit None is none", () => {
-    const sections = [
-      { name: "State", lines: ["Waiting for a review."] },
-      { name: "Blockers", lines: ["- The API serves no page.", "- None."] },
-    ];
-    expect(writtenBlockers({ sections })).toEqual(["The API serves no page."]);
-    expect(writtenBlockers({ sections: [{ name: "Blockers", lines: ["None."] }] })).toEqual([]);
-    expect(writtenBlockers(null)).toEqual([]);
   });
 });

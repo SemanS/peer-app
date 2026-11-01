@@ -38,12 +38,7 @@ import type {
   HubUnsupported,
   ReportedSession,
 } from "../hub/coordApi.ts";
-import type {
-  PeerCommand,
-  PeerContributions,
-  PeerReviewFacts,
-  PeerRuntimeProvider,
-} from "../plugin.ts";
+import type { PeerCommand, PeerContributions, PeerRuntimeProvider } from "../plugin.ts";
 import type { ActivePlugin } from "../plugins/PeerPlugins.ts";
 import type { RunBook } from "../work/runs.ts";
 
@@ -394,15 +389,6 @@ export interface PeerBrokerHost {
     scope: string,
     version: number,
   ) => Promise<HubContextVersionText | null>;
-  readonly finishTask?: (
-    workspace: string,
-    project: string,
-    task: string,
-    session: string,
-    status: "review" | "done",
-    op: string,
-    facts?: PeerReviewFacts,
-  ) => Promise<unknown>;
 
   /** What people see changed. */
   readonly changed: () => void;

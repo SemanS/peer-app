@@ -1,39 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { gitCommands, publishesWork } from "./handoffCommands.ts";
-
-describe("publication boundary", () => {
-  it("recognizes direct publication after directory and environment options", () => {
-    for (const command of [
-      "git push",
-      "cd '/tmp/a b' && git -C . push origin HEAD",
-      "env GH_HOST=x gh -R a/b pr create --title 'a'",
-      "/opt/bin/git -c x=y push",
-      "git status\ngit push",
-      "command -- git push origin HEAD",
-      "command -p env -i GH_HOST=x gh pr create",
-      "env -u TOKEN -C '/tmp/a b' git push",
-      "jj git push -b feature/KRK-1-ab12",
-      "jj -R ~/src/app --config ui.paginate=never git push",
-    ])
-      expect(publishesWork(command)).toBe(true);
-  });
-  it("does not block discussion, inspection, or configuring push", () => {
-    for (const command of [
-      'echo "git push"',
-      "git config alias.publish push",
-      "gh pr view",
-      "git pushx",
-      "printf '%s' 'gh pr create'",
-      "git log --grep=push",
-      "command -v git push",
-      "env -u git push",
-      "jj git fetch",
-      "jj commit -m push",
-      'echo "jj git push"',
-    ])
-      expect(publishesWork(command)).toBe(false);
-  });
-});
+import { gitCommands } from "./handoffCommands.ts";
 
 describe("what a shell line runs of git and gh", () => {
   it("names each command's subcommand, in order, past options and wrappers", () => {

@@ -14,20 +14,3 @@ export function contextBlockerText(line: string): string | undefined {
   });
   return statements.length === 0 ? undefined : statements.join(" ");
 }
-
-/** What a handoff's context says under Blockers. Peer judges only that a line says something. */
-export function writtenBlockers(
-  context:
-    | {
-        readonly sections: ReadonlyArray<{
-          readonly name: string;
-          readonly lines: ReadonlyArray<string>;
-        }>;
-      }
-    | null
-    | undefined,
-): ReadonlyArray<string> {
-  return (context?.sections ?? [])
-    .filter((section) => section.name === "Blockers")
-    .flatMap((section) => section.lines.flatMap((line) => contextBlockerText(line) ?? []));
-}

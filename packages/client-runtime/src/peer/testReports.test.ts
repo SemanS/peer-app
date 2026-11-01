@@ -5,7 +5,6 @@ import {
   canAssignOwners,
   draftItems,
   draftOf,
-  handoffReportLine,
   itemMark,
   markDisagrees,
   newestSummary,
@@ -217,33 +216,6 @@ describe("reports on a page", () => {
   it("names the newer report when an owner's save was stale", () => {
     expect(staleOwnerLine({ kind: "stale", number: 3 })).toContain("report 3");
     expect(staleOwnerLine({ kind: "saved", report: report({}) })).toBeNull();
-  });
-});
-
-describe("the report in a handoff package", () => {
-  const carried = {
-    number: 1,
-    result: "mixed" as const,
-    author: ANA,
-    role: "author",
-    at: "2026-10-28T14:05:00Z",
-    passed: 1,
-    failed: 0,
-    unverified: 1,
-    unowned: ["iPhone layout"],
-  };
-
-  it("names the result, the counts and the items without an owner", () => {
-    expect(handoffReportLine(carried)).toBe(
-      "Tests: mixed, 1 passed, 0 failed, 1 unverified · 'iPhone layout' needs an owner",
-    );
-    expect(handoffReportLine({ ...carried, unowned: ["a", "b"], unverified: 2 })).toBe(
-      "Tests: mixed, 1 passed, 0 failed, 2 unverified · 'a', 'b' need an owner",
-    );
-    expect(handoffReportLine({ ...carried, unowned: [] })).toBe(
-      "Tests: mixed, 1 passed, 0 failed, 1 unverified",
-    );
-    expect(handoffReportLine(undefined)).toBeNull();
   });
 });
 

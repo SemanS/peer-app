@@ -521,10 +521,6 @@
     },
     "./peer/local": "./src/peer/local.ts",
     "./peer/needs-you": "./src/peer/needsYou.ts",
-    "./coordinationTimeline": {
-      "types": "./src/coordinationTimeline.ts",
-      "default": "./src/coordinationTimeline.ts"
-    },
     "./peer/plugins": {
       "types": "./src/peer/plugins.ts",
       "default": "./src/peer/plugins.ts"
@@ -589,8 +585,6 @@
     "./peer/agreements": "./src/peer/agreements.ts",
     "./peer/jujutsu": "./src/peer/jujutsu.ts",
     "./peer/changes": "./src/peer/changes.ts",
-    "./peer/handoff": "./src/peer/handoff.ts",
-    "./peer/readiness": "./src/peer/readiness.ts",
     "./peer/contextView": "./src/peer/contextView.ts",
     "./peer/resources": "./src/peer/resources.ts",
     "./peer-resources": "./src/peer/resources.ts",
@@ -598,7 +592,6 @@
     "./peer/test-reports": "./src/peer/testReports.ts",
     "./peer/roles": "./src/peer/roles.ts",
     "./peer/rooms": "./src/peer/rooms.ts",
-    "./peer/acceptance": "./src/peer/acceptance.ts",
     "./peer/runs": "./src/peer/runs.ts"
   },
   "scripts": {

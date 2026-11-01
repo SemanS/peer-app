@@ -30,10 +30,6 @@ export const DependenciesPlugin = bindPlugin({
         sessionStart: ({ session }) => service.hook(session, true),
         notices: [{ wakes: false, read: ({ session }) => service.hook(session, false) }],
       },
-      commandReply: (session, command) =>
-        command === "review" || command === "done"
-          ? service.handoff(session)
-          : Effect.succeed(null),
       status: { read: service.snapshot },
       hubChanges: {
         changes: ["dependencies", "work", "resync"],

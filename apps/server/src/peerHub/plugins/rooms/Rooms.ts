@@ -48,13 +48,7 @@ import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerHubClient from "../../core/hub/PeerHubClient.ts";
 import type { PeerSessionView } from "../../core/plugin.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
-import {
-  handoffRunPrefix,
-  messageKey,
-  pinWork,
-  sealWork,
-  shareWork,
-} from "../../core/workSnapshots.ts";
+import { messageKey, pinWork, sealWork, shareWork } from "../../core/workSnapshots.ts";
 import { cardOf } from "../../core/state/card.ts";
 import * as PeerState from "../../core/state/PeerState.ts";
 import { runKeys } from "../../core/state/PeerState.ts";
@@ -64,7 +58,7 @@ import * as PeerWork from "../../core/work/PeerWork.ts";
 import { changeToReview, pushedRefs, roomDiff, workRun, worktreeOf } from "./client/diff.ts";
 import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/steps.ts";
 import { workSharing } from "./client/sharing.ts";
-import { fetchPins, newestHandoff, pinnedRoot, readPin, storeOf } from "./client/snapshots.ts";
+import { fetchPins, pinnedRoot, readPin, storeOf } from "./client/snapshots.ts";
 import { hearsWhileWaiting, runQueues, tellable } from "./client/queue.ts";
 import { withheld } from "./client/render.ts";
 import { statusOf } from "./client/status.ts";
@@ -218,7 +212,7 @@ const make = Effect.gen(function* () {
       );
     });
 
-  /** Where the task's work may be: the project's checkout here, handoffs and every member's threads. */
+  /** Where the task's work may be: the project's checkout here and every member's threads. */
   const workOf = (place: PeerRoomsPlace) =>
     Effect.gen(function* () {
       const { project } = yield* state.project(place.workspace, place.project);
@@ -230,7 +224,6 @@ const make = Effect.gen(function* () {
         project,
         checkout,
         base: checkout?.repository.branch ?? project.repositories[0]?.branch ?? "main",
-        handoffs: yield* hub.handoffs(place).pipe(Effect.orElseSucceed(() => [])),
         threads,
       };
     });
@@ -451,8 +444,8 @@ const make = Effect.gen(function* () {
       Effect.gen(function* () {
         const heard = yield* heardOf(workspace, item, "own", me);
         const place = placeOf(workspace, item);
-        const { base, checkout, handoffs, threads } = yield* workOf(place);
-        const refs = pushedRefs(handoffs, threads, base);
+        const { base, checkout, threads } = yield* workOf(place);
+        const refs = pushedRefs(threads, base);
         const change =
           checkout === undefined
             ? undefined
@@ -739,7 +732,7 @@ const make = Effect.gen(function* () {
       ...place
     }: PeerRoomsDiffInput): Effect.Effect<PeerRoomDiff, PeerHubError> =>
       Effect.gen(function* () {
-        const { project, base, checkout, handoffs, threads } = yield* workOf(place);
+        const { project, base, checkout, threads } = yield* workOf(place);
         const views = yield* agents.view(place.workspace);
         const here = yield* workHere(place, checkout?.path, run);
         if (step !== undefined && here?.root !== undefined) {
@@ -762,7 +755,6 @@ const make = Effect.gen(function* () {
           rootBase: project.repositories.find((row) => row.id === here?.repository)?.branch,
           base,
           checkout,
-          handoffs,
           threads,
           files: views.sessions.flatMap((session) =>
             session.task === place.task ? session.files : [],
@@ -796,21 +788,13 @@ const make = Effect.gen(function* () {
             ((await Promise.all(stores.map((store) => fetchPins(store, room, now)))).some(Boolean)
               ? await look()
               : undefined);
-          const handoffs = await Promise.all(
-            run === undefined
-              ? []
-              : stores.map((store) => newestHandoff(store, room, handoffRunPrefix(run))),
-          );
-          const handoff = handoffs.find((one) => one !== undefined);
-          const named = handoff === undefined ? {} : { handoff };
-          if (found !== undefined) return { ...found.pin, ...named };
+          if (found !== undefined) return found.pin;
           return {
             state: "none",
             reason:
               stores.length === 0
                 ? "This computer has no checkout of the project, so it cannot read a kept state."
                 : "Peer kept no state of the work for this moment here. It is kept when an agent posts on Jujutsu, and reaches other computers when its author shares work in progress.",
-            ...named,
           };
         });
       }),

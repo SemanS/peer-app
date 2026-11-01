@@ -82,8 +82,6 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   // Ending a run changes the team's shared work; continuing one starts an agent on this environment.
   [WS_METHODS.peerHubEndRun]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerHubContinueRun]: AuthOrchestrationOperateScope,
-  // A review policy accepts handoffs in the name of the lead who set it.
-  [WS_METHODS.peerAcceptanceSetReviewPolicy]: AuthOrchestrationOperateScope,
   // Consent to send this person's usage off the computer; turning it off erases it on the Hub.
   // These also need the terminal scope: see NATIVE_CLI_METHODS.
   [WS_METHODS.nativeCliStart]: AuthOrchestrationOperateScope,

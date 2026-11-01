@@ -186,15 +186,6 @@ export async function callTools(
   let text: string;
   let isError = false;
   try {
-    if (
-      (command === "review" || command === "done") &&
-      session.keeps &&
-      this.mirrorOf(session)?.unsent
-    )
-      throw refused(
-        "the shared handoff context has not reached the Hub",
-        "call peer_status to retry publishing it, then hand the task over.",
-      );
     text = await this.runCli(command, args, { "x-peer-cwd": session.cwd }, session);
   } catch (failure) {
     text = render(failure instanceof CliError ? failure : uncertain(command));

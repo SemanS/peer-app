@@ -62,7 +62,7 @@ import {
   projectMenuSections,
   projectsToAdd,
 } from "./WorkScopePicker.logic";
-import { ALL_PROJECTS, projectScopeKey } from "./workBoard.logic";
+import { ALL_PROJECTS, projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import { useWorkData } from "./useWorkData";
 import type { WorkProjectNode } from "./workTree.logic";
 

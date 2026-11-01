@@ -22,7 +22,6 @@ const TASK_SCREENS: ReadonlySet<string> = new Set([
   "room",
   "together",
   "workspace",
-  "team",
   "observe",
   "agent",
   "operations",
@@ -100,6 +99,7 @@ const GONE_SCREENS: ReadonlySet<string> = new Set([
   "knowledge",
   "memory",
   "changes",
+  "team",
 ]);
 
 /** A remembered address worth going back to: a path on this app, nothing that leaves it. */
@@ -129,20 +129,14 @@ export function sanitizeRoutes(value: unknown): SidebarRoutes {
 
 /**
  * What the sidebar highlights for the open route, in `workTree` terms: a chat by its environment
- * and thread, an agent, a task's room, a colleague's thread, and for the pages of a whole project
- * `team:` (the Team page and its owner map). Null where the route is none of these.
+ * and thread, an agent, a task's room and a colleague's thread. Null where the route is none of these.
  */
 export function activeRouteKey(
-  pathname: string,
   params: Readonly<Record<string, string | undefined>>,
 ): string | null {
   const { agentId, workspace, project, task, environment, thread } = params;
   if (agentId) return `agent:${agentId}`;
   if (workspace && project && task) return `task:${workspace}:${project}:${task}`;
-  if (workspace && project) {
-    const root = pathname.split("/")[1];
-    return root === "team" ? `team:${workspace}:${project}` : null;
-  }
   if (workspace && environment && thread) return `observe:${workspace}:${environment}:${thread}`;
   if (params.environmentId && params.threadId) return `${params.environmentId}:${params.threadId}`;
   return null;

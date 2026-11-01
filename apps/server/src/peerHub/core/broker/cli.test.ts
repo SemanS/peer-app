@@ -5,7 +5,6 @@ import * as NodePath from "node:path";
 
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import { vi } from "vite-plus/test";
 
 import { PeerCommandError, type PeerCommand, type PeerCommandInput } from "../plugin.ts";
 import { helpText } from "./help.ts";
@@ -29,11 +28,9 @@ const HELP_WITHOUT_PLUGINS = [
   "  peer context [<task>] [history|<version>|findings [cursor]] | context decide <decisions-json>  a work's shared context (yours by default), its versions, or one",
   "  peer inputs [checkpoint|changes|recover|import]  durable input references, return changes and explicit recovery",
   "  peer ack <task>                 explicitly accept a changed shared context version",
-  "  peer review                     hand your assigned task over for review after publishing context and checking inputs",
-  "  peer done                       finish your assigned task only after all linked PRs have merged",
   "  peer run                        your run: its id, task, state and sessions; it outlives this session",
   "  peer log [--task <key>] [--path <path>] committed coordination history",
-  `  peer task [show <task> | add "<title>" | set <task> | remove <task>]  list or change tasks for your person; --status is administrative, without handoff checks`,
+  `  peer task [show <task> | add "<title>" | set <task> | remove <task>]  list or change tasks for your person`,
   `  peer share [--workspace <slug>] [--name "<name>"]  share this project, now only on this computer, with your person's workspace`,
   "",
   "Outcomes: 0 done (stdout); 2 usage; 3 refused; 4 uncertain; 5 Peer not running (stderr).",
@@ -367,85 +364,15 @@ describe("the peer command", () => {
     }
   });
 
-  it("shows command help without changing task state and rejects handoff arguments", async () => {
-    const finishTask = vi.fn(async () => undefined);
-    const staleReads = vi.fn(async () => ({
-      fresh: true,
-      recovery: "complete" as const,
-      reads: [],
-      stale: [],
-    }));
-    const fixture = await brokerFixture(() => ({
-      taskOf: () => "work",
-      finishTask,
-      staleReads,
-    }));
+  it("shows command help for a command's --help", async () => {
+    const fixture = await brokerFixture();
     try {
       await fixture.register("help");
       const headers = { "x-peer-session": "claude:help" };
-      for (const command of ["review", "done", "release"]) {
-        for (const arg of ["--help", "-h"]) {
-          expect(await fixture.broker["runCli"](command, [arg], headers)).toContain("peer review");
-        }
+      for (const arg of ["--help", "-h"]) {
+        expect(await fixture.broker["runCli"]("release", [arg], headers)).toContain("peer release");
       }
-      expect(await fixture.broker["runCli"]("--help", [], {})).toContain("peer review");
-      for (const command of ["review", "done"]) {
-        await expect(fixture.broker["runCli"](command, ["unexpected"], headers)).rejects.toThrow(
-          "takes no arguments",
-        );
-      }
-      expect(staleReads).not.toHaveBeenCalled();
-      expect(finishTask).not.toHaveBeenCalled();
-      expect(await fixture.broker["runCli"]("review", [], headers)).toContain("moved to review");
-      expect(finishTask).toHaveBeenCalledOnce();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("names the way out of a Hub refusal of done by its code", async () => {
-    const hubRefusal = (code: string, message: string) =>
-      Object.assign(new Error(message), { refused: true, code });
-    const finishTask = vi
-      .fn<() => Promise<undefined>>()
-      .mockRejectedValueOnce(
-        hubRefusal(
-          "unverified_unowned",
-          'the newest test report has unverified items without an owner: "iPhone layout"',
-        ),
-      )
-      .mockRejectedValueOnce(
-        hubRefusal("review_session", "a review session cannot hand its task over"),
-      )
-      .mockRejectedValueOnce(hubRefusal("stale_context", "a context you read changed"));
-    const fixture = await brokerFixture(() => ({
-      taskOf: () => "work",
-      finishTask,
-      staleReads: async () => ({
-        fresh: true,
-        recovery: "complete" as const,
-        reads: [],
-        stale: [],
-      }),
-    }));
-    try {
-      await fixture.register("next");
-      const headers = { "x-peer-session": "claude:next" };
-      const refusal = async () => {
-        try {
-          await fixture.broker["runCli"]("done", [], headers);
-          throw new Error("done went ahead");
-        } catch (error) {
-          const { reason, next } = error as { reason?: string; next?: string };
-          return `${reason}\nNext: ${next}`;
-        }
-      };
-      const unowned = await refusal();
-      expect(unowned).toContain("iPhone layout");
-      expect(unowned).toContain('--unverified "<text> @<person>"');
-      expect(unowned).not.toContain("peer context <task>");
-      expect(await refusal()).toContain("hands nothing over");
-      expect(await refusal()).toContain("peer context <task>");
+      expect(await fixture.broker["runCli"]("--help", [], {})).toContain("peer status");
     } finally {
       await fixture.dispose();
     }

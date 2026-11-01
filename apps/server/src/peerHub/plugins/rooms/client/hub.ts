@@ -50,26 +50,6 @@ export interface MoveBody {
 const Posted = Schema.Struct({ message: PeerRoomMessage });
 const EMPTY_INBOX: PeerRoomInbox = { waiting: [], mentions: [], work: [], seqs: {}, revs: {} };
 
-/** What a task's handoff packages say of where its work is, read as data of the `handoff` feature. */
-const Handoffs = Schema.Struct({
-  packages: Schema.Array(
-    Schema.Struct({
-      composedAt: Schema.optional(Schema.String),
-      author: Schema.optional(Schema.String),
-      delivery: Schema.optional(
-        Schema.Struct({
-          evidence: Schema.Struct({
-            branch: Schema.optional(Schema.String),
-            commit: Schema.optional(Schema.String),
-            uncommitted: Schema.optional(Schema.Array(Schema.String)),
-            untracked: Schema.optional(Schema.Array(Schema.String)),
-          }),
-        }),
-      ),
-    }),
-  ),
-});
-
 const segment = encodeURIComponent;
 const room = ({ project, task }: Place) =>
   `/projects/${segment(project)}/tasks/${segment(task)}/room`;
@@ -142,15 +122,6 @@ export const roomsHub = (client: PeerHubClient.PeerHubClient["Service"]) => ({
       path: `/rooms/inbox?environment=${segment(environment)}`,
       unsupported: { value: EMPTY_INBOX },
     }),
-  /** The task's handoff packages, oldest first as the Hub keeps them; none where it keeps none. */
-  handoffs: ({ workspace, project, task }: Place) =>
-    client
-      .request(Handoffs, {
-        workspace,
-        path: `/handoffs/${segment(project)}/${segment(task)}`,
-        unsupported: { value: { packages: [] } },
-      })
-      .pipe(Effect.map(({ packages }) => packages)),
 });
 
 export type RoomsHub = ReturnType<typeof roomsHub>;

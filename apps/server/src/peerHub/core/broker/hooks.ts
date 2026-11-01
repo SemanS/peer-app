@@ -14,7 +14,6 @@ import { pluginsForWorkspace } from "./pluginScope.ts";
 import * as NodeCrypto from "node:crypto";
 import * as NodeHttp from "node:http";
 
-import { publishesWork } from "../../handoffCommands.ts";
 import { askedByPerson, clip, cutText } from "../../peerText.ts";
 import { hookCommand } from "../adapters/scripts.ts";
 import {
@@ -94,7 +93,7 @@ export async function hookInTime(
         resolve({
           hookSpecificOutput: {
             hookEventName: "SessionStart",
-            additionalContext: `Peer is still connecting to the team's shared context. Use ${this.scripts.peer} status to check coordination and ${this.scripts.peer} context to read the current handoff. If your session is not registered yet, retry after the next step. Shared context will arrive when ready.`,
+            additionalContext: `Peer is still connecting to the team's shared context. Use ${this.scripts.peer} status to check coordination and ${this.scripts.peer} context to read the current context. If your session is not registered yet, retry after the next step. Shared context will arrive when ready.`,
           },
         });
       } else if (body.hook_event_name !== "PreToolUse") {
@@ -229,14 +228,7 @@ export async function hook(
       runtimeGeneration: generation,
       hookEvent: event,
     });
-    const input = body.tool_input as Record<string, unknown> | null;
-    if (
-      event === "PreToolUse" &&
-      (editedFiles(body.tool_name, body.tool_input).length > 0 ||
-        (body.tool_name === "Bash" &&
-          typeof input?.command === "string" &&
-          publishesWork(input.command)))
-    ) {
+    if (event === "PreToolUse" && editedFiles(body.tool_name, body.tool_input).length > 0) {
       return {
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
@@ -696,17 +688,6 @@ export async function beforeShell(
   if (isLanding(command)) {
     const stopped = await this.landingStop(session, body, command, step, verdictBudgetMs);
     if (stopped !== null) return stopped;
-  }
-  if (publishesWork(command)) {
-    const refusal = await this.handoffRefusal(session, "publish");
-    if (refusal !== null)
-      return {
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason: refusal.hook,
-        },
-      };
   }
   const script = this.scripts.peer;
   const quotedScript = hookCommand(script);

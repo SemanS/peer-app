@@ -24,7 +24,6 @@ const everything = [
   "settings",
   "requests",
   "observe",
-  "handoff",
   "dependencies",
   "ownership",
   "agreements",
@@ -40,7 +39,6 @@ const ALL = [
   "audit",
   "requests",
   "observe",
-  "handoff",
   "dependencies",
   "announcements",
   "ownership",
@@ -77,7 +75,6 @@ describe("the features of a Hub that serves them all", () => {
       "audit",
       "requests",
       "observe",
-      "handoff",
       "dependencies",
       "announcements",
       "ownership",
@@ -122,11 +119,11 @@ describe("a feature a Hub with a catalog does not serve", () => {
   });
 
   it("needs a newer Hub when it neither serves it nor turned it off", () => {
-    const list = rows({ hub: catalog(ALL.filter((id) => id !== "handoff")) });
-    expect(byId(list, "handoff")).toMatchObject({
+    const list = rows({ hub: catalog(ALL.filter((id) => id !== "observe")) });
+    expect(byId(list, "observe")).toMatchObject({
       state: "newer",
       label: "Not available",
-      effect: "Review packages can’t be stored until the Hub is updated.",
+      effect: "Shared threads can’t be watched live until the Hub is updated.",
     });
   });
 
@@ -145,10 +142,10 @@ describe("a feature a Hub with a catalog does not serve", () => {
     const list = rows({
       hub: catalog(ALL),
       plugins: everything.map((entry) =>
-        entry.id === "handoff" ? { ...entry, active: false, reason: "hub" } : entry,
+        entry.id === "observe" ? { ...entry, active: false, reason: "hub" } : entry,
       ),
     });
-    expect(byId(list, "handoff")?.state).toBe("newer");
+    expect(byId(list, "observe")?.state).toBe("newer");
   });
 });
 
@@ -180,10 +177,10 @@ describe("the features of the plugins this version of Peer has", () => {
       effect:
         "What the agents of two tasks agree is kept for those tasks and told to whoever works on either one later.",
     });
-    expect(byId(list, "handoff")).toMatchObject({
-      name: "Handoff for review",
+    expect(byId(list, "observe")).toMatchObject({
+      name: "Observe",
       state: "on",
-      effect: "Agents can store a review package for a task.",
+      effect: "Teammates can watch a thread you share, live.",
     });
     expect(list.some((row) => row.effect.includes("has no words for"))).toBe(false);
   });
@@ -191,7 +188,7 @@ describe("the features of the plugins this version of Peer has", () => {
   it("says what each means for the workspace when the Hub does not run it", () => {
     const list = rows({
       hub: catalog(
-        ALL.filter((id) => id !== "agreements" && id !== "handoff"),
+        ALL.filter((id) => id !== "agreements" && id !== "observe"),
         ["agreements"],
       ),
     });
@@ -200,7 +197,7 @@ describe("the features of the plugins this version of Peer has", () => {
       label: "Not available",
       effect: "Agreements can’t be kept: this Hub doesn’t run them.",
     });
-    expect(byId(list, "handoff")).toMatchObject({ state: "newer" });
+    expect(byId(list, "observe")).toMatchObject({ state: "newer" });
   });
 });
 
@@ -235,7 +232,6 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
       "github",
       "requests",
       "observe",
-      "handoff",
       "dependencies",
       "ownership",
       "agreements",
@@ -245,7 +241,7 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
 
   it("needs a newer Hub when the Hub does not even serve settings", () => {
     const old = everything.map((entry) =>
-      ["settings", "handoff", "dependencies"].includes(entry.id)
+      ["settings", "observe", "dependencies"].includes(entry.id)
         ? { ...entry, active: false, reason: "hub" }
         : entry,
     );
@@ -255,16 +251,16 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
       label: "Not available",
       effect: "Settings can be read here but not changed until the Hub is updated.",
     });
-    expect(byId(list, "handoff")?.state).toBe("newer");
+    expect(byId(list, "observe")?.state).toBe("newer");
     expect(byId(list, "requests")?.state).toBe("on");
   });
 
   it("still tells from the plugins when the catalog has no list of what is off", () => {
     const list = rows({
       hub: { features: { requests: 1, settings: 1 } },
-      plugins: without("handoff"),
+      plugins: without("observe"),
     });
-    expect(byId(list, "handoff")?.state).toBe("off-hub");
+    expect(byId(list, "observe")?.state).toBe("off-hub");
     expect(byId(list, "requests")?.state).toBe("on");
   });
 
@@ -303,7 +299,7 @@ describe("what the app cannot tell", () => {
   it("leaves out a plugin the build does not have", () => {
     const list = rows({ plugins: everything.filter((entry) => entry.id !== "requests") });
     expect(byId(list, "requests")).toBeUndefined();
-    expect(byId(list, "handoff")).toBeDefined();
+    expect(byId(list, "observe")).toBeDefined();
   });
 
   it("is only coordination for an environment that lists no plugins", () => {
@@ -407,7 +403,7 @@ describe("a feature in the status language", () => {
   it("maps what the Hub does onto Connected, Not available and Off", () => {
     const list = rows({
       hub: catalog(
-        ALL.filter((id) => id !== "resources" && id !== "handoff"),
+        ALL.filter((id) => id !== "resources" && id !== "observe"),
         ["resources"],
       ),
     });
@@ -416,7 +412,7 @@ describe("a feature in the status language", () => {
       connection: "unavailable",
       label: "Not available",
     });
-    expect(byId(list, "handoff")).toMatchObject({
+    expect(byId(list, "observe")).toMatchObject({
       connection: "unavailable",
       label: "Not available",
     });

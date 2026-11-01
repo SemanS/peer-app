@@ -4,7 +4,7 @@ import type { RoomFeedRow, RoomFeedState } from "@t3tools/client-runtime/peer/ro
 import type { PeerHubStatus } from "@t3tools/contracts";
 
 import type { ResolvedProjectScope } from "../projectScope.logic";
-import { ALL_PROJECTS, projectScopeKey } from "../workBoard.logic";
+import { ALL_PROJECTS, projectScopeKey } from "@t3tools/client-runtime/peer/work";
 
 const FEED_HEADINGS: ReadonlyArray<{ readonly state: RoomFeedState; readonly title: string }> = [
   { state: "yours", title: "Waiting on you" },

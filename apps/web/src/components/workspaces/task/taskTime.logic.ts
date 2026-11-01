@@ -13,11 +13,6 @@ const dayMonthYear = new Intl.DateTimeFormat("en-GB", {
   month: "short",
   year: "numeric",
 });
-const clock24 = new Intl.DateTimeFormat("en-GB", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hourCycle: "h23",
-});
 
 type When =
   | { readonly kind: "now" }
@@ -66,49 +61,4 @@ export function agoLabel(at: string, now: number): string {
     case "date":
       return `on ${when.label}`;
   }
-}
-
-/** For a column: "Just now", "40 min", "2 h", "Yesterday", "10 Oct". */
-export function shortWhen(at: string, now: number): string {
-  const when = classify(at, now);
-  if (when === null) return "";
-  switch (when.kind) {
-    case "now":
-      return "Just now";
-    case "minutes":
-      return `${when.n} min`;
-    case "hours":
-      return `${when.n} h`;
-    case "yesterday":
-      return "Yesterday";
-    case "date":
-      return when.label;
-  }
-}
-
-/** How long something has lasted, without "ago": "3 min", "2 h", "3 d"; null under a minute. */
-export function lastedLabel(since: string, now: number): string | null {
-  const time = Date.parse(since);
-  if (!Number.isFinite(time)) return null;
-  const elapsed = now - time;
-  if (elapsed < MINUTE_MS) return null;
-  if (elapsed < HOUR_MS) return `${Math.floor(elapsed / MINUTE_MS)} min`;
-  if (elapsed < DAY_MS) return `${Math.floor(elapsed / HOUR_MS)} h`;
-  return `${Math.floor(elapsed / DAY_MS)} d`;
-}
-
-/** "10 Oct", with the year once it is not this one. */
-export function dateLabel(at: string, now: number): string {
-  const time = Date.parse(at);
-  if (!Number.isFinite(time)) return "";
-  const date = new Date(time);
-  return (date.getFullYear() === new Date(now).getFullYear() ? dayMonth : dayMonthYear).format(
-    date,
-  );
-}
-
-/** The time of day on a 24-hour clock; the page passes the person's own format instead. */
-export function clockLabel(at: string): string {
-  const time = Date.parse(at);
-  return Number.isFinite(time) ? clock24.format(new Date(time)) : "";
 }

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { useLastPeerWorkspace } from "./PeerSettingsContext";
 import { useActiveOrganization } from "../organizationChoice";
 import { organizationStatus } from "../activeOrganization.logic";
-import { ALL_PROJECTS } from "../workBoard.logic";
+import { ALL_PROJECTS } from "@t3tools/client-runtime/peer/work";
 import { newChatProject, peerProjectIndex, resolveProjectScope } from "../projectScope.logic";
 import { EnvironmentId, type PeerHubStatus, ProjectId } from "@t3tools/contracts";
 

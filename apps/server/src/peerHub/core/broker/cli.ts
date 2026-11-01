@@ -5,8 +5,8 @@ import { currentViewCommand } from "../index/contextViewCommand.ts";
  * The `peer` command agents run: core's commands and the plugins', `peer help`, and how long the
  * `peer` shim waits for each command.
  *
- * Core's commands are coordination's own (status, notes, claims, contexts, the index, handoff); the
- * broker runs them. A plugin's command runs while its plugin is active. While it is not, it answers
+ * Core's commands are coordination's own (status, notes, claims, contexts, the index); the broker
+ * runs them. A plugin's command runs while its plugin is active. While it is not, it answers
  * 409 with one line and touches nothing, and `peer help` leaves it out. The shim's waits come from
  * every registered command, active or not, so turning a plugin on or off never rewrites the shim.
  *
@@ -29,16 +29,7 @@ import type { PeerCommand } from "../plugin.ts";
 import { CORE_COMMANDS } from "../registry.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
-import {
-  CliError,
-  hubFailure,
-  hubRead,
-  hubWrite,
-  refused,
-  uncertain,
-  usage,
-} from "./cliContract.ts";
-import { ownerCallNeeded, runsRunningRefusal } from "./landing.ts";
+import { CliError, hubRead, hubWrite, refused, uncertain, usage } from "./cliContract.ts";
 import { PUBLIC_COMMANDS, publicCli } from "./publicCli.ts";
 import { headerOf } from "./server.ts";
 import { inRepository, type LocalSession, unsupportedCheckout } from "./sessions.ts";
@@ -53,7 +44,6 @@ import {
 } from "./tasks.ts";
 import { SHARE_FLAGS, shareCommand, UNSHARED } from "./share.ts";
 import { helpText } from "./help.ts";
-import { reviewFacts } from "./handoffGuard.ts";
 import { checkpointInputs, inputCommand } from "./inputCheckpoints.ts";
 
 /** How long the `peer` shim waits for Peer's answer to a command that says nothing else. */
@@ -121,20 +111,6 @@ export function commandArguments(args: ReadonlyArray<string>): CommandArguments 
     },
   };
 }
-
-/**
- * The way out of a Hub refusal of `peer review` or `peer done`, by its code: a stale input is reread,
- * a review session never hands over, an unverified item gets an owner, a failed item a home. Any other code reads as a
- * stale input, the refusal the Hub gives most.
- */
-const HANDOFF_NEXT: Readonly<Record<string, string>> = {
-  review_session: "a review session hands nothing over; ask your person to move the task in Peer.",
-  unverified_unowned:
-    'give each unverified item an owner with peer tests … --unverified "<text> @<person>", name the task it belongs to with "<text> @task:<key>", or ask your person to on the task page, then retry.',
-  failed_unresolved:
-    'fix each failed item and file again, leave it to an open task that depends on this one with --fail "<text> @task:<key>", or ask your person: a person may still move the task.',
-  other: "read the changed inputs with peer context <task>, recheck the result and retry.",
-};
 
 const CORE_FLAGS: Readonly<Record<string, ReadonlyArray<string>>> = {
   current: ["--cursor", "--limit"],
@@ -263,7 +239,6 @@ export async function runCli(
   headers: NodeHttp.IncomingHttpHeaders,
   verifiedSession?: LocalSession,
 ): Promise<string> {
-  const commandStarted = Date.now();
   if (
     command === "help" ||
     command === "--help" ||
@@ -530,119 +505,6 @@ export async function runCli(
         );
       }
       return this.contextCli(session, scope, own ? first : plain[1], own ? plain[1] : plain[2]);
-    }
-    case "review":
-    case "done": {
-      if (args.length > 0) throw usage(`${command} takes no arguments`, `run peer ${command}.`);
-      if (session.task === undefined) {
-        // Its branch may name a task the next sync has not read yet.
-        session.task = this.taskFor(session, plugins.runtime);
-      }
-      if (session.task === undefined || this.host.finishTask === undefined)
-        throw refused(
-          "this session must be on a task to hand it off",
-          "name the task's key in your branch, or ask your person to put this thread on a task in Peer.",
-        );
-      const unread = await this.landingRefusal(session, plugins, command);
-      if (unread !== null) throw unread;
-      const refusal = await this.handoffRefusal(session, command);
-      if (refusal !== null) throw refused(refusal.reason, refusal.next);
-      if (command === "review") {
-        // What the agent just wrote under For the team may settle what a plugin would refuse.
-        await this.readTeamLines(session);
-        for (const plugin of plugins.active) {
-          const check = plugin.contributions.beforeReview;
-          if (!check) continue;
-          const remainingMs = Math.max(0, Math.min(6000, 9000 - (Date.now() - commandStarted)));
-          const unsettled = await this.host.run(
-            check({ session: this.sessionView(session), remainingMs }).pipe(
-              Effect.timeout(`${Math.max(1, remainingMs)} millis`),
-              Effect.catchCause(() =>
-                Effect.sync(() => {
-                  this.record("plugin.failed", { plugin: plugin.id, command, at: "beforeReview" });
-                  return null;
-                }),
-              ),
-            ),
-            { signal: this.stopping.signal },
-          );
-          if (unsettled !== null) throw refused(unsettled.reason, unsettled.next);
-        }
-      }
-      const facts =
-        command === "review" ? await reviewFacts.call(this, session, plugins, commandStarted) : {};
-      let moved: Awaited<ReturnType<NonNullable<typeof this.host.finishTask>>>;
-      try {
-        moved = await this.host.finishTask!(
-          session.workspace,
-          session.project,
-          session.task!,
-          session.id,
-          command,
-          newOp(),
-          facts,
-        );
-      } catch (error) {
-        const code =
-          typeof error === "object" && error !== null && "code" in error
-            ? String(error.code)
-            : "other";
-        this.record("handoff.refused", { session: session.id, at: command, refusal: code });
-        throw hubFailure(error, command, HANDOFF_NEXT[code] ?? HANDOFF_NEXT.other!);
-      }
-      const held = runsRunningRefusal(moved);
-      if (held !== undefined) {
-        this.record("handoff.refused", {
-          session: session.id,
-          at: command,
-          refusal: "runs_running",
-        });
-        throw held;
-      }
-      const owing = ownerCallNeeded(moved);
-      if (owing !== undefined)
-        throw this.ownerCallRefusal(session, command, owing, commandsOn(plugins)("owner"));
-      await this.endRunOf(session, command === "review" ? "handed-off" : "done");
-      const notes: string[] = [];
-      for (const plugin of plugins.active) {
-        const reply = plugin.contributions.commandReply;
-        if (!reply) continue;
-        const note = await this.host.run(
-          reply(this.sessionView(session), command).pipe(
-            Effect.catchCause((cause) =>
-              Effect.sync(() => {
-                this.record("plugin.failed", { plugin: plugin.id, command, cause: String(cause) });
-                return null;
-              }),
-            ),
-          ),
-          { signal: this.stopping.signal },
-        );
-        if (note) notes.push(cutText(note, 1200));
-      }
-      if (command === "review")
-        for (const plugin of plugins.active) {
-          const step = plugin.contributions.afterReview;
-          if (!step) continue;
-          const remainingMs = Math.max(0, Math.min(10000, 13000 - (Date.now() - commandStarted)));
-          const lines = await this.host.run(
-            step({
-              session: this.sessionView(session),
-              remainingMs,
-            }).pipe(
-              Effect.timeout(`${Math.max(1, remainingMs)} millis`),
-              Effect.catchCause(() =>
-                Effect.sync(() => {
-                  this.record("plugin.failed", { plugin: plugin.id, command });
-                  return [];
-                }),
-              ),
-            ),
-            { signal: this.stopping.signal },
-          );
-          notes.push(...lines);
-        }
-      return [`Task moved to ${command} with current shared input versions.`, ...notes].join("\n");
     }
     case "ack": {
       const handle = plain[0];

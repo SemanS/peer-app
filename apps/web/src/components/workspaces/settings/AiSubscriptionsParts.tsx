@@ -31,7 +31,7 @@ import {
 } from "../../ui/select";
 import { ProjectMark } from "../signals";
 import { useOpenWorkspaceProject } from "../useOpenWorkspaceProject";
-import { projectScopeKey } from "../workBoard.logic";
+import { projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import {
   CLASS_LABEL,
   HARNESSES,

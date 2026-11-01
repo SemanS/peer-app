@@ -48,16 +48,6 @@
       "count": 1
     }
   },
-  "apps/server/scripts/peer-lab/gap.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/scripts/peer-lab/handoffSteps.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/scripts/peer-lab/hidden.ts": {
     "t3code/no-low-value-comments": {
       "count": 4
@@ -78,22 +68,7 @@
       "count": 1
     }
   },
-  "apps/server/scripts/peer-lab/owners.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 3
-    }
-  },
-  "apps/server/scripts/peer-lab/owners.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 4
-    }
-  },
   "apps/server/scripts/peer-lab/rooms.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/scripts/peer-lab/team.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -353,9 +328,6 @@
     }
   },
   "apps/server/src/peerHub/core/broker/inputCheckpoints.test.ts": {
-    "t3code/no-test-timeout-or-unreasoned-skip": {
-      "count": 2
-    },
     "t3code/no-wall-clock-in-tests": {
       "count": 2
     }
@@ -367,7 +339,7 @@
   },
   "apps/server/src/peerHub/core/broker/landing.ts": {
     "t3code/no-low-value-comments": {
-      "count": 2
+      "count": 1
     }
   },
   "apps/server/src/peerHub/core/broker/owner.ts": {
@@ -683,32 +655,6 @@
       "count": 1
     }
   },
-  "apps/server/src/peerHub/plugins/acceptance/Acceptance.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 3
-    }
-  },
-  "apps/server/src/peerHub/plugins/acceptance/client/hub.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 3
-    }
-  },
-  "apps/server/src/peerHub/plugins/acceptance/fixtures.test.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/acceptance/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/plugins/agreements/Agreements.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -859,31 +805,6 @@
   "apps/server/src/peerHub/plugins/github/status.ts": {
     "t3code/prefer-effect-fn": {
       "count": 4
-    }
-  },
-  "apps/server/src/peerHub/plugins/handoff/cli.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/handoff/client/delivery.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/handoff/client/ghWrite.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/handoff/render.ts": {
-    "t3code/no-em-dash-copy": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/handoff/service.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 8
     }
   },
   "apps/server/src/peerHub/plugins/herdr/Herdr.test.ts": {
@@ -1258,11 +1179,6 @@
       "count": 1
     }
   },
-  "apps/server/src/peerHub/plugins/roles/integration.test.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/plugins/roles/tell.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1410,11 +1326,6 @@
     }
   },
   "apps/server/src/peerHub/plugins/test-reports/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/test-reports/integration.test.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -1573,21 +1484,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/acceptance/AcceptanceCard.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/acceptance/AcceptanceDialogs.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/acceptance/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/agreements/AgreementsNeedsYou.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1654,16 +1550,6 @@
       "count": 2
     }
   },
-  "apps/web/src/components/workspaces/handoff/Handoff.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/handoff/HandoffReport.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/herdr/StartTaskAgent.browser.test.tsx": {
     "t3code/require-disposable-render": {
       "count": 7
@@ -1672,114 +1558,6 @@
   "apps/web/src/components/workspaces/herdr/StartTaskAgent.tsx": {
     "react/capitalized-calls": {
       "count": 3
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/AreasBoard.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/AssignUnassigned.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/OwnerBadge.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/OwnerCallDecision.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/OwnerCallDecision.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/OwnerDialogs.test.tsx": {
-    "t3code/no-wall-clock-in-tests": {
-      "count": 3
-    },
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/OwnerDialogs.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/OwnerMapEditor.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/OwnerMapEditor.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/OwnersSettings.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/TeamNavigator.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/TeamNavigator.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/TeamPage.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/TeamPage.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 3
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/TeamRoute.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/ownerMapDraft.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/ownership.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/taskMenu.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/team.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/ownership/teamTimeline.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
     }
   },
   "apps/web/src/components/workspaces/projectScope.integration.test.tsx": {
@@ -2125,11 +1903,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/test-reports/ReportSection.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
   "apps/web/src/components/workspaces/test-reports/ReportSection.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -2146,11 +1919,6 @@
     }
   },
   "apps/web/src/components/workspaces/workMenus.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "packages/client-runtime/src/peer/acceptance.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -2173,27 +1941,12 @@
       "count": 1
     }
   },
-  "packages/client-runtime/src/peer/handoff.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "packages/client-runtime/src/peer/ownership.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
-    }
-  },
   "packages/client-runtime/src/peer/ownershipRules.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
   },
   "packages/client-runtime/src/peer/plugins.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "packages/client-runtime/src/peer/readiness.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -2223,7 +1976,7 @@
       "count": 1
     },
     "t3code/no-low-value-comments": {
-      "count": 4
+      "count": 2
     }
   },
   "packages/client-runtime/src/peerSettings.test.ts": {
@@ -2232,11 +1985,6 @@
     }
   },
   "packages/client-runtime/src/peerSettings.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "packages/contracts/src/peer/acceptance.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -2259,11 +2007,6 @@
   "packages/contracts/src/peer/github.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
-    }
-  },
-  "packages/contracts/src/peer/handoff.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 2
     }
   },
   "packages/contracts/src/peer/ownership.ts": {

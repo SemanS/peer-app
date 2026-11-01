@@ -89,8 +89,6 @@ describe("peer command outcomes", () => {
         ["release", ["--typo"], "usage", "peer release"],
         ["claim", ["pay.ts", "--intent"], "usage", "peer claim"],
         ["resolve", ["agreed"], "refused", "peer status"],
-        ["review", [], "refused", "on a task in Peer"],
-        ["done", [], "refused", "on a task in Peer"],
         ["ack", ["KRK-7"], "refused", "peer context"],
         ["log", [], "refused", "update"],
       ];
@@ -146,8 +144,6 @@ describe("peer command outcomes", () => {
           ["resolve", ["agreed"]],
           ["ack", ["KRK-7"]],
           ["context", []],
-          ["review", []],
-          ["done", []],
         ] as const) {
           await expect(fixture.broker.runCli(command, args, headers)).rejects.toMatchObject({
             outcome,

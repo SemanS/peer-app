@@ -41,12 +41,6 @@ export const startBlock = () =>
 export const changedText = (paths: ReadonlyArray<string>) =>
   `Peer: ${pathsText(paths)} changed in this review session. A review session leaves no changes, and Peer denies the shell's ways of undoing one too: tell your person, and report what you found with peer tests.`;
 
-/** `peer review` from a review session. */
-export const reviewRefusal = {
-  reason: "this is a review session, and a review session hands nothing over",
-  next: "file what you found with peer tests; the task's author hands it over.",
-} as const;
-
 /** The first prompt of a review a person started from Peer on `task`. */
 export const reviewPrompt = (task: Pick<PeerTask, "id" | "key" | "title">) =>
   [

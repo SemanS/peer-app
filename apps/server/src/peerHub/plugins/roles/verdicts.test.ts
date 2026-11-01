@@ -6,7 +6,7 @@ import { assert, describe, it } from "@effect/vitest";
 import type { PeerRoleRow } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
-import { CliError, render, type PeerToolContext } from "../../core/plugin.ts";
+import type { PeerToolContext } from "../../core/plugin.ts";
 import { acmeHubOf, BOB, logged, NOW, ready } from "./fixtures.test.ts";
 import { editStop, landingStop, shellStop, startBlock } from "./text.ts";
 import { judge } from "./verdicts.ts";
@@ -238,32 +238,6 @@ describe("a review session", () => {
         assert.strictEqual(out.permissionDecision, "deny");
         const write = yield* hook(fixture, call(fixture.root, "Bash", { command: "rm x" }));
         assert.strictEqual(write.permissionDecision, "deny");
-      }),
-    ),
-  );
-
-  it.effect("cannot hand its task over with peer review", () =>
-    run(
-      Effect.gen(function* () {
-        let moved = false;
-        const { fixture } = yield* ready(reviewing(), () => ({
-          finishTask: async () => {
-            moved = true;
-            return {};
-          },
-        }));
-        yield* Effect.promise(() => fixture.register("one"));
-        const printed = yield* Effect.promise(() =>
-          fixture.broker["runCli"]("review", [], {
-            "x-peer-cwd": fixture.root,
-            "x-peer-session": "claude:one",
-          }).then(
-            () => "done",
-            (error: unknown) => (error instanceof CliError ? render(error) : String(error)),
-          ),
-        );
-        assert.include(printed, "a review session hands nothing over");
-        assert.isFalse(moved);
       }),
     ),
   );

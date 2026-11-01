@@ -54,7 +54,7 @@ function AgentJujutsu({
   readonly agent: JujutsuAgent;
   readonly stack: ComponentProps<typeof RoomTaskJujutsu>;
 }) {
-  const [show, setShow] = useState<"snapshot" | "handoff" | "current" | "task">("snapshot");
+  const [show, setShow] = useState<"snapshot" | "current" | "task">("snapshot");
   const { environmentId, place } = stack;
   const { label, seq, working, ...changes } = agent;
   const atMessage = useRoomSnapshot({
@@ -63,7 +63,6 @@ function AgentJujutsu({
     snapshotKey: `message-${seq}`,
     run: changes.run,
   });
-  const handoff = atMessage.snapshot?.handoff;
   return (
     <>
       <div className="shrink-0 border-b border-border/60 px-4 py-2">
@@ -72,12 +71,10 @@ function AgentJujutsu({
           value={[show]}
           onValueChange={(value) => {
             const next = value[0];
-            if (next === "snapshot" || next === "handoff" || next === "current" || next === "task")
-              setShow(next);
+            if (next === "snapshot" || next === "current" || next === "task") setShow(next);
           }}
         >
           <Toggle value="snapshot">At this message</Toggle>
-          {handoff === undefined ? null : <Toggle value="handoff">At handoff</Toggle>}
           <Toggle value="current">{working ? "Live changes" : "Current changes"}</Toggle>
           <Toggle value="task">Task's stack</Toggle>
         </ToggleGroup>
@@ -86,16 +83,6 @@ function AgentJujutsu({
         <RoomSnapshot
           label={label}
           read={atMessage}
-          view={changes}
-          onCurrent={() => setShow("current")}
-        />
-      ) : show === "handoff" && handoff !== undefined ? (
-        <HandoffSnapshot
-          environmentId={environmentId}
-          place={place}
-          snapshotKey={handoff}
-          run={changes.run}
-          label={label}
           view={changes}
           onCurrent={() => setShow("current")}
         />
@@ -118,23 +105,6 @@ function AgentJujutsu({
 }
 
 type SnapshotView = Omit<ComponentProps<typeof RoomDiff>, "diff" | "error" | "onRefresh" | "focus">;
-
-function HandoffSnapshot({
-  environmentId,
-  place,
-  snapshotKey,
-  run,
-  label,
-  view,
-  onCurrent,
-}: Parameters<typeof useRoomSnapshot>[0] & {
-  readonly label: string;
-  readonly view: SnapshotView;
-  readonly onCurrent: () => void;
-}) {
-  const read = useRoomSnapshot({ environmentId, place, snapshotKey, run });
-  return <RoomSnapshot label={label} read={read} view={view} onCurrent={onCurrent} />;
-}
 
 function RoomSnapshot({
   label,

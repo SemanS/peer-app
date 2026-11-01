@@ -34,8 +34,6 @@ describe("coordination tool contracts", () => {
       "peer_ask",
       "peer_task",
       "peer_share",
-      "peer_review",
-      "peer_done",
       "peer_run",
     ]);
     expect(

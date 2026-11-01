@@ -24,7 +24,7 @@ import {
 import { DEFAULT_PROJECT_TAB, type PeerSettingsLocation } from "./settings/peerSettings.logic";
 import type { ProjectSet } from "./projectSets.logic";
 import { isSetScope, setScope } from "./projectSets.logic";
-import { ALL_PROJECTS, projectScopeKey } from "./workBoard.logic";
+import { ALL_PROJECTS, projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import { canRemoveProject } from "./workMenus.logic";
 import type { WorkProjectNode } from "./workTree.logic";
 

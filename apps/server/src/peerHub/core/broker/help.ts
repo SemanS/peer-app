@@ -77,17 +77,6 @@ const CORE_HELP: { readonly [Name in Exclude<(typeof CORE_COMMANDS)[number], "he
       usage: "ack <task>",
       summary: "explicitly accept a changed shared context version",
     },
-    review: {
-      name: "review",
-      usage: "review",
-      summary:
-        "hand your assigned task over for review after publishing context and checking inputs",
-    },
-    done: {
-      name: "done",
-      usage: "done",
-      summary: "finish your assigned task only after all linked PRs have merged",
-    },
     run: {
       name: "run",
       usage: "run",

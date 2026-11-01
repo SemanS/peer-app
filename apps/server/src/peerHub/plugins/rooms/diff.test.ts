@@ -48,7 +48,6 @@ const input = (over: Partial<DiffInput>): DiffInput => ({
   root: undefined,
   base: "main",
   checkout: undefined,
-  handoffs: [],
   threads: [],
   files: [],
   nameOf: () => "Ana",
@@ -156,21 +155,18 @@ describe("the change a review session starts on", () => {
     ),
   );
 
-  it("looks at handoffs first and never at the base", () => {
+  it("takes the task's branches once each, and never the base", () => {
     assert.deepStrictEqual(
       pushedRefs(
-        [
-          { delivery: { evidence: { branch: "old" } } },
-          { delivery: { evidence: { branch: "new" } } },
-        ],
         [
           { branch: "main", email: "a" },
           { branch: "old", email: "a" },
           { branch: "thread", email: "a" },
+          { branch: "old", email: "b" },
         ],
         "main",
       ),
-      ["new", "old", "thread"],
+      ["old", "thread"],
     );
   });
 });
@@ -211,7 +207,7 @@ describe("the room's diff", () => {
         const diff = yield* roomDiff(
           input({
             checkout: { path: work },
-            handoffs: [{ delivery: { evidence: { branch: "ana/tax" } } }],
+            threads: [{ branch: "ana/tax", email: "ana@acme.test" }],
           }),
         );
         assert.strictEqual(diff.state, "here");
@@ -225,22 +221,6 @@ describe("the room's diff", () => {
           NodeFS.readFileSync(NodePath.join(work, "a.txt"), "utf8"),
           "local edit\n",
         );
-      }),
-    ),
-  );
-
-  it.effect("uses a reported session's branch when no handoff names one", () =>
-    scoped(
-      Effect.gen(function* () {
-        const { dir, origin, work } = yield* repositories;
-        pushedBranch(origin, dir);
-        const diff = yield* roomDiff(
-          input({
-            checkout: { path: work },
-            threads: [{ branch: "ana/tax", email: "ana@acme.test" }],
-          }),
-        );
-        assert.strictEqual(diff.state, "here");
       }),
     ),
   );
@@ -387,14 +367,13 @@ describe("the room's diff", () => {
           input({
             checkout: { path: work },
             threads: [{ branch: "ana/unpushed", email: "ana@acme.test" }],
-            handoffs: [{ delivery: { evidence: { uncommitted: ["b.ts"], untracked: ["c.ts"] } } }],
-            files: ["a.ts", "b.ts"],
+            files: ["a.ts", "b.ts", "a.ts"],
           }),
         );
         assert.deepStrictEqual(diff, {
           state: "notHere",
           reason: "Ana's work has not been pushed. Watch it, or ask the agent to push.",
-          files: ["a.ts", "b.ts", "c.ts"],
+          files: ["a.ts", "b.ts"],
         });
       }),
     ),

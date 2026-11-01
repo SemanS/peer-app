@@ -3,15 +3,12 @@ import { TERMINAL_RUN_HINT } from "@t3tools/client-runtime/peer/runs";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
-  chatsWithoutRun,
   CONTINUED_ELSEWHERE,
   CONTINUED_HERE,
   ELSEWHERE_RUN_HINT,
-  runsChip,
   runThreadWorking,
   taskRunRows,
 } from "./runs.logic";
-import type { TaskChatRow } from "./taskChats.logic";
 
 const HERE = EnvironmentId.make("env-here");
 const NOW = Date.parse("2026-10-30T12:00:00.000Z");
@@ -51,21 +48,6 @@ const ctx = {
   project: undefined,
   clock: (at: string) => at.slice(11, 16),
 };
-
-function chat(key: string): TaskChatRow {
-  return {
-    key,
-    title: key,
-    mine: true,
-    person: "Slavo",
-    agent: "Claude",
-    email: ME,
-    subtitle: "",
-    state: { label: "Claude · idle", tone: "neutral" },
-    open: undefined,
-    concerns: undefined,
-  };
-}
 
 describe("taskRunRows", () => {
   it("lists runs newest first with agent, runtime, person, state, sessions and time", () => {
@@ -207,34 +189,5 @@ describe("runThreadWorking", () => {
     expect(runThreadWorking(herdr, [{ key: "herdr:claude:other", status: "working" }])).toBe(
       undefined,
     );
-  });
-});
-
-describe("chatsWithoutRun", () => {
-  it("keeps chats no run covers, local and a colleague's alike", () => {
-    const runs = [
-      run({ id: "run_P" }),
-      run({
-        id: "run_H",
-        runtime: "herdr",
-        thread: undefined,
-        environment: "env-ana",
-        sessions: [{ id: "codex:s9", from: "2026-10-30T10:00:00.000Z" }],
-      }),
-    ];
-    const kept = chatsWithoutRun(
-      [chat("thread-run_P"), chat("env-ana:herdr:codex:s9"), chat("thread-old")],
-      runs,
-    );
-    expect(kept.map((row) => row.key)).toEqual(["thread-old"]);
-  });
-});
-
-describe("runsChip", () => {
-  it("counts runs only while one is running or detached", () => {
-    expect(runsChip(undefined)).toBeUndefined();
-    expect(runsChip({ running: 0, detached: 0, ended: 3 })).toBeUndefined();
-    expect(runsChip({ running: 1, detached: 0, ended: 0 })).toBe("1 run");
-    expect(runsChip({ running: 0, detached: 1, ended: 2 })).toBe("3 runs");
   });
 });

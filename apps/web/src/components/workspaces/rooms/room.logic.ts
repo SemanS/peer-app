@@ -28,7 +28,7 @@ import * as Schema from "effect/Schema";
 
 import type { SignalTone } from "../signals";
 import { runThreadKeys, type TaskRunRow } from "../task/runs.logic";
-import type { WorkOpen, WorkProjectNode } from "../workTree.logic";
+import type { WorkAreaNode, WorkOpen, WorkProjectNode, WorkTaskNode } from "../workTree.logic";
 
 /** The Hub's bound on a message: more is refused with `bad_text`. */
 export const ROOM_TEXT_MAX = 4_000;
@@ -690,4 +690,23 @@ export function roomAgentGroups(input: {
       agents: group.agents.toSorted((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status]),
     }))
     .toSorted((a, b) => Number(b.mine) - Number(a.mine) || a.person.localeCompare(b.person));
+}
+
+/** The task a room names, with its project and area; undefined once it is gone. */
+export function findTask(
+  tree: ReadonlyArray<WorkProjectNode>,
+  ids: RoomPlace,
+):
+  | {
+      readonly project: WorkProjectNode;
+      readonly area: WorkAreaNode;
+      readonly task: WorkTaskNode;
+    }
+  | undefined {
+  const project = tree.find((p) => p.workspace === ids.workspace && p.projectId === ids.project);
+  for (const area of project?.areas ?? []) {
+    const task = area.tasks.find((candidate) => candidate.id === ids.task);
+    if (project !== undefined && task !== undefined) return { project, area, task };
+  }
+  return undefined;
 }

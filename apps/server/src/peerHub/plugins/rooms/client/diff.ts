@@ -127,16 +127,11 @@ async function pushedDiff(cwd: string, ref: string, base: string): Promise<Pushe
   return { state: "here", source: "pushed", base: merge, head, patch, truncated };
 }
 
-/** The refs the task's work may be on, likeliest first: handoffs, then threads, never the base. */
-export const pushedRefs = (
-  handoffs: DiffInput["handoffs"],
-  threads: DiffInput["threads"],
-  base: string,
-) =>
-  [
-    ...handoffs.toReversed().flatMap((one) => one.delivery?.evidence.branch ?? []),
-    ...threads.flatMap((thread) => thread.branch ?? []),
-  ].filter((ref, at, all) => ref !== base && isSafeGitRef(ref) && all.indexOf(ref) === at);
+/** The branches of the task's runs, newest first, never the base. */
+export const pushedRefs = (threads: DiffInput["threads"], base: string) =>
+  threads
+    .flatMap((thread) => thread.branch ?? [])
+    .filter((ref, at, all) => ref !== base && isSafeGitRef(ref) && all.indexOf(ref) === at);
 
 /**
  * The first ref that is on the remote, fetched for a session to start on: its remote branch for
@@ -207,19 +202,6 @@ export interface DiffInput {
   readonly base: string;
   /** This computer's checkout of the project. */
   readonly checkout: { readonly path: string } | undefined;
-  /** The task's handoff packages, oldest first. */
-  readonly handoffs: ReadonlyArray<{
-    readonly author?: string | undefined;
-    readonly delivery?:
-      | {
-          readonly evidence: {
-            readonly branch?: string | undefined;
-            readonly uncommitted?: ReadonlyArray<string> | undefined;
-            readonly untracked?: ReadonlyArray<string> | undefined;
-          };
-        }
-      | undefined;
-  }>;
   /** The task's threads, newest first. */
   readonly threads: ReadonlyArray<{ readonly branch?: string | undefined; readonly email: string }>;
   /** The paths the Hub knows of the task. */
@@ -238,7 +220,7 @@ export const roomDiff = (input: DiffInput): Effect.Effect<PeerRoomDiff> =>
       empty = here;
     }
     if (input.checkout !== undefined)
-      for (const ref of pushedRefs(input.handoffs, input.threads, input.base)) {
+      for (const ref of pushedRefs(input.threads, input.base)) {
         const pushed = await pushedDiff(input.checkout.path, ref, input.base).catch(() => null);
         if (pushed === null) continue;
         if ("trouble" in pushed) trouble ??= pushed.trouble;
@@ -246,13 +228,8 @@ export const roomDiff = (input: DiffInput): Effect.Effect<PeerRoomDiff> =>
         else empty ??= pushed;
       }
     if (empty !== null) return empty;
-    const packages = input.handoffs.toReversed();
-    const email = input.threads[0]?.email ?? packages[0]?.author;
+    const email = input.threads[0]?.email;
     const who = email === undefined ? "The task's" : `${plain(input.nameOf(email), 40)}'s`;
-    const reported = packages.flatMap((one) => [
-      ...(one.delivery?.evidence.uncommitted ?? []),
-      ...(one.delivery?.evidence.untracked ?? []),
-    ]);
     const reason =
       input.checkout === undefined
         ? `This computer has no checkout of the project, and ${who} work is not here.`
@@ -262,6 +239,6 @@ export const roomDiff = (input: DiffInput): Effect.Effect<PeerRoomDiff> =>
     return {
       state: "notHere" as const,
       reason,
-      files: [...new Set([...input.files, ...reported])].slice(0, 200),
+      files: [...new Set(input.files)].slice(0, 200),
     };
   });

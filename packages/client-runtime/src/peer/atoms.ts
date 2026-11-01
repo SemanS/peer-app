@@ -1,7 +1,6 @@
 import { createPeerAgreementsAtoms } from "./agreements.ts";
 import { createPeerChangesAtoms } from "./changes.ts";
 import { createPeerJujutsuAtoms } from "./jujutsu.ts";
-import { createPeerHandoffAtoms } from "./handoff.ts";
 import { createPeerDependencyAtoms } from "./dependencies.ts";
 import type { Atom } from "effect/reactivity";
 
@@ -22,7 +21,6 @@ import { createPeerRoomsAtoms } from "./rooms.ts";
 import { createPeerRunsAtoms } from "./runs.ts";
 import { createPeerSettingsAtoms } from "./settings.ts";
 import { createPeerTestReportsAtoms } from "./testReports.ts";
-import { createPeerAcceptanceAtoms } from "./acceptance.ts";
 
 /**
  * The atoms of Peer's plugins, spread into the server atoms under the names they always had. A
@@ -37,7 +35,6 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerHerdrAtoms(runtime),
     ...createPeerJujutsuAtoms(runtime),
     ...createPeerDependencyAtoms(runtime),
-    ...createPeerHandoffAtoms(runtime),
     ...createPeerAgreementsAtoms(runtime),
     ...createPeerChangesAtoms(runtime),
     ...createPeerGitHubAtoms(runtime),
@@ -53,6 +50,5 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerRunsAtoms(runtime),
     peerSettings: createPeerSettingsAtoms(runtime),
     ...createPeerTestReportsAtoms(runtime),
-    ...createPeerAcceptanceAtoms(runtime),
   };
 }

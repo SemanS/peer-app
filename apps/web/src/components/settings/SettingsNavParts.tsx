@@ -21,7 +21,7 @@ import {
 import { SidebarGroup, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { WorkSectionLabel } from "../workspaces/marks";
 import { ProjectMark } from "../workspaces/signals";
-import { projectScopeKey } from "../workspaces/workBoard.logic";
+import { projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import { usePeerSettingsEnvironment } from "../workspaces/settings/PeerSettingsContext";
 import type { SettingsNavGroup, SettingsNavItem } from "./settingsNav.logic";
 import { settingsScopeEnvironmentLabel } from "./settingsScopeAxis";

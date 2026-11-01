@@ -407,14 +407,14 @@ export type PeerRoomDiff = typeof PeerRoomDiff.Type;
 
 export const PeerRoomsSnapshotInput = Schema.Struct({
   ...RoomPlace,
-  /** `message-<seq>`, or the `handoff` a read of a message named. */
+  /** `message-<seq>`. */
   key: TrimmedNonEmptyString,
   /** The run whose repository to look in first, where the project has several. */
   run: Schema.optional(TrimmedNonEmptyString),
 });
 export type PeerRoomsSnapshotInput = typeof PeerRoomsSnapshotInput.Type;
 
-/** An agent's work as it stood at a message or a handoff; `none` says why it cannot be shown. */
+/** An agent's work as it stood at a message; `none` says why it cannot be shown. */
 export const PeerRoomSnapshot = Schema.Union([
   Schema.Struct({
     state: Schema.Literal("here"),
@@ -435,13 +435,10 @@ export const PeerRoomSnapshot = Schema.Union([
         diff: PeerRoomDiff,
       }),
     ),
-    /** The run's newest handoff snapshot, as a `key`. */
-    handoff: Schema.optional(Schema.String),
   }),
   Schema.Struct({
     state: Schema.Literal("none"),
     reason: Schema.String,
-    handoff: Schema.optional(Schema.String),
   }),
 ]);
 export type PeerRoomSnapshot = typeof PeerRoomSnapshot.Type;

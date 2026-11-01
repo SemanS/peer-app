@@ -8,7 +8,6 @@ import {
   PeerOwnershipView,
   PeerTask,
   PeerTaskOwner,
-  type PeerHandoffDelivery,
   type PeerHubCreateTaskInput,
   type PeerHubUpdateTaskInput,
 } from "@t3tools/contracts";
@@ -26,20 +25,6 @@ const OwnerSet = Schema.Struct({
 });
 /** The owner a refusal to take a task names, in its details; older Hubs name none. */
 const decodeOwnerDetails = Schema.decodeUnknownOption(Schema.Struct({ owner: Schema.String }));
-/** What the Hub says when it did not move an agent's task because a change of its session waits for an owner's call. */
-const OwnerCallNeeded = Schema.Struct({ owner: Schema.String, paths: Schema.Array(Schema.String) });
-export type OwnerCallNeeded = typeof OwnerCallNeeded.Type;
-const decodeOwnerCallNeeded = Schema.decodeUnknownOption(OwnerCallNeeded);
-/** What the Hub says when it did not let an agent's `done` through: other runs on the task are live. */
-const RunsRunning = Schema.Struct({
-  /** Up to five of them, named. */
-  runs: Schema.Array(
-    Schema.Struct({ id: Schema.String, email: Schema.String, agent: Schema.String }),
-  ),
-  running: Schema.Number,
-});
-export type RunsRunning = typeof RunsRunning.Type;
-const decodeRunsRunning = Schema.decodeUnknownOption(RunsRunning);
 
 const segment = (value: string) => encodeURIComponent(value);
 
@@ -91,11 +76,6 @@ export const workApi = (
       readonly area?: string | undefined;
       readonly source?: PeerHubUpdateTaskInput["source"];
       readonly status?: "open" | "review" | "done" | undefined;
-      readonly session?: string;
-      readonly environment?: string;
-      readonly op?: string;
-      /** An agent's move to review: the delivery its app observed (a Hub with `handoff` 3). */
-      readonly delivery?: PeerHandoffDelivery;
     },
   ) =>
     request(PeerTask, {
@@ -104,22 +84,6 @@ export const workApi = (
       method: "PATCH",
       session,
       body,
-      // An agent's move that waits for an owner's call is told whose and for which paths, and one
-      // the done gate holds (other runs still live on the task) which runs, rather than failed.
-      conflict: (code, details) =>
-        body.session === undefined
-          ? undefined
-          : code === "owner_call_needed"
-            ? Option.getOrUndefined(
-                Option.map(decodeOwnerCallNeeded(details), (needed) => ({
-                  ownerCallNeeded: needed,
-                })),
-              )
-            : code === "runs_running"
-              ? Option.getOrUndefined(
-                  Option.map(decodeRunsRunning(details), (running) => ({ runsRunning: running })),
-                )
-              : undefined,
     }),
 
   deleteTask: (hubUrl: string, session: string, slug: string, projectId: string, taskId: string) =>

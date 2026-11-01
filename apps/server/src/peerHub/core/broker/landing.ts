@@ -6,11 +6,9 @@
  * a person's request to settle one) and the notices plugins flag `landing` (a decision on a request
  * it made, an agreement kept for its task). Work lands when a `git commit`, `git push`,
  * `gh pr create`, `gh pr merge`, `jj commit`, `jj squash`, `jj new` or `jj git push` runs in the
- * agent's shell (`isLanding`), or when it runs
- * `peer review` or `peer done` (the commands check for themselves). Peer stops the step once to give
- * the messages; the same step again runs, unless something new came meanwhile. Advice
- * (dependencies, announcements) never stops a step: it reaches the agent as at any other, and a
- * plugin's notice that is not flagged is advice.
+ * agent's shell (`isLanding`). Peer stops the step once to give the messages; the same step again
+ * runs, unless something new came meanwhile. Advice (dependencies, announcements) never stops a step:
+ * it reaches the agent as at any other, and a plugin's notice that is not flagged is advice.
  *
  * What is a landing step goes by the words of the command only, never by its output or a model: a
  * command hidden in a script or an alias is not recognized.
@@ -28,19 +26,10 @@ import {
   type TaskNamer,
 } from "../coordination/edits.ts";
 import { unseenNotes } from "../coordination/news.ts";
-import type { OwnerCallNeeded, RunsRunning } from "../hub/workApi.ts";
 import type { HubOverlap } from "../hub/coordApi.ts";
 import type { PeerToolContext } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";
-import { type CliError, refused } from "./cliContract.ts";
-import type { PeerBrokerPlugins } from "./host.ts";
-import {
-  type PipelineStep,
-  type PreparedDelivery,
-  remainingMs,
-  stepNotices,
-  VERDICT_BUDGET_MS,
-} from "./pipeline.ts";
+import { type PipelineStep, type PreparedDelivery, remainingMs, stepNotices } from "./pipeline.ts";
 import type { LocalSession } from "./sessions.ts";
 
 /** What each landing command is called in the stop that waits for it. */
@@ -71,9 +60,7 @@ export function landingKind(command: string): string | undefined {
 /**
  * Whether a shell command runs a landing step, alone or within a compound command, after any
  * leading `VAR=value` words: `git commit`, `git push`, `gh pr create`, `gh pr merge`, or jj's
- * `commit`, `squash`, `new` and `git push`. `peer
- * review` and `peer done` are landing steps too, but they are Peer's own commands, which check
- * for themselves.
+ * `commit`, `squash`, `new` and `git push`.
  */
 export const isLanding = (command: string): boolean => landingKind(command) !== undefined;
 
@@ -245,88 +232,5 @@ export async function landingStop(
   step.deliveries?.push(putBack(session, reason, waiting));
   return (
     editHookAnswer(session.agent, [{ ...noContest(), decision: "deny", reason }])?.output ?? null
-  );
-}
-
-/**
- * `peer review` and `peer done` while messages wait for the session: the command ends refused with
- * the first line saying so, the messages below it and `Next:` naming the same command, before it
- * contacts the Hub, and the task stays as it was. Null when none waits, and the command goes on.
- */
-export async function landingRefusal(
-  this: CoordinationBroker,
-  session: LocalSession,
-  plugins: PeerBrokerPlugins,
-  command: "review" | "done",
-): Promise<CliError | null> {
-  const step = this.pipelineStep(session, plugins, Date.now() + 2500);
-  const ctx: PeerToolContext = {
-    session: step.session,
-    event: "pre-tool",
-    tool: "Bash",
-    paths: [],
-    command: `${this.cli} ${command}`,
-    remainingMs: remainingMs(step),
-  };
-  const waiting = await this.landingMessages(session, step, ctx, VERDICT_BUDGET_MS);
-  if (waiting === null) return null;
-  const reason = stopText({
-    head: waits(waiting.blocks.length),
-    blocks: waiting.blocks,
-    cli: this.cli,
-  });
-  this.record("landing.stopped", {
-    session: session.id,
-    messages: waiting.blocks.length,
-    chars: reason.length,
-  });
-  return refused(reason, `${this.cli} ${command}`);
-}
-
-/**
- * `peer done` the Hub's done gate held (409 `runs_running`): other agents' runs on the task are still
- * live. The refusal names those the Hub named and how many there are in all.
- */
-export function runsRunningRefusal(answer: unknown): CliError | undefined {
-  if (typeof answer !== "object" || answer === null || !("runsRunning" in answer)) return undefined;
-  const { runs, running } = (answer as { readonly runsRunning: RunsRunning }).runsRunning;
-  const named = runs.map((run) => `${run.agent} (${run.email}) run ${run.id}`).join(", ");
-  const more = running > runs.length ? ` and ${running - runs.length} more` : "";
-  return refused(
-    `another agent is still on this task: ${named || `${running} running`}${more}`,
-    "wait, or ask your person to end it.",
-  );
-}
-
-/** The Hub's refusal of an agent's move to review or done for an owner's call that is missing, if that is what it answered. */
-export const ownerCallNeeded = (answer: unknown): OwnerCallNeeded | undefined =>
-  typeof answer === "object" && answer !== null && "ownerCallNeeded" in answer
-    ? (answer as { readonly ownerCallNeeded: OwnerCallNeeded }).ownerCallNeeded
-    : undefined;
-
-/**
- * `peer review` and `peer done` when the Hub did not move the task because a change the session
- * reported waits for an owner's call: the command ends refused, naming the paths and whose call
- * they wait for, and how to ask (`peer owner ask`, while that command is on).
- */
-export function ownerCallRefusal(
-  this: CoordinationBroker,
-  session: LocalSession,
-  command: "review" | "done",
-  needed: OwnerCallNeeded,
-  asking: boolean,
-): CliError {
-  const owner = plain(this.nameOf(session.workspace)(needed.owner), 60);
-  const task = this.taskNamer(
-    session.workspace,
-    session.project,
-  )(session.task ?? "").split(" · ")[0];
-  const [first, ...more] = needed.paths.map((path) => plain(path, 120));
-  const paths = more.length === 0 ? first : `${first} and ${more.length} more`;
-  return refused(
-    `${paths} ${more.length === 0 ? "waits" : "wait"} for ${owner}’s call before ${plain(task ?? "", 40)} can go to ${command === "done" ? "done" : "review"}`,
-    asking
-      ? `peer owner ask ${first} "<why>"`
-      : `ask your person to ask ${owner} for the call in Peer, or to turn Ownership on in Settings.`,
   );
 }

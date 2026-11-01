@@ -11,13 +11,9 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { EnvironmentThreadShell } from "../state/models.ts";
 import {
-  adviceLabel,
-  adviceOnWork,
   buildWorkTree,
-  childrenOf,
   harnessName,
   scopeItems,
-  scopeOfArea,
   scopeOfTask,
   scopePrompt,
   subtreeOf,
@@ -536,112 +532,6 @@ describe("taskNamedIn", () => {
   });
 });
 
-describe("what an agent did with the team's work", () => {
-  const told = (
-    over: Partial<NonNullable<PeerHubStatus["coordination"]["advice"]>[number]> = {},
-  ): NonNullable<PeerHubStatus["coordination"]["advice"]>[number] => ({
-    workspace: "acme",
-    project: "kirkwood",
-    session: "claude:a",
-    about: "work",
-    scope: "task:str",
-    name: "STR",
-    how: "read",
-    why: "read its shared context, version 3",
-    at: "2026-10-03T11:55:00Z",
-    ...over,
-  });
-  const withAdvice = (advice: ReadonlyArray<ReturnType<typeof told>>): PeerHubStatus => {
-    const base = status(kirkwood());
-    return {
-      ...base,
-      coordination: {
-        ...base.coordination,
-        sessions: [
-          {
-            id: "claude:a",
-            workspace: "acme",
-            project: "kirkwood",
-            email: "slavo@acme.test",
-            label: "Split payments",
-            status: "working",
-            task: "krk-812",
-            files: [],
-            claims: [],
-            local: true,
-          },
-          {
-            id: "codex:b",
-            workspace: "acme",
-            project: "kirkwood",
-            email: "yev@acme.test",
-            label: "UI",
-            status: "working",
-            task: "krk-812",
-            files: [],
-            claims: [],
-            local: false,
-          },
-          {
-            id: "claude:c",
-            workspace: "acme",
-            project: "kirkwood",
-            email: "chino@acme.test",
-            label: "Loose",
-            status: "working",
-            files: [],
-            claims: [],
-            local: false,
-          },
-        ],
-        advice,
-      },
-    };
-  };
-  const on = (status: PeerHubStatus, scope: string) =>
-    adviceOnWork({ status, workspace: "acme", project: "kirkwood", scope });
-
-  it("is listed on the work its agent is on, newest first, with whose agent it was", () => {
-    const status = withAdvice([
-      told({ at: "2026-10-03T11:50:00Z", name: "Partner Rec", scope: "task:partner-rec" }),
-      told({ at: "2026-10-03T11:58:00Z", session: "codex:b", how: "asked" }),
-      told({ session: "claude:c", name: "Loose ends" }),
-    ]);
-    const rows = on(status, "task:krk-812");
-    expect(rows.map((row) => [row.person, row.name, row.mine])).toEqual([
-      ["Yev", "STR", false],
-      ["Slavo", "Partner Rec", true],
-    ]);
-    // An agent on no task is the project's work.
-    expect(on(status, "project").map((row) => row.name)).toEqual(["Loose ends"]);
-    expect(on(status, "task:str")).toEqual([]);
-  });
-
-  it("leaves out an agent that no longer reports, other projects and other workspaces", () => {
-    const status = withAdvice([
-      told({ session: "claude:gone" }),
-      told({ project: "elsewhere" }),
-      told({ workspace: "globex" }),
-    ]);
-    expect(on(status, "task:krk-812")).toEqual([]);
-    // A Peer from before advice lists none.
-    const base = withAdvice([]);
-    const { advice: _gone, ...coordination } = base.coordination;
-    expect(on({ ...base, coordination }, "task:krk-812")).toEqual([]);
-  });
-
-  it("says in a line whose agent did what", () => {
-    const row = (over: Parameters<typeof told>[0]) => {
-      const rows = on(withAdvice([told({ session: "codex:b", ...over })]), "task:krk-812");
-      return adviceLabel(rows[0]!);
-    };
-    expect(row({})).toBe("Yev’s agent read this work’s context");
-    expect(row({ how: "asked" })).toBe("Yev’s agent asked this work’s agents");
-    const mine = on(withAdvice([told({})]), "task:krk-812");
-    expect(adviceLabel(mine[0]!)).toBe("Your agent read this work’s context");
-  });
-});
-
 describe("durable work and runtime presence", () => {
   it("overlays a live local thread on its hub record without duplicating it", () => {
     const base = kirkwood();
@@ -804,7 +694,6 @@ describe("the task tree", () => {
       unsettled: false,
       childCount: 0,
     });
-    expect(childrenOf(revenue, "change").map((node) => node.id)).toEqual(["api", "server", "docs"]);
     expect(subtreeOf(revenue, "server").map((node) => node.id)).toEqual(["store", "routes"]);
     expect(scopeItems(revenue, "change").map((node) => node.id)).toEqual(["api", "routes", "docs"]);
     expect(scopeItems(tree!).map((node) => node.id)).toEqual(["str", "api", "routes", "docs"]);
@@ -842,12 +731,17 @@ describe("the task tree", () => {
         "- api API",
         "- routes Routes",
         "- docs Docs",
-        "Mark each item done with peer task set <id> --status done as you finish it; peer done on the group finishes the group itself.",
+        "Mark each item done with peer task set <id> --status done as you finish it; peer ready says the group is done.",
       ].join("\n"),
     );
-    expect(scopePrompt(scopeOfArea(tree!, revenue)).split("\n")[0]).toBe(
-      'Work on the area "Revenue" of Kirkwood: its open tasks, in order:',
-    );
+    expect(
+      scopePrompt({
+        kind: "area",
+        name: revenue.name,
+        project: tree!.name,
+        items: scopeItems(revenue),
+      }).split("\n")[0],
+    ).toBe('Work on the area "Revenue" of Kirkwood: its open tasks, in order:');
     const many = Array.from({ length: 32 }, (_, index) => ({ id: `t${index}`, title: "T" }));
     const lines = scopePrompt({ kind: "area", name: null, project: "Kirkwood", items: many }).split(
       "\n",
@@ -869,7 +763,7 @@ describe("the task tree", () => {
       scopePrompt([
         scopeOfTask(tree!, node("str")),
         scopeOfTask(tree!, node("change")),
-        scopeOfArea(tree!, revenue),
+        { kind: "area", name: revenue.name, project: tree!.name, items: scopeItems(revenue) },
       ]),
     ).toBe(
       [
@@ -892,7 +786,7 @@ describe("the task tree", () => {
           "- docs Docs",
         ].join("\n"),
         "",
-        "Mark each item done with peer task set <id> --status done as you finish it; peer done finishes the scope you are on.",
+        "Mark each item done with peer task set <id> --status done as you finish it; peer ready says the scope is done.",
       ].join("\n"),
     );
     expect(scopePrompt([docs, { kind: "task", id: "api", title: "API" }]).split("\n")[0]).toBe(

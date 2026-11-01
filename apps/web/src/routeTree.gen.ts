@@ -56,7 +56,6 @@ import { Route as ChatSettingsAboutRouteImport } from './routes/_chat.settings.a
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatAgentAgentIdRouteImport } from './routes/_chat.agent.$agentId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
-import { Route as ChatTeamWorkspaceProjectRouteImport } from './routes/_chat.team.$workspace.$project'
 import { Route as ChatSettingsPeerSplatRouteImport } from './routes/_chat.settings.peer.$'
 import { Route as ChatOperationsWorkspaceProjectRouteImport } from './routes/_chat.operations.$workspace.$project'
 import { Route as ChatTaskWorkspaceProjectTaskRouteImport } from './routes/_chat.task.$workspace.$project.$task'
@@ -308,12 +307,6 @@ const ChatEnvironmentIdThreadIdRoute =
     path: '/$environmentId/$threadId',
     getParentRoute: () => ChatRoute,
   } as any)
-const ChatTeamWorkspaceProjectRoute =
-  ChatTeamWorkspaceProjectRouteImport.update({
-    id: '/team/$workspace/$project',
-    path: '/team/$workspace/$project',
-    getParentRoute: () => ChatRoute,
-  } as any)
 const ChatSettingsPeerSplatRoute = ChatSettingsPeerSplatRouteImport.update({
   id: '/$',
   path: '/$',
@@ -429,7 +422,6 @@ export interface FileRoutesByFullPath {
   '/workspace/$setId': typeof ChatWorkspaceSetIdRoute
   '/operations/$workspace/$project': typeof ChatOperationsWorkspaceProjectRoute
   '/settings/peer/$': typeof ChatSettingsPeerSplatRoute
-  '/team/$workspace/$project': typeof ChatTeamWorkspaceProjectRoute
   '/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
   '/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
   '/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
@@ -489,7 +481,6 @@ export interface FileRoutesByTo {
   '/workspace/$setId': typeof ChatWorkspaceSetIdRoute
   '/operations/$workspace/$project': typeof ChatOperationsWorkspaceProjectRoute
   '/settings/peer/$': typeof ChatSettingsPeerSplatRoute
-  '/team/$workspace/$project': typeof ChatTeamWorkspaceProjectRoute
   '/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
   '/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
   '/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
@@ -551,7 +542,6 @@ export interface FileRoutesById {
   '/_chat/workspace/$setId': typeof ChatWorkspaceSetIdRoute
   '/_chat/operations/$workspace/$project': typeof ChatOperationsWorkspaceProjectRoute
   '/_chat/settings/peer/$': typeof ChatSettingsPeerSplatRoute
-  '/_chat/team/$workspace/$project': typeof ChatTeamWorkspaceProjectRoute
   '/_chat/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
   '/_chat/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
   '/_chat/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
@@ -613,7 +603,6 @@ export interface FileRouteTypes {
     | '/workspace/$setId'
     | '/operations/$workspace/$project'
     | '/settings/peer/$'
-    | '/team/$workspace/$project'
     | '/context/$workspace/$project/$scope'
     | '/observe/$workspace/$environment/$thread'
     | '/overlap/$workspace/$project/$overlap'
@@ -673,7 +662,6 @@ export interface FileRouteTypes {
     | '/workspace/$setId'
     | '/operations/$workspace/$project'
     | '/settings/peer/$'
-    | '/team/$workspace/$project'
     | '/context/$workspace/$project/$scope'
     | '/observe/$workspace/$environment/$thread'
     | '/overlap/$workspace/$project/$overlap'
@@ -734,7 +722,6 @@ export interface FileRouteTypes {
     | '/_chat/workspace/$setId'
     | '/_chat/operations/$workspace/$project'
     | '/_chat/settings/peer/$'
-    | '/_chat/team/$workspace/$project'
     | '/_chat/context/$workspace/$project/$scope'
     | '/_chat/observe/$workspace/$environment/$thread'
     | '/_chat/overlap/$workspace/$project/$overlap'
@@ -1087,13 +1074,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatEnvironmentIdThreadIdRouteImport
       parentRoute: typeof ChatRoute
     }
-    '/_chat/team/$workspace/$project': {
-      id: '/_chat/team/$workspace/$project'
-      path: '/team/$workspace/$project'
-      fullPath: '/team/$workspace/$project'
-      preLoaderRoute: typeof ChatTeamWorkspaceProjectRouteImport
-      parentRoute: typeof ChatRoute
-    }
     '/_chat/settings/peer/$': {
       id: '/_chat/settings/peer/$'
       path: '/$'
@@ -1274,7 +1254,6 @@ interface ChatRouteChildren {
   ChatTogetherGroupRoute: typeof ChatTogetherGroupRoute
   ChatWorkspaceSetIdRoute: typeof ChatWorkspaceSetIdRoute
   ChatOperationsWorkspaceProjectRoute: typeof ChatOperationsWorkspaceProjectRoute
-  ChatTeamWorkspaceProjectRoute: typeof ChatTeamWorkspaceProjectRoute
   ChatContextWorkspaceProjectScopeRoute: typeof ChatContextWorkspaceProjectScopeRoute
   ChatObserveWorkspaceEnvironmentThreadRoute: typeof ChatObserveWorkspaceEnvironmentThreadRoute
   ChatOverlapWorkspaceProjectOverlapRoute: typeof ChatOverlapWorkspaceProjectOverlapRoute
@@ -1296,7 +1275,6 @@ const ChatRouteChildren: ChatRouteChildren = {
   ChatTogetherGroupRoute: ChatTogetherGroupRoute,
   ChatWorkspaceSetIdRoute: ChatWorkspaceSetIdRoute,
   ChatOperationsWorkspaceProjectRoute: ChatOperationsWorkspaceProjectRoute,
-  ChatTeamWorkspaceProjectRoute: ChatTeamWorkspaceProjectRoute,
   ChatContextWorkspaceProjectScopeRoute: ChatContextWorkspaceProjectScopeRoute,
   ChatObserveWorkspaceEnvironmentThreadRoute:
     ChatObserveWorkspaceEnvironmentThreadRoute,

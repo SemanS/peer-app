@@ -13,7 +13,6 @@ import { PEER_RESOURCES_METHODS, ResourcesRpcGroup, ResourcesRpcScopes } from ".
 import { PeerHubSubscribeInput } from "./needs-you.ts";
 import { PEER_NEEDS_YOU_METHODS, NeedsYouRpcGroup, NeedsYouRpcScopes } from "./needs-you.rpc.ts";
 import { PEER_SETTLE_METHODS, SettleRpcGroup, SettleRpcScopes } from "./settle.rpc.ts";
-import { HandoffRpcGroup, HandoffRpcScopes, PEER_HANDOFF_METHODS } from "./handoff.rpc.ts";
 import {
   DependenciesRpcGroup,
   DependenciesRpcScopes,
@@ -116,11 +115,6 @@ import { PEER_ROLES_METHODS, RolesRpcGroup, RolesRpcScopes } from "./roles.rpc.t
 import { PEER_ROOMS_METHODS, RoomsRpcGroup, RoomsRpcScopes } from "./rooms.rpc.ts";
 import { CardRpcGroup, CardRpcScopes, PEER_CARD_METHODS } from "./card.rpc.ts";
 import { PEER_RUNS_METHODS, RunsRpcGroup, RunsRpcScopes } from "./runs.rpc.ts";
-import {
-  AcceptanceRpcGroup,
-  AcceptanceRpcScopes,
-  PEER_ACCEPTANCE_METHODS,
-} from "./acceptance.rpc.ts";
 
 export * from "./changes.rpc.ts";
 export * from "./jujutsu.rpc.ts";
@@ -580,7 +574,6 @@ export const PEER_WS_METHODS = {
   ...PEER_CHANGES_METHODS,
   ...PEER_CORE_METHODS,
   ...PEER_DEPENDENCY_METHODS,
-  ...PEER_HANDOFF_METHODS,
   ...PEER_HERDR_METHODS,
   ...PEER_JUJUTSU_METHODS,
   ...PEER_GITHUB_METHODS,
@@ -600,7 +593,6 @@ export const PEER_WS_METHODS = {
   ...PEER_ROLES_METHODS,
   ...PEER_ROOMS_METHODS,
   ...PEER_CARD_METHODS,
-  ...PEER_ACCEPTANCE_METHODS,
   ...PEER_RUNS_METHODS,
 } as const;
 
@@ -609,7 +601,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   AgreementsRpcGroup,
   ChangesRpcGroup,
   DependenciesRpcGroup,
-  HandoffRpcGroup,
   HerdrRpcGroup,
   JujutsuRpcGroup,
   GitHubRpcGroup,
@@ -629,7 +620,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   RolesRpcGroup,
   RoomsRpcGroup,
   CardRpcGroup,
-  AcceptanceRpcGroup,
   RunsRpcGroup,
 );
 
@@ -640,7 +630,6 @@ export const PEER_RPC_SCOPES = {
   ...ChangesRpcScopes,
   ...PeerCoreRpcScopes,
   ...DependenciesRpcScopes,
-  ...HandoffRpcScopes,
   ...HerdrRpcScopes,
   ...JujutsuRpcScopes,
   ...GitHubRpcScopes,
@@ -660,7 +649,6 @@ export const PEER_RPC_SCOPES = {
   ...RolesRpcScopes,
   ...RoomsRpcScopes,
   ...CardRpcScopes,
-  ...AcceptanceRpcScopes,
   ...RunsRpcScopes,
 } as const;
 

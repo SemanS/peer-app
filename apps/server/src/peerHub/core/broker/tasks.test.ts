@@ -60,7 +60,7 @@ describe("peer task", () => {
         "Added STR-10 · Speaker naming [open] (speech) id:t2.",
       );
       expect(await run(["set", "str-10", "--status", "review", "--area", ""])).toBe(
-        "Changed STR-10 · Speaker naming [review] id:t2.\nThis administrative status change did not verify the agent's handoff. Use peer review or peer done for guarded handoff checks.",
+        "Changed STR-10 · Speaker naming [review] id:t2.",
       );
       expect(await run(["set", "Diarization memory bounds", "--title", "Bounded AHC"])).toContain(
         "STR-9 · Bounded AHC [open]",
@@ -86,11 +86,11 @@ describe("peer task", () => {
     }
   });
 
-  it("keeps administrative completion and reopening available without implying a verified handoff", async () => {
+  it("completes and reopens a task for its person", async () => {
     const { fixture, run, writes } = await withTasks([diarization]);
     try {
-      expect(await run(["set", "t1", "--status", "done"])).toContain(
-        "did not verify the agent's handoff",
+      expect(await run(["set", "t1", "--status", "done"])).toBe(
+        "Changed STR-9 · Diarization memory bounds [done] id:t1.",
       );
       expect(await run(["set", "t1", "--status", "open"])).toBe(
         "Changed STR-9 · Diarization memory bounds [open] id:t1.",
@@ -146,8 +146,8 @@ describe("peer task", () => {
         ...NO_PLUGINS,
         active: [
           {
-            id: "acceptance",
-            title: "Acceptance",
+            id: "rooms",
+            title: "Rooms",
             contributions: {
               taskFacts: (place, tasks) =>
                 Effect.sync(() => {

@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 
 import { useLocalStorage } from "../../hooks/useLocalStorage";
-import { ALL_PROJECTS } from "./workBoard.logic";
+import { ALL_PROJECTS } from "@t3tools/client-runtime/peer/work";
 
 const StoredScope = Schema.NullOr(Schema.String);
 

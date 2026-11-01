@@ -537,10 +537,8 @@ describe("the broker's hooks", () => {
     }
   });
 
-  it.each([
-    { tool_name: "Edit", tool_input: { file_path: "src/pricing.ts" } },
-    { tool_name: "Bash", tool_input: { command: "git push" } },
-  ])("blocks an in-flight $tool_name action from a replaced runtime", async (tool) => {
+  it("blocks an in-flight edit from a replaced runtime", async () => {
+    const tool = { tool_name: "Edit", tool_input: { file_path: "src/pricing.ts" } };
     const fixture = await brokerFixture();
     const entered = Promise.withResolvers<void>();
     const reply = Promise.withResolvers<Record<string, unknown> | null>();
@@ -574,7 +572,7 @@ describe("the broker's hooks", () => {
     }
   });
 
-  it("applies each policy at the broker deadline and always blocks unverified publication", async () => {
+  it("applies each policy at the broker deadline", async () => {
     const fixture = await brokerFixture(() => ({ policy: () => "notify" }));
     try {
       await fixture.register("one");
@@ -603,18 +601,6 @@ describe("the broker's hooks", () => {
             permissionDecision: policy === "ask" ? "ask" : "deny",
           });
       }
-      const publish = fixture.broker["hookInTime"](
-        { ...body, tool_name: "Bash", tool_input: { command: "git push origin HEAD" } },
-        {},
-      );
-      await vi.advanceTimersByTimeAsync(4000);
-      expect((await publish)?.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
-      const jjPublish = fixture.broker["hookInTime"](
-        { ...body, tool_name: "Bash", tool_input: { command: "jj git push -b feature/x" } },
-        {},
-      );
-      await vi.advanceTimersByTimeAsync(4000);
-      expect((await jjPublish)?.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
       const read = fixture.broker["hookInTime"](
         { ...body, tool_name: "Bash", tool_input: { command: "git status" } },
         {},
@@ -646,73 +632,6 @@ describe("the broker's hooks", () => {
       await fixture.broker.host.log.idle();
       const log = await NodeFSP.readFile(fixture.debugPath, "utf8");
       expect(log.split("\n").filter((line) => line.includes('"event":"hook"'))).toHaveLength(2);
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("blocks handoff on stale reads and when freshness cannot be verified", async () => {
-    const stale = { current: true };
-    const fixture = await brokerFixture(() => ({
-      staleReads: async () => {
-        if (!stale.current) throw new Error("offline");
-        return {
-          fresh: false,
-          recovery: "complete",
-          stale: [
-            {
-              project: "app",
-              scope: "task:prices",
-              readVersion: 1,
-              currentVersion: 2,
-              at: "2026-10-06",
-              updatedAt: "2026-10-06",
-            },
-          ],
-        };
-      },
-    }));
-    try {
-      await fixture.register("one");
-      const body = {
-        session_id: "one",
-        cwd: fixture.root,
-        hook_event_name: "PreToolUse",
-        tool_name: "Bash",
-        tool_input: { command: "git push origin HEAD" },
-      };
-      const blocked = await fixture.broker["hook"](body, {});
-      expect(blocked?.hookSpecificOutput).toMatchObject({
-        permissionDecision: "deny",
-        permissionDecisionReason:
-          "Peer: shared inputs changed. Read the current version before publishing, or explicitly confirm its change with peer ack <task>: prices v1 → v2.",
-      });
-      expect(JSON.stringify(blocked)).toContain("prices");
-      const jjPush = await fixture.broker["hook"](
-        { ...body, tool_input: { command: "jj git push -b feature/KRK-1-ab12" } },
-        {},
-      );
-      expect(jjPush?.hookSpecificOutput).toMatchObject({
-        permissionDecision: "deny",
-        permissionDecisionReason: expect.stringContaining("prices v1 → v2"),
-      });
-      const refusal = await fixture.broker.handoffRefusal(
-        fixture.broker.sessions.get("claude:one")!,
-      );
-      expect(refusal).toMatchObject({
-        reason: expect.stringContaining("prices v1 → v2"),
-        next: expect.stringContaining("peer context <task>, recheck the result and retry"),
-      });
-      stale.current = false;
-      expect((await fixture.broker["hook"](body, {}))?.hookSpecificOutput).toMatchObject({
-        permissionDecision: "deny",
-      });
-      expect(
-        await fixture.broker["hook"](
-          { ...body, tool_input: { command: 'echo "git push origin HEAD"' } },
-          {},
-        ),
-      ).toBeNull();
     } finally {
       await fixture.dispose();
     }

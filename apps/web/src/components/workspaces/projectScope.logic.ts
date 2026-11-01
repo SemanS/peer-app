@@ -13,7 +13,7 @@ import {
   setScope,
   type ProjectSet,
 } from "./projectSets.logic";
-import { ALL_PROJECTS, projectScopeKey } from "./workBoard.logic";
+import { ALL_PROJECTS, projectScopeKey } from "@t3tools/client-runtime/peer/work";
 
 /**
  * A workspace project as the sidebar's project scope knows it: its scope key, its name, and the

@@ -1504,7 +1504,7 @@ describe("peer core create, invite and the menu", () => {
             "- t3 Model",
             "- t4 Store",
             "- t5 Refunds",
-            "Mark each item done with peer task set <id> --status done as you finish it; peer done on the group finishes the group itself.",
+            "Mark each item done with peer task set <id> --status done as you finish it; peer ready says the group is done.",
           ].join("\n"),
         );
       }),
@@ -1569,7 +1569,7 @@ describe("peer core create, invite and the menu", () => {
             "- t3 Model",
             "- t4 Store",
             "",
-            "Mark each item done with peer task set <id> --status done as you finish it; peer done finishes the scope you are on.",
+            "Mark each item done with peer task set <id> --status done as you finish it; peer ready says the scope is done.",
           ].join("\n"),
           env: { PEER_RUN: "run_01TEST", PEER_RUN_TOKEN: "f00d", PEER_TASK: "t1" },
         });

@@ -48,7 +48,7 @@ import { servesTree } from "./taskTree.logic";
 import { UnderChip } from "./UnderChip";
 import { useWorkActions } from "./useWorkActions";
 import { issueKeyHint, type PeerVcsKind } from "./vcsWords";
-import { projectScopeKey } from "./workBoard.logic";
+import { projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import type { WorkProjectNode } from "./workTree.logic";
 import { failureMessage } from "./WorkspaceAccess";
 

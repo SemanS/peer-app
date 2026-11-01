@@ -26,7 +26,6 @@ import * as NodeCrypto from "node:crypto";
 import type {
   EnvironmentAuthorizationError,
   PeerAgentView,
-  PeerHandoffDelivery,
   PeerHarness,
   PeerHubError,
   PeerHubStartAgentResult,
@@ -37,7 +36,6 @@ import type {
   PeerTask,
   PeerWorkPullRequest,
   PeerWorkStatus,
-  PeerStaleReads,
   PeerHubStatus,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -174,29 +172,6 @@ export interface PeerContributions {
     answer: PeerIntentResponse,
   ) => Effect.Effect<void>;
   readonly commands?: ReadonlyArray<PeerCommand>;
-  /** A note after a successful core command; it cannot change the committed outcome. */
-  readonly commandReply?: (
-    session: PeerSessionView,
-    command: string,
-  ) => Effect.Effect<string | null>;
-  /**
-   * What must be settled before `peer review` hands the task over: a refusal ends the command
-   * refused and the task stays where it was. It has what is left of the command's budget; one that
-   * misses it or fails refuses nothing.
-   */
-  readonly beforeReview?: (input: {
-    readonly session: PeerSessionView;
-    readonly remainingMs: number;
-  }) => Effect.Effect<{ readonly reason: string; readonly next: string } | null>;
-  /** What an agent's move to review carries (the delivery the Hub's review policy reads). */
-  readonly reviewFacts?: (input: {
-    readonly session: PeerSessionView;
-    readonly remainingMs: number;
-  }) => Effect.Effect<PeerReviewFacts>;
-  readonly afterReview?: (input: {
-    readonly session: PeerSessionView;
-    readonly remainingMs: number;
-  }) => Effect.Effect<ReadonlyArray<string>>;
   readonly hooks?: PeerHooks;
   readonly hubChanges?: PeerHubListener;
   readonly status?: PeerStatusContribution;
@@ -264,8 +239,6 @@ export type PeerLifecycleEvent =
   | { readonly kind: "synced"; readonly workspaces: ReadonlyArray<PersistedWorkspace> }
   | { readonly kind: "left-workspace"; readonly workspace: string };
 
-export type PeerReviewFacts = { readonly delivery?: PeerHandoffDelivery };
-
 /** An agent session as plugins see it. */
 export interface PeerSessionView {
   /** A public checkout read: no advice or receipt is attributed to an agent. */
@@ -311,11 +284,6 @@ export interface PeerSessionView {
 export interface PeerHooks {
   /** Local catalog information, at most 300 characters after the commands paragraph. No I/O. */
   readonly startLine?: Effect.Effect<string | null>;
-  /** Structured refusal versions, without the input text; callbacks must only queue local work. */
-  readonly handoffRefused?: (
-    session: PeerSessionView,
-    scopes: PeerStaleReads["stale"],
-  ) => Effect.Effect<void>;
   /** Information that must survive provider start-context limits, before core's context. */
   readonly priority?: "first";
   /** A block of the session's start text, at most 2,000 characters. */
@@ -328,8 +296,7 @@ export interface PeerHooks {
      * a decision on a request it made, an agreement kept for its task, or the push notice (jujutsu:
      * the session pushes a change that builds on a teammate's unmerged bookmark, so it should use
      * that bookmark as the pull request's `--base`) (G8, "nothing lands unread"). A landing step (a `git commit`, `git push`, `gh pr create` or `gh pr merge` in its
-     * shell, or `peer review` or `peer done`) then stops once to give the agent this text, and the
-     * same step again runs. Advice never sets it: dependencies and announcements reach the agent
+     * shell) then stops once to give the agent this text, and the same step again runs. Advice never sets it: dependencies and announcements reach the agent
      * as at any other step. A notice marks its text told
      * when it reads it, as any notice does, so the stop and the next ordinary step never both say it.
      */

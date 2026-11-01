@@ -26,7 +26,7 @@ export function RoomSharingSettings({ environmentId, status }: PeerSlotProps) {
   return (
     <SettingsRow
       title={TITLE}
-      description="In a Jujutsu checkout, each message an agent posts in a room and each handoff pins the work as it stood. On: Peer pushes those pins to refs/peer/snapshots/* on origin, so teammates can open them. Off: new pins stay on this computer, and what was pushed stays on origin."
+      description="In a Jujutsu checkout, each message an agent posts in a room pins the work as it stood. On: Peer pushes those pins to refs/peer/snapshots/* on origin, so teammates can open them. Off: new pins stay on this computer, and what was pushed stays on origin."
       status={
         error !== null ? (
           <SettingsRowError>{error}</SettingsRowError>

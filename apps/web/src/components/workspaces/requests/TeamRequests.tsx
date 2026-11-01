@@ -29,7 +29,7 @@ import type {
   ProjectSlotProps,
   RequestTeammateProps,
 } from "../slots.types";
-import { projectScopeKey } from "../workBoard.logic";
+import { projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import { failureMessage } from "../WorkspaceAccess";
 import { SentRequests } from "./SentRequests";
 import { TaskField, type TaskMode } from "./TaskField";

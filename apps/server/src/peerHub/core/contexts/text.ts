@@ -36,7 +36,7 @@ export function commandsText(
     `Peer knows this session, its project and task: run \`${cli}\`${path === undefined ? "" : ` (${path})`} as is, with no names or IDs.`,
     `Before implementing, check the team index below for shared data, behavior or interfaces, and pick what bears on your work even if your person did not mention it: \`${cli} index [page]\` lists more, \`${cli} context <task>\` reads a context and records it as an input.${on("ask") ? ` \`${cli} ask <task> "<question>"\` reaches a task's agents.` : ""}`,
     `When Peer announces a change, read it and recheck your code and tests. On an overlap: \`${cli} note "<text>"\`, \`${cli} resolve "<agreement>"\`. \`${cli} status\` shows where things stand; \`${cli}\` lists all commands.`,
-    `When the work is verified, publish its shared context, then run \`${cli} review\`. A stale-input refusal: read the named contexts, recheck, retry. Never ask your person for Peer commands. \`${cli} done\` is only for work whose linked PRs have merged.`,
+    `When the work is verified, publish its shared context, then run \`${cli} ready\`. Never ask your person for Peer commands.`,
   ].join(" ");
   return tools
     ? text
@@ -71,8 +71,8 @@ const PEER_CONTEXT_COMMAND = "peer context";
 /** How the keeper of a shared context keeps it, said when it starts keeping it. */
 export function keeperSkill(path: string, subject: string): string {
   return [
-    `You keep the shared context of ${subject} in ${path}: a handoff teammates and their people read, not a log. Read it with \`${PEER_CONTEXT_COMMAND}\` before editing it.`,
-    'Before implementation, publish a short intent under "## Provides": interfaces and assumptions others may rely on, untested ones marked unconfirmed. Update it at subtask boundaries and before handoff with checks, decisions, blockers and precise sources.',
+    `You keep the shared context of ${subject} in ${path}: what teammates and their people read, not a log. Read it with \`${PEER_CONTEXT_COMMAND}\` before editing it.`,
+    'Before implementation, publish a short intent under "## Provides": interfaces and assumptions others may rely on, untested ones marked unconfirmed. Update it at subtask boundaries and when the work is ready, with checks, decisions, blockers and precise sources.',
     `Keep it under about 6K tokens. Peer keeps your recent versions, so compact freely: leave "(details: version 7)" where you cut, and \`${PEER_CONTEXT_COMMAND} 7\` reads it back.`,
     "When Peer reports findings, read them with peer context and fold in what is verified, with authors and evidence. [project] bullets work here too.",
   ].join("\n");
@@ -163,13 +163,12 @@ export function sharedTemplate(subject: string): string {
 }
 
 /**
- * What the template says under Blockers and Next, as HTML comments: what stays under Blockers at a
- * handoff is the agent's own (`handoffOwed`), and the review page shows Next as the next step.
- * Comments never reach the Hub (`publishable`) and count as nothing written.
+ * What the template says under Blockers and Next, as HTML comments. Comments never reach the Hub
+ * (`publishable`) and count as nothing written.
  */
 export const GUIDANCE = {
   blockers:
-    "<!-- What stops this task now. What it needs and no task does is yours: do it, or give it an owner with peer tests. Work another task owns is no blocker: name it under Decisions or State. -->",
+    "<!-- What stops this task now. What it needs and no task does is yours: do it, or say what you need with peer blocked. Work another task owns is no blocker: name it under Decisions or State. -->",
   next: "<!-- One line: the next step and who takes it. Ask your person only what the brief and the project's rules leave open. -->",
 } as const;
 

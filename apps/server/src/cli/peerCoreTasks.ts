@@ -160,7 +160,7 @@ const onePrompt = (scope: WorkScope): string => {
     return [
       `Work on the Peer group "${scope.title}" (${scope.id}) in ${scope.project}: its open items, in order:`,
       ...list,
-      "Mark each item done with peer task set <id> --status done as you finish it; peer done on the group finishes the group itself.",
+      "Mark each item done with peer task set <id> --status done as you finish it; peer ready says the group is done.",
     ].join("\n");
   return [
     scope.name === null
@@ -191,7 +191,7 @@ export const scopePrompt = (scope: WorkScope | ReadonlyArray<WorkScope>): string
       return ["", `${index + 1}. ${lines.join("\n")}`];
     }),
     "",
-    "Mark each item done with peer task set <id> --status done as you finish it; peer done finishes the scope you are on.",
+    "Mark each item done with peer task set <id> --status done as you finish it; peer ready says the scope is done.",
   ].join("\n");
 };
 

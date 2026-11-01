@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 
 import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { scopeAfterSwitch } from "./activeOrganization.logic";
-import { ALL_PROJECTS } from "./workBoard.logic";
+import { ALL_PROJECTS } from "@t3tools/client-runtime/peer/work";
 import { useWorkScope } from "./workScope";
 
 const StoredWorkspace = Schema.NullOr(Schema.String);

@@ -313,10 +313,3 @@ export function jjInvocations(command: string): JjInvocation[] {
     return [parseJj(words, start.from)];
   });
 }
-
-/** Direct git/gh/jj publication commands exposed by a shell tool. Scripts remain outside this gate. */
-export function publishesWork(command: string): boolean {
-  return gitCommands(command).some(
-    (run) => run === "git push" || run === "jj git push" || run === "gh pr create",
-  );
-}

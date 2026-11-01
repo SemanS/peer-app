@@ -287,7 +287,7 @@ import { sidebarScopeLine, type SidebarView } from "./workspaces/SidebarViewSwit
 import { useProjectScope } from "./workspaces/projectScope";
 import { newChatProject, roomSetOf, scopeOfProject } from "./workspaces/projectScope.logic";
 import { routeForView } from "./workspaces/sidebarRoutes.logic";
-import { ALL_PROJECTS } from "./workspaces/workBoard.logic";
+import { ALL_PROJECTS } from "@t3tools/client-runtime/peer/work";
 import { ActiveOrganization } from "./workspaces/ActiveOrganization";
 import { ProjectSetMembers } from "./workspaces/ProjectSetNav";
 import { WorkScopePicker } from "./workspaces/WorkScopePicker";

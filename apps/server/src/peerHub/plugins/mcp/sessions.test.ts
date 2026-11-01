@@ -1,8 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off - a private broker and generated shim, never the live Peer socket.
 import * as NodeChildProcess from "node:child_process";
-import * as NodeFSP from "node:fs/promises";
 import * as NodeHttp from "node:http";
-import type { PeerBrokerHost } from "../../core/broker/host.ts";
 import { NO_PLUGINS } from "../../core/broker/host.ts";
 import type { PeerRuntimeProvider } from "../../core/plugin.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -247,111 +245,6 @@ describe("coordination tool sessions", () => {
           assert.equal(fixture.broker.sessions.size, 1);
           yield* entry.workspaceCleanup!({ kind: "synced", workspaces: [] });
           assert.equal(fixture.broker.sessions.size, 0);
-        }),
-      ),
-  );
-  it.effect(
-    "publishes team findings and a keeper's edits before checking stale review inputs",
-    () =>
-      program((fixture, plugins) =>
-        Effect.gen(function* () {
-          let stale = true;
-          const order: string[] = [];
-          const override: Partial<PeerBrokerHost> = {
-            keepContext: async (_workspace, project, scope, session) => ({
-              project,
-              scope,
-              version: 1,
-              text: "Shared overview",
-              updatedAt: "2026-10-09T10:00:00Z",
-              keeper: {
-                session,
-                email: "ana@acme.test",
-                environment: "test",
-                since: "2026-10-09T10:00:00Z",
-              },
-            }),
-            writeContext: async (_workspace, project, scope, _session, baseVersion, text) => {
-              order.push("published");
-              return {
-                project,
-                scope,
-                version: baseVersion + 1,
-                text,
-                updatedAt: "2026-10-09T10:00:00Z",
-              };
-            },
-            staleReads: async () => ({
-              fresh: !stale,
-              recovery: "complete",
-              stale: stale
-                ? [
-                    {
-                      project: "app",
-                      scope: "task:prices",
-                      readVersion: 1,
-                      currentVersion: 2,
-                      at: "2026-10-09",
-                      updatedAt: "2026-10-09",
-                    },
-                  ]
-                : [],
-            }),
-            finishTask: async (_workspace, _project, _task, _session, status) => {
-              order.push(status);
-            },
-          };
-          Object.assign(fixture.broker.host, override);
-          const command = yield* commandOf(plugins);
-          yield* command.stdio!({ line: status, headers });
-          const session = fixture.broker.sessions.get("cursor:native-1")!;
-          assert.isTrue(session.keeps);
-          yield* Effect.promise(() =>
-            NodeFSP.writeFile(
-              session.ownContextPath,
-              "Private notes\n## For the team\n- Prices are stored in cents\n",
-            ),
-          );
-          yield* Effect.promise(() =>
-            NodeFSP.writeFile(fixture.broker.mirrorOf(session)!.path, "Verified shared result"),
-          );
-          const review =
-            '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"peer_review"}}';
-          const refused = JSON.parse(yield* command.stdio!({ line: review, headers }));
-          assert.isTrue(refused.result.isError);
-          assert.include(refused.result.content[0].text, "peer: refused: shared inputs changed");
-          assert.deepEqual(order, ["published"]);
-          assert.deepEqual(fixture.broker.reportFor("acme")[0]?.findings, [
-            "Prices are stored in cents",
-          ]);
-          stale = false;
-          const accepted = JSON.parse(yield* command.stdio!({ line: review, headers }));
-          assert.isUndefined(accepted.result.isError);
-          assert.deepEqual(order, ["published", "review"]);
-          Object.assign(fixture.broker.host, {
-            writeContext: async () => {
-              throw new Error("lost upload");
-            },
-          });
-          yield* Effect.promise(() =>
-            NodeFSP.writeFile(
-              fixture.broker.mirrorOf(session)!.path,
-              "A handoff still waiting to publish",
-            ),
-          );
-          const unpublished = JSON.parse(yield* command.stdio!({ line: review, headers }));
-          assert.isTrue(unpublished.result.isError);
-          assert.include(
-            unpublished.result.content[0].text,
-            "shared handoff context has not reached the Hub",
-          );
-          assert.deepEqual(order, ["published", "review"]);
-          yield* Effect.promise(() => fixture.broker.host.log.idle());
-          const log = yield* Effect.promise(() => NodeFSP.readFile(fixture.debugPath, "utf8"));
-          assert.include(log, '"event":"mcp.session"');
-          assert.include(log, '"event":"mcp.call"');
-          assert.isAbove(session.injected.get("mcp")!, 0);
-          assert.notInclude(log, '"event":"delivery.verified"');
         }),
       ),
   );

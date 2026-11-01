@@ -11,7 +11,6 @@ export const PEER_PLUGIN_IDS = [
   "jujutsu",
   "github",
   "dependencies",
-  "handoff",
   "capacity",
   "requests",
   "observe",
@@ -29,7 +28,6 @@ export const PEER_PLUGIN_IDS = [
   "test-reports",
   "roles",
   "rooms",
-  "acceptance",
   "settings",
 ] as const;
 export const PeerPluginId = Schema.Literals(PEER_PLUGIN_IDS);

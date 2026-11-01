@@ -19,7 +19,6 @@ import {
 
 import type { SignalTone } from "../signals";
 import type { WorkOpen } from "../workTree.logic";
-import type { TaskChatRow } from "./taskChats.logic";
 
 /** Said where Open would be when the run's agent lives on another of the person's computers. */
 export const ELSEWHERE_RUN_HINT = "Runs on another computer; open it there";
@@ -214,25 +213,6 @@ export function runThreadWorking(
   const keys = runThreadKeys(run);
   const own = threads.filter((thread) => keys.includes(thread.key));
   return own.length === 0 ? undefined : own.some((thread) => thread.status === "working");
-}
-
-/**
- * The task's chats that no run covers yet (a thread from before runs, or one an older Peer
- * reports), so nothing that was on the page disappears from it.
- */
-export function chatsWithoutRun(
-  chats: ReadonlyArray<TaskChatRow>,
-  runs: ReadonlyArray<PeerRun>,
-): ReadonlyArray<TaskChatRow> {
-  const covered = new Set(runs.flatMap(runThreadKeys));
-  return chats.filter((chat) => !covered.has(chat.key));
-}
-
-/** The quiet chip on a task's row: its runs while any is running or detached, else nothing. */
-export function runsChip(counts: PeerRunCounts | undefined): string | undefined {
-  if (counts === undefined || counts.running + counts.detached === 0) return undefined;
-  const total = counts.running + counts.detached + counts.ended;
-  return `${total} ${total === 1 ? "run" : "runs"}`;
 }
 
 /**

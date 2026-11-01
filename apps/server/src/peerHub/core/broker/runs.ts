@@ -12,7 +12,7 @@ import * as NodeFSP from "node:fs/promises";
 import type * as NodeHttp from "node:http";
 import * as NodePath from "node:path";
 
-import { PEER_LOCAL_WORKSPACE, type PeerRunOutcome, type PeerRunRuntime } from "@t3tools/contracts";
+import { PEER_LOCAL_WORKSPACE, type PeerRunRuntime } from "@t3tools/contracts";
 
 import { agentNamed } from "../coordination/edits.ts";
 import { type CreateRun, stateOf, toPeerRun } from "../work/runs.ts";
@@ -287,16 +287,6 @@ export function runEnded(this: CoordinationBroker, run: string) {
     this.markDirty();
     this.record("run.ended", { session: session.id, run });
   }
-}
-
-/** `peer review` and `peer done` the Hub accepted end the session's run. */
-export async function endRunOf(
-  this: CoordinationBroker,
-  session: LocalSession,
-  outcome: PeerRunOutcome,
-) {
-  if (session.run !== undefined)
-    await this.host.runs?.end(session.run, outcome).catch(() => undefined);
 }
 
 /** Events whose answer may carry text for the agent. */

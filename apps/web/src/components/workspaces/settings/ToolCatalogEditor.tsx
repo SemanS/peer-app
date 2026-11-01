@@ -15,7 +15,7 @@ import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
 import { Toggle, ToggleGroup } from "../../ui/toggle-group";
 import { PeerStackedField } from "../PeerDialog";
 import { ProjectMark } from "../signals";
-import { projectScopeKey } from "../workBoard.logic";
+import { projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import type { Transport } from "./projectTools.logic";
 import { Problem, useTyped } from "./ToolCatalogParts";
 import {

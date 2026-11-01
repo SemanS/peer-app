@@ -1,5 +1,5 @@
 import { setScope } from "./projectSets.logic";
-import { ALL_PROJECTS } from "./workBoard.logic";
+import { ALL_PROJECTS } from "@t3tools/client-runtime/peer/work";
 import {
   scopeOfProject,
   type ProjectCatalog,

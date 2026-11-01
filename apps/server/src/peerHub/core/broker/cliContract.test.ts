@@ -17,9 +17,9 @@ describe("peer command contract", () => {
     expect(HTTP_STATUS).toEqual({ done: 200, usage: 400, refused: 409, uncertain: 500 });
   });
   it("keeps a bare reason while rendering stable first and next lines", () => {
-    const error = usage("review takes no arguments", "run peer review.");
-    expect(error.message).toBe("review takes no arguments");
-    expect(render(error)).toBe("peer: usage: review takes no arguments.\nNext: run peer review.");
+    const error = usage("ready takes no flags", "run peer ready.");
+    expect(error.message).toBe("ready takes no flags");
+    expect(render(error)).toBe("peer: usage: ready takes no flags.\nNext: run peer ready.");
     expect(render(refused("no open overlap", "run peer status."))).toBe(
       "peer: refused: no open overlap.\nNext: run peer status.",
     );
@@ -27,12 +27,12 @@ describe("peer command contract", () => {
   });
   it("leaves a reason of several lines as written, its last line included", () => {
     expect(
-      render(refused('a message waits\n[teammate text] Ana:\n"rename it first."', "peer review")),
+      render(refused('a message waits\n[teammate text] Ana:\n"rename it first."', "peer ready")),
     ).toBe(
-      'peer: refused: a message waits\n[teammate text] Ana:\n"rename it first."\nNext: peer review',
+      'peer: refused: a message waits\n[teammate text] Ana:\n"rename it first."\nNext: peer ready',
     );
-    expect(render(refused('a message waits\n"no period"', "peer review"))).toBe(
-      'peer: refused: a message waits\n"no period"\nNext: peer review',
+    expect(render(refused('a message waits\n"no period"', "peer ready"))).toBe(
+      'peer: refused: a message waits\n"no period"\nNext: peer ready',
     );
   });
   it("does not promise whether a lost answer applied the command", () => {

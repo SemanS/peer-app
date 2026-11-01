@@ -117,8 +117,6 @@ describe("what the row looks like", () => {
     expect(taskStateLook("done")).toEqual({ tone: "delivery", hollow: false });
     expect(taskStateLook("paused")).toEqual({ tone: "neutral", hollow: false });
     expect(taskStateLook("new")).toEqual({ tone: "neutral", hollow: true });
-    // Accepted, waiting only to land: done's colour, hollow until it lands.
-    expect(taskStateLook("accepted")).toEqual({ tone: "delivery", hollow: true });
   });
 
   it("names the route a task's room is highlighted by", () => {

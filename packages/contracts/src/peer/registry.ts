@@ -1,4 +1,3 @@
-import { PeerHandoffStatus } from "./handoff.ts";
 import { PeerResourcesState } from "./resources.ts";
 import { PeerOwnershipStatus } from "./ownership.ts";
 import { PeerAgreementsStatus } from "./agreements.ts";
@@ -24,7 +23,6 @@ import { PeerSettingsStatus } from "./settings.ts";
 import { PeerTestReportsStatus } from "./test-reports.ts";
 import { PeerRolesStatus } from "./roles.ts";
 import { PeerRoomsStatus } from "./rooms.ts";
-import { PeerAcceptanceStatus } from "./acceptance.ts";
 /** The schemas of these plugins reach the package index through here. */
 export * from "./changes.ts";
 export * from "./jujutsu.ts";
@@ -37,7 +35,6 @@ export const peerPluginStatusFields = {
   resources: SchemaValues.optional(PeerResourcesState),
   needsYou: SchemaValues.optional(PeerNeedsYouStatus),
   settle: SchemaValues.optional(PeerSettleStatus),
-  handoff: SchemaValues.optional(PeerHandoffStatus),
   dependencies: SchemaValues.optional(SchemaValues.Array(PeerDependencySnapshot)),
   toolTrust: SchemaValues.optional(PeerToolTrustStatus),
   announcements: SchemaValues.optional(PeerAnnouncementsStatus),
@@ -49,5 +46,4 @@ export const peerPluginStatusFields = {
   testReports: SchemaValues.optional(PeerTestReportsStatus),
   roles: SchemaValues.optional(PeerRolesStatus),
   rooms: SchemaValues.optional(PeerRoomsStatus),
-  acceptance: SchemaValues.optional(PeerAcceptanceStatus),
 } satisfies Schema.Struct.Fields;

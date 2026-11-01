@@ -200,7 +200,7 @@ describe("the scope prompt", () => {
         "- t1 Item 1",
         "- t2 Item 2",
         "",
-        "Mark each item done with peer task set <id> --status done as you finish it; peer done finishes the scope you are on.",
+        "Mark each item done with peer task set <id> --status done as you finish it; peer ready says the scope is done.",
       ].join("\n"),
     );
     // A set of one is that scope's own words; tasks alone name no project.

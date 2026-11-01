@@ -18,7 +18,6 @@ import {
   overlapTopic,
   type NeedsYouEnvironment,
 } from "./needsYou.ts";
-import { ALL_PROJECTS, buildWorkTree, taskCards } from "./work.ts";
 
 const HERE = EnvironmentId.make("env-here");
 const KIRKWOOD_T3 = ProjectId.make("t3-kirkwood");
@@ -746,108 +745,5 @@ describe("Needs you: what a person answers for", () => {
 
   it("says nothing with test reports off", () => {
     expect(answers(status(kirkwood()))).toEqual([]);
-  });
-});
-
-describe("Needs you: accepted handoffs", () => {
-  function inReview(accepted?: { via?: "person" | "policy"; beforeReopening?: boolean }) {
-    const project = kirkwood();
-    const tasks = project.work.tasks.map((candidate) =>
-      candidate.id === "str" ? { ...candidate, status: "review" as const } : candidate,
-    );
-    return {
-      ...status({ ...project, work: { ...project.work, tasks } }),
-      acceptance: {
-        accepted:
-          accepted === undefined
-            ? []
-            : [
-                {
-                  workspace: "acme",
-                  project: "kirkwood",
-                  task: "str",
-                  by: "slavo@acme.test",
-                  at: "2026-10-03T11:30:00Z",
-                  statusThen: "review",
-                  ...accepted,
-                },
-              ],
-      },
-    };
-  }
-  const cardOf = (hub: PeerHubStatus) => {
-    const tree = buildWorkTree({ status: hub, localThreads: [], now: NOW });
-    const card = taskCards(tree, { scope: ALL_PROJECTS, mine: false, query: "" }).find(
-      (candidate) => candidate.kind === "task" && candidate.task.id === "str",
-    );
-    if (card?.kind !== "task") throw new Error("no card for STR");
-    return card;
-  };
-
-  it("lists a handoff for review until it is accepted, by policy or by a lead", () => {
-    expect(cardOf(inReview()).column).toBe("needs");
-    const byPolicy = cardOf(inReview({ via: "policy" }));
-    expect(byPolicy.task.accepted).toBe("policy");
-    expect(byPolicy.state.label).toBe("Accepted");
-    expect(byPolicy.column).toBe("working");
-    expect(byPolicy.action).toBeUndefined();
-    // An older Hub says no `via`: a person gave it.
-    expect(cardOf(inReview({})).task.accepted).toBe("person");
-  });
-
-  it("keeps a live agent's handoff off Needs you, and brings it back when the run ends", () => {
-    const hub = (running: number) => {
-      const base = inReview();
-      const project = base.workspaces[0]!.projects[0]!;
-      const tasks = project.work.tasks.map((candidate) =>
-        candidate.id === "str"
-          ? { ...candidate, runs: { running, detached: 1 - running, ended: 0 } }
-          : candidate,
-      );
-      return {
-        ...base,
-        workspaces: [
-          {
-            ...base.workspaces[0]!,
-            projects: [{ ...project, work: { ...project.work, tasks } }],
-          },
-        ],
-        handoff: {
-          target: "none" as const,
-          projectTargets: {},
-          deliveries: [],
-          summaries: [
-            {
-              workspace: "acme",
-              project: "kirkwood",
-              task: "str",
-              author: "yev@acme.test",
-              number: 1,
-              composedAt: "2026-10-03T11:00:00Z",
-              contextVersion: null,
-              pullRequests: 0,
-              source: "agent" as const,
-              policy: {
-                mode: "ask" as const,
-                version: 1,
-                signals: ["not-delivered" as const],
-                accepted: false,
-              },
-            },
-          ],
-        },
-      };
-    };
-    const live = cardOf(hub(1));
-    expect(live.state.label).toBe("With the agent");
-    expect(live.column).toBe("working");
-    const ended = cardOf(hub(0));
-    expect(ended.state.label).toMatch(/^The agent stopped · 1 step open$/);
-    expect(ended.column).toBe("needs");
-    expect(ended.action?.label).toBe("Review");
-  });
-
-  it("lists it again when the acceptance was given before the task was reopened", () => {
-    expect(cardOf(inReview({ via: "policy", beforeReopening: true })).column).toBe("needs");
   });
 });

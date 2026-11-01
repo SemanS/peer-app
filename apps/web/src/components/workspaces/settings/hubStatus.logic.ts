@@ -143,16 +143,6 @@ const FEATURES: ReadonlyArray<Feature> = [
     },
   },
   {
-    id: "handoff",
-    name: "Handoff for review",
-    without: "plugin",
-    words: {
-      on: "Agents can store a review package for a task.",
-      off: "Review packages can’t be stored: this Hub doesn’t run it.",
-      newer: "Review packages can’t be stored until the Hub is updated.",
-    },
-  },
-  {
     id: "dependencies",
     name: "Task dependencies",
     without: "plugin",

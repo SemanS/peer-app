@@ -15,10 +15,7 @@ export const NeedsYouPlugin = bindPlugin({
     return {
       status: { read: service.read },
       statusViews: { "needs-you": needsYouView },
-      hooks: {
-        handoffRefused: (session, scopes) => service.refuse(session.id, scopes),
-        sessionEnding: ({ session }) => service.end(session.id),
-      },
+      hooks: { sessionEnding: ({ session }) => service.end(session.id) },
       lifecycle: (event) => (event.kind === "signing-out" ? service.stop : Effect.void),
       turnOff: service.stop,
       run: service.run,

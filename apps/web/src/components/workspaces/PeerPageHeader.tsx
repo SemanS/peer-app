@@ -16,7 +16,7 @@ import { ProjectMark, TONE_BADGE, type SignalTone } from "./signals";
 import { taskIdOfParams } from "./task/taskRoute.logic";
 
 /** A task's tracker key, as every Work view writes it. */
-export function TaskKey({ children }: { readonly children: ReactNode }) {
+function TaskKey({ children }: { readonly children: ReactNode }) {
   return <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{children}</span>;
 }
 

@@ -22,8 +22,6 @@ import {
   settleChange,
   taskItems,
 } from "./taskTree.logic";
-import { listTreeRows } from "./workList.logic";
-import type { WorkTaskCard } from "./workBoard.logic";
 import type { WorkProjectNode, WorkTaskNode } from "./workTree.logic";
 
 function node(id: string, overrides: Partial<WorkTaskNode> = {}): WorkTaskNode {
@@ -122,26 +120,6 @@ describe("nestProjectTasks", () => {
     const rows = nestProjectTasks(project, [g, a, b, c, r], new Set(["b"]));
     expect(rows.map((row) => row.item.id)).toEqual(["g", "a", "b", "r"]);
     expect(rows.find((row) => row.item.id === "b")?.children).toBe(1);
-  });
-});
-
-describe("listTreeRows", () => {
-  const card = (task: WorkTaskNode, other = project): WorkTaskCard =>
-    ({ kind: "task", key: `${other.projectId}:${task.id}`, project: other, task }) as WorkTaskCard;
-
-  it("nests a status's rows by project, so equal ids of two projects never nest", () => {
-    const elsewhere = { ...project, projectId: "web" };
-    const rows = listTreeRows([card(c, elsewhere), card(g), card(b)], new Set());
-    expect(rows.map((row) => [row.item.project.projectId, row.item.task.id, row.indent])).toEqual([
-      ["web", "c", 0],
-      ["hub", "g", 0],
-      ["hub", "b", 1],
-    ]);
-  });
-
-  it("folds a collapsed row by its project's key", () => {
-    const rows = listTreeRows([card(g), card(b), card(c)], new Set(["acme/hub/g"]));
-    expect(rows.map((row) => row.item.task.id)).toEqual(["g"]);
   });
 });
 
@@ -289,7 +267,7 @@ describe("picking several tasks", () => {
       "",
       '2. Work on the Peer task "R" (r).',
       "",
-      "Mark each item done with peer task set <id> --status done as you finish it; peer done finishes the scope you are on.",
+      "Mark each item done with peer task set <id> --status done as you finish it; peer ready says the scope is done.",
     ]);
     expect(selectionPrompt(settled, [g, r])!.split("\n")[0]).toBe(
       "Work on these 2 Peer scopes in Hub, in this order:",

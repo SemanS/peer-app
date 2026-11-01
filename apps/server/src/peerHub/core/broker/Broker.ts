@@ -43,7 +43,6 @@ import type { PeerSessionView } from "../plugin.ts";
 import * as Cli from "./cli.ts";
 import * as Delivery from "./delivery.ts";
 import * as Hooks from "./hooks.ts";
-import { handoffRefusal } from "./handoffGuard.ts";
 import type { PeerBrokerHost } from "./host.ts";
 import * as Landing from "./landing.ts";
 import * as Log from "./log.ts";
@@ -554,7 +553,6 @@ export class CoordinationBroker {
   runTask = Runs.runTask;
   leaveRun = Runs.leaveRun;
   runEnded = Runs.runEnded;
-  endRunOf = Runs.endRunOf;
   withRunNotice = Runs.withRunNotice;
   runsRoute = Runs.runsRoute;
   runCommand = Runs.runCommand;
@@ -569,14 +567,11 @@ export class CoordinationBroker {
   pluginsOwn = Hooks.pluginsOwn;
   isPeerWork = Hooks.isPeerWork;
   beforeShell = Hooks.beforeShell;
-  handoffRefusal = handoffRefusal;
   shellVerdicts = Hooks.shellVerdicts;
 
   // Nothing lands unread (landing.ts).
   landingMessages = Landing.landingMessages;
   landingStop = Landing.landingStop;
-  landingRefusal = Landing.landingRefusal;
-  ownerCallRefusal = Landing.ownerCallRefusal;
 
   // What reaches an agent (delivery.ts).
   startContextFor = Delivery.startContextFor;

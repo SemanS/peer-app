@@ -10,7 +10,6 @@
 import {
   WS_METHODS,
   type EnvironmentId,
-  type PeerHandoffPackage,
   type PeerHubStatus,
   type PeerProject,
   type PeerTestReport,
@@ -333,19 +332,4 @@ export function staleOwnerLine(result: PeerTestsSetOwnerResult): string | null {
   return result.kind === "stale"
     ? `Not saved: report ${result.number} replaced the one you assigned from. Its items are shown now; assign again if it still needs it.`
     : null;
-}
-
-/**
- * The newest report as a handoff package carries it, in one line for the reviewer's card: "Tests:
- * mixed, 1 passed, 0 failed, 1 unverified · 'iPhone layout' needs an owner". Null for a package
- * without one, which says so in its own words.
- */
-export function handoffReportLine(report: PeerHandoffPackage["report"]): string | null {
-  if (report === undefined) return null;
-  const counts = `${report.passed} passed, ${report.failed} failed, ${report.unverified} unverified`;
-  const unowned =
-    report.unowned.length === 0
-      ? ""
-      : ` · ${report.unowned.map((text) => `'${text}'`).join(", ")} ${report.unowned.length === 1 ? "needs" : "need"} an owner`;
-  return `Tests: ${report.result}, ${counts}${unowned}`;
 }

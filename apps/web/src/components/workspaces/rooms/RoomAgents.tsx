@@ -10,7 +10,7 @@ import { taskRunRows } from "../task/runs.logic";
 import { useWorkData } from "../useWorkData";
 import { useWorkScope } from "../workScope";
 import { StatusGlyph } from "../workStatus";
-import { projectScopeKey } from "../workBoard.logic";
+import { projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import type { WorkOpen, WorkProjectNode } from "../workTree.logic";
 import {
   projectAgentGroups,

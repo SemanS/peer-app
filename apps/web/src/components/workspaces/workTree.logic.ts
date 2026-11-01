@@ -11,7 +11,6 @@ export {
   taskNamedIn,
   type ActiveAgentNode,
   type AgentNeed,
-  type WorkAdviceRow,
   type WorkAgent,
   type WorkAreaNode,
   type WorkContextNode,

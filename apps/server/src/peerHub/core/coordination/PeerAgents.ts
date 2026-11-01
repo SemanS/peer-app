@@ -66,7 +66,7 @@ export class PeerAgents extends Context.Service<
     ) => Effect.Effect<A, E | PeerHubError, R>;
     /** This computer's sessions now. */
     readonly sessions: Effect.Effect<ReadonlyArray<PeerSessionView>>;
-    /** Rechecks a previously refused handoff; unknown/ended sessions have no stale inputs. */
+    /** The session's stale inputs; unknown/ended sessions have none. */
     readonly staleReads: (session: string) => Effect.Effect<PeerStaleReads, PeerHubError>;
     /**
      * The agent tool catalog any transport offers (the MCP server today): core's commands as tools

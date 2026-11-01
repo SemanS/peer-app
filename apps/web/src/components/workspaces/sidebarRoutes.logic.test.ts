@@ -19,7 +19,6 @@ describe("viewOfPath", () => {
       "/room/acme/app/t-1",
       "/together/group-1",
       "/workspace/set-1",
-      "/team/acme/app",
       "/observe/acme/laptop/th-1",
       "/agent/claude:1",
     ]) {
@@ -167,7 +166,7 @@ describe("sanitizeRoutes", () => {
   });
 
   it("drops an address of a screen this app no longer has", () => {
-    for (const screen of ["integration", "team-usage", "knowledge", "memory", "changes"]) {
+    for (const screen of ["integration", "team-usage", "knowledge", "memory", "changes", "team"]) {
       expect(sanitizeRoutes({ work: `/${screen}/acme/app`, lastView: "work" })).toEqual({
         lastView: "work",
       });
@@ -177,31 +176,23 @@ describe("sanitizeRoutes", () => {
 
 describe("activeRouteKey", () => {
   it("names what each route shows, as the tree highlights it", () => {
-    expect(activeRouteKey("/agent/claude:1", { agentId: "claude:1" })).toBe("agent:claude:1");
+    expect(activeRouteKey({ agentId: "claude:1" })).toBe("agent:claude:1");
+    expect(activeRouteKey({ workspace: "acme", project: "app", task: "t-1" })).toBe(
+      "task:acme:app:t-1",
+    );
     expect(
-      activeRouteKey("/room/acme/app/t-1", { workspace: "acme", project: "app", task: "t-1" }),
-    ).toBe("task:acme:app:t-1");
-    expect(
-      activeRouteKey("/observe/acme/laptop/th-1", {
+      activeRouteKey({
         workspace: "acme",
         environment: "laptop",
         thread: "th-1",
       }),
     ).toBe("observe:acme:laptop:th-1");
-    expect(
-      activeRouteKey("/env-1/thread-1", { environmentId: "env-1", threadId: "thread-1" }),
-    ).toBe("env-1:thread-1");
-    expect(activeRouteKey("/work", {})).toBeNull();
-  });
-
-  it("lights up the Team page for its own", () => {
-    const project = { workspace: "acme", project: "app" };
-    expect(activeRouteKey("/team/acme/app", project)).toBe("team:acme:app");
+    expect(activeRouteKey({ environmentId: "env-1", threadId: "thread-1" })).toBe("env-1:thread-1");
+    expect(activeRouteKey({})).toBeNull();
   });
 
   it("lights nothing for a project's Operations page", () => {
-    const project = { workspace: "acme", project: "app" };
-    expect(activeRouteKey("/operations/acme/app", project)).toBeNull();
+    expect(activeRouteKey({ workspace: "acme", project: "app" })).toBeNull();
     expect(viewOfPath("/operations/acme/app")).toBe("work");
   });
 });

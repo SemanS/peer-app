@@ -25,12 +25,9 @@ export interface TaskStateLook {
 
 const LOOK: Readonly<Record<TaskStateKind, TaskStateLook>> = {
   done: { tone: "delivery", hollow: false },
-  accepted: { tone: "delivery", hollow: true },
   review: { tone: "needs", hollow: false },
   approval: { tone: "needs", hollow: false },
   input: { tone: "needs", hollow: false },
-  agent_action: { tone: "working", hollow: false },
-  coordination: { tone: "working", hollow: true },
   working: { tone: "working", hollow: false },
   waiting: { tone: "working", hollow: true },
   paused: { tone: "neutral", hollow: false },

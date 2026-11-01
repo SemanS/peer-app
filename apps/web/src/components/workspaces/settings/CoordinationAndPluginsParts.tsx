@@ -19,7 +19,7 @@ import { Switch } from "../../ui/switch";
 import { Toggle, ToggleGroup } from "../../ui/toggle-group";
 import { ProjectMark } from "../signals";
 import { usePeerPluginControl } from "../usePeerPluginControl";
-import { projectScopeKey } from "../workBoard.logic";
+import { projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import { reportFailure } from "../workFeedback";
 import { PageSection } from "./CapacityCoordinationParts";
 import {

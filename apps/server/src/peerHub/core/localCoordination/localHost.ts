@@ -80,7 +80,5 @@ export function withLocalCoordination(
       isLocal(w) || host.updateTask === undefined ? teamOnly() : host.updateTask(w, ...args),
     deleteTask: (w, ...args) =>
       isLocal(w) || host.deleteTask === undefined ? teamOnly() : host.deleteTask(w, ...args),
-    finishTask: (w, ...args) =>
-      isLocal(w) || host.finishTask === undefined ? teamOnly() : host.finishTask(w, ...args),
   };
 }

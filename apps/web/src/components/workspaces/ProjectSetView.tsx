@@ -40,7 +40,7 @@ import { NewSharedRoom } from "./rooms/SharedRoomView";
 import { plannedProjects, sharedRoomsOf } from "./rooms/sharedRoom.logic";
 import { ProjectMark } from "./signals";
 import { useWorkData } from "./useWorkData";
-import { projectScopeKey } from "./workBoard.logic";
+import { projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import type { WorkOpen, WorkProjectNode } from "./workTree.logic";
 
 const VIEWS = ["room", "files", "diff", "agents"] as const;

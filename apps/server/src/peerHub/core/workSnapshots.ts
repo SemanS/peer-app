@@ -44,10 +44,6 @@ export const snapshotPrefix = (place: RoomPlace) => {
 };
 
 export const messageKey = (seq: number) => `message-${seq}`;
-export const handoffRunPrefix = (run: string) =>
-  `handoff-${NodeCrypto.createHash("sha256").update(run).digest("hex").slice(0, 12)}-`;
-export const handoffKey = (run: string, head: string) =>
-  `${handoffRunPrefix(run)}${head.slice(0, 12)}`;
 
 const TEMPLATE = [
   "change_id",

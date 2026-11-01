@@ -5,7 +5,6 @@ import { OwnersNote, PageSection, SettingsReadError } from "../CapacityCoordinat
 import { DraftSaveBar } from "../DraftBar";
 import type { ProjectPageProps } from "../pageProps";
 import { useOpenPeerSettings } from "../peerSettingsLinks";
-import { HostedProjectSettings } from "../PluginSlots";
 import { DecidePanel, PathRules, PathRulesOff, PolicyList } from "../ProjectCoordinationParts";
 import {
   addRuleBlocker,
@@ -32,7 +31,7 @@ import { useSettingsView } from "../useSettingsView";
  * no settings, the page shows the policy and the number of rules the status says, and nothing is
  * editable.
  */
-export function ProjectCoordination({ environmentId, status, workspace, state }: ProjectPageProps) {
+export function ProjectCoordination({ status, workspace, state }: ProjectPageProps) {
   const { project } = state;
   const view = useSettingsView(workspace.slug);
   const draft = useSettingsDraft(view, { slice: ["projects", project.id] });
@@ -132,15 +131,6 @@ export function ProjectCoordination({ environmentId, status, workspace, state }:
       ) : count > 0 ? (
         <p className="text-sm text-muted-foreground">{ruleCountSentence(count, project.name)}</p>
       ) : null}
-
-      {/* Saved on their own, not through the draft: the review policy is a Hub row, not a setting. */}
-      <HostedProjectSettings
-        host="coordination"
-        environmentId={environmentId}
-        status={status}
-        workspace={workspace}
-        state={state}
-      />
 
       <DraftSaveBar draft={draft} scope={project.name} label={`${project.name} · Coordination`} />
     </>

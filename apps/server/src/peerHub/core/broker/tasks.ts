@@ -33,8 +33,7 @@ export const TASK_SWITCHES = ["--flat", "--not-executable"];
 export const TASK_HELP = {
   name: "task",
   usage: 'task [show <task> | add "<title>" | set <task> | remove <task>]',
-  summary:
-    "list or change tasks for your person; --status is administrative, without handoff checks",
+  summary: "list or change tasks for your person",
 };
 const STATUSES = ["open", "review", "done"] as const;
 type Status = (typeof STATUSES)[number];
@@ -359,11 +358,6 @@ export async function taskCommand(
                 ? "This settles it: an agent may run it as one task."
                 : "This settles it: it is not run as one task; its items are.",
             ]),
-        ...(status === "review" || status === "done"
-          ? [
-              "This administrative status change did not verify the agent's handoff. Use peer review or peer done for guarded handoff checks.",
-            ]
-          : []),
       ].join("\n");
     }
     case "remove": {

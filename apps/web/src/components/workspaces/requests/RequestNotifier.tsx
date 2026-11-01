@@ -10,7 +10,7 @@ import {
 import { toastManager } from "../../ui/toast";
 import { useSidebarView } from "../SidebarViewSwitch";
 import { useWorkScope } from "../workScope";
-import { ALL_PROJECTS } from "../workBoard.logic";
+import { ALL_PROJECTS } from "@t3tools/client-runtime/peer/work";
 import { usePeerHubStatus } from "../WorkspaceAccess";
 import {
   makeRequestObserver,

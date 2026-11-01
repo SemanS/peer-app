@@ -97,32 +97,32 @@ describe("pluginRows", () => {
 });
 
 describe("reasonText", () => {
-  const hub = { hub: { features: { requests: 1 }, featuresOff: ["handoff"] } };
+  const hub = { hub: { features: { requests: 1 }, featuresOff: ["rooms"] } };
 
   it("says a plugin the Hub does not serve needs a newer Hub, as an older Hub's silence allows", () => {
-    expect(reasonText("hub", {}, "handoff")).toBe("needs a newer Peer Hub.");
-    expect(reasonText("hub", { hub: { features: { requests: 1 } } }, "handoff")).toBe(
+    expect(reasonText("hub", {}, "rooms")).toBe("needs a newer Peer Hub.");
+    expect(reasonText("hub", { hub: { features: { requests: 1 } } }, "rooms")).toBe(
       "needs a newer Peer Hub.",
     );
   });
 
   it("says a plugin waiting for a Hub works once one answers, or once you sign in", () => {
-    expect(reasonText("waiting", { signedIn: false }, "dependencies")).toBe(
+    expect(reasonText("waiting", { signedIn: false }, "changes")).toBe(
       "works once you sign in to a Peer Hub.",
     );
-    expect(reasonText("waiting", { signedIn: true }, "dependencies")).toBe(
+    expect(reasonText("waiting", { signedIn: true }, "changes")).toBe(
       "works once Peer reaches its Peer Hub.",
     );
   });
 
   it("says the Hub turned the feature off where the Hub lists it, and a newer one is still needed otherwise", () => {
-    expect(reasonText("hub", hub, "handoff")).toBe("is turned off on this Peer Hub.");
+    expect(reasonText("hub", hub, "rooms")).toBe("is turned off on this Peer Hub.");
     expect(reasonText("hub", hub, "observe")).toBe("needs a newer Peer Hub.");
   });
 
   it("leaves every other reason as it was, whatever the Hub says", () => {
-    expect(reasonText("off", hub, "handoff")).toBe("is turned off on this environment.");
-    expect(reasonText("locked", hub, "handoff")).toBe("is forced off by the environment operator.");
-    expect(reasonText("missing", hub, "handoff")).toBe("is not available on this environment.");
+    expect(reasonText("off", hub, "rooms")).toBe("is turned off on this environment.");
+    expect(reasonText("locked", hub, "rooms")).toBe("is forced off by the environment operator.");
+    expect(reasonText("missing", hub, "rooms")).toBe("is not available on this environment.");
   });
 });

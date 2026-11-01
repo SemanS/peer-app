@@ -26,7 +26,7 @@ import {
   PeerStackedField,
 } from "../PeerDialog";
 import { ProjectMark } from "../signals";
-import { projectScopeKey } from "../workBoard.logic";
+import { projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import { announcementAtoms } from "./atoms";
 import { AnnouncementList } from "./AnnouncementList";
 import { withFinally } from "~/lib/withFinally";

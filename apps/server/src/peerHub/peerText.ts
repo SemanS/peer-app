@@ -1,7 +1,7 @@
 /**
  * peerText — text that reaches an agent from somebody else.
  *
- * What other members and their agents write (a note, a shared context, a committed entry, a
+ * What other members and their agents write (a note, a room message, a committed entry, a
  * model's answer) is read by agents that never saw its author. So nothing in it may hide (the
  * characters a reader cannot see are dropped), nothing in it may open or close what Peer wraps it
  * in (the tags a harness or a model reads are made harmless), and Peer says it is reference, not

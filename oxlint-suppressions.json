@@ -363,7 +363,7 @@
   },
   "apps/server/src/peerHub/core/coordination/PeerAgents.ts": {
     "t3code/no-low-value-comments": {
-      "count": 2
+      "count": 1
     },
     "t3code/prefer-effect-fn": {
       "count": 1
@@ -432,7 +432,7 @@
   },
   "apps/server/src/peerHub/core/plugin.ts": {
     "t3code/no-low-value-comments": {
-      "count": 3
+      "count": 2
     }
   },
   "apps/server/src/peerHub/core/plugins/PeerPlugins.ts": {
@@ -636,10 +636,10 @@
   },
   "apps/server/src/peerHub/plugins/herdr/Herdr.ts": {
     "t3code/no-low-value-comments": {
-      "count": 2
+      "count": 1
     },
     "t3code/prefer-effect-fn": {
-      "count": 9
+      "count": 7
     }
   },
   "apps/server/src/peerHub/plugins/herdr/client/checkouts.ts": {

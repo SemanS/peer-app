@@ -1,6 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { afterEach, assert, describe, it } from "@effect/vitest";
-import { PeerHubError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -8,7 +7,6 @@ import * as Path from "effect/Path";
 import { vi } from "vite-plus/test";
 
 import type { CoordinationBroker } from "../broker/Broker.ts";
-import { PeerPromptStale, type PeerPromptExpect } from "../plugin.ts";
 import * as PeerAgents from "./PeerAgents.ts";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -58,171 +56,6 @@ describe("PeerAgents.report", () => {
   );
 });
 
-it.effect(
-  "prompts only a live local runtime with matching pane and current coordinated session",
-  () =>
-    Effect.gen(function* () {
-      const agents = yield* PeerAgents.PeerAgents;
-      const asked: string[] = [];
-      let present = true,
-        level: "A" | "B" | "C" = "B";
-      const broker = {
-        onViewChange: () => () => undefined,
-        localRuntimeAgents: async () =>
-          present
-            ? [{ id: "herdr:claude:one", paneId: "p", status: "running", title: "Mine" }]
-            : [],
-        sessionViews: () => [{ id: "claude:one", pane: "p" }],
-        coordinationLevel: () => level,
-        plugins: async () => ({
-          runtime: {
-            prefix: "herdr:",
-            prompt: (id: string, text: string) =>
-              Effect.sync(() => void asked.push(`${id}:${text}`)),
-          },
-        }),
-        host: { run: Effect.runPromise },
-      } as unknown as CoordinationBroker;
-      yield* agents.attach(broker);
-      yield* agents.promptRuntime("herdr:claude:one", "words");
-      assert.deepStrictEqual(asked, ["herdr:claude:one:words"]);
-      present = false;
-      assert.strictEqual(
-        (yield* agents.promptRuntime("herdr:claude:one", "words").pipe(Effect.flip))._tag,
-        "PeerHubError",
-      );
-      present = true;
-      level = "C";
-      yield* agents.promptRuntime("herdr:claude:one", "words").pipe(Effect.flip);
-      assert.strictEqual(asked.length, 1);
-      yield* agents.promptRuntime("herdr:colleague", "words").pipe(Effect.flip);
-      assert.strictEqual(asked.length, 1);
-    }).pipe(Effect.provide(PeerAgents.layer)),
-);
-
-/** A runtime that lists one agent, `herdr:claude:one` in pane `p`, and notes what it is prompted with. */
-const promptingBroker = () => {
-  const world = {
-    present: true,
-    status: "idle" as "idle" | "blocked",
-    level: "B" as "A" | "B" | "C",
-    /** What the runtime answers when asked to prompt; it types when nothing is set. */
-    refusal: undefined as PeerHubError | PeerPromptStale | undefined,
-    prompted: [] as Array<readonly [string, string, PeerPromptExpect | undefined]>,
-  };
-  const broker = {
-    onViewChange: () => () => undefined,
-    localRuntimeAgents: async () =>
-      world.present
-        ? [{ id: "herdr:claude:one", paneId: "p", status: world.status, title: "Mine" }]
-        : [],
-    sessionViews: () => [{ id: "claude:one", pane: "p" }],
-    coordinationLevel: () => world.level,
-    plugins: async () => ({
-      runtime: {
-        prefix: "herdr:",
-        prompt: (id: string, text: string, expect?: PeerPromptExpect) =>
-          world.refusal === undefined
-            ? Effect.sync(() => void world.prompted.push([id, text, expect]))
-            : Effect.fail(world.refusal),
-      },
-    }),
-    host: { run: Effect.runPromise },
-  } as unknown as CoordinationBroker;
-  return { world, broker };
-};
-
-describe("PeerAgents.promptRuntime with what the caller read", () => {
-  const expect = { session: "one", turn: 3 } satisfies PeerPromptExpect;
-
-  it.effect("hands it to the runtime, and hands the runtime nothing when there is none", () =>
-    Effect.gen(function* () {
-      const agents = yield* PeerAgents.PeerAgents;
-      const { world, broker } = promptingBroker();
-      yield* agents.attach(broker);
-      yield* agents.promptRuntime("herdr:claude:one", "words", expect);
-      yield* agents.promptRuntime("herdr:claude:one", "more");
-      assert.deepStrictEqual(world.prompted, [
-        ["herdr:claude:one", "words", expect],
-        ["herdr:claude:one", "more", undefined],
-      ]);
-    }).pipe(Effect.provide(PeerAgents.layer)),
-  );
-
-  it.effect("tells an agent that is not the one it read from a prompt that failed", () =>
-    Effect.gen(function* () {
-      const agents = yield* PeerAgents.PeerAgents;
-      const { world, broker } = promptingBroker();
-      yield* agents.attach(broker);
-
-      // The runtime read the agent again and found it changed: that reaches the caller as it is.
-      world.refusal = new PeerPromptStale({ reason: "turn" });
-      const stale = yield* agents
-        .promptRuntime("herdr:claude:one", "words", expect)
-        .pipe(Effect.flip);
-      assert.deepStrictEqual(
-        [stale._tag, stale._tag === "PeerPromptStale" && stale.reason],
-        ["PeerPromptStale", "turn"],
-      );
-      // A runtime that could not type the text is a failure, with or without what the caller read.
-      world.refusal = new PeerHubError({ detail: "herdr did not take the prompt." });
-      for (const asked of [expect, undefined]) {
-        const failed = yield* agents
-          .promptRuntime("herdr:claude:one", "words", asked)
-          .pipe(Effect.flip);
-        assert.deepStrictEqual(
-          [failed._tag, failed.message],
-          ["PeerHubError", "herdr did not take the prompt."],
-        );
-      }
-      assert.deepStrictEqual(world.prompted, []);
-    }).pipe(Effect.provide(PeerAgents.layer)),
-  );
-
-  it.effect(
-    "calls an agent that is gone or waiting for an answer stale, and asks the runtime nothing",
-    () =>
-      Effect.gen(function* () {
-        const agents = yield* PeerAgents.PeerAgents;
-        const { world, broker } = promptingBroker();
-        yield* agents.attach(broker);
-        const refusedAs = (asked: PeerPromptExpect | undefined) =>
-          agents.promptRuntime("herdr:claude:one", "words", asked).pipe(
-            Effect.flip,
-            Effect.map((failure) =>
-              failure._tag === "PeerPromptStale" ? `stale ${failure.reason}` : failure.message,
-            ),
-          );
-        const before = "That agent no longer coordinates here or waits for an answer.";
-
-        world.present = false;
-        assert.strictEqual(yield* refusedAs(expect), "stale gone");
-        assert.strictEqual(yield* refusedAs(undefined), before);
-        world.present = true;
-        world.status = "blocked";
-        assert.strictEqual(yield* refusedAs(expect), "stale busy");
-        assert.strictEqual(yield* refusedAs(undefined), before);
-        // An agent Peer does not follow cannot be prompted at all; that is no reading gone stale.
-        world.status = "idle";
-        world.level = "C";
-        assert.strictEqual(yield* refusedAs(expect), before);
-        assert.deepStrictEqual(world.prompted, []);
-      }).pipe(Effect.provide(PeerAgents.layer)),
-  );
-
-  it.effect("is a failed prompt, not a stale agent, while coordination is off", () =>
-    Effect.gen(function* () {
-      const agents = yield* PeerAgents.PeerAgents;
-      for (const asked of [expect, undefined]) {
-        const off = yield* agents
-          .promptRuntime("herdr:claude:one", "words", asked)
-          .pipe(Effect.flip);
-        assert.strictEqual(off._tag, "PeerHubError");
-      }
-    }).pipe(Effect.provide(PeerAgents.layer)),
-  );
-});
-
 /** The agents service, and the files a transcript is kept in. */
 const withFiles = Layer.mergeAll(NodeServices.layer, PeerAgents.layer);
 
@@ -238,7 +71,7 @@ const record = (type: "user" | "assistant", content: unknown, extra: object = {}
 const said = (text: string, extra: object = {}) =>
   record("assistant", [{ type: "text", text }], extra);
 
-describe("PeerAgents.lastMessage", () => {
+describe("PeerAgents.asking", () => {
   /** A broker whose hooks know the session in pane `w1:p1`, with its transcript at `path`. */
   const hookedBroker = (path: string | undefined) =>
     ({
@@ -273,7 +106,10 @@ describe("PeerAgents.lastMessage", () => {
         // What a subagent said in between is not the agent's own last message.
         said("A helper's note.", { isSidechain: true }),
       ]);
-      assert.strictEqual(yield* agents.lastMessage("w1:p1"), "Done. Round half up, or to even?");
+      assert.deepStrictEqual(yield* agents.asking("w1:p1"), {
+        kind: "words",
+        text: "Done. Round half up, or to even?",
+      });
     }).pipe(Effect.scoped, Effect.provide(withFiles)),
   );
 
@@ -299,7 +135,6 @@ describe("PeerAgents.lastMessage", () => {
         kind: "question",
         text: "Round half up, or to even? · Scope",
       });
-      assert.strictEqual(yield* agents.lastMessage("w1:p1"), "I need a decision.");
       const plain = yield* withTranscript([said("Which one?")]);
       assert.deepStrictEqual(yield* plain.asking("w1:p1"), { kind: "words", text: "Which one?" });
     }).pipe(Effect.scoped, Effect.provide(withFiles)),
@@ -308,9 +143,9 @@ describe("PeerAgents.lastMessage", () => {
   it.effect("knows nothing of a pane without a session, and of coordination being off", () =>
     Effect.gen(function* () {
       const agents = yield* withTranscript([said("Done.")]);
-      assert.isUndefined(yield* agents.lastMessage("w9:p9"));
+      assert.isUndefined(yield* agents.asking("w9:p9"));
       yield* agents.attach(null);
-      assert.isUndefined(yield* agents.lastMessage("w1:p1"));
+      assert.isUndefined(yield* agents.asking("w1:p1"));
     }).pipe(Effect.scoped, Effect.provide(withFiles)),
   );
 
@@ -322,13 +157,13 @@ describe("PeerAgents.lastMessage", () => {
       });
       vi.stubEnv("CLAUDE_CONFIG_DIR", dir);
       yield* agents.attach(hookedBroker(undefined));
-      assert.isUndefined(yield* agents.lastMessage("w1:p1"));
+      assert.isUndefined(yield* agents.asking("w1:p1"));
       yield* agents.attach(hookedBroker(`${dir}/moved.jsonl`));
-      assert.isUndefined(yield* agents.lastMessage("w1:p1"));
+      assert.isUndefined(yield* agents.asking("w1:p1"));
       const fs = yield* FileSystem.FileSystem;
       yield* fs.writeFileString(`${dir}/empty.jsonl`, record("user", "Hello") + "\n");
       yield* agents.attach(hookedBroker(`${dir}/empty.jsonl`));
-      assert.isUndefined(yield* agents.lastMessage("w1:p1"));
+      assert.isUndefined(yield* agents.asking("w1:p1"));
     }).pipe(Effect.scoped, Effect.provide(withFiles)),
   );
 
@@ -342,10 +177,10 @@ describe("PeerAgents.lastMessage", () => {
           record("user", "And now?"),
           said("Ready."),
         ]);
-        assert.strictEqual(yield* long.lastMessage("w1:p1"), "Ready.");
+        assert.deepStrictEqual(yield* long.asking("w1:p1"), { kind: "words", text: "Ready." });
         // Last words longer than the end it reads are unknown, not the message before them.
         const longer = yield* withTranscript([said("Old words."), said("y".repeat(40_000))]);
-        assert.isUndefined(yield* longer.lastMessage("w1:p1"));
+        assert.isUndefined(yield* longer.asking("w1:p1"));
       }).pipe(Effect.scoped, Effect.provide(withFiles)),
   );
 });

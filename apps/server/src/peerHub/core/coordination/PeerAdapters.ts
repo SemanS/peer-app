@@ -58,7 +58,7 @@ const messageOf = (failure: unknown) =>
 export class PeerAdapters extends Context.Service<
   PeerAdapters,
   {
-    /** Agent coordination on or off, its policy, and Peer's hooks in Claude Code and Codex. */
+    /** Agent coordination on or off, and Peer's hooks in Claude Code and Codex. */
     readonly setCoordination: (
       input: PeerHubSetCoordinationInput,
     ) => Effect.Effect<PeerHubStatus, PeerHubError>;

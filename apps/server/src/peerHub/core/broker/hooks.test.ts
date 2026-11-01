@@ -386,7 +386,7 @@ describe("the broker's hooks", () => {
     }
   });
 
-  it("blocks an in-flight edit from a replaced runtime", async () => {
+  it("drops what an in-flight edit of a replaced runtime would say, and stops nothing", async () => {
     const tool = { tool_name: "Edit", tool_input: { file_path: "src/pricing.ts" } };
     const fixture = await brokerFixture();
     const entered = Promise.withResolvers<void>();
@@ -412,9 +412,7 @@ describe("the broker's hooks", () => {
       reply.resolve({
         hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny" },
       });
-      expect(await pending).toMatchObject({
-        hookSpecificOutput: { permissionDecision: "deny" },
-      });
+      expect(await pending).toBeNull();
     } finally {
       reply.resolve(null);
       await fixture.dispose();

@@ -32,8 +32,6 @@ import * as Stream from "effect/Stream";
 import * as AgentTranscript from "../../agentTranscript.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import {
-  PeerPromptStale,
-  type PeerPromptExpect,
   type PeerRuntimeProvider,
   type PeerTaskLauncher,
   type ReportedSession,
@@ -42,7 +40,7 @@ import {
 import * as PeerState from "../../core/state/PeerState.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
-import { herdrAgentChange, herdrViewHint, herdrWorkStatus } from "./client/herdr.ts";
+import { herdrViewHint, herdrWorkStatus } from "./client/herdr.ts";
 import { boundHerdrClient, HerdrClient } from "./client/HerdrClient.ts";
 import { boundHerdrObservations } from "./client/observations.ts";
 import { makeTaskCheckouts, realDirectory } from "./client/checkouts.ts";
@@ -294,39 +292,6 @@ const make = Effect.gen(function* () {
       } satisfies PeerAgentView;
     });
 
-  /** Where to type into an agent now: its pane, unless it is gone or waits for an answer. */
-  const plainTarget = (agent: HerdrAgentState | undefined) =>
-    agent === undefined || agent.status === "blocked"
-      ? Effect.fail(hubError("That agent stopped or waits for an answer."))
-      : Effect.succeed(agent.paneId);
-
-  /**
-   * Where to type into an agent a caller read earlier: its live name (which follows the terminal's
-   * occupant), else its pane, once a new read of its terminal shows it is still the session at the
-   * turn `expect` names, idle or done, as `wakeHerdrAgent` checks before it types. Otherwise the
-   * caller is told it is stale and nothing is typed. What `expect` leaves out is compared with what
-   * Peer last read of the agent.
-   */
-  const confirmedTarget = (known: HerdrAgentState | undefined, expect: PeerPromptExpect) =>
-    Effect.gen(function* () {
-      if (known === undefined) return yield* new PeerPromptStale({ reason: "gone" });
-      const listed = yield* Effect.tryPromise(() => client.list()).pipe(
-        Effect.orElseSucceed(() => null),
-      );
-      const found = listed?.find((candidate) => candidate.terminalId === known.terminalId);
-      const fresh = found === undefined ? undefined : { ...found, session: sessionOf(found) };
-      const read = sessionOf(known);
-      const change = herdrAgentChange(fresh, {
-        ...known,
-        session: { id: expect.session ?? read?.id, path: read?.path },
-        completionSeq: expect.turn ?? known.completionSeq,
-      });
-      if (fresh === undefined || change !== undefined) {
-        return yield* new PeerPromptStale({ reason: change ?? "gone" });
-      }
-      return fresh.name ?? fresh.paneId;
-    });
-
   const provider: PeerRuntimeProvider = {
     prefix: "herdr:",
     title: (pane) => agents.current()?.find((agent) => agent.paneId === pane)?.title,
@@ -359,19 +324,6 @@ const make = Effect.gen(function* () {
         return client.wake({ ...agent, session: sessionOf(agent) }, text);
       }),
     view: (threadKey) => agentView(threadKey),
-    prompt: (id, text, expect) =>
-      Effect.gen(function* () {
-        const agent = agentOf(id);
-        const target = yield* expect === undefined
-          ? plainTarget(agent)
-          : confirmedTarget(agent, expect);
-        yield* Effect.tryPromise(() => client.prompt(target, text)).pipe(
-          Effect.mapError(() =>
-            hubError("herdr could not confirm the prompt. Read the agent before retrying."),
-          ),
-        );
-        yield* agents.refresh;
-      }),
     notify: (title, body) => Effect.sync(() => void client.notify(title, body)),
     threads: (workspace) =>
       Effect.gen(function* () {

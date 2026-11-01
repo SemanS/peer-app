@@ -388,7 +388,7 @@ export type HerdrWakeResult = {
 /**
  * How an agent read just now differs from the one expected: its terminal has no agent (`gone`), it
  * runs another conversation (`session`), it finished another piece of work (`turn`), or it works or
- * waits for an answer (`busy`). The same words as `PeerPromptStale.reason`.
+ * waits for an answer (`busy`).
  */
 export type HerdrAgentChange = "gone" | "session" | "turn" | "busy";
 
@@ -396,7 +396,7 @@ export type HerdrAgentChange = "gone" | "session" | "turn" | "busy";
  * How `fresh`, what was read just now in the terminal of `expected`, differs from `expected`;
  * undefined when it is still that agent: the same kind of agent in the same session (its id and its
  * file) at the same completion, idle or done. An expectation with no session proves nothing, so
- * nothing matches it. The wake and a guarded prompt both type only into an agent that passes.
+ * nothing matches it. The wake types only into an agent that passes.
  */
 export function herdrAgentChange(
   fresh: HerdrAgent | undefined,

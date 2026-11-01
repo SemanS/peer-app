@@ -174,7 +174,7 @@ const continueInHerdr = (
       harness,
       prompt:
         resume === undefined
-          ? `${name}. You continue run ${run.id} on this task; read your working context and the task's shared context before you change anything.`
+          ? `${name}. You continue run ${run.id} on this task; read its room before you change anything.`
           : `Peer: your person continues run ${run.id} on ${name}. Pick it up where you left it.`,
       env: identity.env,
       resume,

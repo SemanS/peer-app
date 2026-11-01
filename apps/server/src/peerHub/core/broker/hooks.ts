@@ -102,7 +102,7 @@ export async function hookInTime(
                   hookEventName: "PreToolUse",
                   permissionDecision: "deny",
                   permissionDecisionReason:
-                    "Peer could not load its coordination policies before the deadline. Retry this action.",
+                    "Peer could not load its plugins before the deadline. Retry this action.",
                 },
               }
             : this.unverifiedTool(body, headers, plugins),
@@ -224,16 +224,6 @@ export async function hook(
       runtimeGeneration: generation,
       hookEvent: event,
     });
-    if (event === "PreToolUse" && editedFiles(body.tool_name, body.tool_input).length > 0) {
-      return {
-        hookSpecificOutput: {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason:
-            "Peer's runtime session changed while checking this action. Retry from the current session.",
-        },
-      };
-    }
     return null;
   }
   if (mod) {

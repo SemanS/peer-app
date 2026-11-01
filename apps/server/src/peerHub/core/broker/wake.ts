@@ -21,7 +21,6 @@ import {
 } from "./pipeline.ts";
 import { headerOf } from "./server.ts";
 import type { LocalSession } from "./sessions.ts";
-import type { SessionMemory } from "../coordination/edits.ts";
 
 const WAIT_MS = 25 * 60 * 1000;
 
@@ -202,19 +201,12 @@ export async function wakeDormant(this: CoordinationBroker, plugins: PeerBrokerP
     // The memory must remain unchanged on disk until the update is durably admitted.
     this.queueing.add(id);
     const deliveries: PreparedDelivery[] = [];
-    const memoryKinds = Object.keys(session.memory) as Array<keyof SessionMemory>;
-    const before = new Map(memoryKinds.map((kind) => [kind, new Set(session.memory[kind])]));
     const pluginsBefore = new Map(
       [...session.pluginTold].map(([plugin, ids]) => [plugin, new Set(ids)]),
     );
     const source = session;
     const remember = (live: LocalSession) => {
       if (live === source) return;
-      for (const kind of memoryKinds) {
-        for (const value of source.memory[kind]) {
-          if (!before.get(kind)?.has(value)) live.memory[kind].add(value);
-        }
-      }
       for (const [plugin, ids] of source.pluginTold) {
         const accepted = live.pluginTold.get(plugin) ?? new Set<string>();
         for (const value of ids) {
@@ -262,9 +254,8 @@ export async function wakeDormant(this: CoordinationBroker, plugins: PeerBrokerP
 }
 
 /**
- * Idle Codex agents hear a note on an overlap through Codex, which starts
- * their turn: Codex has no hook that waits and wakes them. Should Codex not
- * take it, the note waits for the agent's next step.
+ * Idle Codex agents hear what must wake them through Codex, which starts their turn: Codex has no
+ * hook that waits and wakes them. Should Codex not take it, it waits for the agent's next step.
  */
 export async function wakeCodex(this: CoordinationBroker, plugins: PeerBrokerPlugins) {
   for (const session of Array.from(this.sessions.values())) {
@@ -323,7 +314,7 @@ export async function wakeCodex(this: CoordinationBroker, plugins: PeerBrokerPlu
   }
 }
 
-/** Idle agents a runtime runs (herdr's) hear overlap news through it, which starts their turn. */
+/** Idle agents a runtime runs (herdr's) hear what must wake them through it, which starts their turn. */
 export async function wakeRuntime(this: CoordinationBroker, plugins: PeerBrokerPlugins) {
   const runtime = plugins.runtime;
   if (runtime === undefined) return;

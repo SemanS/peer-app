@@ -3,11 +3,11 @@
  * CoordinationBroker — the local end of coordination. Agents' hooks and the
  * `peer` CLI talk to it over a Unix socket only this user can open. It keeps
  * the agent sessions of this computer and reports them to the hub. Before an
- * agent changes a file the hub decides, recording its claim and the overlaps
- * in the same step, so the first edits of one file on two computers cannot
- * both pass; within its deadline, or by an explicit fallback. A hub without
- * that leaves the decision to the last view, as it was. Every event goes to
- * a JSON-lines log, so a run can be read back exactly.
+ * agent changes a file the hub hears of it, recording its claim and the
+ * overlaps in the same step, so the first edits of one file on two computers
+ * hear of each other; the agent goes on whatever the hub answers, or if it
+ * answers nothing. Every event goes to a JSON-lines log, so a run can be read
+ * back exactly.
  *
  * The class holds the broker's state, its lifecycle and what core reads of it. Its work lives in a
  * module per part, as functions run on the broker (`this`), listed at the end of the class.

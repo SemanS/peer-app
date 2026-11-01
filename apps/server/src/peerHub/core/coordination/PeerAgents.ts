@@ -26,10 +26,8 @@ import { AGENT_TOOL_INSTRUCTIONS, CORE_AGENT_TOOLS } from "../broker/agentTools.
 import type { CoordinationBroker } from "../broker/Broker.ts";
 import {
   CliError,
-  PeerPromptStale,
   refused,
   type PeerAgentTool,
-  type PeerPromptExpect,
   type PeerSessionView,
   type PeerToolBinding,
 } from "../plugin.ts";
@@ -37,8 +35,7 @@ import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import type { CoordinationView } from "./edits.ts";
 
 const isHubError = Schema.is(PeerHubError);
-const isPromptStale = Schema.is(PeerPromptStale);
-/** How much of the end of a transcript `lastMessage` reads. */
+/** How much of the end of a transcript `asking` reads. */
 const LAST_MESSAGE_BYTES = 16 * 1024;
 const messageOf = (failure: unknown) =>
   failure instanceof Error ? failure.message : String(failure);
@@ -80,27 +77,10 @@ export class PeerAgents extends Context.Service<
       ReadonlyArray<import("@t3tools/contracts").PeerLocalAgent>
     >;
     /**
-     * Types a prompt into one of this computer's coordinated runtime agents (`PeerLocalAgent.id`).
-     * With `expect`, the text goes in only if the agent is still the session at the turn the caller
-     * read and is idle or done: an agent that is gone or has moved on since fails with
-     * `PeerPromptStale` and nothing is typed. Without it nothing beyond the agent being live and
-     * coordinated is checked.
-     */
-    readonly promptRuntime: (
-      agent: string,
-      text: string,
-      expect?: PeerPromptExpect,
-    ) => Effect.Effect<void, PeerHubError | PeerPromptStale>;
-    /**
-     * The last words the agent said in the session most recently active in a runtime's pane, read
-     * from its Claude Code transcript (the last 16 KiB of it at most). Undefined when no session
-     * is known there, its transcript cannot be found or read, or its end holds no words of the
-     * agent's, such as a last message longer than that.
-     */
-    readonly lastMessage: (pane: string) => Effect.Effect<string | undefined>;
-    /**
-     * What the agent in a pane asks while it waits for an answer: the question of a trailing
-     * AskUserQuestion call, else its last words; undefined as for `lastMessage`.
+     * What the agent in a pane asks while it waits for an answer, read from the end of its Claude
+     * Code transcript: the question of a trailing AskUserQuestion call, else its last words.
+     * Undefined when no session is known there, its transcript cannot be read, or its end holds no
+     * words of the agent's.
      */
     readonly asking: (pane: string) => Effect.Effect<AgentTranscript.WaitingWords | undefined>;
     /**
@@ -222,46 +202,6 @@ const make = Effect.gen(function* () {
     runtimeAgents: tools((running) => running.localRuntimeAgents()).pipe(
       Effect.orElseSucceed(() => []),
     ),
-    promptRuntime: (id, text, expect) =>
-      Effect.tryPromise({
-        try: async () => {
-          const running = broker;
-          const runtime =
-            running && (await running.localRuntimeAgents()).find((row) => row.id === id);
-          const session = running
-            ?.sessionViews()
-            .find((row) => row.pane === runtime?.paneId && `herdr:${row.id}` === id);
-          // A caller that read the agent earlier asks for that agent, so one that has gone or
-          // waits for an answer is not the one it read, rather than a prompt that failed.
-          if (expect !== undefined && running && (!runtime || runtime.status === "blocked"))
-            throw new PeerPromptStale({ reason: runtime ? "busy" : "gone" });
-          if (
-            !running ||
-            !runtime ||
-            !session ||
-            running.coordinationLevel(session.id) === "C" ||
-            runtime.status === "blocked"
-          )
-            throw new PeerHubError({
-              detail: "That agent no longer coordinates here or waits for an answer.",
-            });
-          const provider = (await running.plugins()).runtime;
-          if (!provider?.prompt || !id.startsWith(provider.prefix))
-            throw new PeerHubError({ detail: "This runtime cannot accept that prompt." });
-          await running.host.run(provider.prompt(id, text, expect));
-        },
-        catch: (failure) =>
-          isHubError(failure) || isPromptStale(failure)
-            ? failure
-            : new PeerHubError({
-                detail: "The runtime could not confirm the prompt. Read the agent before retrying.",
-              }),
-      }),
-    lastMessage: (pane) =>
-      Effect.map(
-        tailEntries(pane),
-        (entries) => entries.findLast((entry) => entry.kind === "text")?.text,
-      ),
     asking: (pane) => Effect.map(tailEntries(pane), AgentTranscript.waitingWords),
     inPane: (pane) => broker?.sessionInPane(pane),
     level: (session) => broker?.coordinationLevel(session) ?? "C",

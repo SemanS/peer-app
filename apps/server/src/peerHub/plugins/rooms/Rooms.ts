@@ -30,6 +30,7 @@ import {
   type PeerRoomsFoldersInput,
   type PeerRoomsSeenInput,
   type PeerRoomsSetReachInput,
+  type PeerRoomsShareWorkInput,
   type PeerRoomsWithdrawInput,
   type PeerRoomTarget,
 } from "@t3tools/contracts";
@@ -61,6 +62,7 @@ import { checkoutKind, holdsWork } from "../../core/vcs.ts";
 import * as PeerWork from "../../core/work/PeerWork.ts";
 import { changeToReview, pushedRefs, roomDiff, workRun, worktreeOf } from "./client/diff.ts";
 import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/steps.ts";
+import { workSharing } from "./client/sharing.ts";
 import { fetchPins, newestHandoff, pinnedRoot, readPin, storeOf } from "./client/snapshots.ts";
 import { runQueues, tellable } from "./client/queue.ts";
 import { statusOf } from "./client/status.ts";
@@ -120,6 +122,7 @@ const make = Effect.gen(function* () {
   /** Run → its messages not yet confirmed heard, in arrival order. */
   const queues = runQueues();
   const starts = roomStarts(state, work, plugins);
+  const sharing = workSharing(state);
   const startedAt = yield* Clock.currentTimeMillis;
   /** `heard` moves the Hub never confirmed, sent again with the next read that reaches it. */
   const unsent = new Map<string, HeardJob>();
@@ -516,7 +519,14 @@ const make = Effect.gen(function* () {
 
   return {
     /** The plugin's status slice, read from memory. */
-    status: Effect.map(Ref.get(inboxes), statusOf),
+    status: Effect.zipWith(Ref.get(inboxes), sharing.on, (read, shareWork) => ({
+      ...statusOf(read),
+      shareWork,
+    })),
+    /** Whether this computer's pins go to origin. */
+    sharesWork: sharing.on,
+    shareWork: ({ share }: PeerRoomsShareWorkInput) =>
+      sharing.set(share).pipe(Effect.andThen(status.publish), Effect.as({ shareWork: share })),
     read: roomRead,
     post: (input: PeerRoomsPostInput) => {
       const { workspace, project, task, ...body } = input;

@@ -33,6 +33,8 @@ export const roomsRpc = (rooms: Rooms["Service"]) =>
           wrap.effect(methods.peerRoomsSteps, rooms.steps(input)),
         [methods.peerRoomsSnapshot]: (input) =>
           wrap.effect(methods.peerRoomsSnapshot, rooms.snapshot(input)),
+        [methods.peerRoomsShareWork]: (input) =>
+          wrap.effect(methods.peerRoomsShareWork, rooms.shareWork(input)),
       }),
   }) satisfies NonNullable<PeerContributions["rpc"]>;
 

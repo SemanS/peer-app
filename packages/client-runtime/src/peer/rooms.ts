@@ -93,6 +93,10 @@ export function createPeerRoomsAtoms<R, ER>(
       label: "environment-data:peer.rooms.set-reach",
       tag: WS_METHODS.peerRoomsSetReach,
     }),
+    shareWork: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:peer.rooms.share-work",
+      tag: WS_METHODS.peerRoomsShareWork,
+    }),
   };
 }
 

@@ -82,6 +82,7 @@ export const CLIENT_GUARDED_RPC_SCOPES = {
   [WS_METHODS.peerRoomsDecline]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRoomsWithdraw]: AuthOrchestrationOperateScope,
   [WS_METHODS.peerRoomsSetReach]: AuthOrchestrationOperateScope,
+  [WS_METHODS.peerRoomsShareWork]: AuthAccessWriteScope,
   // Resuming an ended agent runs its CLI headless on this environment.
   [WS_METHODS.peerSettleSetResume]: AuthOrchestrationOperateScope,
   // Ending a run changes the team's shared work; continuing one starts an agent on this environment.

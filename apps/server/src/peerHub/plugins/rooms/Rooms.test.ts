@@ -323,7 +323,13 @@ describe("the status", () => {
           }),
         );
         const rooms = yield* roomsWhen(peer.status, (next) => next !== undefined);
-        assert.deepStrictEqual(rooms, { waiting: [], mentions: [], seqs: {}, revs: {} });
+        assert.deepStrictEqual(rooms, {
+          waiting: [],
+          mentions: [],
+          seqs: {},
+          revs: {},
+          shareWork: false,
+        });
       }),
     ),
   );

@@ -213,8 +213,16 @@ export const PeerRoomsStatus = Schema.Struct({
   seqs: Schema.Record(Schema.String, PeerRoomSeqs),
   /** `workspace` → `project` → `task` → revision, keyed as `seqs`. */
   revs: Schema.Record(Schema.String, PeerRoomRevs),
+  /** Whether this computer's pins of its agents' work go to origin; absent from an older Peer. */
+  shareWork: Schema.optional(Schema.Boolean),
 });
 export type PeerRoomsStatus = typeof PeerRoomsStatus.Type;
+
+/** Its owner chooses whether this computer's pins of its agents' work go to origin. */
+export const PeerRoomsShareWorkInput = Schema.Struct({ share: Schema.Boolean });
+export type PeerRoomsShareWorkInput = typeof PeerRoomsShareWorkInput.Type;
+export const PeerRoomsShareWorkResult = Schema.Struct({ shareWork: Schema.Boolean });
+export type PeerRoomsShareWorkResult = typeof PeerRoomsShareWorkResult.Type;
 
 const RoomPlace = {
   workspace: TrimmedNonEmptyString,

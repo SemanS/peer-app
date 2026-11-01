@@ -1,6 +1,7 @@
 import type { PeerWebPlugin } from "../slots.types";
 import { RoomBadge, RoomReviewSection, RoomTaskSection } from "./RoomCard";
 import { ProjectChats } from "./ProjectChats";
+import { RoomSharingSettings } from "./RoomSharingSettings";
 import { RoomsInbox } from "./RoomsInbox";
 import { roomNeedsCount, roomPalette } from "./roomSlots.logic";
 
@@ -17,4 +18,5 @@ export const roomsWebPlugin: PeerWebPlugin = {
   taskBadges: RoomBadge,
   palette: roomPalette,
   projectRows: ProjectChats,
+  settings: RoomSharingSettings,
 };

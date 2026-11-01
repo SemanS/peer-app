@@ -49,6 +49,7 @@ export const RoomsPlugin = bindPlugin({
             ? rooms.forget(event.workspace)
             : rooms.keep(event.workspaces.map((workspace) => workspace.slug)),
       status: { read: rooms.status },
+      wipSharing: { on: rooms.sharesWork },
       turnOff: rooms.forget(),
       rpc: roomsRpc(rooms),
       run: rooms.follow,

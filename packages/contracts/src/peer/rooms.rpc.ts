@@ -7,6 +7,7 @@ import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 
 import {
+  AuthAccessWriteScope,
   AuthOrchestrationOperateScope,
   AuthOrchestrationReadScope,
   EnvironmentAuthorizationError,
@@ -34,6 +35,8 @@ import {
   PeerRoomsSeenResult,
   PeerRoomsSetReachInput,
   PeerRoomsSetReachResult,
+  PeerRoomsShareWorkInput,
+  PeerRoomsShareWorkResult,
   PeerRoomsWithdrawInput,
 } from "./rooms.ts";
 
@@ -50,6 +53,7 @@ export const PEER_ROOMS_METHODS = {
   peerRoomsSteps: "peer.rooms.steps",
   peerRoomsSnapshot: "peer.rooms.snapshot",
   peerRoomsThread: "peer.rooms.thread",
+  peerRoomsShareWork: "peer.rooms.shareWork",
 } as const;
 
 const methods = PEER_ROOMS_METHODS;
@@ -96,9 +100,17 @@ export const RoomsRpcGroup = RpcGroup.make(
     success: PeerRoomThread,
     error,
   }),
+  Rpc.make(methods.peerRoomsShareWork, {
+    payload: PeerRoomsShareWorkInput,
+    success: PeerRoomsShareWorkResult,
+    error,
+  }),
 );
 
-/** Reading is orchestration-read; what may start an agent or tell the team is operating. */
+/**
+ * Reading is orchestration-read; what may start an agent or tell the team is operating. Whether
+ * code leaves this computer is its owner's call.
+ */
 export const RoomsRpcScopes = {
   [methods.peerRoomsRead]: AuthOrchestrationReadScope,
   [methods.peerRoomsPost]: AuthOrchestrationOperateScope,
@@ -112,4 +124,5 @@ export const RoomsRpcScopes = {
   [methods.peerRoomsSteps]: AuthOrchestrationReadScope,
   [methods.peerRoomsSnapshot]: AuthOrchestrationReadScope,
   [methods.peerRoomsThread]: AuthOrchestrationReadScope,
+  [methods.peerRoomsShareWork]: AuthAccessWriteScope,
 } as const satisfies Record<RpcGroup.Rpcs<typeof RoomsRpcGroup>["_tag"], AuthEnvironmentScope>;

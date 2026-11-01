@@ -171,9 +171,11 @@ describe("sanitizeRoutes", () => {
   });
 
   it("drops an address of a screen this app no longer has", () => {
-    expect(sanitizeRoutes({ work: "/integration/acme/app", lastView: "work" })).toEqual({
-      lastView: "work",
-    });
+    for (const screen of ["integration", "team-usage", "knowledge", "memory"]) {
+      expect(sanitizeRoutes({ work: `/${screen}/acme/app`, lastView: "work" })).toEqual({
+        lastView: "work",
+      });
+    }
   });
 });
 

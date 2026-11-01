@@ -164,11 +164,6 @@ function SettingsNavRow({
             lead
           </span>
         ) : null}
-        {item.tag === undefined ? null : (
-          <span className="ms-auto shrink-0 text-2xs font-normal text-warning-foreground">
-            {item.tag}
-          </span>
-        )}
         {item.dot === true ? (
           <span
             role="img"

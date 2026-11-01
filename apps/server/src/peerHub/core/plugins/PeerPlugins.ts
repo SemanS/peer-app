@@ -42,7 +42,7 @@ export interface ActivePlugin {
 }
 
 /** The capability slots at most one plugin fills. */
-export type CapabilitySlot = "runtime" | "gitHost" | "taskLauncher" | "wipSharing";
+export type CapabilitySlot = "runtime" | "taskLauncher" | "wipSharing";
 
 /** The first of `providers` (see `contributions`) that fills `slot`, if any does. */
 export const capability = <K extends CapabilitySlot>(

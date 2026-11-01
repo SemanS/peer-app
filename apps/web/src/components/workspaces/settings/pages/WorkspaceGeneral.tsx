@@ -1,16 +1,14 @@
 import { serverEnvironment } from "../../../../state/server";
 import { useAtomCommand } from "../../../../state/use-atom-command";
-import { SettingsSearchTarget, SettingsSection } from "../../../settings/settingsLayout";
+import { SettingsSearchTarget } from "../../../settings/settingsLayout";
 import { EMAIL_DOMAINS_TARGET } from "../../workspaceAccess.logic";
 import { ProjectMark } from "../../signals";
 import { failureMessage } from "../../WorkspaceAccess";
 import { PageSection, SettingsReadError } from "../CapacityCoordinationParts";
-import { GitHubChecksCard } from "../IntegrationsGitHub";
 import type { WorkspacePageProps } from "../pageProps";
 import { ownLimit } from "../../workspaceMembers.logic";
-import { GITHUB_ANCHOR, isWorkspaceAdmin, workspaceRoleBadge } from "../peerSettings.logic";
-import { PeerSettingsPage, RequirePlugin } from "../PeerSettingsPage";
-import { HostedWorkspaceSettings } from "../PluginSlots";
+import { isWorkspaceAdmin, workspaceRoleBadge } from "../peerSettings.logic";
+import { PeerSettingsPage } from "../PeerSettingsPage";
 import { SettingsUnavailableNote } from "../SettingsUnavailable";
 import { useSettingsView } from "../useSettingsView";
 import { DomainsSection } from "../WorkspaceGeneralDomains";
@@ -19,9 +17,8 @@ import { YamlCard } from "../WorkspaceGeneralYaml";
 
 /**
  * A workspace's General page (design artboard 14): its name, the email domains that let colleagues
- * in on their own, its settings as YAML to export and import, and for admins GitHub's PR checks
- * (against a Hub without the settings feature, the setup they always had). Admins rename the
- * workspace and use YAML; only owners change domains; everyone else reads. The name and the domains
+ * in on their own, and its settings as YAML to export and import. Admins rename the workspace and
+ * use YAML; only owners change domains; everyone else reads. The name and the domains
  * are the Hub's own calls and take effect at once. Without the settings feature on the Hub the page
  * shows what the manifest says and nothing is editable.
  */
@@ -79,29 +76,6 @@ export function WorkspaceGeneral({ environmentId, status, workspace }: Workspace
 
         {admin && available ? (
           <YamlCard environmentId={environmentId} workspace={workspace} view={view} />
-        ) : null}
-
-        {admin ? (
-          <RequirePlugin status={status} plugin="github" title="GitHub">
-            <SettingsSearchTarget id={GITHUB_ANCHOR}>
-              {available ? (
-                <GitHubChecksCard
-                  environmentId={environmentId}
-                  status={status}
-                  workspace={workspace}
-                />
-              ) : (
-                <SettingsSection title="GitHub" hideTitle>
-                  <HostedWorkspaceSettings
-                    host="github"
-                    environmentId={environmentId}
-                    status={status}
-                    workspace={workspace}
-                  />
-                </SettingsSection>
-              )}
-            </SettingsSearchTarget>
-          </RequirePlugin>
         ) : null}
 
         <WorkspaceRows

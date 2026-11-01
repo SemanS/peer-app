@@ -9,7 +9,7 @@ import {
   selectPeerPlugins,
 } from "./slots.logic";
 
-const REGISTRY = ["herdr", "github", "changes", "observe", "rooms"].map((id) => ({ id }));
+const REGISTRY = ["herdr", "changes", "observe", "rooms"].map((id) => ({ id }));
 
 const plugin = (id: string, active = true): PeerPluginState => ({
   id,
@@ -29,7 +29,6 @@ const status = (plugins?: ReadonlyArray<PeerPluginState>): PeerHubStatus => ({
   workspaceRoot: "/home/ana/Peer",
   environmentId: "ana-laptop",
   agents: { herdr: "not-running", list: [] },
-  github: { cli: false, account: null, signIn: null, error: null },
   coordination: {
     enabled: true,
     policy: "coordinate",
@@ -61,7 +60,7 @@ describe("selectPeerPlugins", () => {
   });
 
   it("selects the features that existed before plugins when the status lists none", () => {
-    const legacy = ["herdr", "github", "observe"];
+    const legacy = ["herdr", "observe"];
     expect(ids(selectPeerPlugins(REGISTRY, status()))).toEqual(legacy);
     expect(ids(selectPeerPlugins(REGISTRY, status([])))).toEqual(legacy);
   });

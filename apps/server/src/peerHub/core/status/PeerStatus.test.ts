@@ -72,11 +72,10 @@ const startedCore = (plugins: ReadonlyArray<PeerPluginEntry>) =>
 /** The fields plugins that existed before plugins fill. */
 const legacyFields = (status: PeerHubStatus) => ({
   agents: status.agents,
-  github: status.github,
   sharedThreads: status.sharedThreads,
 });
 
-const LEGACY_IDS: ReadonlyArray<PeerPluginId> = ["herdr", "github", "observe"];
+const LEGACY_IDS: ReadonlyArray<PeerPluginId> = ["herdr", "observe"];
 
 describe("the Peer status", () => {
   it.effect("keeps core's values for features that are no plugins yet", () =>
@@ -84,10 +83,9 @@ describe("the Peer status", () => {
       const { status } = yield* startedCore([]);
       const published = yield* status.publish;
       assert.deepStrictEqual(legacyFields(published), {
-        // herdr, GitHub and observe are plugins, which this registry leaves out:
+        // herdr and observe are plugins, which this registry leaves out:
         // core knows none of them.
         agents: { herdr: "not-running", list: [] },
-        github: { cli: false, account: null, signIn: null, error: null },
         sharedThreads: [],
       });
       assert.deepStrictEqual(published.plugins, []);
@@ -100,13 +98,11 @@ describe("the Peer status", () => {
       Effect.gen(function* () {
         const { status, plugins } = yield* startedCore([
           slicePlugin("herdr", { herdr: "running", list: [], postHocSkipped: 1 }),
-          slicePlugin("github", { cli: true, account: "bob", signIn: null, error: null }),
           // A slice of another shape reads as the neutral value.
           slicePlugin("observe", ["peer:thread-2", 3]),
         ]);
         assert.deepStrictEqual(legacyFields(yield* status.publish), {
           agents: { herdr: "running", list: [], postHocSkipped: 1 },
-          github: { cli: true, account: "bob", signIn: null, error: null },
           sharedThreads: [],
         });
 
@@ -114,7 +110,6 @@ describe("the Peer status", () => {
         const off = yield* status.publish;
         assert.deepStrictEqual(legacyFields(off), {
           agents: { herdr: "not-running", list: [] },
-          github: { cli: false, account: null, signIn: null, error: null },
           sharedThreads: [],
         });
         assert.deepStrictEqual(

@@ -10,7 +10,6 @@ import { McpPlugin } from "../plugins/mcp/index.ts";
 
 import { AuditPlugin } from "../plugins/audit/index.ts";
 import { CardPlugin } from "../plugins/card/index.ts";
-import { GitHubPlugin } from "../plugins/github/index.ts";
 import { HerdrPlugin } from "../plugins/herdr/index.ts";
 import { JujutsuPlugin } from "../plugins/jujutsu/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
@@ -50,7 +49,6 @@ export const CORE_COMMANDS = [
 export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   HerdrPlugin,
   JujutsuPlugin,
-  GitHubPlugin,
   ObservePlugin,
 
   CardPlugin,

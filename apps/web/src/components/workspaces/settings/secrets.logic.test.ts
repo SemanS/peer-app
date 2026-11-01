@@ -20,7 +20,7 @@ const options = { now: NOW, timeZone: "UTC" } as const;
 
 const slavo = { email: "slavo@acme.dev", name: "Slavo" };
 
-/** The design's table: a gateway key, GitHub's secret, a webhook's URL that nobody stored, its signing key, a leftover. */
+/** The design's table: a tool's key, a webhook's URL that nobody stored, its signing key, a leftover. */
 const view: PeerSettingsSecretsView = {
   secrets: [
     {
@@ -33,10 +33,10 @@ const view: PeerSettingsSecretsView = {
       name: "litellm-master-key",
       at: "2026-10-02T10:00:00Z",
       by: slavo,
-      usedBy: ["Shared capacity · the gateway"],
+      usedBy: ["Tool · Postgres"],
     },
     { name: "OLD_JIRA_HOOK", at: "2026-08-12T08:00:00Z", by: null, usedBy: [] },
-    { name: "github-webhook", at: "2026-09-28T16:45:00Z", usedBy: ["GitHub PR checks"] },
+    { name: "POSTGRES_URL", at: "2026-09-28T16:45:00Z", usedBy: ["Tool · Postgres"] },
   ],
   missing: [{ name: "TEAMS_ALERTS_URL", usedBy: ["Webhook “Teams alerts” · off until set"] }],
 };
@@ -71,9 +71,9 @@ describe("the rows", () => {
   it("put what needs doing first, then what is used, then what is not, each by name", () => {
     expect(rows.map((row) => row.name)).toEqual([
       "TEAMS_ALERTS_URL",
-      "github-webhook",
       "litellm-master-key",
       "OPS_SIGNING_KEY",
+      "POSTGRES_URL",
       "OLD_JIRA_HOOK",
     ]);
   });
@@ -124,7 +124,7 @@ describe("what a row says", () => {
   const row = (name: string) => rows.find((candidate) => candidate.name === name)!;
 
   it("says what uses a secret, or that nothing does", () => {
-    expect(usesOf(row("github-webhook"))).toEqual(["GitHub PR checks"]);
+    expect(usesOf(row("POSTGRES_URL"))).toEqual(["Tool · Postgres"]);
     expect(usesOf(row("OLD_JIRA_HOOK"))).toEqual([NOTHING_USES_IT]);
   });
 
@@ -152,7 +152,6 @@ describe("what a row says", () => {
 
 describe("what stops when a secret goes", () => {
   it.each([
-    ["GitHub PR checks", "GitHub’s deliveries will fail, so PR checks stop."],
     ["The nightly export", "The nightly export stops working until the secret is set again."],
   ])("says of %j: %s", (use, impact) => {
     expect(impactOf(use)).toBe(impact);
@@ -170,13 +169,16 @@ describe("what stops when a secret goes", () => {
   it("lists every use of one that is used, and asks for Delete anyway", () => {
     const words = deleteWords({
       name: "ops-url",
-      uses: ["GitHub PR checks", "The nightly export"],
+      uses: ["Tool · Postgres", "The nightly export"],
     });
     expect(words.title).toBe("Delete ops-url?");
     expect(words.nothing).toBeNull();
     expect(words.confirm).toBe("Delete anyway");
     expect(words.impacts).toEqual([
-      { use: "GitHub PR checks", impact: "GitHub’s deliveries will fail, so PR checks stop." },
+      {
+        use: "Tool · Postgres",
+        impact: "Tool · Postgres stops working until the secret is set again.",
+      },
       {
         use: "The nightly export",
         impact: "The nightly export stops working until the secret is set again.",

@@ -5,7 +5,7 @@
  * and branches are safe for a computer to clone is `shared.logic`'s; the id rule is the Hub's
  * (`valid_id`).
  */
-import type { PeerCheckoutState, PeerHubStatus } from "@t3tools/contracts";
+import type { PeerCheckoutState } from "@t3tools/contracts";
 
 import { isSafeGitRef, isSafeGitRemote } from "./shared.logic";
 
@@ -51,19 +51,6 @@ export function hasCredentials(url: string): boolean {
   if (at < 0) return false;
   return /^https?$/i.test(scheme) || authority.slice(0, at).includes(":");
 }
-
-/** The host an address names, lowercase: of `https://…`, `ssh://git@…`, `git@host:path` or `host/path`. */
-export function hostOf(url: string): string | null {
-  const address = url.trim();
-  const named =
-    /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?([^/?#:]+)/i.exec(address) ??
-    /^(?:[A-Za-z0-9._-]+@)?([A-Za-z0-9.-]+):[^:/\\]/.exec(address) ??
-    /^([A-Za-z0-9.-]+)\//.exec(address);
-  return named?.[1]?.toLowerCase() ?? null;
-}
-
-/** Whether Peer can confirm a pull request's merge on this host (GitHub's signed webhooks). */
-export const isGitHubUrl = (url: string): boolean => hostOf(url) === "github.com";
 
 /** An address as the list shows it: without `https://` and a trailing `.git`. */
 export const shortUrl = (url: string): string =>
@@ -151,19 +138,6 @@ export const setRepositoryBranch = (
   listOf(list).map((element) =>
     hasId(element, id) && isMapping(element) ? { ...element, branch: branch.trim() } : element,
   );
-
-/** Whether the workspace verifies pull requests with GitHub's signed webhooks, as the task views read it. */
-export const githubChecksOn = (status: Pick<PeerHubStatus, "github">, workspace: string): boolean =>
-  status.github.verification?.find((entry) => entry.workspace === workspace)?.configured === true;
-
-/** "PRs verified" where Peer can confirm a merge (GitHub checks on, a github.com address), else as the agent reports. */
-export const prVerification = (url: string, checksOn: boolean): "verified" | "reported" =>
-  checksOn && isGitHubUrl(url) ? "verified" : "reported";
-
-export const PR_LABEL: Readonly<Record<"verified" | "reported", string>> = {
-  verified: "PRs verified",
-  reported: "PRs as reported",
-};
 
 /** What a row says of the clone on this computer. */
 export type CloneView =

@@ -12,7 +12,7 @@ import { block } from "../../peerText.ts";
 
 const DIRECTORIES = ["projects", "tools"] as const;
 /** What `workspace.yaml` holds of the configuration; the workspace's name and domains are its own. */
-export const WORKSPACE_KEYS = ["currency", "people", "github"] as const;
+export const WORKSPACE_KEYS = ["currency", "people"] as const;
 const FILE = /^(projects|tools)\/([a-z0-9][a-z0-9-]*)\.ya?ml$/;
 
 const isMapping = (value: unknown): value is Record<string, unknown> =>

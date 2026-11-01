@@ -1,5 +1,4 @@
 import * as Schema from "effect/Schema";
-import { PeerGitHubEvidence } from "./github.ts";
 import { PeerRunCounts } from "./runs.ts";
 
 /**
@@ -34,7 +33,6 @@ export const PeerWorkPullRequest = Schema.Struct({
   url: Schema.String,
   state: Schema.Literals(["open", "closed", "merged", "unknown"]),
   headBranch: Schema.String,
-  github: Schema.optional(PeerGitHubEvidence),
 });
 export type PeerWorkPullRequest = typeof PeerWorkPullRequest.Type;
 

@@ -15,8 +15,6 @@ import {
   jjView,
   addRepository,
   cloneView,
-  githubChecksOn,
-  prVerification,
   removeRepository,
   repositoriesOf,
   setRepositoryBranch,
@@ -64,14 +62,12 @@ export function ProjectRepositories({ environmentId, status, workspace, state }:
       : getAt(view.document, ["projects", project.id, "repositories"]),
   );
   const unsaved = draft.dirty > 0;
-  const checksOn = githubChecksOn(status, workspace.slug);
   const rows: ReadonlyArray<RepositoryRowModel> = listed.map((entry) => {
     const here = state.repositories.find((repository) => repository.id === entry.id);
     const jj = jjView(here, status.jj);
     return {
       ...entry,
       notSaved: unsaved && !saved.some((repository) => repository.id === entry.id),
-      pr: prVerification(entry.url, checksOn),
       clone: cloneView(here),
       jj: jj.kind === "offer" && !jujutsu.allowed ? { kind: "none" } : jj,
     };

@@ -61,8 +61,6 @@ export const SettingsPlugin = bindPlugin({
             [m.peerSettingsSecrets]: on(m.peerSettingsSecrets, service.secrets),
             [m.peerSettingsPutSecret]: on(m.peerSettingsPutSecret, service.putSecret),
             [m.peerSettingsDeleteSecret]: on(m.peerSettingsDeleteSecret, service.deleteSecret),
-            [m.peerSettingsGithubEnable]: on(m.peerSettingsGithubEnable, service.githubEnable),
-            [m.peerSettingsGithubDisable]: on(m.peerSettingsGithubDisable, service.githubDisable),
             [m.peerSettingsDomainRecord]: on(m.peerSettingsDomainRecord, service.domainRecord),
             [m.peerSettingsVerifyDomain]: on(m.peerSettingsVerifyDomain, service.verifyDomain),
             [m.peerSettingsUpdateWorkspace]: on(

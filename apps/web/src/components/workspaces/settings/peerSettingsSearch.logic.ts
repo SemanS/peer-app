@@ -13,7 +13,6 @@ import {
   COMPUTER_SECTION_LABELS,
   PROJECT_TAB_LABELS,
   WORKSPACE_SECTION_LABELS,
-  GITHUB_ANCHOR,
   isPluginHidden,
   isWorkspaceAdmin,
   peerSettingsGroupLabel,
@@ -94,17 +93,6 @@ const WORKSPACE_ENTRIES: ReadonlyArray<Entry> = [
     title: "Hub secrets",
     place: w("secrets"),
     terms: "secret secrets token key sealed value store",
-  },
-  // GitHub
-  {
-    id: "github-checks",
-    title: "GitHub PR checks",
-    place: w("general"),
-    targetId: GITHUB_ANCHOR,
-    admin: true,
-    terms: "github webhook secret ping pull request merge checks",
-    plugin: "github",
-    row: "workspace:github",
   },
   // Audit, Hub, New project
   {

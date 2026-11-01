@@ -4,11 +4,8 @@ import { useId, useRef, useState, type ReactNode } from "react";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
-import { PeerCallout } from "../PeerDialog";
 import {
-  PR_LABEL,
   branchProblem,
-  isGitHubUrl,
   newRepositoryProblems,
   repositoryIdFromUrl,
   shortUrl,
@@ -22,7 +19,6 @@ import {
 export interface RepositoryRowModel extends RepositoryEntry {
   /** The draft adds it. */
   readonly notSaved: boolean;
-  readonly pr: "verified" | "reported";
   readonly clone: CloneView;
   readonly jj: JjView;
 }
@@ -203,9 +199,6 @@ function RepositoryRow({
         </Button>
       ) : null}
       <BranchChip id={row.id} branch={row.branch} editable={editable} onChange={onBranch} />
-      <Badge variant={row.pr === "verified" ? "success" : "warning"} size="lg">
-        {PR_LABEL[row.pr]}
-      </Badge>
       <span className="flex w-28 shrink-0 items-center">
         <CloneCell clone={row.clone} busy={busy} onClone={onClone} />
       </span>
@@ -268,8 +261,7 @@ export function RepositoryList({
 
 /**
  * Adds a repository by its Git URL and branch. Its id comes from the URL and is made unique in the
- * project; an address on another host than github.com is allowed, with a note that its pull
- * requests are only as the agent reports them.
+ * project.
  */
 export function AddRepositoryForm({
   projectName,
@@ -287,7 +279,6 @@ export function AddRepositoryForm({
   const [branch, setBranch] = useState("main");
   const problems = newRepositoryProblems({ url, branch });
   const id = uniqueRepositoryId(repositoryIdFromUrl(url), takenIds);
-  const elsewhere = url.trim() !== "" && problems.url === null && !isGitHubUrl(url.trim());
   return (
     <form
       aria-labelledby={`${formId}-title`}
@@ -335,12 +326,6 @@ export function AddRepositoryForm({
       <p className="text-xs text-muted-foreground">
         ID <span className="font-mono text-foreground">{id}</span> · unique in {projectName}
       </p>
-      {elsewhere ? (
-        <PeerCallout tone="needs">
-          This isn’t on github.com, so Peer can’t confirm its PRs were merged. Tasks here finish
-          with the PR the agent reports.
-        </PeerCallout>
-      ) : null}
       <div className="flex gap-2">
         <Button type="submit" disabled={!problems.ready}>
           Add

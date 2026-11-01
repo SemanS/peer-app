@@ -15,7 +15,6 @@ import type { PeerHubStatus } from "@t3tools/contracts";
 import { settingsWebPlugin } from "./settings";
 
 import { auditWebPlugin } from "./audit";
-import { githubWebPlugin } from "./github";
 import { herdrWebPlugin } from "./herdr";
 import { jujutsuWebPlugin } from "./jujutsu";
 import { observeWebPlugin } from "./observe";
@@ -30,7 +29,6 @@ export type * from "./slots.types";
 export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   herdrWebPlugin,
   jujutsuWebPlugin,
-  githubWebPlugin,
   observeWebPlugin,
 
   auditWebPlugin,

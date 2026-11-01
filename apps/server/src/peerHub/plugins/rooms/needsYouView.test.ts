@@ -16,7 +16,6 @@ const emptyStatus = (): PeerHubStatus => ({
   workspaceRoot: "",
   environmentId: "computer",
   agents: { herdr: "running", list: [] },
-  github: { cli: false, account: null, signIn: null, error: null },
   coordination: {
     enabled: true,
     policy: "ask",

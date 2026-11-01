@@ -6,7 +6,7 @@
  *
  * @module peerHub/core/status/legacy
  */
-import { PeerGitHubState, PeerHubStatus, type PeerPluginId } from "@t3tools/contracts";
+import { PeerHubStatus, type PeerPluginId } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 /** One plugin's place in the status. */
@@ -38,12 +38,6 @@ export const LEGACY_PLACES: ReadonlyArray<LegacyPlace> = [
     PeerHubStatus.fields.agents,
     { herdr: "not-running", list: [] },
     (status, agents) => ({ ...status, agents }),
-  ),
-  legacyPlace(
-    "github",
-    PeerGitHubState,
-    { cli: false, account: null, signIn: null, error: null },
-    (status, github) => ({ ...status, github }),
   ),
   legacyPlace("observe", Schema.Array(Schema.String), [], (status, sharedThreads) => ({
     ...status,

@@ -16,7 +16,6 @@ import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
 
 import type { SignalTone } from "./signals";
-import type { ProjectCheckout } from "./useOpenWorkspaceProject";
 import type { WorkProjectNode, WorkTaskNode, WorkThreadNode } from "./workTree.logic";
 
 /** What every slot gets: the environment it shows, and its status as the view read it. */
@@ -73,14 +72,6 @@ export interface NoProjectsSlotProps extends PeerSlotProps {
 export interface ProjectSettingsSlotProps extends PeerSlotProps {
   readonly workspace: PeerWorkspaceState;
   readonly state: PeerProjectState;
-}
-
-export interface NotOpenHereSlotProps extends PeerSlotProps {
-  readonly checkout: ProjectCheckout;
-  /** The last clone or open failed and nothing is running now. */
-  readonly failed: boolean;
-  /** Tries to open the project again, e.g. once what was missing is connected. */
-  readonly onRetry: () => void;
 }
 
 /** Starts an agent on a task in its own checkout. */
@@ -281,8 +272,4 @@ export interface PeerWebPlugin {
   /** Capability: starts an agent on a task. At most one plugin fills it. */
   readonly taskLauncher?: ComponentType<TaskLauncherProps>;
   /** Capability: asks a teammate to take a task on. At most one plugin fills it. */
-  /** What a project that is not open here offers once opening it failed. */
-  readonly notOpenHere?: ComponentType<NotOpenHereSlotProps>;
-  /** A note in the form that shares a project with the workspace. */
-  readonly shareProject?: ComponentType<PeerSlotProps>;
 }

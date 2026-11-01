@@ -33,8 +33,6 @@ export interface ProjectCheckout {
   readonly unsupported: ReadonlyArray<string>;
   /** Every repository is such a checkout, so there is nothing to clone or open here. */
   readonly onlyUnsupported: boolean;
-  /** Connecting GitHub, with an account that can open it, fixes a failure. */
-  readonly gitHubSignIn: boolean;
 }
 
 export function projectCheckout(state: PeerProjectState): ProjectCheckout {
@@ -52,7 +50,6 @@ export function projectCheckout(state: PeerProjectState): ProjectCheckout {
         : [],
     ),
     onlyUnsupported: state.repositories.length > 0 && usable.length === 0,
-    gitHubSignIn: usable.some((repo) => repo.state === "error" && repo.gitHubSignIn === true),
   };
 }
 

@@ -273,7 +273,6 @@ describe("where plugin settings are hosted", () => {
   it("puts the plugins a page is about on that page", () => {
     expect(slotHost("settings", "tool-trust")).toBe("tool-trust");
     expect(slotHost("workspaceSettings", "audit")).toBe("audit");
-    expect(slotHost("workspaceSettings", "github")).toBe("github");
   });
 
   it("sends every other slot to its kind's home, so no plugin's settings go missing", () => {

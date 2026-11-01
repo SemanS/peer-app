@@ -10,7 +10,6 @@ import type {
   PeerSettingsChangeResult,
   PeerSettingsConflict,
   PeerSettingsDiagnostic,
-  PeerSettingsGitHubDisableInput,
   PeerSettingsImportInput,
   PeerSettingsLine,
   PeerSettingsPath,
@@ -48,9 +47,7 @@ export type ReviewOperation =
       readonly files: Readonly<Record<string, string>>;
       readonly base?: number | undefined;
     }
-  | { readonly kind: "proposal"; readonly workspace: string; readonly id: string }
-  /** Turning GitHub's PR checks off: no draft and no base, so nothing to conflict with. */
-  | { readonly kind: "github-disable"; readonly workspace: string };
+  | { readonly kind: "proposal"; readonly workspace: string; readonly id: string };
 
 /** How conflicts were settled: `force` takes my value, `drop` keeps theirs. */
 export interface Settle {
@@ -80,8 +77,7 @@ export type ChangeCall =
   | { readonly command: "save"; readonly input: PeerSettingsChangeInput }
   | { readonly command: "revert"; readonly input: PeerSettingsRevertInput }
   | { readonly command: "importYaml"; readonly input: PeerSettingsImportInput }
-  | { readonly command: "applyProposal"; readonly input: PeerSettingsApplyProposalInput }
-  | { readonly command: "githubDisable"; readonly input: PeerSettingsGitHubDisableInput };
+  | { readonly command: "applyProposal"; readonly input: PeerSettingsApplyProposalInput };
 
 /**
  * The call an operation makes. A draft's changes have a command for each mode; the others are the
@@ -132,9 +128,6 @@ export function changeCall(
         command: "applyProposal",
         input: { workspace: operation.workspace, id: operation.id, ...dry, ...settling },
       };
-    case "github-disable":
-      // The Hub takes neither a reason nor a settlement for it.
-      return { command: "githubDisable", input: { workspace: operation.workspace, ...dry } };
   }
 }
 
@@ -539,16 +532,6 @@ export function reviewWords(kind: ReviewOperation["kind"]): ReviewWords {
         owner: "the revert’s",
         forbidden: "Ask the people named to revert them.",
         why: true,
-      };
-    case "github-disable":
-      return {
-        back: "Cancel",
-        mine: "Turning off",
-        discard: "Keep theirs",
-        started: "Turning off started from",
-        owner: "the",
-        forbidden: "Ask the people named to turn it off.",
-        why: false,
       };
   }
 }

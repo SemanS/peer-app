@@ -176,8 +176,6 @@ export const EMPTY_PERSISTED: PersistedState = {
 export interface Transient {
   readonly state: "cloning" | "error";
   readonly error?: string;
-  /** Signing in to GitHub with an account that can open the repository fixes the error. */
-  readonly gitHubSignIn?: boolean;
 }
 
 export interface ProjectWork {

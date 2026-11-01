@@ -6,14 +6,8 @@
  */
 import type { PeerProject, PeerTask, PeerWorkStatus } from "@t3tools/contracts";
 
-import {
-  boundedWorkReport,
-  mergePullRequestEvidence,
-  pullRequestBatch,
-  restoreWorkIdentity,
-} from "../../workLifecycle.ts";
+import { boundedWorkReport, restoreWorkIdentity } from "../../workLifecycle.ts";
 import type { HubWork, ReportedThread } from "../hub/hubApi.ts";
-import type { PeerGitHost } from "../plugin.ts";
 import {
   assignedTask,
   projectKey,
@@ -126,7 +120,6 @@ export function workspaceReport(input: {
   readonly live: ReadonlyArray<ReportedThread>;
   /** Whether its owner lets the team watch a thread (observe). */
   readonly observable: (thread: string) => boolean;
-  readonly gitHost: PeerGitHost | undefined;
   /** How many reports went before: dormant work takes turns within the bound. */
   readonly round: number;
 }): ReadonlyArray<ReportedThread> {
@@ -165,32 +158,11 @@ export function workspaceReport(input: {
     }
   }
   return boundedWorkReport(reported, input.round).map((thread) => {
-    const project = input.projects.find((p) => p.id === thread.project);
     const before = ownBefore(thread.project).find(
       (old) => old.id === thread.id && old.branch === thread.branch,
     );
     const repository = thread.repository ?? before?.repository;
-    const repo = project?.repositories.find((r) => r.id === repository);
-    const required = thread.pullRequests ?? before?.pullRequests;
-    // Native threads already get host snapshots through their PR links. Runtime and dormant
-    // threads use exact URLs once discovered; failed lookups leave hub evidence untouched.
-    const observed =
-      thread.source === "peer" &&
-      thread.runtimePresent !== false &&
-      thread.pullRequests !== undefined
-        ? thread.pullRequests
-        : repo === undefined ||
-            thread.branch === undefined ||
-            input.gitHost === undefined ||
-            !input.gitHost.owns(repo.url)
-          ? undefined
-          : input.gitHost.pullRequests({
-              workId: `${email}/${workspace}/${thread.project}/${thread.id}`,
-              repositoryUrl: repo.url,
-              branch: thread.branch,
-              known: pullRequestBatch(required ?? [], thread.branch),
-            });
-    const pullRequests = mergePullRequestEvidence(required, observed);
+    const pullRequests = thread.pullRequests ?? before?.pullRequests;
     return {
       ...thread,
       ...(repository === undefined ? {} : { repository }),

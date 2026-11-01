@@ -59,8 +59,6 @@ export interface PeerSettingsAtoms<ER> {
   readonly withdrawProposal: PeerSettingsCommand<Methods["peerSettingsWithdrawProposal"], ER>;
   readonly putSecret: PeerSettingsCommand<Methods["peerSettingsPutSecret"], ER>;
   readonly deleteSecret: PeerSettingsCommand<Methods["peerSettingsDeleteSecret"], ER>;
-  readonly githubEnable: PeerSettingsCommand<Methods["peerSettingsGithubEnable"], ER>;
-  readonly githubDisable: PeerSettingsCommand<Methods["peerSettingsGithubDisable"], ER>;
   readonly verifyDomain: PeerSettingsCommand<Methods["peerSettingsVerifyDomain"], ER>;
   readonly updateWorkspace: PeerSettingsCommand<Methods["peerSettingsUpdateWorkspace"], ER>;
 }
@@ -140,8 +138,6 @@ export function createPeerSettingsAtoms<R, ER>(
     withdrawProposal: command("withdraw-proposal", WS_METHODS.peerSettingsWithdrawProposal),
     putSecret: command("put-secret", WS_METHODS.peerSettingsPutSecret),
     deleteSecret: command("delete-secret", WS_METHODS.peerSettingsDeleteSecret),
-    githubEnable: command("github-enable", WS_METHODS.peerSettingsGithubEnable),
-    githubDisable: change("github-disable", WS_METHODS.peerSettingsGithubDisable),
     verifyDomain: command("verify-domain", WS_METHODS.peerSettingsVerifyDomain),
     updateWorkspace: command("update-workspace", WS_METHODS.peerSettingsUpdateWorkspace),
   };

@@ -50,7 +50,7 @@ const rejection = (status: 403 | 422, code: string, details: unknown) => {
     : undefined;
 };
 
-/** What a change, revert, import, applied proposal or GitHub removal sends besides what it names. */
+/** What a change, revert, import or applied proposal sends besides what it names. */
 const settle = (
   input: Pick<C.PeerSettingsRevertInput, "message" | "dryRun" | "force" | "drop">,
 ) => ({
@@ -233,21 +233,6 @@ export const settingsHub = (client: PeerHubClient.PeerHubClient["Service"]) => {
               : { kind: "deleted" },
           ),
         ),
-    githubEnable: (input: C.PeerSettingsGitHubEnableInput) =>
-      send(
-        C.PeerSettingsGitHubSetup,
-        input.workspace,
-        "POST",
-        "/settings/github/enable",
-        input.rotate === true ? { rotate: true } : {},
-      ),
-    githubDisable: (input: C.PeerSettingsGitHubDisableInput) =>
-      change(
-        input.workspace,
-        "/settings/github/disable",
-        input.dryRun === true ? { dryRun: true } : {},
-        input.dryRun !== true,
-      ),
     domainRecord: (input: C.PeerSettingsDomainInput) =>
       read(C.PeerDomainRecord, input.workspace, `/domains/${segment(input.domain)}/record`),
     verifyDomain: (input: C.PeerSettingsDomainInput) =>

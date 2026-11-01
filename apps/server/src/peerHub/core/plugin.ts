@@ -29,7 +29,6 @@ import type {
   PeerHubStartAgentResult,
   PeerPluginId,
   PeerTask,
-  PeerWorkPullRequest,
   PeerWorkStatus,
   PeerHubStatus,
 } from "@t3tools/contracts";
@@ -164,7 +163,6 @@ export interface PeerContributions {
   readonly turnOff?: Effect.Effect<void, PeerHubError>;
   // Capability slots: at most one plugin fills each, and core works without them.
   readonly runtime?: PeerRuntimeProvider;
-  readonly gitHost?: PeerGitHost;
   /**
    * Adds sessions to a coordination report: herdr's observations. The plugin that fills `runtime`
    * adds last, so it can fit its observations within the Hub's bound.
@@ -568,34 +566,4 @@ export interface PeerTaskLauncher {
     },
     PeerHubError
   >;
-}
-
-/** Clones, explains and finds pull requests for the repositories it owns (github). */
-export interface PeerGitHost {
-  readonly owns: (url: string) => boolean;
-  /**
-   * An address it owns as people type it (GitHub's `owner/repo`), as a clone URL and the
-   * repository's name; null when it is not one of its own.
-   */
-  readonly address: (text: string) => { readonly url: string; readonly name: string } | null;
-  /** How to clone `url`: the address and arguments to sign in with; null leaves git its own way. */
-  readonly clone: (url: string) => Effect.Effect<{
-    readonly url: string;
-    readonly args: ReadonlyArray<string>;
-    readonly configure: (checkout: string) => Effect.Effect<void>;
-  } | null>;
-  readonly explain: (
-    output: string,
-    repo: { readonly url: string; readonly branch: string },
-  ) => { readonly message: string; readonly signIn: boolean };
-  /**
-   * What the host says now of a work's pull requests, from a cache it refreshes in the
-   * background; undefined leaves the Hub's evidence as it is. `known` are the ones the Hub has.
-   */
-  readonly pullRequests: (input: {
-    readonly workId: string;
-    readonly repositoryUrl: string;
-    readonly branch: string;
-    readonly known: ReadonlyArray<PeerWorkPullRequest>;
-  }) => ReadonlyArray<PeerWorkPullRequest> | undefined;
 }

@@ -1,7 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - clones into the person's own checkouts.
 /**
- * Checkouts of workspace repositories on this computer: cloning one, through the git host that
- * owns its address or with git's own sign-in (SSH keys, the keychain); and reading what sharing a
+ * Checkouts of workspace repositories on this computer: cloning one, and reading what sharing a
  * repository gives the workspace.
  *
  * @module peerHub/core/workspaces/checkouts
@@ -12,60 +11,36 @@ import * as NodePath from "node:path";
 import { PeerHubError } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
-import { explainCloneFailure } from "../../cloneFailure.ts";
 import { isSafeGitRemote } from "../../gitSafety.ts";
 import { idFromName } from "../../names.ts";
+import { gitHubRepository } from "../../workLifecycle.ts";
 import { run, runOutput } from "../local.ts";
-import type { PeerGitHost } from "../plugin.ts";
+import { gitWay } from "./gitHost.ts";
 
 /** How long a clone or a pull may take: a big repository over a slow connection takes a while. */
 const GIT_TIMEOUT_MS = 15 * 60 * 1000;
 
 const hubError = (detail: string) => new PeerHubError({ detail });
 
-/** Why a clone failed, in words a person can act on; signing in to the host may fix it. */
-export interface CloneFailure {
-  readonly message: string;
-  readonly signIn: boolean;
-}
-
-/** The git host that owns an address, if one does. */
-const hostOf = (gitHost: PeerGitHost | undefined, url: string) =>
-  gitHost !== undefined && gitHost.owns(url) ? gitHost : undefined;
-
-/** Clones `repo` into `path`: through the git host that owns its address, or with plain git. */
+/** Clones `repo` into `path`; it fails with why, in words a person can act on. */
 export const cloneRepository = (
   repo: { readonly url: string; readonly branch: string },
   path: string,
-  gitHost: PeerGitHost | undefined,
 ) =>
   Effect.gen(function* () {
-    const host = hostOf(gitHost, repo.url);
-    const via = host === undefined ? null : yield* host.clone(repo.url);
+    const way = yield* gitWay(repo.url);
     yield* Effect.tryPromise({
       try: async () => {
         await NodeFSP.mkdir(NodePath.dirname(path), { recursive: true });
         await run(
           "git",
-          [
-            ...(via?.args ?? []),
-            "clone",
-            "--quiet",
-            "--branch",
-            repo.branch,
-            "--",
-            via?.url ?? repo.url,
-            path,
-          ],
+          [...way.args, "clone", "--quiet", "--branch", repo.branch, "--", way.url, path],
           { timeoutMs: GIT_TIMEOUT_MS },
         );
       },
-      catch: (failure): CloneFailure =>
-        host === undefined
-          ? { message: explainCloneFailure(runOutput(failure), repo), signIn: false }
-          : host.explain(runOutput(failure), repo),
+      catch: (failure) => way.explain(runOutput(failure), repo),
     });
-    if (via !== null) yield* via.configure(path);
+    yield* way.configure(path);
   });
 
 /** What sharing gives the workspace: one repository, and where it is checked out here if it is. */
@@ -126,32 +101,23 @@ export const localRepository = (project: {
   });
 
 /**
- * A repository by its address, as "Add project" takes one: a git host's own form (GitHub's
- * `owner/repo`) or a clone URL. Asking it for its default branch also shows that the person sharing
- * it can open it.
+ * A repository by its address, as "Add project" takes one: GitHub's `owner/repo` or a clone URL.
+ * Asking it for its default branch also shows that the person sharing it can open it.
  */
-export const addressedRepository = (address: string, gitHost: PeerGitHost | undefined) =>
+export const addressedRepository = (address: string) =>
   Effect.gen(function* () {
-    const host = hostOf(gitHost, address);
-    const named = host?.address(address) ?? null;
+    const named = gitHubRepository(address);
     if (named === null && !isSafeGitRemote(address)) {
       return yield* hubError(
         `"${address}" is not a repository address. Enter GitHub's owner/repo or a clone URL.`,
       );
     }
-    const url = named?.url ?? address;
-    const via = host === undefined ? null : yield* host.clone(url);
+    const url = named?.httpsUrl ?? address;
+    const way = yield* gitWay(url);
     const head = yield* Effect.tryPromise({
       try: () =>
-        run("git", [...(via?.args ?? []), "ls-remote", "--symref", via?.url ?? url, "HEAD"], {
-          timeoutMs: 60_000,
-        }),
-      catch: (failure) =>
-        hubError(
-          host === undefined
-            ? explainCloneFailure(runOutput(failure), { url, branch: "" })
-            : host.explain(runOutput(failure), { url, branch: "" }).message,
-        ),
+        run("git", [...way.args, "ls-remote", "--symref", way.url, "HEAD"], { timeoutMs: 60_000 }),
+      catch: (failure) => hubError(way.explain(runOutput(failure), { url, branch: "" })),
     });
     const name = named?.name ?? NodePath.basename(url.replace(/\/+$/, "")).replace(/\.git$/i, "");
     return {

@@ -175,7 +175,7 @@ describe("a chat's pull requests", () => {
     expect(pullRequestLabel([pr(1, "merged"), pr(2, "closed")])).toBe("2 PRs");
   });
 
-  it("finds a chat's pull requests by its key, GitHub's verified state first", () => {
+  it("finds a chat's pull requests by its key", () => {
     const map = pullRequestsByThread([
       {
         id: "peer:abc",
@@ -185,20 +185,13 @@ describe("a chat's pull requests", () => {
             url: "https://github.com/a/b/pull/9",
             state: "open",
             headBranch: "feat",
-            github: {
-              state: "merged",
-              headBranch: "feat",
-              baseBranch: "main",
-              updatedAt: "",
-              verifiedAt: "",
-            },
           },
         ],
       },
       { id: "peer:none", environment: "env-1", pullRequests: [] },
       { id: "peer:old", environment: "env-1" },
     ]);
-    const expected = [{ url: "https://github.com/a/b/pull/9", state: "merged" }];
+    const expected = [{ url: "https://github.com/a/b/pull/9", state: "open" }];
     expect(map.get("peer:abc")).toEqual(expected);
     expect(map.get("env-1:peer:abc")).toEqual(expected);
     expect(map.has("peer:none")).toBe(false);

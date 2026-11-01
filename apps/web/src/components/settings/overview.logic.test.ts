@@ -3,7 +3,6 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   SourceControlProviderKind,
-  type PeerGitHubStatus,
   type PeerPluginState,
   type ServerProvider,
   type SourceControlDiscoveryResult,
@@ -34,23 +33,12 @@ const plugin = (id: string, extra: Partial<PeerPluginState> = {}): PeerPluginSta
   ...extra,
 });
 
-const PLUGINS = ["github", "settings"].map((id) => plugin(id));
-
-const github = (extra: Partial<PeerGitHubStatus> = {}): PeerGitHubStatus => ({
-  configured: false,
-  webhookPath: "/v1/workspaces/webinson/github/webhook",
-  lastPingAt: null,
-  lastVerifiedAt: null,
-  repositories: [],
-  secret: "missing",
-  ...extra,
-});
+const PLUGINS = ["settings"].map((id) => plugin(id));
 
 const workspace = (extra: Partial<WorkspaceFacts> = {}): WorkspaceFacts => ({
   slug: "webinson",
   name: "Webinson",
   role: "admin",
-  github: readyFact(github()),
   ...extra,
 });
 
@@ -180,10 +168,7 @@ describe("the Overview of an admin", () => {
       ["workspace", "Workspace", "Webinson · admins set these up"],
       ["computer", "This computer", "MacBook Pro"],
     ]);
-    expect(rowsOf(groups, "workspace").map((row) => row.name)).toEqual([
-      "Peer Hub",
-      "GitHub PR checks",
-    ]);
+    expect(rowsOf(groups, "workspace").map((row) => row.name)).toEqual(["Peer Hub"]);
     expect(rowsOf(groups, "computer").map((row) => row.name)).toEqual([
       "GitHub CLI",
       "Bitbucket",
@@ -203,14 +188,6 @@ describe("the Overview of an admin", () => {
         checkedAt: "2026-10-12T10:20:00Z",
       },
       action: { label: "Hub" },
-    });
-  });
-
-  it("reads GitHub's checks from what their page reads", () => {
-    expect(rowNamed(groups, "GitHub PR checks")).toMatchObject({
-      connection: { state: "off", detail: "Agents can’t prove a merge yet." },
-      action: { label: "Turn on" },
-      attention: false,
     });
   });
 
@@ -251,23 +228,6 @@ describe("the Overview of an admin", () => {
 describe("something to finish", () => {
   const groups = overviewRows(facts());
 
-  it("names the first missing step in the banner, with what it means until then", () => {
-    const waiting = overviewSummary(
-      overviewRows(
-        facts({
-          peer: {
-            kind: "ready",
-            peer: peerFacts(workspace({ github: readyFact(github({ configured: true })) })),
-          },
-        }),
-      ),
-    );
-    expect(waiting.first?.row.name).toBe("GitHub PR checks");
-    expect(waiting.first?.text).toMatch(
-      /^GitHub PR checks for Webinson is at step \d of \d: .+ Until then pull requests count as their agents report them\.$/,
-    );
-  });
-
   it("has nothing to finish, and no badge, when everything is connected or off", () => {
     const done = overviewSummary(
       overviewRows(
@@ -285,41 +245,23 @@ describe("something to finish", () => {
 
   it("filters to the rows that need attention, and drops a group with none", () => {
     expect(filterOverview(groups, "all")).toBe(groups);
-    const waiting = overviewRows(
+    const broken = overviewRows(
       facts({
-        peer: {
-          kind: "ready",
-          peer: peerFacts(workspace({ github: readyFact(github({ configured: true })) })),
-        },
+        peer: { kind: "ready", peer: peerFacts(workspace(), { error: "Hub unreachable" }) },
       }),
     );
-    expect(filterOverview(waiting, "attention").map((group) => group.id)).toEqual(["workspace"]);
+    expect(filterOverview(broken, "attention").map((group) => group.id)).toEqual(["workspace"]);
   });
 
-  it("tells a problem in words, with its consequence", () => {
+  it("tells a problem in words", () => {
     const problem = overviewRows(
       facts({
-        peer: {
-          kind: "ready",
-          peer: peerFacts(
-            workspace({
-              github: readyFact(
-                github({
-                  configured: true,
-                  lastPingAt: "2026-10-12T10:42:00Z",
-                  lastVerifiedAt: "2026-10-12T10:42:00Z",
-                }),
-              ),
-            }),
-          ),
-        },
+        peer: { kind: "ready", peer: peerFacts(workspace(), { error: "Hub unreachable" }) },
       }),
     );
-    const row = rowNamed(problem, "GitHub PR checks");
+    const row = rowNamed(problem, "Peer Hub");
     expect(row?.connection.state).toBe("problem");
-    expect(row && finishText(row)).toMatch(
-      /^GitHub PR checks for Webinson: Its secret is not stored, .+ Until then pull requests count as their agents report them\.$/,
-    );
+    expect(row && finishText(row)).toContain("last sync failed: Hub unreachable.");
     expect(overviewSummary(problem).toFinish).toBe(1);
   });
 });
@@ -338,62 +280,7 @@ describe("what a member sees", () => {
   });
 });
 
-describe("a plugin that is not there", () => {
-  const without = (id: string, extra: Partial<PeerPluginState>) =>
-    PLUGINS.map((entry) => (entry.id === id ? { ...entry, ...extra } : entry));
-
-  it("removes the rows of a plugin turned off", () => {
-    const groups = overviewRows(
-      facts({
-        peer: {
-          kind: "ready",
-          peer: peerFacts(workspace(), {
-            plugins: without("github", { enabled: false, active: false, reason: "off" }),
-          }),
-        },
-      }),
-    );
-    expect(rowNamed(groups, "GitHub PR checks")).toBeUndefined();
-  });
-
-  it("says Not available where the Hub cannot serve the feature yet", () => {
-    const groups = overviewRows(
-      facts({
-        peer: {
-          kind: "ready",
-          peer: peerFacts(workspace(), {
-            plugins: without("github", { active: false, reason: "hub" }),
-          }),
-        },
-      }),
-    );
-    expect(rowNamed(groups, "GitHub PR checks")).toMatchObject({
-      connection: {
-        state: "unavailable",
-        detail: "This Peer Hub has no GitHub support yet.",
-      },
-      action: null,
-    });
-  });
-});
-
 describe("what is not read yet, and what failed", () => {
-  it("says Checking… for a fact that has not arrived, and Problem only for one that failed", () => {
-    const groups = overviewRows(
-      facts({
-        peer: {
-          kind: "ready",
-          peer: peerFacts(
-            workspace({
-              github: { kind: "loading" },
-            }),
-          ),
-        },
-      }),
-    );
-    expect(rowNamed(groups, "GitHub PR checks")?.connection).toBe(CHECKING);
-  });
-
   it("says a failed Hub sync is a Problem, and a sync that has not happened yet is not one", () => {
     const failed = overviewRows(
       facts({

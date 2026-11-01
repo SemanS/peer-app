@@ -96,28 +96,6 @@ export function boundedWorkReport(
   return [...live.slice(0, 500), ...dormant.slice(start), ...dormant.slice(0, start)].slice(0, 500);
 }
 
-/** Register the full required set; only host reads are batched, with unfinished PRs first. */
-export function pullRequestBatch(
-  prs: ReadonlyArray<PeerWorkPullRequest>,
-  branch: string | undefined,
-): ReadonlyArray<PeerWorkPullRequest> {
-  const anchor = prs.find((pr) => pr.headBranch === branch);
-  return [
-    ...(anchor === undefined ? [] : [anchor]),
-    ...prs.filter((pr) => pr !== anchor && pr.state !== "merged"),
-  ].slice(0, 20);
-}
-
-export function mergePullRequestEvidence(
-  required: ReadonlyArray<PeerWorkPullRequest> | undefined,
-  observed: ReadonlyArray<PeerWorkPullRequest> | undefined,
-): ReadonlyArray<PeerWorkPullRequest> | undefined {
-  if (observed === undefined) return required;
-  const merged = new Map((required ?? []).map((pr) => [pr.url.toLowerCase(), pr]));
-  for (const pr of observed) merged.set(pr.url.toLowerCase(), pr);
-  return [...merged.values()];
-}
-
 /** A durable provider thread can outlive its actual runtime, including after app recovery. */
 export function nativeRuntimePresent(
   provider: { readonly status: string; readonly providerSessionId: string | null } | undefined,

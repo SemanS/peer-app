@@ -1,28 +1,17 @@
 /**
- * The Workspace rows of Settings › Overview: the Hub and GitHub's checks that a workspace's admins
- * connect. Each is told from facts the pages already read; a fact not read yet says "Checking…", and only
- * one that failed says "Problem".
+ * The Workspace row of Settings › Overview: the Hub, told from what the status already says.
  */
-import type { PeerGitHubStatus, PeerHubStatus, PeerWorkspaceRole } from "@t3tools/contracts";
+import type { PeerHubStatus, PeerWorkspaceRole } from "@t3tools/contracts";
 
 import { hubAddress, hubBuild } from "../workspaces/settings/hubStatus.logic";
-import { githubFactConnection } from "../workspaces/settings/integrations.logic";
-import { GITHUB_ANCHOR, isWorkspaceAdmin } from "../workspaces/settings/peerSettings.logic";
-import { CHECKING, LOADING, type ConnectionView, type Fact } from "./connectionFacts";
-import {
-  actionFor,
-  overviewRow,
-  pluginGate,
-  type OverviewRow,
-  type OverviewTarget,
-} from "./overviewRow.logic";
+import { CHECKING, type ConnectionView } from "./connectionFacts";
+import { overviewRow, type OverviewRow, type OverviewTarget } from "./overviewRow.logic";
 
 /** What the Overview knows of the workspace the settings area has open. */
 export interface WorkspaceFacts {
   readonly slug: string;
   readonly name: string;
   readonly role: PeerWorkspaceRole;
-  readonly github: Fact<PeerGitHubStatus> | null;
 }
 
 export type PeerFacts = {
@@ -72,30 +61,7 @@ function hubRow(peer: PeerFacts): OverviewRow {
   });
 }
 
-function githubRow(peer: PeerFacts, workspace: WorkspaceFacts): OverviewRow | null {
-  const gate = pluginGate(peer.status, "github", "GitHub");
-  if (gate.kind === "hidden") return null;
-  const connection =
-    gate.kind === "view" ? gate.view : githubFactConnection(workspace.github ?? LOADING);
-  return overviewRow({
-    id: "workspace:github",
-    group: "workspace",
-    name: "GitHub PR checks",
-    subject: `GitHub PR checks for ${workspace.name}`,
-    connection,
-    consequence: "Until then pull requests count as their agents report them.",
-    action: actionFor(connection, peerTarget(workspace.slug, "general", GITHUB_ANCHOR), "GitHub", {
-      off: "Turn on",
-    }),
-  });
-}
-
-/** The Workspace group: the Hub for everyone, the rest for the admins who connect them. */
+/** The Workspace group: the Hub, for everyone. */
 export function workspaceRows(peer: PeerFacts): ReadonlyArray<OverviewRow> {
-  const { workspace } = peer;
-  const rows: Array<OverviewRow | null> = [hubRow(peer)];
-  if (workspace !== null && isWorkspaceAdmin(workspace.role)) {
-    rows.push(githubRow(peer, workspace));
-  }
-  return rows.filter((row): row is OverviewRow => row !== null);
+  return [hubRow(peer)];
 }

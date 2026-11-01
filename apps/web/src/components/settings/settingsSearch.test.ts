@@ -409,7 +409,7 @@ describe("every page of the app's settings", () => {
 });
 
 describe("searching Peer's pages", () => {
-  const PLUGINS = ["github", "audit", "tool-trust"].map((id) => ({
+  const PLUGINS = ["audit", "tool-trust"].map((id) => ({
     id,
     title: id,
     enabled: true,
@@ -446,7 +446,6 @@ describe("searching Peer's pages", () => {
         find(query).map(([name]) => name),
         query,
       ).toContain(title);
-    found("github checks", "GitHub PR checks");
     found("coordination", "Coordination policy");
     found("tool trust", "Tool trust");
     found("catalog", "Tools catalog");
@@ -471,17 +470,8 @@ describe("searching Peer's pages", () => {
     });
   });
 
-  it("opens a result on the part of the page it names", () => {
-    const [checks] = searchSettingsEntries("github checks", entries());
-    expect(checks).toMatchObject({
-      location: { kind: "workspace", workspace: "acme", section: "general" },
-      targetId: "workspace-github",
-    });
-  });
-
   it("does not hand a member the admin pages or their fields", () => {
     const member = entries("member");
-    expect(find("github checks", member).map(([title]) => title)).not.toContain("GitHub PR checks");
     expect(find("secrets", member).map(([title]) => title)).not.toContain("Hub secrets");
     expect(find("yaml", member)).toEqual([]);
     expect(find("yaml").map(([title]) => title)).toEqual(["Workspace YAML"]);
@@ -492,18 +482,18 @@ describe("searching Peer's pages", () => {
 
   it("takes the items of a plugin that is turned off", () => {
     const off = PLUGINS.map((plugin) =>
-      plugin.id === "github" ? { ...plugin, enabled: false, active: false, reason: "off" } : plugin,
+      plugin.id === "audit" ? { ...plugin, enabled: false, active: false, reason: "off" } : plugin,
     );
     const items = entries("admin", { status: { plugins: off, signedIn: true } });
-    expect(find("github checks", items).map(([title]) => title)).not.toContain("GitHub PR checks");
+    expect(find("history", items).map(([title]) => title)).not.toContain("Settings history");
   });
 
   it("leaves a plugin the Hub cannot serve yet in, since its page says so", () => {
     const waiting = PLUGINS.map((plugin) =>
-      plugin.id === "github" ? { ...plugin, active: false, reason: "hub" } : plugin,
+      plugin.id === "audit" ? { ...plugin, active: false, reason: "hub" } : plugin,
     );
     const items = entries("admin", { status: { plugins: waiting, signedIn: true } });
-    expect(find("github checks", items).map(([title]) => title)).toContain("GitHub PR checks");
+    expect(find("history", items).map(([title]) => title)).toContain("Settings history");
   });
 
   it("offers only This computer's pages with no workspace, and none when nobody is signed in", () => {
@@ -514,12 +504,10 @@ describe("searching Peer's pages", () => {
   });
 
   it("shows where a connection stands on the result", () => {
-    const withStatus = entries("admin", {
-      statuses: { "workspace:github": "Needs setup" },
-    });
+    const withStatus = entries("admin", { statuses: { "workspace:hub": "Problem" } });
     const byTitle = (title: string) =>
       searchSettingsEntries(title, withStatus).find((entry) => entry.title === title);
-    expect(byTitle("GitHub PR checks")).toMatchObject({ status: "Needs setup" });
+    expect(byTitle("Peer Hub")).toMatchObject({ status: "Problem" });
     expect(byTitle("Hub secrets")).not.toHaveProperty("status");
   });
 

@@ -41,7 +41,6 @@ const settingsView = {
   revision: { seq: 42, commit: "3f2a", at: "2026-10-11T12:00:00Z", by: eva, message: "Start" },
   rights: { admin: false, owner: false, leads: ["app"] },
   document,
-  features: { pathRules: true, github: true },
   people: [],
 };
 const line = {

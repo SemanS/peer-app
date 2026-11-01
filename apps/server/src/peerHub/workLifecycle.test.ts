@@ -3,10 +3,8 @@ import { assert, describe, expect, it } from "@effect/vitest";
 import {
   boundedWorkReport,
   gitHubRepository,
-  mergePullRequestEvidence,
   nativeRuntimePresent,
   nativeWorkPullRequests,
-  pullRequestBatch,
   restoreWorkIdentity,
   runtimeStillPresent,
 } from "./workLifecycle.ts";
@@ -19,7 +17,7 @@ const input = {
 };
 
 describe("work delivery evidence", () => {
-  it("registers a full native stack while batching only host reads", () => {
+  it("registers a full native stack", () => {
     const links = Array.from({ length: 21 }, (_, index) => ({
       host: "github.com",
       repository: "acme/service",
@@ -29,14 +27,6 @@ describe("work delivery evidence", () => {
     })) as unknown as ThreadPullRequestLink[];
     const required = nativeWorkPullRequests(input.repositoryUrl, input.branch, links)!;
     expect(required).toHaveLength(21);
-    const observed = pullRequestBatch(required, input.branch).map((pr) => ({
-      ...pr,
-      state: "merged" as const,
-    }));
-    const merged = mergePullRequestEvidence(required, observed)!;
-    expect(merged).toHaveLength(21);
-    expect(merged.filter((pr) => pr.state === "open")).toHaveLength(1);
-    expect(pullRequestBatch(merged, input.branch).some((pr) => pr.state === "open")).toBe(true);
     expect(
       nativeWorkPullRequests("https://github.com/elsewhere/repo", input.branch, links),
     ).toBeUndefined();

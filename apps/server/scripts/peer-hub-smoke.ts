@@ -555,12 +555,11 @@ const program = Effect.gen(function* () {
   // account, and one that account cannot open says which account it was.
   const gitHubRepo = process.env.GITHUB_SMOKE_REPO;
   if (gitHubRepo !== undefined) {
-    const fromGitHub = yield* client[WS_METHODS.peerHubShareProject]({
+    yield* client[WS_METHODS.peerHubShareProject]({
       workspace: "acme",
       repository: gitHubRepo,
       name: "From GitHub",
     });
-    log("github", `GitHub CLI account: ${fromGitHub.github.account ?? "-"}`);
     const [checkout] = repositoriesOf(
       yield* client[WS_METHODS.peerHubOpenProject]({ workspace: "acme", projectId: "from-github" }),
       "from-github",

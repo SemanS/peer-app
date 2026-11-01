@@ -38,8 +38,6 @@ export interface SettingsNavItem {
   readonly quiet?: boolean;
   /** Something there is left to finish here. */
   readonly dot?: boolean | undefined;
-  /** A few words beside the label: "2 detected". */
-  readonly tag?: string | undefined;
 }
 
 export interface SettingsNavGroup {
@@ -64,18 +62,13 @@ export interface NavMarks {
   readonly toFinish: string | null;
   /** The pages with a setup under way or a connection that broke, by item id. */
   readonly dots: ReadonlySet<string>;
-  /** A few words beside a page, by item id: "2 detected". */
-  readonly tags: ReadonlyMap<string, string>;
 }
 
-export const NO_MARKS: NavMarks = { toFinish: null, dots: new Set(), tags: new Map() };
+export const NO_MARKS: NavMarks = { toFinish: null, dots: new Set() };
 
 /** The page of the navigation each Overview row is about. */
 function navItemOfRow(rowId: string): string | undefined {
   if (rowId === "workspace:hub") return "workspace:hub";
-  if (rowId === "workspace:capacity") return "workspace:capacity";
-  if (rowId === "workspace:github") return "workspace:general";
-  if (rowId === "me:plans") return "workspace:plans";
   if (rowId === "computer:browser") return "settings:/settings/browser";
   if (rowId === "computer:device-hub") return "settings:/settings/devices";
   if (rowId.startsWith("computer:provider:")) return "settings:/settings/providers";
@@ -85,19 +78,16 @@ function navItemOfRow(rowId: string): string | undefined {
 
 /**
  * What the Overview asks the navigation to mark: a dot where a setup is under way or a connection
- * broke, "2 detected" beside AI subscriptions when plans wait to be added, and the Overview's own
- * "N to finish".
+ * broke, and the Overview's own "N to finish".
  */
 export function navMarks(groups: ReadonlyArray<OverviewGroup>): NavMarks {
   const dots = new Set<string>();
-  const tags = new Map<string, string>();
   for (const row of groups.flatMap((group) => group.rows)) {
     const item = navItemOfRow(row.id);
     if (item === undefined) continue;
     if (row.underway) dots.add(item);
-    if (row.id === "me:plans" && row.badge !== null && !row.underway) tags.set(item, row.badge);
   }
-  return { toFinish: toFinishLabel(overviewSummary(groups)), dots, tags };
+  return { toFinish: toFinishLabel(overviewSummary(groups)), dots };
 }
 
 export interface SettingsNavInput {
@@ -206,7 +196,6 @@ export function settingsNavGroups(input: SettingsNavInput): SettingsNav {
     target: { kind: "peer", location },
     current: peerLocationCurrent(location, current),
     ...(marks.dots.has(id) ? { dot: true } : {}),
-    ...(marks.tags.has(id) ? { tag: marks.tags.get(id) } : {}),
     ...extra,
   });
   const staticItem = (to: SettingsPath, extra: Partial<SettingsNavItem> = {}): SettingsNavItem => {

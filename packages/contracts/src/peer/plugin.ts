@@ -9,7 +9,6 @@ import { TrimmedNonEmptyString } from "../baseSchemas.ts";
 export const PEER_PLUGIN_IDS = [
   "herdr",
   "jujutsu",
-  "github",
   "observe",
   "card",
   "audit",

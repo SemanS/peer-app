@@ -123,12 +123,8 @@ export const valueDialogTitle = (row: Pick<SecretRow, "name" | "stored">): strin
 /** What saving a value does, in the dialog under its field. */
 export const VALUE_DIALOG_NOTE = "Saved on the Hub and sealed. It is never shown again.";
 
-/**
- * What stops when a secret something uses goes, in the words of the design: the sentence is
- * picked by what the Hub says uses it, and a use this build does not know of says the plain thing.
- */
+/** What stops when a secret something uses goes. */
 export function impactOf(use: string): string {
-  if (/^GitHub/i.test(use)) return "GitHub’s deliveries will fail, so PR checks stop.";
   return `${use} stops working until the secret is set again.`;
 }
 

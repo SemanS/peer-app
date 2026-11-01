@@ -2,7 +2,7 @@ import {
   inactivePluginReason,
   type InactivePluginReason,
 } from "@t3tools/client-runtime/peer/plugins";
-import type { PeerSettingsRights, PeerSettingsView } from "@t3tools/contracts";
+import type { PeerSettingsRights } from "@t3tools/contracts";
 
 import { useEnvironmentQuery } from "../../../state/query";
 import { serverEnvironment } from "../../../state/server";
@@ -38,7 +38,6 @@ export interface SettingsView {
   /** The revision the document is at ("revision 42"); null until read. */
   readonly revision: number | null;
   readonly rights: PeerSettingsRights | null;
-  readonly features: PeerSettingsView["features"] | null;
   /** The workspace's members, who the view names people by. */
   readonly people: ReadonlyArray<SettingsPerson & { readonly role: "owner" | "admin" | "member" }>;
   /** The signed-in address. */
@@ -91,7 +90,6 @@ export function useSettingsView(workspace: string): SettingsView {
     document: view?.document ?? null,
     revision: view?.revision.seq ?? null,
     rights: view?.rights ?? null,
-    features: view?.features ?? null,
     people,
     me,
     canChange: (path) =>

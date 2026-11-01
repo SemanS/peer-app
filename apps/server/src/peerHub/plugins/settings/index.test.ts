@@ -366,33 +366,6 @@ describe("Settings through core", () => {
       assert.deepStrictEqual(deleted, { kind: "deleted" });
       assert.strictEqual(last(), "DELETE /secrets/TEAMS_ALERTS_URL?force=true");
 
-      on({
-        payloadUrl: "https://hub.acme.dev/v1/github/acme",
-        secret: "s",
-        secretName: "github-webhook",
-        events: "pull_request",
-        revision: null,
-      });
-      const enabled = yield* client["peer.settings.githubEnable"]({
-        workspace: "acme",
-        rotate: true,
-      });
-      assert.strictEqual(enabled.secret, "s");
-      assert.strictEqual(
-        last(),
-        `POST /settings/github/enable ${JSON.stringify({ rotate: true })}`,
-      );
-      on(dryRun);
-      const disabled = yield* client["peer.settings.githubDisable"]({
-        workspace: "acme",
-        dryRun: true,
-      });
-      assert.strictEqual(disabled.kind, "preview");
-      assert.strictEqual(
-        last(),
-        `POST /settings/github/disable ${JSON.stringify({ dryRun: true })}`,
-      );
-
       on({ domain: "acme-studio.com", record: "peer-hub-verify=7f3c", state: "listed" });
       const record = yield* client["peer.settings.domainRecord"]({
         workspace: "acme",

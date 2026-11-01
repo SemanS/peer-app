@@ -350,7 +350,6 @@ const make = Effect.gen(function* () {
       }
       const providers = yield* plugins.contributions;
       const runtime = PeerPlugins.capability(providers, "runtime");
-      const gitHost = PeerPlugins.capability(providers, "gitHost");
       const threadReports = providers.flatMap((provider) =>
         provider.threadReport === undefined ? [] : [provider.threadReport],
       );
@@ -378,7 +377,6 @@ const make = Effect.gen(function* () {
           previous: before.work,
           live,
           observable,
-          gitHost,
           round: reportRound,
         });
         // Consumers of local facts must not depend on this report reaching the Hub.

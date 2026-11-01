@@ -31,7 +31,7 @@ const sameAddress = (a: string, b: string) => a.toLowerCase() === b.toLowerCase(
  * Whether the caller may change the node at `path`, by the Hub's table: admins anything; a project's
  * leads the project's nodes; a project anyone may create (whoever it names as lead is the Hub's
  * concern) and only its leads delete; a person their own entry; everything else (the tool catalog,
- * GitHub, currency) admins. For enabling controls only, since the Hub checks every change again.
+ * currency) admins. For enabling controls only, since the Hub checks every change again.
  */
 export function canChangePath(who: SettingsRightsInput, path: Path): boolean {
   const { rights, email, document } = who;

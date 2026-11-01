@@ -3,11 +3,10 @@
  * its status in the status language, what is left to do, and the page where that is done. Pure,
  * so the rows can be built from facts and tested without a screen.
  */
-import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
-import type { EnvironmentId, ProviderInstanceId, PeerHubStatus } from "@t3tools/contracts";
+import type { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
 
 import type { PeerSettingsLocation } from "../workspaces/settings/peerSettings.logic";
-import { CHECKING, isUnderway, type ConnectionView } from "./connectionFacts";
+import { isUnderway, type ConnectionView } from "./connectionFacts";
 import { CONNECTION_STATE_LABEL } from "./connectionStatus.logic";
 import type { SettingsPath } from "./settingsSearch";
 import { validateSettingsScopeSearch } from "./settingsScope";
@@ -55,16 +54,14 @@ export interface OverviewAction {
 export interface OverviewRow {
   readonly id: string;
   readonly group: OverviewGroupId;
-  /** What the list calls it: "GitHub PR checks". */
+  /** What the list calls it: "Peer Hub". */
   readonly name: string;
-  /** What a sentence calls it: "GitHub PR checks for Webinson". */
+  /** What a sentence calls it: "Your AI providers". */
   readonly subject: string;
   readonly connection: ConnectionView;
   /** The account the detail is about (a hosting tool's), shown hidden until revealed. */
   readonly account: string | null;
   readonly action: OverviewAction | null;
-  /** What it means for the people until it is done: "Until then agents ask only in Peer." */
-  readonly consequence: string | null;
   /** In the "Needs attention" filter: a setup already started or a connection with a problem. */
   readonly attention: boolean;
   /** Counts as "to finish": a setup with a step left, or a connection that broke. */
@@ -81,9 +78,6 @@ export function overviewRow(input: {
   readonly connection: ConnectionView;
   readonly account?: string | null;
   readonly action?: OverviewAction | null;
-  readonly consequence?: string;
-  /** Replaces the badge the state would give ("2 detected"). */
-  readonly badge?: string;
 }): OverviewRow {
   const attention = isUnderway(input.connection);
   return {
@@ -94,11 +88,10 @@ export function overviewRow(input: {
     connection: input.connection,
     account: input.account ?? null,
     action: input.action ?? null,
-    consequence: input.consequence ?? null,
     attention,
     underway: isUnderway(input.connection),
     badge: attention
-      ? (input.badge ?? input.connection.label ?? CONNECTION_STATE_LABEL[input.connection.state])
+      ? (input.connection.label ?? CONNECTION_STATE_LABEL[input.connection.state])
       : null,
   };
 }
@@ -125,38 +118,5 @@ export function actionFor(
       return { label: connection.label === undefined ? (labels.off ?? page) : page, target };
     case "connected":
       return { label: page, target };
-  }
-}
-
-/** What a feature's plugin lets a row say. */
-export type PluginGate =
-  | { readonly kind: "open" }
-  /** Turned off here, forced off or not built: its rows are not listed. */
-  | { readonly kind: "hidden" }
-  /** The Hub cannot serve it yet, or no Hub has answered: the row says so. */
-  | { readonly kind: "view"; readonly view: ConnectionView };
-
-const OPEN: PluginGate = { kind: "open" };
-const HIDDEN: PluginGate = { kind: "hidden" };
-
-export function pluginGate(
-  status: Pick<PeerHubStatus, "plugins"> & { readonly signedIn?: boolean },
-  plugin: string,
-  title: string,
-): PluginGate {
-  switch (inactivePluginReason(status, plugin)) {
-    case null:
-      return OPEN;
-    case "off":
-    case "locked":
-    case "missing":
-      return HIDDEN;
-    case "hub":
-      return {
-        kind: "view",
-        view: { state: "unavailable", detail: `This Peer Hub has no ${title} support yet.` },
-      };
-    case "waiting":
-      return { kind: "view", view: CHECKING };
   }
 }

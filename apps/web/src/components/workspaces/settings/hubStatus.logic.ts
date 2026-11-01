@@ -13,12 +13,10 @@
  * the Hub is too old (Not available), or this computer's owner turned its plugin off (Off).
  */
 import { hubFeatureState, pluginLockNote } from "@t3tools/client-runtime/peer/plugins";
-import type { PeerHubInfo, PeerPluginState, PeerSettingsView } from "@t3tools/contracts";
+import type { PeerHubInfo, PeerPluginState } from "@t3tools/contracts";
 
-import { CHECKING_LABEL, type ConnectionView } from "../../settings/connectionFacts";
 import {
   CONNECTION_STATE_LABEL,
-  connectionDetail,
   type ConnectionState,
 } from "../../settings/connectionStatus.logic";
 
@@ -37,7 +35,7 @@ export interface FeatureRow {
   readonly state: FeatureState;
   /** The status language's state: where the feature stands, apart from the word on its badge. */
   readonly connection: ConnectionState;
-  /** The badge's word: "Connected", "Not available", "Off", "Needs setup", "Checking…". */
+  /** The badge's word: "Connected", "Not available", "Off". */
   readonly label: string;
   /** What it means for the people of the workspace, in the state it is in. */
   readonly effect: string;
@@ -56,12 +54,10 @@ interface Words {
   readonly on: string;
   readonly off: string;
   readonly newer: string;
-  /** What it means until the workspace has connected it, for the features that need that. */
-  readonly pending?: string;
 }
 
 /** What tells the state of a Hub that sends no catalog, if anything does. */
-type Without = "plugin" | "flags" | "nothing";
+type Without = "plugin" | "nothing";
 
 interface Feature {
   /** The Hub's id for it, which is its plugin's too. */
@@ -69,8 +65,8 @@ interface Feature {
   readonly name: string;
   readonly words: Words;
   /**
-   * The plugin's state (it needs this Hub feature), the flags the Hub's settings carry, or nothing:
-   * a feature no plugin of the app waits for says nothing of an older Hub.
+   * The plugin's state (it needs this Hub feature), or nothing: a feature no plugin of the app
+   * waits for says nothing of an older Hub.
    */
   readonly without: Without;
 }
@@ -85,17 +81,6 @@ const FEATURES: ReadonlyArray<Feature> = [
       on: "Settings changed in the app are saved with their history and reviewed first.",
       off: "Settings can’t be changed in the app: this Hub doesn’t run them.",
       newer: "Settings can be read here but not changed until the Hub is updated.",
-    },
-  },
-  {
-    id: "github",
-    name: "GitHub PR checks",
-    without: "flags",
-    words: {
-      on: "GitHub’s word on a pull request can count over the agent’s report.",
-      off: "Pull requests count as their agents report them: this Hub doesn’t check them with GitHub.",
-      newer: "Pull requests count as their agents report them until the Hub is updated.",
-      pending: "Pull requests count as their agents report them.",
     },
   },
   {
@@ -124,27 +109,16 @@ const KNOWN: ReadonlySet<string> = new Set(FEATURES.map((feature) => feature.id)
 
 const OFF_HERE = "Turned off on this computer. Its owner turns it on in Coordination & plugins.";
 
-/** The features whose Hub support is only half of it: the workspace connects them too. */
-export type ConnectedFeature = "github";
-
-/**
- * What the workspace's own connection says of the features that have one, by the feature's id:
- * the status language's view of GitHub's checks, as Settings › Overview tells it. A feature without
- * an entry says only what the Hub does.
- */
-export type FeatureConnections = Readonly<Partial<Record<ConnectedFeature, ConnectionView>>>;
-
 interface Context {
   readonly plugins: ReadonlyArray<PeerPluginState>;
   readonly hub: PeerHubInfo | undefined;
-  readonly flags: PeerSettingsView["features"] | null;
   readonly settingsServed: boolean;
 }
 
 /**
  * Where a feature stands, from the catalog where the Hub sent one. Without it the plugin's state
  * tells (the Hub does not serve a feature its plugin needs, and an older Hub is not the one that
- * turned it off), or the flags of the settings; undefined where nothing does, so there is no row.
+ * turned it off); undefined where nothing does, so there is no row.
  */
 function stateOf(feature: Feature, context: Context): FeatureState | undefined {
   const plugin = context.plugins.find((candidate) => candidate.id === feature.id);
@@ -163,10 +137,6 @@ function stateOf(feature: Feature, context: Context): FeatureState | undefined {
       // knows, so it is the operator who turned the feature off; an older one has yet to be updated.
       if (plugin.reason === "hub") return context.settingsServed ? "off-hub" : "newer";
       return "off-here";
-    case "flags": {
-      if (!context.settingsServed || context.flags === null) return undefined;
-      return context.flags.github ? "on" : "off-hub";
-    }
     case "nothing":
       return undefined;
   }
@@ -202,57 +172,21 @@ function unknownRow(id: string, state: "on" | "off-hub"): FeatureRow {
   };
 }
 
-const sentences = (...parts: ReadonlyArray<string | undefined>): string =>
-  parts.filter((part): part is string => part !== undefined && part !== "").join(" ");
-
-const withFullStop = (text: string): string => (/[.!?…]$/.test(text) ? text : `${text}.`);
-
-/**
- * A feature the Hub serves, told by the workspace's own connection where it has one: connected, it
- * is what the Hub does for the feature; otherwise the connection's step or detail comes first and
- * then what it means until the workspace is done.
- */
-function connectedRow(
-  feature: Feature,
-  view: ConnectionView,
-): Pick<FeatureRow, "connection" | "label" | "effect"> {
-  const label = view.label ?? CONNECTION_STATE_LABEL[view.state];
-  // Not read yet: say what the feature does, and nothing about how far the workspace is.
-  if (view.state === "connected" || view.label === CHECKING_LABEL) {
-    return { connection: view.state, label, effect: feature.words.on };
-  }
-  const why = connectionDetail(view);
-  return {
-    connection: view.state,
-    label,
-    effect: sentences(
-      why === undefined ? undefined : withFullStop(why),
-      view.state === "unavailable" ? undefined : feature.words.pending,
-    ),
-  };
-}
-
 /**
  * The features table. Coordination is the Hub's own and always on. Each other feature of the Hub is
  * on, off on this Hub or waiting for a newer one, as the Hub's catalog says (`hub`), with the ones
  * it serves or turned off that this app does not know after them; for a Hub that sends no catalog
- * the plugins and the settings flags tell what they can, as `stateOf` says.
+ * the plugins tell what they can, as `stateOf` says.
  */
 export function hubFeatureRows(input: {
   readonly plugins: ReadonlyArray<PeerPluginState> | undefined;
   /** What the Hub said of itself in `/v1/me`; undefined from one that says nothing. */
   readonly hub: PeerHubInfo | undefined;
-  /** `GET /settings`' `features`; null while the settings cannot be read. */
-  readonly flags: PeerSettingsView["features"] | null;
-  /** The projects that have path rules, by name. */
-  /** What the workspace's own connection says of GitHub's checks, once read. */
-  readonly connections?: FeatureConnections | undefined;
 }): ReadonlyArray<FeatureRow> {
   const plugins = input.plugins ?? [];
   const context: Context = {
     plugins,
     hub: input.hub,
-    flags: input.flags,
     settingsServed: plugins.find((plugin) => plugin.id === "settings")?.active === true,
   };
   const rows: FeatureRow[] = [
@@ -269,19 +203,13 @@ export function hubFeatureRows(input: {
     const state = stateOf(feature, context);
     if (state === undefined) continue;
     const plugin = plugins.find((candidate) => candidate.id === feature.id);
-    const view =
-      state === "on" && feature.id === "github" ? input.connections?.[feature.id] : undefined;
     rows.push({
       id: feature.id,
       name: feature.name,
       state,
-      ...(view === undefined
-        ? {
-            connection: CONNECTION[state],
-            label: CONNECTION_STATE_LABEL[CONNECTION[state]],
-            effect: effectOf(feature, state, plugin),
-          }
-        : connectedRow(feature, view)),
+      connection: CONNECTION[state],
+      label: CONNECTION_STATE_LABEL[CONNECTION[state]],
+      effect: effectOf(feature, state, plugin),
     });
   }
   const unknown = (ids: ReadonlyArray<string> | undefined) =>

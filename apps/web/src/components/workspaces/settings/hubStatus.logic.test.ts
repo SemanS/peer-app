@@ -1,7 +1,6 @@
 import type { PeerHubInfo, PeerPluginState } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { CHECKING, type ConnectionView } from "../../settings/connectionFacts";
 import { featuresFootnote, hubAddress, hubBuild, hubFeatureRows } from "./hubStatus.logic";
 
 const plugin = (id: string, overrides: Partial<PeerPluginState> = {}): PeerPluginState => ({
@@ -15,10 +14,8 @@ const plugin = (id: string, overrides: Partial<PeerPluginState> = {}): PeerPlugi
 /** A Hub that serves everything: every plugin that needs a feature is active. */
 const everything = ["settings", "observe"].map((id) => plugin(id));
 
-const flags = { github: true };
-
 /** Every feature of the Hub this app has words for. */
-const ALL = ["settings", "github", "audit", "observe"];
+const ALL = ["settings", "audit", "observe"];
 
 /** What a Hub with the catalog says: it serves `serves`, and its operator turned `off` off. */
 const catalog = (serves: ReadonlyArray<string>, off: ReadonlyArray<string> = []): PeerHubInfo => ({
@@ -32,7 +29,6 @@ const rows = (input: Partial<Parameters<typeof hubFeatureRows>[0]> = {}) =>
   hubFeatureRows({
     plugins: everything,
     hub: undefined,
-    flags,
     ...input,
   });
 
@@ -41,13 +37,7 @@ const byId = (list: ReturnType<typeof rows>, id: string) => list.find((row) => r
 describe("the features of a Hub that serves them all", () => {
   it("lists coordination first and then every feature the Hub has, each on", () => {
     const list = rows({ hub: catalog(ALL) });
-    expect(list.map((row) => row.id)).toEqual([
-      "coordination",
-      "settings",
-      "github",
-      "audit",
-      "observe",
-    ]);
+    expect(list.map((row) => row.id)).toEqual(["coordination", "settings", "audit", "observe"]);
     expect(list.every((row) => row.state === "on" && row.label === "Connected")).toBe(true);
   });
 
@@ -71,15 +61,14 @@ describe("a feature a Hub with a catalog does not serve", () => {
   it("is off on this Hub when its operator turned it off, and says what that means", () => {
     const list = rows({
       hub: catalog(
-        ALL.filter((id) => id !== "github"),
-        ["github"],
+        ALL.filter((id) => id !== "audit"),
+        ["audit"],
       ),
     });
-    expect(byId(list, "github")).toMatchObject({
+    expect(byId(list, "audit")).toMatchObject({
       state: "off-hub",
       label: "Not available",
-      effect:
-        "Pull requests count as their agents report them: this Hub doesn’t check them with GitHub.",
+      effect: "The audit log can’t be read: this Hub doesn’t run it.",
     });
   });
 
@@ -183,7 +172,7 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
 
   it("lists coordination and every feature the app can tell, each on", () => {
     const list = rows();
-    expect(list.map((row) => row.id)).toEqual(["coordination", "settings", "github", "observe"]);
+    expect(list.map((row) => row.id)).toEqual(["coordination", "settings", "observe"]);
     expect(list.every((row) => row.state === "on" && row.label === "Connected")).toBe(true);
   });
 
@@ -193,7 +182,7 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
         ? { ...entry, active: false, reason: "hub" }
         : entry,
     );
-    const list = rows({ plugins: old, flags: null });
+    const list = rows({ plugins: old });
     expect(byId(list, "settings")).toMatchObject({
       state: "newer",
       label: "Not available",
@@ -210,19 +199,9 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
     expect(byId(list, "observe")?.state).toBe("off-hub");
     expect(byId(list, "settings")?.state).toBe("on");
   });
-
-  it("says GitHub's checks are not served when the settings say so", () => {
-    const list = rows({ flags: { ...flags, github: false } });
-    expect(byId(list, "github")).toMatchObject({ state: "off-hub", label: "Not available" });
-  });
 });
 
 describe("what the app cannot tell", () => {
-  it("leaves out GitHub where the settings cannot be read", () => {
-    const list = rows({ flags: null });
-    expect(byId(list, "github")).toBeUndefined();
-  });
-
   it("leaves out the features no plugin waits for, which an older Hub says nothing of", () => {
     const list = rows();
     for (const id of ["audit"]) {
@@ -301,12 +280,12 @@ describe("a feature in the status language", () => {
   it("maps what the Hub does onto Connected, Not available and Off", () => {
     const list = rows({
       hub: catalog(
-        ALL.filter((id) => id !== "github" && id !== "observe"),
-        ["github"],
+        ALL.filter((id) => id !== "audit" && id !== "observe"),
+        ["audit"],
       ),
     });
     expect(byId(list, "settings")).toMatchObject({ connection: "connected", label: "Connected" });
-    expect(byId(list, "github")).toMatchObject({
+    expect(byId(list, "audit")).toMatchObject({
       connection: "unavailable",
       label: "Not available",
     });
@@ -326,63 +305,5 @@ describe("a feature in the status language", () => {
   it("never calls a feature On, Enabled or Authenticated", () => {
     const list = rows({ hub: catalog(ALL, ["telepathy"]) });
     for (const row of list) expect(row.label).not.toMatch(/^(On|Enabled|Authenticated)$/);
-  });
-});
-
-describe("GitHub's checks, which the workspace connects too", () => {
-  const githubSetup: ConnectionView = {
-    state: "setup",
-    step: { n: 2, of: 4, title: "add the webhook to GitHub" },
-  };
-  const githubOff: ConnectionView = {
-    state: "off",
-    detail: "Agents can’t prove a merge yet.",
-  };
-
-  it("says they need setup, at their step, while the workspace has not finished", () => {
-    const row = byId(rows({ connections: { github: githubSetup } }), "github");
-    expect(row).toMatchObject({
-      state: "on",
-      connection: "setup",
-      label: "Needs setup",
-      effect:
-        "Step 2 of 4: add the webhook to GitHub. Pull requests count as their agents report them.",
-    });
-  });
-
-  it("says they are off with what that means for pull requests", () => {
-    const row = byId(rows({ connections: { github: githubOff } }), "github");
-    expect(row).toMatchObject({
-      connection: "off",
-      label: "Off",
-      effect: "Agents can’t prove a merge yet. Pull requests count as their agents report them.",
-    });
-  });
-
-  it("keeps what the feature does once the workspace is connected", () => {
-    const row = byId(
-      rows({ connections: { github: { state: "connected", detail: "2 repositories" } } }),
-      "github",
-    );
-    expect(row).toMatchObject({
-      connection: "connected",
-      label: "Connected",
-      effect: "GitHub’s word on a pull request can count over the agent’s report.",
-    });
-  });
-
-  it("says Checking… and what the feature does while the connection is being read", () => {
-    const row = byId(rows({ connections: { github: CHECKING } }), "github");
-    expect(row).toMatchObject({
-      connection: "off",
-      label: "Checking…",
-      effect: "GitHub’s word on a pull request can count over the agent’s report.",
-    });
-  });
-
-  it("leaves the rest to what the Hub does when it knows nothing of the connection", () => {
-    const row = byId(rows({ connections: {} }), "github");
-    expect(row).toMatchObject({ connection: "connected", label: "Connected" });
-    expect(row?.effect).toBe("GitHub’s word on a pull request can count over the agent’s report.");
   });
 });

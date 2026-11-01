@@ -13,7 +13,6 @@ const project = {
 const document = {
   currency: "EUR",
   people: { "ana@acme.dev": { name: "Ana" } },
-  github: {},
   projects: { camp: { name: "Camp-bot" }, booking: project },
   tools: { postgres: { name: "Postgres", mcp: { command: "npx", args: ["pg"] } } },
   futureSection: { ignored: true },
@@ -34,7 +33,7 @@ describe("the settings as files", () => {
       settingsFiles(document).map(({ path }) => path),
       ["workspace.yaml", "projects/booking.yaml", "projects/camp.yaml", "tools/postgres.yaml"],
     );
-    // An empty section (`github: {}`, all a member is shown of it) is nothing to read or propose.
+    // Only what `workspace.yaml` holds of the configuration.
     assert.deepStrictEqual(settingsFiles(document)[0]?.value, {
       currency: "EUR",
       people: document.people,

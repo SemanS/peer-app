@@ -11,7 +11,6 @@ import {
 } from "./peer/base.ts";
 import { PeerFounding, PeerInvitationDelivery, PeerRemovedWorkspace } from "./peer/access.ts";
 import { PeerDomainClaim, PeerDomainOffer } from "./peer/domains.ts";
-import { PeerGitHubState } from "./peer/github.ts";
 import { PeerLocalAgent } from "./peer/herdr.ts";
 import { PeerPluginState } from "./peer/plugin.ts";
 import { peerPluginStatusFields } from "./peer/registry.ts";
@@ -23,7 +22,6 @@ export * from "./peer/base.ts";
 export * from "./peer/access.ts";
 export * from "./peer/audit.ts";
 export * from "./peer/domains.ts";
-export * from "./peer/github.ts";
 export * from "./peer/herdr.ts";
 export * from "./peer/observe.ts";
 export * from "./peer/card.ts";
@@ -131,8 +129,6 @@ export const PeerProjectState = Schema.Struct({
       path: Schema.String,
       state: PeerCheckoutState,
       error: Schema.optional(Schema.String),
-      /** Signing in to GitHub, with an account that can open the repository, fixes the error. */
-      gitHubSignIn: Schema.optional(Schema.Boolean),
       /**
        * The folder is a Jujutsu repository Peer cannot work in (not colocated with Git, or this
        * computer's jj is missing or too old); `error` says why and nothing is cloned into it. It
@@ -656,7 +652,6 @@ export const PeerHubStatus = Schema.Struct({
     list: Schema.Array(PeerLocalAgent),
     postHocSkipped: Schema.optional(Schema.Number),
   }),
-  github: PeerGitHubState,
   coordination: PeerCoordinationState,
   /** This computer's threads (`peer:…`, `herdr:…`) its owner lets the team watch. */
   sharedThreads: Schema.Array(Schema.String),

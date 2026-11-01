@@ -145,7 +145,6 @@ export const PeerSettingsView = Schema.Struct({
   rights: PeerSettingsRights,
   /** An open JSON object: read its parts with the narrow schemas below. */
   document: Schema.Record(Schema.String, Schema.Unknown),
-  features: Schema.Struct({ github: Schema.Boolean }),
   people: Schema.Array(Schema.Struct({ ...PeerSettingsPerson.fields, role: Role })),
 });
 export type PeerSettingsView = typeof PeerSettingsView.Type;
@@ -179,7 +178,7 @@ export const PeerSettingsSaved = Schema.Struct({
 export type PeerSettingsSaved = typeof PeerSettingsSaved.Type;
 
 /**
- * What a change, revert, import, applied proposal or GitHub removal comes to, as the app
+ * What a change, revert, import or applied proposal comes to, as the app
  * answers it. A dry run is a `preview`, a save is `saved`. The Hub's refusals are results too, not
  * errors, because each is a way these flows go that a person resolves: `conflict` (409
  * `settings_conflict`, the preview with `conflicts` to settle), `forbidden` (403 `settings_forbidden`,
@@ -268,16 +267,6 @@ export const PeerSettingsSecretsView = Schema.Struct({
   missing: Schema.Array(Schema.Struct({ name: Text, usedBy: Schema.Array(Text) })),
 });
 export type PeerSettingsSecretsView = typeof PeerSettingsSecretsView.Type;
-
-/** What GitHub needs to send its signed webhooks; `secret` is in this answer only. */
-export const PeerSettingsGitHubSetup = Schema.Struct({
-  payloadUrl: Text,
-  secret: NullableText,
-  secretName: Text,
-  events: Text,
-  revision: Schema.optional(Schema.NullOr(Seq)),
-});
-export type PeerSettingsGitHubSetup = typeof PeerSettingsGitHubSetup.Type;
 
 /** The TXT record that proves control of a domain; `state` is verified, claimed or listed. */
 export const PeerDomainRecord = Schema.Struct({ domain: Text, record: Text, state: Text });
@@ -543,20 +532,6 @@ export const PeerSettingsDeleteSecretInput = Schema.Struct({
   force: Schema.optional(Schema.Boolean),
 });
 export type PeerSettingsDeleteSecretInput = typeof PeerSettingsDeleteSecretInput.Type;
-
-export const PeerSettingsGitHubEnableInput = Schema.Struct({
-  workspace: Workspace,
-  /** Generate a new secret although one exists. */
-  rotate: Schema.optional(Schema.Boolean),
-});
-export type PeerSettingsGitHubEnableInput = typeof PeerSettingsGitHubEnableInput.Type;
-
-export const PeerSettingsGitHubDisableInput = Schema.Struct({
-  workspace: Workspace,
-  /** List what removing it deletes, without removing it. */
-  dryRun: Schema.optional(Schema.Boolean),
-});
-export type PeerSettingsGitHubDisableInput = typeof PeerSettingsGitHubDisableInput.Type;
 
 export const PeerSettingsDomainInput = Schema.Struct({
   workspace: Workspace,

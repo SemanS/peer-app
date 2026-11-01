@@ -10,13 +10,9 @@ import {
   branchProblem,
   cloneView,
   jjView,
-  githubChecksOn,
   hasCredentials,
-  hostOf,
-  isGitHubUrl,
   isRepositoryId,
   newRepositoryProblems,
-  prVerification,
   removeRepository,
   repositoriesOf,
   repositoryIdFromUrl,
@@ -83,37 +79,7 @@ describe("what an address and an id may be", () => {
   });
 });
 
-describe("where an address is hosted", () => {
-  it.each([
-    ["https://github.com/acme/app.git", "github.com"],
-    ["HTTPS://GitHub.com/acme/app", "github.com"],
-    ["https://user@github.com/acme/app", "github.com"],
-    ["https://github.com:443/acme/app", "github.com"],
-    ["ssh://git@github.com/acme/app.git", "github.com"],
-    ["git@github.com:acme/app.git", "github.com"],
-    ["github.com:acme/app", "github.com"],
-    ["github.com/acme/app", "github.com"],
-    ["https://gitlab.com/acme/legacy-sync.git", "gitlab.com"],
-    ["https://github.com@evil.example/app", "evil.example"],
-    ["https://github.com.evil.example/app", "github.com.evil.example"],
-    ["evil.example:github.com/app", "evil.example"],
-  ])("reads the host of %s", (url, host) => {
-    expect(hostOf(url)).toBe(host);
-  });
-
-  it("has no host for a path", () => {
-    expect(hostOf("/Users/ana/app")).toBeNull();
-    expect(hostOf("file:///srv/git/app.git")).toBeNull();
-  });
-
-  it("calls only github.com GitHub", () => {
-    expect(isGitHubUrl("https://github.com/acme/app")).toBe(true);
-    expect(isGitHubUrl("git@github.com:acme/app.git")).toBe(true);
-    expect(isGitHubUrl("https://github.com.evil.example/acme/app")).toBe(false);
-    expect(isGitHubUrl("https://notgithub.com/acme/app")).toBe(false);
-    expect(isGitHubUrl("https://gitlab.com/acme/app")).toBe(false);
-  });
-
+describe("an address on the page", () => {
   it("shows an address without https:// and .git", () => {
     expect(shortUrl("https://github.com/acme/booking-api")).toBe("github.com/acme/booking-api");
     expect(shortUrl("https://github.com/acme/booking-api.git/")).toBe(
@@ -241,22 +207,7 @@ describe("changing the list", () => {
   });
 });
 
-describe("pull requests and clones", () => {
-  const status = (verification: unknown) => ({ github: { verification } }) as never;
-
-  it("reads whether the workspace has GitHub checks on", () => {
-    expect(githubChecksOn(status([{ workspace: "acme", configured: true }]), "acme")).toBe(true);
-    expect(githubChecksOn(status([{ workspace: "acme", configured: false }]), "acme")).toBe(false);
-    expect(githubChecksOn(status([{ workspace: "other", configured: true }]), "acme")).toBe(false);
-    expect(githubChecksOn(status(undefined), "acme")).toBe(false);
-  });
-
-  it("verifies a pull request only on github.com with GitHub checks on", () => {
-    expect(prVerification("https://github.com/acme/app", true)).toBe("verified");
-    expect(prVerification("https://github.com/acme/app", false)).toBe("reported");
-    expect(prVerification("https://gitlab.com/acme/app", true)).toBe("reported");
-  });
-
+describe("clones", () => {
   it("says where a repository stands on this computer", () => {
     expect(cloneView({ state: "ready", projectId: "p1" })).toEqual({ kind: "cloned" });
     expect(cloneView({ state: "ready" })).toEqual({ kind: "open" });

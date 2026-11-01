@@ -76,7 +76,6 @@ export * from "./peer/plugin.ts";
 export * from "./peer/registry.ts";
 export * from "./peer/rpcRegistry.ts";
 export * from "./peer/herdr.rpc.ts";
-export * from "./peer/github.rpc.ts";
 export * from "./peer/observe.rpc.ts";
 export * from "./peer/card.rpc.ts";
 export * from "./peer/settings.ts";
@@ -86,7 +85,6 @@ export * from "./peer/audit.rpc.ts";
 
 export * from "./peer/toolTrust.ts";
 export * from "./peer/toolTrust.rpc.ts";
-export { deliveryBadge, pullRequestRows, taskDelivery } from "./peer/github.logic.ts";
 
 export * from "./peer/mcp.ts";
 export * from "./peer/mcp.rpc.ts";

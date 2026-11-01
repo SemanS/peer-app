@@ -42,7 +42,6 @@ export function needsYouView(status: PeerHubStatus): PeerHubStatus {
           projectId,
         })),
     },
-    github: { cli: false, account: null, signIn: null, error: null },
     coordination: {
       ...status.coordination,
       logPath: "",

@@ -15,7 +15,6 @@ import { Input } from "../ui/input";
 import { toastManager } from "../ui/toast";
 import { isLocalScope, type ResolvedProjectScope } from "./projectScope.logic";
 import { shareRowNote, shareRows } from "./shareProject.logic";
-import type { PeerWebPlugin } from "./slots.types";
 import type { WorkActions } from "./useWorkActions";
 import { reportFailure } from "./workFeedback";
 
@@ -29,13 +28,11 @@ import { reportFailure } from "./workFeedback";
 export function ShareProject({
   environmentId,
   status,
-  plugins,
   scope,
   actions,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
-  readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly scope: ResolvedProjectScope;
   readonly actions: WorkActions;
 }) {
@@ -200,9 +197,6 @@ export function ShareProject({
           {busy === "address" ? "Sharing…" : "Share"}
         </Button>
       </form>
-      {plugins.map(({ id, shareProject: Note }) =>
-        Note === undefined ? null : <Note key={id} environmentId={environmentId} status={status} />,
-      )}
       <div className="mt-2 flex justify-end">
         <Button size="xs" variant="ghost" onClick={() => setOpen(false)}>
           Close

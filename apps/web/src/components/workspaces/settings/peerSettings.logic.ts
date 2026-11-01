@@ -11,9 +11,6 @@ import type { PeerHubStatus, PeerWorkspaceRole } from "@t3tools/contracts";
 
 export const PEER_SETTINGS_PATH = "/settings/peer";
 
-/** The GitHub part of a workspace's General page: Settings › Overview and search send people to it. */
-export const GITHUB_ANCHOR = "workspace-github";
-
 /** Whether `pathname` is the Peer settings area or one of its pages. */
 export function isPeerSettingsPath(pathname: string): boolean {
   return pathname === PEER_SETTINGS_PATH || pathname.startsWith(`${PEER_SETTINGS_PATH}/`);
@@ -348,7 +345,7 @@ export function environmentIsComing(
  */
 type SlotKind = "settings" | "alwaysSettings" | "workspaceSettings";
 
-export type SlotHost = "coordination" | "general" | "people" | "github" | "audit" | "tool-trust";
+export type SlotHost = "coordination" | "general" | "people" | "audit" | "tool-trust";
 
 const SLOT_HOMES: Readonly<Record<SlotKind, SlotHost>> = {
   settings: "coordination",
@@ -359,7 +356,7 @@ const SLOT_HOMES: Readonly<Record<SlotKind, SlotHost>> = {
 const SLOT_PLACEMENTS: Readonly<Record<SlotKind, Readonly<Record<string, SlotHost>>>> = {
   settings: { "tool-trust": "tool-trust" },
   alwaysSettings: {},
-  workspaceSettings: { audit: "audit", github: "github" },
+  workspaceSettings: { audit: "audit" },
 };
 
 export const slotHost = (kind: SlotKind, plugin: string): SlotHost =>

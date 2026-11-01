@@ -170,7 +170,6 @@ export function SidebarTasks({
           <ShareProject
             environmentId={environmentId}
             status={status}
-            plugins={plugins}
             scope={resolved}
             actions={actions}
           />

@@ -164,7 +164,6 @@ const make = Effect.gen(function* () {
                 ...(transient?.error === undefined ? {} : { error: transient.error }),
               }),
           ...(checkout.state === "ready" && checkout.kind === "jj" ? { vcs: "jj" as const } : {}),
-          ...(transient?.gitHubSignIn === true ? { gitHubSignIn: true } : {}),
           ...(projectId === undefined ? {} : { projectId }),
         });
       }
@@ -296,7 +295,6 @@ const make = Effect.gen(function* () {
           workspaceRoot: state.workspaceRoot,
           environmentId,
           agents: { herdr: "not-running", list: [] },
-          github: { cli: false, account: null, signIn: null, error: null },
           coordination,
           sharedThreads: [],
           syncing: s.syncing,

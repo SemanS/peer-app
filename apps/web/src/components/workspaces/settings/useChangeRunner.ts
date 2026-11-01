@@ -24,7 +24,6 @@ export function useChangeRunner() {
   const revert = useAtomCommand(serverEnvironment.peerSettings.revert, options);
   const importYaml = useAtomCommand(serverEnvironment.peerSettings.importYaml, options);
   const applyProposal = useAtomCommand(serverEnvironment.peerSettings.applyProposal, options);
-  const githubDisable = useAtomCommand(serverEnvironment.peerSettings.githubDisable, options);
   return async (call: ChangeCall): Promise<ChangeOutcome> => {
     const settled = await (() => {
       switch (call.command) {
@@ -38,8 +37,6 @@ export function useChangeRunner() {
           return importYaml({ environmentId, input: call.input });
         case "applyProposal":
           return applyProposal({ environmentId, input: call.input });
-        case "githubDisable":
-          return githubDisable({ environmentId, input: call.input });
       }
     })();
     if (settled._tag === "Success") return { ok: true, result: settled.value };

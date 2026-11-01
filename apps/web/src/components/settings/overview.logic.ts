@@ -4,8 +4,6 @@
  * and the page to do it on. `overviewRows` turns the facts the pages already read into the groups;
  * `overviewSummary` counts what needs attention and names the first thing to finish, for the
  * banner on the page and the badge in the navigation.
- *
- * Admin-only rows (GitHub's checks) are listed for the workspace's admins only, as the navigation lists their pages; a plugin turned off removes its rows.
  */
 import { isWorkspaceAdmin } from "../workspaces/settings/peerSettings.logic";
 import { CHECKING, type ConnectionView } from "./connectionFacts";
@@ -109,14 +107,12 @@ export interface OverviewSummary {
 
 const withFullStop = (text: string): string => (/[.!?…]$/.test(text) ? text : `${text}.`);
 
-/** The banner's sentence: the first missing step, or the problem, and what it means until then. */
+/** The banner's sentence: the first missing step, or the problem. */
 export function finishText(row: OverviewRow): string {
   const { connection } = row;
-  const what =
-    connection.step === undefined
-      ? `${row.subject}: ${withFullStop(connection.detail ?? "needs your attention")}`
-      : `${row.subject} is at step ${connection.step.n} of ${connection.step.of}: ${connection.step.title}.`;
-  return row.consequence === null ? what : `${what} ${row.consequence}`;
+  return connection.step === undefined
+    ? `${row.subject}: ${withFullStop(connection.detail ?? "needs your attention")}`
+    : `${row.subject} is at step ${connection.step.n} of ${connection.step.of}: ${connection.step.title}.`;
 }
 
 export function overviewSummary(groups: ReadonlyArray<OverviewGroup>): OverviewSummary {

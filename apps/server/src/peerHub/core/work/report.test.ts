@@ -32,7 +32,6 @@ describe("the VCS kind a report carries", () => {
       previous: new Map([["acme/pay", { areas: [], tasks: [], threads: previous }]]),
       live,
       observable: () => false,
-      gitHost: undefined,
       round: 0,
     });
 

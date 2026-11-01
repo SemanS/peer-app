@@ -312,8 +312,6 @@ describe("the plugins and where each comes from", () => {
 
   it("knows which plugins a Hub that lists them says its operator turned off", () => {
     expect(hubOffPlugins({ featuresOff: [] })).toEqual(new Set());
-    expect(hubOffPlugins({ featuresOff: ["github", "audit"] })).toEqual(
-      new Set(["github", "audit"]),
-    );
+    expect(hubOffPlugins({ featuresOff: ["audit"] })).toEqual(new Set(["audit"]));
   });
 });

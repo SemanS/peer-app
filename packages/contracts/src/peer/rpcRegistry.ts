@@ -75,7 +75,6 @@ import {
   PeerInvitePreview,
 } from "../peerHub.ts";
 import { AuditRpcGroup, AuditRpcScopes, PEER_AUDIT_METHODS } from "./audit.rpc.ts";
-import { GitHubRpcGroup, GitHubRpcScopes, PEER_GITHUB_METHODS } from "./github.rpc.ts";
 import { ChangesRpcGroup, ChangesRpcScopes, PEER_CHANGES_METHODS } from "./changes.rpc.ts";
 import { JujutsuRpcGroup, JujutsuRpcScopes, PEER_JUJUTSU_METHODS } from "./jujutsu.rpc.ts";
 import { HerdrRpcGroup, HerdrRpcScopes, PEER_HERDR_METHODS } from "./herdr.rpc.ts";
@@ -525,7 +524,6 @@ export const PEER_WS_METHODS = {
   ...PEER_CORE_METHODS,
   ...PEER_HERDR_METHODS,
   ...PEER_JUJUTSU_METHODS,
-  ...PEER_GITHUB_METHODS,
   ...PEER_OBSERVE_METHODS,
   ...PEER_MCP_METHODS,
 
@@ -541,7 +539,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   ChangesRpcGroup,
   HerdrRpcGroup,
   JujutsuRpcGroup,
-  GitHubRpcGroup,
   ObserveRpcGroup,
   McpRpcGroup,
 
@@ -559,7 +556,6 @@ export const PEER_RPC_SCOPES = {
   ...PeerCoreRpcScopes,
   ...HerdrRpcScopes,
   ...JujutsuRpcScopes,
-  ...GitHubRpcScopes,
   ...ObserveRpcScopes,
   ...McpRpcScopes,
 

@@ -113,9 +113,6 @@ export function ProjectSection({
       <div className="flex flex-col gap-1">
         {checkout !== undefined && checkout.projectId === undefined ? (
           <NotOpenHere
-            environmentId={environmentId}
-            status={status}
-            plugins={plugins}
             checkout={checkout}
             opening={opener.opening}
             onOpen={() => void opener.open()}
@@ -202,20 +199,13 @@ function AreaGroup({
 }
 
 /**
- * A workspace project not open on this computer: clone and open it, or say
- * why that failed, with GitHub to connect when the account was the reason.
+ * A workspace project not open on this computer: clone and open it, or say why that failed.
  */
 function NotOpenHere({
-  environmentId,
-  status,
-  plugins,
   checkout,
   opening,
   onOpen,
 }: {
-  readonly environmentId: EnvironmentId;
-  readonly status: PeerHubStatus;
-  readonly plugins: ReadonlyArray<PeerWebPlugin>;
   readonly checkout: ProjectCheckout;
   readonly opening: boolean;
   readonly onOpen: () => void;
@@ -251,18 +241,6 @@ function NotOpenHere({
       </div>
       {checkout.unsupported.length === 0 ? null : (
         <p className="text-xs text-muted-foreground">{checkout.unsupported.join(" ")}</p>
-      )}
-      {plugins.map(({ id, notOpenHere: Fix }) =>
-        Fix === undefined ? null : (
-          <Fix
-            key={id}
-            environmentId={environmentId}
-            status={status}
-            checkout={checkout}
-            failed={failed}
-            onRetry={onOpen}
-          />
-        ),
       )}
     </div>
   );

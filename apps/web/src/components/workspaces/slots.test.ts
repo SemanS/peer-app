@@ -20,7 +20,6 @@ describe("the web plugin registry", () => {
     expect(ids).toEqual([
       "herdr",
       "jujutsu",
-      "github",
       "observe",
       "audit",
       "tool-trust",

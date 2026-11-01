@@ -42,7 +42,7 @@ it("explains explicit policy locks without guessing from a newer reason", () => 
 
 describe("activePlugin", () => {
   it("treats the features that existed before plugins as active without a plugin list", () => {
-    for (const id of ["observe", "herdr", "github"]) {
+    for (const id of ["observe", "herdr"]) {
       expect(activePlugin(status(), id)).toBe(true);
     }
     expect(activePlugin(status(), "telepathy")).toBe(false);

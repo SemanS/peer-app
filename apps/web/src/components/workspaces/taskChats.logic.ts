@@ -129,7 +129,7 @@ export interface ChatPullRequest {
 
 /**
  * Each chat's pull requests by the key its node has in the work tree (`WorkThreadNode.key`), in the
- * state GitHub verified where it did, else the one the chat's Peer reported.
+ * state the chat's Peer reported.
  */
 export function pullRequestsByThread(
   workThreads: ReadonlyArray<Pick<PeerWorkThread, "id" | "environment" | "pullRequests">>,
@@ -138,7 +138,7 @@ export function pullRequestsByThread(
   for (const thread of workThreads) {
     const pullRequests = (thread.pullRequests ?? []).map((pullRequest) => ({
       url: pullRequest.url,
-      state: pullRequest.github?.state ?? pullRequest.state,
+      state: pullRequest.state,
     }));
     if (pullRequests.length === 0) continue;
     // This computer's chats are known by their own id, any other computer's after it.

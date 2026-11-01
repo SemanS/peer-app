@@ -11,11 +11,7 @@ import {
  * The features that existed before plugins. An environment that sends no plugin list (an older one,
  * or one with no plugin registered yet) runs all of them, so a client shows them as before.
  */
-const PRE_PLUGIN_FEATURES: ReadonlySet<string> = new Set<PeerPluginId>([
-  "herdr",
-  "github",
-  "observe",
-]);
+const PRE_PLUGIN_FEATURES: ReadonlySet<string> = new Set<PeerPluginId>(["herdr", "observe"]);
 
 /** What these read of a status: its plugins, and whether someone is signed in, when known. */
 type StatusPlugins = Pick<PeerHubStatus, "plugins"> & { readonly signedIn?: boolean };

@@ -714,24 +714,6 @@
       "count": 1
     }
   },
-  "apps/server/src/peerHub/plugins/github/GitHub.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/github/client/gh.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/github/status.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 4
-    }
-  },
   "apps/server/src/peerHub/plugins/herdr/Herdr.test.ts": {
     "t3code/no-wall-clock-in-tests": {
       "count": 1
@@ -1119,11 +1101,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/settings/useOverviewFacts.ts": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/sidebar/SidebarChatMeta.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1205,26 +1182,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/github/GitHubConnect.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/github/GitHubTaskPullRequests.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/github/GitHubVerificationSettings.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/github/GitHubVerificationSettings.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 2
-    }
-  },
   "apps/web/src/components/workspaces/herdr/StartTaskAgent.browser.test.tsx": {
     "t3code/require-disposable-render": {
       "count": 7
@@ -1281,24 +1238,6 @@
   "apps/web/src/components/workspaces/settings/AskAgent.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/settings/GitHubWizard.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/settings/IntegrationsGitHub.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/settings/IntegrationsGitHub.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/no-unreasoned-state-sync": {
-      "count": 2
     }
   },
   "apps/web/src/components/workspaces/settings/InviteDialog.test.tsx": {
@@ -1514,11 +1453,6 @@
       "count": 2
     }
   },
-  "packages/client-runtime/src/peer/github.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "packages/client-runtime/src/peer/plugins.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1553,11 +1487,6 @@
     }
   },
   "packages/contracts/src/peer/changes.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "packages/contracts/src/peer/github.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }

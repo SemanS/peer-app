@@ -480,15 +480,9 @@ const make = Effect.gen(function* () {
             checkouts: new Map(s.checkouts).set(path, { state: "cloning" }),
           }));
           yield* publish;
-          const gitHost = PeerPlugins.capability(yield* plugins.contributions, "gitHost");
-          const cloned = yield* cloneRepository(repo, path, gitHost).pipe(Effect.result);
+          const cloned = yield* cloneRepository(repo, path).pipe(Effect.result);
           if (cloned._tag === "Failure") {
-            const { message, signIn } = cloned.failure;
-            yield* failed(path, {
-              state: "error",
-              error: message,
-              ...(signIn ? { gitHubSignIn: true } : {}),
-            });
+            yield* failed(path, { state: "error", error: cloned.failure });
             continue;
           }
         }
@@ -589,8 +583,7 @@ const make = Effect.gen(function* () {
     }
     let shared: SharedRepository;
     if (input.repository !== undefined) {
-      const gitHost = PeerPlugins.capability(yield* plugins.contributions, "gitHost");
-      shared = yield* addressedRepository(input.repository, gitHost);
+      shared = yield* addressedRepository(input.repository);
     } else if (input.projectId !== undefined) {
       const local = yield* projects
         .getById(input.projectId)

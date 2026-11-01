@@ -169,7 +169,6 @@ function status(project: PeerProjectState, role: "owner" | "member" = "owner"): 
         },
       ],
     },
-    github: { cli: true, account: "slavo", signIn: null, error: null },
     coordination: {
       enabled: false,
       policy: "coordinate",

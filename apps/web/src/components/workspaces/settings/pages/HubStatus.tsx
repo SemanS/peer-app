@@ -1,6 +1,4 @@
 import { editionLabel } from "@t3tools/contracts";
-import { verificationReadKey } from "@t3tools/client-runtime/peer/github";
-import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
 import type { ReactNode } from "react";
 
 import { formatRelativeTimeLabel } from "../../../../timestampFormat";
@@ -14,8 +12,6 @@ import {
   hubBuild,
   hubFeatureRows,
 } from "../hubStatus.logic";
-import { githubFactConnection } from "../integrations.logic";
-import { useGitHubChecksStatus } from "../IntegrationsGitHub";
 import type { WorkspacePageProps } from "../pageProps";
 import { PeerSettingsPage } from "../PeerSettingsPage";
 import { useSettingsView } from "../useSettingsView";
@@ -33,31 +29,13 @@ function Fact({ label, children }: { readonly label: string; readonly children: 
  * The Hub this computer is signed in to (design artboard 23): read only, since its operator changes
  * it. Its address, build and the last sync, and each of its features in the status language:
  * Connected, Not available (the operator's choice, or a Hub that needs an update) or Off on this
- * computer, with what it means for the workspace. GitHub's checks are also the workspace's to
- * connect, so they say Needs setup (at its step) or Off until that is done. A Hub
- * says its build and its features in the answer that tells who is signed in; one that says less (an
+ * computer, with what it means for the workspace. A Hub says its build and its features in the answer that tells who is signed in; one that says less (an
  * older Hub) leaves the page to the plugins' states and the settings read.
  */
-export function HubStatus({ environmentId, status, workspace }: WorkspacePageProps) {
+export function HubStatus({ status, workspace }: WorkspacePageProps) {
   useRelativeTimeTick(60_000);
   const view = useSettingsView(workspace.slug);
-  // What the workspace connected is read only where the Hub serves the feature to this computer.
-  const githubOn = inactivePluginReason(status, "github") === null;
-  const github = useGitHubChecksStatus(
-    githubOn
-      ? {
-          environmentId,
-          workspace: workspace.slug,
-          moved: verificationReadKey(status, workspace),
-        }
-      : null,
-  );
-  const features = hubFeatureRows({
-    plugins: status.plugins,
-    hub: status.hub,
-    flags: view.features,
-    connections: githubOn ? { github: githubFactConnection(github.fact) } : {},
-  });
+  const features = hubFeatureRows({ plugins: status.plugins, hub: status.hub });
   const build = hubBuild(status.hub);
   return (
     <PeerSettingsPage title="Hub" description={HUB_DESCRIPTION}>

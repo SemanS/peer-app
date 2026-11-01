@@ -31,7 +31,7 @@ const plugin = (id: string, extra: Record<string, unknown> = {}) => ({
   active: true,
   ...extra,
 });
-const PLUGINS = ["github", "audit", "tool-trust"].map((id) => plugin(id));
+const PLUGINS = ["audit", "tool-trust"].map((id) => plugin(id));
 const off = (...ids: string[]) =>
   PLUGINS.map((entry) =>
     ids.includes(entry.id) ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
@@ -292,7 +292,6 @@ describe("what the navigation marks", () => {
     connection: { state: "connected" },
     account: null,
     action: null,
-    consequence: null,
     attention: false,
     underway: false,
     badge: null,
@@ -305,14 +304,11 @@ describe("what the navigation marks", () => {
       who: "Acme",
       rows: [
         row({
-          id: "workspace:github",
+          id: "workspace:hub",
           attention: true,
           underway: true,
-          badge: "Needs setup",
-          connection: {
-            state: "setup",
-            step: { n: 3, of: 4, title: "add the webhook to GitHub" },
-          },
+          badge: "Problem",
+          connection: { state: "problem", detail: "Hub unreachable" },
         }),
       ],
     },
@@ -337,15 +333,14 @@ describe("what the navigation marks", () => {
     ]);
   });
 
-  it("puts a dot on General while GitHub is at a step", () => {
+  it("puts a dot on the Hub's page while its sync fails", () => {
     const marks = navMarks(groups);
     expect(marks.toFinish).toBe("1 to finish");
-    expect([...marks.dots]).toEqual(["workspace:general"]);
-    expect([...marks.tags]).toEqual([]);
+    expect([...marks.dots]).toEqual(["workspace:hub"]);
     const built = nav({ marks });
     expect(built.overview.badge).toBe("1 to finish");
-    const general = built.groups[0]?.items.find((item) => item.label === "General");
-    expect(general).toMatchObject({ dot: true });
+    const hub = built.groups[0]?.items.find((item) => item.label === "Hub");
+    expect(hub).toMatchObject({ dot: true });
   });
 
   it("marks nothing when nothing is to finish", () => {

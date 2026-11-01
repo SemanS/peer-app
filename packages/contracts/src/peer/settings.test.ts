@@ -11,7 +11,6 @@ import {
   PeerSettingsChangeResult,
   PeerSettingsDeleteSecretResult,
   PeerSettingsExport,
-  PeerSettingsGitHubSetup,
   PeerSettingsHistoryPage,
   PeerSettingsPersonEntry,
   PeerSettingsPreview,
@@ -44,7 +43,6 @@ const proposeInput = Schema.decodeUnknownExit(PeerSettingsProposeInput);
 const proposalsInput = Schema.decodeUnknownExit(PeerSettingsProposalsInput);
 const proposeResult = Schema.decodeUnknownExit(PeerSettingsProposeResult);
 const deleteResult = Schema.decodeUnknownExit(PeerSettingsDeleteSecretResult);
-const gitHubSetup = Schema.decodeUnknownExit(PeerSettingsGitHubSetup);
 const domainRecord = Schema.decodeUnknownExit(PeerDomainRecord);
 const exported = Schema.decodeUnknownExit(PeerSettingsExport);
 const workspaceUpdate = Schema.decodeUnknownExit(PeerSettingsWorkspaceUpdate);
@@ -109,7 +107,6 @@ describe("GET /settings", () => {
         projects: { booking: { name: "Booking" } },
         futureSection: { kept: true },
       },
-      features: { pathRules: true, github: true, future: true },
       people: [{ ...eva, role: "member" }],
     });
     expect(Exit.isSuccess(answer)).toBe(true);
@@ -124,7 +121,6 @@ describe("GET /settings", () => {
       revision: { ...revision, message: null },
       rights: { admin: true, owner: true, leads: [] },
       document: {},
-      features: { pathRules: true, github: true },
       people: [],
     });
     expect(Exit.isSuccess(answer) && answer.value.revision.message).toBeNull();
@@ -137,7 +133,6 @@ describe("GET /settings", () => {
           revision,
           rights: { admin: true, owner: true, leads: [] },
           document: {},
-          features: { pathRules: false, github: false },
           people: [{ ...eva, role: "emperor" }],
         }),
       ),
@@ -394,30 +389,7 @@ describe("history, proposals and supporting routes", () => {
     );
   });
 
-  it("reads the GitHub setup, a secret only when new, the domain record and the export", () => {
-    const setup = gitHubSetup;
-    expect(
-      Exit.isSuccess(
-        setup({
-          payloadUrl: "https://hub.acme.dev/v1/github/acme",
-          secret: "s3cr3t",
-          secretName: "github-webhook",
-          events: "pull_request",
-          revision: 44,
-        }),
-      ),
-    ).toBe(true);
-    expect(
-      Exit.isSuccess(
-        setup({
-          payloadUrl: "https://hub.acme.dev/v1/github/acme",
-          secret: null,
-          secretName: "github-webhook",
-          events: "pull_request",
-          revision: null,
-        }),
-      ),
-    ).toBe(true);
+  it("reads the domain record and the export", () => {
     expect(
       Exit.isSuccess(
         domainRecord({

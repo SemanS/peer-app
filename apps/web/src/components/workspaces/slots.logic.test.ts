@@ -9,7 +9,7 @@ import {
   selectPeerPlugins,
 } from "./slots.logic";
 
-const REGISTRY = ["herdr", "github", "capacity", "requests", "observe", "rooms"].map((id) => ({
+const REGISTRY = ["herdr", "github", "capacity", "changes", "observe", "rooms"].map((id) => ({
   id,
 }));
 
@@ -56,22 +56,22 @@ describe("selectPeerPlugins", () => {
     const listed = status([
       plugin("rooms"),
       plugin("observe", false),
-      plugin("requests"),
+      plugin("changes"),
       plugin("herdr"),
     ]);
-    expect(ids(selectPeerPlugins(REGISTRY, listed))).toEqual(["herdr", "requests", "rooms"]);
+    expect(ids(selectPeerPlugins(REGISTRY, listed))).toEqual(["herdr", "changes", "rooms"]);
   });
 
   it("selects the features that existed before plugins when the status lists none", () => {
-    const legacy = ["herdr", "github", "capacity", "requests", "observe"];
+    const legacy = ["herdr", "github", "capacity", "observe"];
     expect(ids(selectPeerPlugins(REGISTRY, status()))).toEqual(legacy);
     expect(ids(selectPeerPlugins(REGISTRY, status([])))).toEqual(legacy);
   });
 
   it("ignores a plugin the registry does not know", () => {
     expect(
-      ids(selectPeerPlugins(REGISTRY, status([plugin("telepathy"), plugin("requests")]))),
-    ).toEqual(["requests"]);
+      ids(selectPeerPlugins(REGISTRY, status([plugin("telepathy"), plugin("changes")]))),
+    ).toEqual(["changes"]);
   });
 
   it("selects nothing before the status has arrived", () => {
@@ -80,7 +80,7 @@ describe("selectPeerPlugins", () => {
 });
 
 describe("Needs you", () => {
-  const requests: PeerWebPlugin = { id: "requests", needsYou: { count: () => 2 } };
+  const changes: PeerWebPlugin = { id: "changes", needsYou: { count: () => 2 } };
   const rooms: PeerWebPlugin = { id: "rooms", needsYou: { count: () => 1 } };
   const herdr: PeerWebPlugin = {
     id: "herdr",
@@ -92,7 +92,7 @@ describe("Needs you", () => {
   const observe: PeerWebPlugin = { id: "observe" };
 
   it("adds what the active plugins say waits on the person", () => {
-    expect(needsYouCount([observe, requests, rooms], status())).toBe(3);
+    expect(needsYouCount([observe, changes, rooms], status())).toBe(3);
     expect(needsYouCount([observe], status())).toBe(0);
     expect(needsYouCount([], status())).toBe(0);
   });
@@ -109,7 +109,7 @@ describe("Needs you", () => {
 
   it("lets threads be watched only while Observe is among the active plugins", () => {
     expect(canWatchThreads([herdr, observe])).toBe(true);
-    expect(canWatchThreads([herdr, requests])).toBe(false);
+    expect(canWatchThreads([herdr, changes])).toBe(false);
     expect(canWatchThreads([])).toBe(false);
   });
 });

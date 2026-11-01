@@ -6,7 +6,6 @@
 import type {
   ContextMenuItem,
   EnvironmentId,
-  PeerAgentRequest,
   PeerHubStatus,
   PeerPluginId,
   PeerProjectState,
@@ -38,28 +37,6 @@ export interface ProjectSlotProps extends PeerSlotProps {
   readonly project: WorkProjectNode;
   /** The route the sidebar highlights, in `workTree` terms (`team:<workspace>:<project>`). */
   readonly activeThread: string | null;
-}
-
-/**
- * An action a plugin adds to a project's More menu: what it is called and what picking it does in
- * a line, so the menu names every item, and the dialog it opens, which the menu mounts while it is
- * open. A plugin that is off or not served by the Hub contributes none.
- */
-export interface ProjectAction {
-  /** Unique within the plugin. */
-  readonly id: string;
-  /** "Request a teammate…". */
-  readonly label: string;
-  /** One line under the label: "Ask someone to take on a task". */
-  readonly hint: string;
-  readonly icon: LucideIcon;
-  /** False where the project's Hub lacks what the action needs; the item then does not show. */
-  readonly available?: (props: ProjectSlotProps) => boolean;
-  readonly Dialog: ComponentType<ProjectActionDialogProps>;
-}
-
-export interface ProjectActionDialogProps extends ProjectSlotProps {
-  readonly onClose: () => void;
 }
 
 export interface TaskSlotProps extends PeerSlotProps {
@@ -106,7 +83,7 @@ export interface NotOpenHereSlotProps extends PeerSlotProps {
   readonly onRetry: () => void;
 }
 
-/** Starts an agent on a task in its own checkout; with a request, it accepts that request. */
+/** Starts an agent on a task in its own checkout. */
 export interface TaskLauncherProps extends PeerSlotProps {
   readonly workspace: string;
   readonly project: PeerProjectState;
@@ -116,37 +93,13 @@ export interface TaskLauncherProps extends PeerSlotProps {
   readonly inline?: boolean;
   readonly initialPrompt?: string;
   readonly repositoryId?: string;
-  readonly request?: PeerAgentRequest;
   readonly initialOpen?: boolean;
-  /** With a request: open on accepting it, or on saying why it is declined. */
-  readonly initialView?: "accept" | "decline";
   /**
    * Opens with "Start from" on this base bookmark, as an integration made for the task (jj
    * projects only). Without it the dialog starts from main.
    */
   readonly baseBranch?: string;
-  /**
-   * With a request: declines it with the person's reason (empty for none), and says why that
-   * failed, or null. Without it the dialog offers no Decline.
-   */
-  readonly onDecline?: (reason: string) => Promise<string | null>;
   readonly onClose?: () => void;
-}
-
-/**
- * Asks a teammate to take a task on, in a dialog the caller opens and closes. Started from a
- * task, the request names it; started from a project, it names none.
- */
-export interface RequestTeammateProps extends PeerSlotProps {
-  /** The project, with its tasks and areas for the task picker. */
-  readonly project: WorkProjectNode;
-  readonly task?: { readonly id: string; readonly label: string } | undefined;
-  /** What the request opens with already filled in: "Ask Ana" on a task's page names Ana. */
-  readonly prefill?:
-    | { readonly recipient?: string | undefined; readonly prompt?: string | undefined }
-    | undefined;
-  readonly open: boolean;
-  readonly onOpenChange: (open: boolean) => void;
 }
 
 /** One item a plugin adds to a thread's menu, and what picking it does. */
@@ -282,7 +235,6 @@ export interface PeerWebPlugin {
     ) => string | null;
   };
   /** Items of a project's More menu, each with its label and hint. */
-  readonly projectActions?: ReadonlyArray<ProjectAction>;
   /** Rows at the top of an open project, for what holds now. */
   readonly projectRows?: ComponentType<ProjectSlotProps>;
   /**
@@ -331,7 +283,6 @@ export interface PeerWebPlugin {
   /** Capability: starts an agent on a task. At most one plugin fills it. */
   readonly taskLauncher?: ComponentType<TaskLauncherProps>;
   /** Capability: asks a teammate to take a task on. At most one plugin fills it. */
-  readonly requestTeammate?: ComponentType<RequestTeammateProps>;
   /** What a project that is not open here offers once opening it failed. */
   readonly notOpenHere?: ComponentType<NotOpenHereSlotProps>;
   /** A note in the form that shares a project with the workspace. */

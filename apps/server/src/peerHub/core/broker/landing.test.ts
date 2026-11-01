@@ -595,14 +595,12 @@ describe("a landing step in the agent's shell", () => {
   });
 
   it("never stops a landing step for advice, which reaches the agent as at any step", async () => {
-    const announcing = plugin("announcements", {
+    const advising = plugin("changes", {
       hooks: {
-        notices: [
-          { wakes: true, read: () => Effect.succeed("Peer · announcement: main CI is red.") },
-        ],
+        notices: [{ wakes: true, read: () => Effect.succeed("Peer · advice: main CI is red.") }],
       },
     });
-    const { fixture, shell, after } = await landingFixture(only(announcing));
+    const { fixture, shell, after } = await landingFixture(only(advising));
     try {
       for (const command of ["git push", "git commit -m x", "gh pr create --fill"])
         expect(await shell(command), command).toBeNull();

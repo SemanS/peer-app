@@ -11,7 +11,7 @@ const announcing: PeerBrokerPlugins = {
   ...NO_PLUGINS,
   active: [
     {
-      id: "announcements",
+      id: "changes",
       title: "fake",
       contributions: {
         hooks: { notices: [{ wakes: true, read: () => Effect.succeed(ANNOUNCEMENT) }] },

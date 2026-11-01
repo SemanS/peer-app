@@ -6,7 +6,7 @@ import * as NodePath from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
-import type { PeerAgentRequest, PeerHubStatus, PeerPluginId } from "@t3tools/contracts";
+import type { PeerHubStatus, PeerPluginId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Queue from "effect/Queue";
@@ -31,19 +31,6 @@ const SEED = [
   '"joinable":[],"lastSyncAt":null,"sharedInstances":{"acme/pay":["peer-acme-pay-claude"]},',
   '"sharedThreads":["peer:thread-1"]}\n',
 ].join("");
-
-const request = (id: string): PeerAgentRequest => ({
-  id,
-  project: "pay",
-  task: "krk-812",
-  sender: "bob@acme.test",
-  recipient: "ana@acme.test",
-  title: "Review the parser",
-  prompt: "Please review the parser.",
-  status: "pending",
-  createdAt: "2026-10-08T10:00:00Z",
-  updatedAt: "2026-10-08T10:00:00Z",
-});
 
 const coordination: PeerHubStatus["coordination"] = {
   enabled: true,
@@ -84,20 +71,13 @@ const startedCore = (plugins: ReadonlyArray<PeerPluginEntry>) =>
 
 /** The fields plugins that existed before plugins fill. */
 const legacyFields = (status: PeerHubStatus) => ({
-  requests: status.requests,
   agents: status.agents,
   github: status.github,
   sharedThreads: status.sharedThreads,
   sharedCapacity: status.workspaces[0]?.projects[0]?.sharedCapacity,
 });
 
-const LEGACY_IDS: ReadonlyArray<PeerPluginId> = [
-  "herdr",
-  "github",
-  "capacity",
-  "requests",
-  "observe",
-];
+const LEGACY_IDS: ReadonlyArray<PeerPluginId> = ["herdr", "github", "capacity", "observe"];
 
 describe("the Peer status", () => {
   it.effect("keeps core's values for features that are no plugins yet", () =>
@@ -105,9 +85,8 @@ describe("the Peer status", () => {
       const { status } = yield* startedCore([]);
       const published = yield* status.publish;
       assert.deepStrictEqual(legacyFields(published), {
-        // herdr, GitHub, shared capacity, team requests and observe are plugins, which this
-        // registry leaves out: core knows none of them.
-        requests: [],
+        // herdr, GitHub, shared capacity and observe are plugins, which this registry leaves out:
+        // core knows none of them.
         agents: { herdr: "not-running", list: [] },
         github: { cli: false, account: null, signIn: null, error: null },
         sharedThreads: [],
@@ -125,12 +104,10 @@ describe("the Peer status", () => {
           slicePlugin("herdr", { herdr: "running", list: [], postHocSkipped: 1 }),
           slicePlugin("github", { cli: true, account: "bob", signIn: null, error: null }),
           slicePlugin("capacity", { "acme/pay": { enabled: true, instanceIds: ["plugin-key"] } }),
-          slicePlugin("requests", [{ workspace: "acme", request: request("two") }]),
           // A slice of another shape reads as the neutral value.
           slicePlugin("observe", ["peer:thread-2", 3]),
         ]);
         assert.deepStrictEqual(legacyFields(yield* status.publish), {
-          requests: [{ workspace: "acme", request: request("two") }],
           agents: { herdr: "running", list: [], postHocSkipped: 1 },
           github: { cli: true, account: "bob", signIn: null, error: null },
           sharedThreads: [],
@@ -140,7 +117,6 @@ describe("the Peer status", () => {
         for (const id of LEGACY_IDS) yield* plugins.setPlugin({ id, enabled: false });
         const off = yield* status.publish;
         assert.deepStrictEqual(legacyFields(off), {
-          requests: [],
           agents: { herdr: "not-running", list: [] },
           github: { cli: false, account: null, signIn: null, error: null },
           sharedThreads: [],
@@ -159,7 +135,7 @@ describe("the Peer status", () => {
         current: () => [
           200,
           meAnswer(
-            { requests: 1 },
+            { changes: 1 },
             { featuresOff: ["resources"], hub: { version: "0.8.4", commit: "a6bde95" } },
           ),
         ],
@@ -178,7 +154,7 @@ describe("the Peer status", () => {
         assert.deepStrictEqual((yield* status.publish).hub, {
           version: "0.8.4",
           commit: "a6bde95",
-          features: { requests: 1 },
+          features: { changes: 1 },
           featuresOff: ["resources"],
         });
         // It is the session's: signed out, the status says nothing of the Hub's build or features.

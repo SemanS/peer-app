@@ -63,7 +63,7 @@ describe("plugins in the Peer status", () => {
     const status = decodeStatus({
       ...statusBeforePlugins,
       plugins: [
-        { id: "requests", title: "Team requests", enabled: true, active: false, reason: "hub" },
+        { id: "changes", title: "Changes", enabled: true, active: false, reason: "hub" },
         {
           id: "telepathy",
           title: "Telepathy",
@@ -75,7 +75,7 @@ describe("plugins in the Peer status", () => {
       ],
     });
     expect(status.plugins?.map((plugin) => [plugin.id, plugin.active, plugin.reason])).toEqual([
-      ["requests", false, "hub"],
+      ["changes", false, "hub"],
       ["telepathy", false, "off"],
     ]);
     expect(isPluginId("telepathy")).toBe(false);

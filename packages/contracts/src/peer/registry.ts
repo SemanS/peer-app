@@ -1,5 +1,4 @@
 import { PeerResourcesState } from "./resources.ts";
-import { PeerAgreementsStatus } from "./agreements.ts";
 import { PeerChangesStatus } from "./changes.ts";
 import { JujutsuState } from "./jujutsu.ts";
 import type * as Schema from "effect/Schema";
@@ -11,7 +10,6 @@ import type * as Schema from "effect/Schema";
  * `peerHub.ts` instead; none is added here.
  */
 import { PeerToolTrustStatus } from "./toolTrust.ts";
-import { PeerAnnouncementsStatus } from "./announcements.ts";
 import { PeerMcpStatus } from "./mcp.ts";
 import { PeerHerdrStatus } from "./herdr.ts";
 import * as SchemaValues from "effect/Schema";
@@ -25,13 +23,11 @@ export * from "./jujutsu.ts";
 export * from "./rooms.ts";
 
 export const peerPluginStatusFields = {
-  agreements: SchemaValues.optional(PeerAgreementsStatus),
   changes: SchemaValues.optional(PeerChangesStatus),
   resources: SchemaValues.optional(PeerResourcesState),
   needsYou: SchemaValues.optional(PeerNeedsYouStatus),
   settle: SchemaValues.optional(PeerSettleStatus),
   toolTrust: SchemaValues.optional(PeerToolTrustStatus),
-  announcements: SchemaValues.optional(PeerAnnouncementsStatus),
   mcp: SchemaValues.optional(PeerMcpStatus),
   herdr: SchemaValues.optional(PeerHerdrStatus),
   jujutsu: SchemaValues.optional(JujutsuState),

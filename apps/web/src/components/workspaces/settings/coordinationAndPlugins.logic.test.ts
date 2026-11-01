@@ -202,7 +202,7 @@ describe("the plugins and where each comes from", () => {
   });
 
   it("shows a plugin whose feature the Hub turned off as Not available, switch off and locked", () => {
-    expect(only([plugin("requests")], { ...OWNER, hubOff: new Set(["requests"]) })).toMatchObject({
+    expect(only([plugin("changes")], { ...OWNER, hubOff: new Set(["changes"]) })).toMatchObject({
       status: "unavailable",
       source: "turned off on this Hub",
       checked: false,
@@ -227,15 +227,15 @@ describe("the plugins and where each comes from", () => {
 
   it("prefers the owner's own choice over the Hub's: a plugin they turned off is off by them", () => {
     expect(
-      only([plugin("requests", { enabled: false, active: false, reason: "off" })], {
+      only([plugin("changes", { enabled: false, active: false, reason: "off" })], {
         ...OWNER,
-        hubOff: new Set(["requests"]),
+        hubOff: new Set(["changes"]),
       }),
     ).toMatchObject({ status: "off", source: "by you", consequence: null });
   });
 
   it("shows a plugin a Hub too old to have it cannot run as Not available, and says the Hub must be updated", () => {
-    expect(only([plugin("requests", { active: false, reason: "hub" })])).toMatchObject({
+    expect(only([plugin("changes", { active: false, reason: "hub" })])).toMatchObject({
       status: "unavailable",
       source: "needs a newer Hub",
       note: "The Hub must be updated before this works.",
@@ -278,7 +278,7 @@ describe("the plugins and where each comes from", () => {
       [
         plugin("handoff"),
         plugin("find", { enabled: false, active: false, reason: "off" }),
-        plugin("requests", { active: false, reason: "hub" }),
+        plugin("changes", { active: false, reason: "hub" }),
       ],
       OWNER,
     ).map((view) => view.statusLabel ?? view.status);
@@ -299,12 +299,12 @@ describe("the plugins and where each comes from", () => {
   });
 
   it("holds the switch of the plugin whose change is on its way, and says which", () => {
-    const views = pluginViews([plugin("requests"), plugin("observe")], {
+    const views = pluginViews([plugin("changes"), plugin("observe")], {
       ...OWNER,
       pending: "observe",
     });
     expect(views.map((view) => [view.id, view.busy, view.disabled])).toEqual([
-      ["requests", false, false],
+      ["changes", false, false],
       ["observe", true, true],
     ]);
   });
@@ -324,8 +324,8 @@ describe("the plugins and where each comes from", () => {
 
   it("keeps the order of the environment's list", () => {
     expect(
-      pluginViews([plugin("requests"), plugin("observe")], OWNER).map((view) => view.id),
-    ).toEqual(["requests", "observe"]);
+      pluginViews([plugin("changes"), plugin("observe")], OWNER).map((view) => view.id),
+    ).toEqual(["changes", "observe"]);
   });
 
   it("knows which plugins a Hub that lists them says its operator turned off", () => {
@@ -340,8 +340,8 @@ describe("the plugins and where each comes from", () => {
     expect(hubOffPlugins({ featuresOff: [] }, { pathRules: false, github: true })).toEqual(
       new Set(),
     );
-    expect(hubOffPlugins({ featuresOff: ["requests"] }, { pathRules: true, github: true })).toEqual(
-      new Set(["requests"]),
+    expect(hubOffPlugins({ featuresOff: ["changes"] }, { pathRules: true, github: true })).toEqual(
+      new Set(["changes"]),
     );
   });
 

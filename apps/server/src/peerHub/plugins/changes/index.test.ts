@@ -50,7 +50,6 @@ describe("the changes plugin", () => {
       listed,
       PEER_PLUGIN_IDS.filter((id) => listed.includes(id)),
     );
-    assert.strictEqual(listed.indexOf("changes"), listed.indexOf("agreements") + 1);
   });
 
   it.live(

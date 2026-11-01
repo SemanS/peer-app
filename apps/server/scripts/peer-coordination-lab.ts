@@ -35,15 +35,6 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //      so exactly one of the two runs and the other is stopped before it edits; the one let through
 //      is stopped on its next edit of the file until it writes a note. Repeated with a new file each
 //      time. It needs a hub that has `/intent`, and says so when PEERHUB_BIN has none.
-//  22. Agreements (peer-lab/agreements.ts): Bob's agent on KRK-2 asks Ana's, idle on KRK-1, and settles
-//      the overlap with `peer resolve "<words>"`: the Hub holds the words as the open agreement of the two
-//      tasks from the moment the settle was answered, and neither session that took part is told it. Both
-//      end; a new session on KRK-1 (Claude Code, and Codex) is stopped once at its first `git push` with
-//      the agreement in the stop reason, fenced as teammate text, and the push again runs. On a computer
-//      started with PEER_AGREEMENTS=off nothing is told or stopped, and `peer agreements` is refused. A
-//      person marks KRK-1 done while no agent is on KRK-2: Bob's status lists the agreement as due for him,
-//      and Handled closes it. The coordination logs hold sizes and counts, never the words. It needs a Hub
-//      that serves `agreements`.
 //  23. Jujutsu (LAB_VCS=jj only; peer-lab/jujutsu.ts): six simulated steps, each in task checkouts of its own and
 //      read from the logs and the repositories. follow-local: an amend of the change an agent builds on moves its
 //      change, and it hears so once. overtaken: an edit not yet snapshotted when a rewrite arrives ends in one
@@ -57,7 +48,6 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   PEERHUB_BIN=../server/target/debug/peerhub node apps/server/scripts/peer-coordination-lab.ts
 //   KEEP_LAB=1 keeps the throwaway homes and logs.
 //   LAB_RACE_RUNS=100 repeats step 17's race that many times (20 by default).
-//   LAB_AGREEMENTS_ONLY=1 runs the agreements step (22) alone.
 //   LAB_VCS=jj makes each computer's clone a colocated Jujutsu repository (`jj git init --colocate`; the
 //   origin stays a bare Git repository). A task's branch is a bookmark on the working copy and the
 //   landing cases run `jj commit` and `jj git push`. A last step makes a task's checkout as herdr's
@@ -100,12 +90,12 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   lands both. LAB_INTEGRATE=1 (implied by deferred; peer-lab/hidden.ts) then adds the integration step:
 //   after both agents finish and their sessions end, a fresh session on Ana's computer, on KRK-1, is asked
 //   to merge Bob's branch into hers, make sure it works and push it, and the lab runs its checks on what
-//   was pushed to origin.git. It reports whether that session was given the agreement the agents settled
-//   (Ana's debug log: agreements.told, landing.stopped), whether the pushed tree is right, and the
-//   characters Peer added to it. The arms are the default (agreements on), LAB_AGREEMENTS=off (the plugin
-//   off on both computers, everything else on) and LAB_PEER=off. Without REAL_AGENTS=1 scripted stand-ins
-//   play every session: Bob's asks KRK-1 and settles with words that defer the change, the integrator
-//   divides by a hundred only if Peer told it so, and the dry run checks that the arms differ as they should.
+//   was pushed to origin.git. It reports whether that session was given what the agents wrote in KRK-1's
+//   room (Ana's debug log: the hook that carried it, landing.stopped), whether the pushed tree is right, and
+//   the characters Peer added to it. The arms are the default and LAB_PEER=off. Without REAL_AGENTS=1
+//   scripted stand-ins play every session: Bob's asks KRK-1 and says there, in words that defer the change,
+//   what whoever lands both has to do, the integrator divides by a hundred only if Peer told it so, and the
+//   dry run checks that the arms differ as they should.
 //   LAB_VERSION_MIX=hub-off runs only the version-mix check against a Hub started with
 //   PEERHUB_FEATURES_OFF=resources (the lab's hub inherits it): `peer claim resource:x` says the Hub
 //   does not support it and file edits are still decided. LAB_VERSION_MIX=app-off turns the
@@ -143,8 +133,8 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //
 // REAL_SCENARIO=contract (peer-lab/contract.ts): a contract migration. Ana's agent renames
 // Invoice.amount (dollars) to amountCents (integer cents); Bob's adds an invoice total in a new file.
-// Arms run on the same seeds: LAB_AGREEMENTS=off (everything on but agreements), LAB_PEER=off (no
-// Peer), LAB_KERNEL=1 (only the kernel) and none of them (Peer as it is). The lab merges both branches
+// Arms run on the same seeds: LAB_PEER=off (no Peer), LAB_KERNEL=1 (only the kernel) and none of them
+// (Peer as it is). The lab merges both branches
 // and runs checks the agents never saw, then reports clean integration, whether Bob's code uses
 // amountCents, and the characters Peer added to each agent's context. With
 // REAL_AGENTS=1 the agents are real (REAL_KINDS, claude,codex by default) and each arm spends the
@@ -161,7 +151,6 @@ import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
-import * as Schema from "effect/Schema";
 import { RpcClient, RpcSerialization } from "effect/rpc";
 
 import {
@@ -172,7 +161,6 @@ import {
   WS_METHODS,
   WsRpcGroup,
   type PeerRoomMessage,
-  PeerAgreementsView,
 } from "@t3tools/contracts";
 
 import { codexPeerPluginEnabled, codexPeerPluginPaths } from "../src/peerHub/codexPlugin.ts";
@@ -183,7 +171,6 @@ import {
   type HookGroup,
 } from "../src/peerHub/core/adapters/scripts.ts";
 
-import { agreementsLab, wasGiven, type HubAgreements } from "./peer-lab/agreements.ts";
 import { resourceLab } from "./peer-lab/resources.ts";
 import {
   ROOMS_ANA_TASK,
@@ -199,7 +186,7 @@ import {
   type RoomsPerson,
   type RoomsRun,
 } from "./peer-lab/rooms.ts";
-import { metricsPathOf, peerAdded, readLines, toldTexts, type LabEvent } from "./peer-lab/told.ts";
+import { peerAdded, toldTexts, type LabEvent } from "./peer-lab/told.ts";
 import {
   headOf,
   makesExclusive,
@@ -243,7 +230,6 @@ import {
   KERNEL_PLUGINS_OFF,
   TASKS as EASY_CONTRACT_TASKS,
   agentReport,
-  agreementsOn,
   armEnv,
   armOf,
   commitWork,
@@ -288,12 +274,11 @@ import {
   runIntegratorStub,
   startIntegration,
   writeHiddenSeed,
+  wasGiven,
   type IntegratorReport,
 } from "./peer-lab/hidden.ts";
 
 // Run from an agent's shell, the lab would hand that agent's Peer session to every child it starts.
-const ANA = "ana@acme.test";
-const BOB = "bob@acme.test";
 
 const droppedOperatorKeys = dropOperatorSession(process.env);
 if (droppedOperatorKeys.length > 0)
@@ -302,7 +287,6 @@ if (droppedOperatorKeys.length > 0)
 const droppedPeerPath = dropOperatorPeerPath(process.env);
 if (droppedPeerPath.length > 0) say("left out of every child's PATH", droppedPeerPath.join(", "));
 const repoRoot = NodePath.resolve(import.meta.dirname, "../../..");
-const decodeAgreementsView = Schema.decodeUnknownSync(PeerAgreementsView);
 const peerhubBin = process.env.PEERHUB_BIN ?? "peerhub";
 const hubPort = 42000 + Math.floor(Math.random() * 1000);
 const hubUrl = `http://127.0.0.1:${hubPort}`;
@@ -398,7 +382,7 @@ const CONTRACT_BOB_TASK = CONTRACT_DEFERRED
   : CONTRACT_HIDDEN
     ? HIDDEN_BOB_TASK
     : BOB_TASK;
-/** The contract scenario's arm: `LAB_PEER=off`, `LAB_AGREEMENTS=off`, `LAB_KERNEL=1`, or Peer as it is. */
+/** The contract scenario's arm: `LAB_PEER=off`, `LAB_KERNEL=1`, or Peer as it is. */
 const ARM = CONTRACT
   ? armOf(process.env)
   : MEMORY || READY
@@ -510,12 +494,6 @@ function branchOff(checkout: string, name: string) {
   jj(checkout, "bookmark", "move", "--from", "@", "--to", "@-", "--allow-backwards");
   jj(checkout, "bookmark", "create", name, "-r", "@");
 }
-
-/** The steps that land work, as an agent runs them: Git's, or jj's with LAB_VCS=jj. */
-const LANDS = {
-  commit: (message: string) => (JJ ? `jj commit -m "${message}"` : `git commit -am "${message}"`),
-  push: JJ ? "jj git push" : "git push",
-};
 
 /** Whether kontext is installed: the memory scenario's project keeps its rules with it. */
 const kontext = (() => {
@@ -659,7 +637,7 @@ const startComputer = Effect.fn("lab.startComputer")(function* (
   email: string,
   herdrSocket?: string,
   hubOverride?: string,
-  /** More environment for this computer's Peer: a switch the lab turns by itself (`PEER_AGREEMENTS=off`). */
+  /** More environment for this computer's Peer: a switch the lab turns by itself. */
   extraEnv: NodeJS.ProcessEnv = {},
 ) {
   const home = NodePath.join(lab, name.toLowerCase());
@@ -1099,113 +1077,6 @@ const cachedStatus = (computer: Computer) =>
       }),
     ),
   );
-
-/** What the Hub says of the lab project's agreements, in its own words, which the app's contract must also be able to read. */
-const hubAgreements = async () => {
-  const body = await hubCall("/v1/workspaces/acme/agreements?project=lab", { session: hubSession });
-  decodeAgreementsView(body);
-  return body as unknown as HubAgreements;
-};
-
-/**
- * Step 22, agreements: KRK-1 on Ana's computer and KRK-2 on Bob's, whose agents settle an overlap with
- * `peer resolve "<words>"`, which the Hub keeps for the pair of tasks. A third computer runs with
- * `PEER_AGREEMENTS=off`. `peer-lab/agreements.ts` holds what is said and checked.
- */
-const agreementsStep = Effect.fn("lab.agreementsStep")(function* (ana: Computer, bob: Computer) {
-  const made: Record<string, unknown>[] = [];
-  for (const [title, key] of [
-    ["Rounding drift bug", "KRK-1"],
-    ["Loyalty points", "KRK-2"],
-  ] as const) {
-    made.push(
-      yield* Effect.promise(() =>
-        hubCall("/v1/workspaces/acme/projects/lab/tasks", {
-          method: "POST",
-          session: hubSession,
-          body: { title, key },
-        }),
-      ),
-    );
-  }
-  const tasks = {
-    ana: { id: String(made[0]?.id), key: "KRK-1" },
-    bob: { id: String(made[1]?.id), key: "KRK-2" },
-  };
-  branchOff(ana.checkout, "krk-1-rounding");
-  branchOff(bob.checkout, "krk-2-loyalty");
-  // A second computer of Ana's, on which the plugin is forced off as an operator would.
-  const off = yield* startComputer("Quiet", ANA, undefined, undefined, {
-    PEER_AGREEMENTS: "off",
-  });
-  branchOff(off.checkout, "krk-1-quiet");
-  for (const computer of [ana, bob, off]) {
-    let known = false;
-    for (let attempt = 0; attempt < 20 && !known; attempt += 1) {
-      const synced = yield* computer.client[WS_METHODS.peerHubSync]({});
-      const listed = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work.tasks;
-      known = listed?.some((task) => task.key === "KRK-2") === true;
-      if (!known) yield* Effect.promise(() => sleep(500));
-    }
-    check(known, `${computer.name}'s Peer knows both agreement tasks`);
-  }
-  const side = (computer: Computer) => ({
-    name: computer.name,
-    state: async () => (await cachedStatus(computer)).agreements,
-    plugin: async () =>
-      (await cachedStatus(computer)).plugins?.find((plugin) => plugin.id === "agreements"),
-    close: (id: string) =>
-      Effect.runPromise(
-        computer.client[WS_METHODS.peerAgreementsClose]({
-          workspace: "acme",
-          project: "lab",
-          id,
-          why: "handled",
-        }),
-      ),
-    events: () => events(computer),
-    metrics: () => readLines(metricsPathOf(computer.log)),
-  });
-  yield* Effect.promise(() =>
-    agreementsLab({
-      ...(JJ ? { pushCommand: LANDS.push } : {}),
-      settlers: {
-        ana: agent(ana, "lab-agr-ana", "w14:p1"),
-        bob: agent(bob, "lab-agr-bob", "w14:p1"),
-      },
-      later: {
-        claude: agent(ana, "lab-agr-ana-next", "w14:p2"),
-        codex: codexAgent(ana, "lab-agr-ana-codex", "w14:p3"),
-      },
-      quiet: agent(off, "lab-agr-quiet", "w14:p1"),
-      ana: side(ana),
-      bob: side(bob),
-      off: side(off),
-      ids: {
-        settlers: { ana: "claude:lab-agr-ana", bob: "claude:lab-agr-bob" },
-        later: { claude: "claude:lab-agr-ana-next", codex: "codex:lab-agr-ana-codex" },
-        quiet: "claude:lab-agr-quiet",
-      },
-      tasks,
-      people: { ana: ANA, bob: BOB },
-      hub: hubAgreements,
-      sessions: async () =>
-        (await hubCall("/v1/workspaces/acme/coord", { session: hubSession }))
-          .sessions as ReadonlyArray<{ id: string; task?: string }>,
-      markDone: async (task) => {
-        await hubCall(`/v1/workspaces/acme/projects/lab/tasks/${task}`, {
-          method: "PATCH",
-          session: hubSession,
-          body: { status: "done" },
-        });
-      },
-      check,
-      told,
-      pause: sleep,
-      say,
-    }),
-  );
-});
 
 /** How many times step 17 races the two computers for a new file. */
 const RACE_RUNS = Math.max(1, Number(process.env.LAB_RACE_RUNS) || 20);
@@ -1653,15 +1524,6 @@ async function until(what: string, ready: () => boolean | Promise<boolean>, ms =
   throw new Error(`expected: ${what}`);
 }
 
-/** Whether the Hub serves the agreements feature: a Hub from before it, or with it off, answers 404. */
-async function hubServesAgreements(): Promise<boolean> {
-  const response = await fetch(`${hubUrl}/v1/workspaces/acme/agreements`, {
-    headers: { authorization: `Bearer ${hubSession}` },
-  });
-  await response.arrayBuffer();
-  return response.status !== 404;
-}
-
 /**
  * LAB_VCS=jj: a task's own checkout as herdr's launcher makes it, before its agent starts. No herdr runs
  * in this lab, so the lab calls the launcher's checkout step itself.
@@ -1834,11 +1696,6 @@ const program = Effect.gen(function* () {
     yield* Effect.promise(() =>
       runJujutsuSteps(jujutsuKit(ana, bob), chosenJujutsuSteps(process.env.LAB_JJ_STEPS)),
     );
-    return;
-  }
-  if (process.env.LAB_AGREEMENTS_ONLY === "1") {
-    check(yield* Effect.promise(hubServesAgreements), "this Hub serves agreements");
-    yield* agreementsStep(ana, bob);
     return;
   }
   if (process.env.LAB_VERSION_MIX !== undefined) {
@@ -3012,17 +2869,6 @@ const program = Effect.gen(function* () {
     }),
   );
   yield* settingsSurface(ana, bob);
-
-  // 22. Agreements: what two agents settle with `peer resolve` is kept by the Hub for their tasks and
-  // reaches the sessions that were not there; a person sees it fall due when no agent is.
-  if (yield* Effect.promise(hubServesAgreements)) {
-    yield* agreementsStep(ana, bob);
-  } else {
-    observe(
-      false,
-      "step 22 (agreements) was not run: this hub does not serve agreements (PEERHUB_BIN is from before it, or has it off)",
-    );
-  }
 
   // J. LAB_VCS=jj: a task's own checkout is a jj workspace with its bookmark, and its index stays out of jj.
   if (JJ) yield* Effect.promise(() => jjTaskCheckoutStep(ana));
@@ -4330,6 +4176,20 @@ async function quietUntil(
   }
 }
 
+/** How many messages agents wrote in the room of the lab project's task `key`, as the Hub holds them. */
+async function agentWordsInRoom(key: string) {
+  const { projects } = (await hubCall("/v1/workspaces/acme/work", { session: hubSession })) as {
+    projects?: { lab?: { tasks?: ReadonlyArray<{ id: string; key?: string }> } };
+  };
+  const task = projects?.lab?.tasks?.find((one) => one.key === key);
+  if (task === undefined) return 0;
+  const room = `/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(task.id)}/room`;
+  const { messages } = (await hubCall(`${room}?limit=200`, { session: hubSession })) as {
+    messages: ReadonlyArray<{ author: { run?: string } }>;
+  };
+  return messages.filter((one) => one.author.run !== undefined).length;
+}
+
 /**
  * The integration step (`LAB_INTEGRATE=1`, implied by `LAB_CONTRACT=deferred`; see `peer-lab/hidden.ts`): the
  * committed tips are recorded before anyone merges, then a fresh session on Ana's computer merges and pushes.
@@ -4350,18 +4210,7 @@ async function integrationStep(input: {
   };
 }): Promise<IntegratorReport> {
   const { ana, bob, where } = input;
-  // The agreements the agents settled, as the Hub holds them; Ana's Peer reads them on the Hub's ping.
-  const kept = (await hubAgreements().catch(() => undefined))?.agreements.filter(
-    (one) => one.state !== "closed",
-  );
-  const held = kept?.length ?? 0;
-  if (held > 0 && agreementsOn(ARM) && ARM !== "none") {
-    await until(
-      "Ana's Peer holds the agreement from the Hub's ping",
-      async () => ((await cachedStatus(ana)).agreements?.workspaces[0]?.open ?? 0) >= held,
-      30_000,
-    );
-  }
+  const said = await agentWordsInRoom(HIDDEN_TASKS[0].key);
   const start = startIntegration(where);
   say(
     "integration",
@@ -4436,7 +4285,7 @@ async function integrationStep(input: {
     start,
     scratch: where.scratch,
   });
-  return integratorReport({ start, finish, events: events(ana), sessions, kept: held });
+  return integratorReport({ start, finish, events: events(ana), sessions, said });
 }
 
 /**
@@ -4683,9 +4532,6 @@ const contractProgram = Effect.gen(function* () {
     waitFor("the hub", async () => (await fetch(`${hubUrl}/health`)).ok, hub.output),
   );
   yield* Effect.promise(setUpWorkspace);
-  // The deferred scenario is about what the Hub keeps of an agent's settle: a Hub from before it measures nothing.
-  if (CONTRACT_DEFERRED)
-    check(yield* Effect.promise(hubServesAgreements), "this Hub serves agreements");
   const anaHerdr = REAL ? startHerdr("Ana") : undefined;
   const bobHerdr = REAL ? startHerdr("Bob") : undefined;
   const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr?.socket);
@@ -4708,17 +4554,6 @@ const contractProgram = Effect.gen(function* () {
   // The arm, as each computer's Peer says it.
   say("arm", ARM_LABELS[ARM]);
   if (ARM === "kernel") for (const computer of [ana, bob]) yield* kernelOnly(computer);
-  for (const computer of [ana, bob]) {
-    const { plugins } = yield* computer.client[WS_METHODS.peerHubSync]({});
-    const active = (id: string) => plugins?.some((one) => one.id === id && one.active) === true;
-    // Agreements are looked at where they are measured, or where an arm turns them off: other runs may meet a Hub without them.
-    const looksAtAgreements = CONTRACT_DEFERRED || ARM === "no-agreements";
-    if (looksAtAgreements)
-      check(
-        active("agreements") === agreementsOn(ARM),
-        `${computer.name}'s Peer has agreements ${agreementsOn(ARM) ? "on" : "off"}`,
-      );
-  }
   const live: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [];
   /** The fresh session of the integration step, once there is one. */
   const fresh: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [];
@@ -4840,8 +4675,8 @@ const contractProgram = Effect.gen(function* () {
         CONTRACT_HIDDEN ? "Bob's code allows for cents" : "Bob's code uses amountCents",
       );
       if (integrator !== undefined) {
-        observe(integrator.kept > 0, "the agents settled an agreement the Hub kept");
-        observe(wasGiven(integrator.given), "the integrator was given the agreement");
+        observe(integrator.said > 0, "the agents wrote in KRK-1's room");
+        observe(wasGiven(integrator.given), "the integrator was given the room's words");
         observe(landed(integrator), "the integrator's merge landed and was pushed");
         observe(integrator.tree?.ok === true, "the pushed tree is right");
       }
@@ -4851,26 +4686,24 @@ const contractProgram = Effect.gen(function* () {
       check(!integration.clean, "a dry run's merged branches give a hundred times the points");
       check(!integration.bobUsesCents, "Bob's scripted code does not allow for cents");
       if (integrator !== undefined) {
-        // The scripted integrator acts on what Peer told it: it is told the agreement the agents settled
-        // when coordination is on, the agreements plugin is on, and the agents settled one (deferred).
-        const settled = CONTRACT_DEFERRED && ARM !== "none";
-        const informed = settled && agreementsOn(ARM);
+        // The scripted integrator acts on what Peer told it: at its push it hears what the agents said
+        // in KRK-1's room, when coordination is on and they said something (deferred).
+        const informed = CONTRACT_DEFERRED && ARM !== "none";
         check(
-          integrator.kept === (settled ? 1 : 0),
-          settled
-            ? "the Hub holds the agreement the scripted agents settled, whether or not Peer tells anybody"
-            : "the scripted agents settled nothing: the Hub holds no agreement",
+          integrator.said > 0 === informed,
+          informed
+            ? "KRK-1's room holds what the scripted agents said"
+            : "the scripted agents wrote nothing in KRK-1's room",
         );
         check(
           landed(integrator) && integrator.merge.head !== integrator.tips.ana,
           "the scripted integrator's merge landed: Bob's tip is in its history, no merge is going on, nothing is left uncommitted, and it was pushed",
         );
         check(
-          wasGiven(integrator.given) === informed &&
-            integrator.given.told.count === (informed ? 1 : 0),
+          integrator.given.carried.length === (informed ? 1 : 0),
           informed
-            ? "Peer gave the integrator the agreement, once"
-            : "Peer gave the integrator no agreement",
+            ? "Peer gave the integrator the room's words, once"
+            : "Peer gave the integrator none of the room's words",
         );
         check(
           integrator.tree?.ok === informed,
@@ -4913,10 +4746,9 @@ const contractProgram = Effect.gen(function* () {
         console.log(
           herdrText(h, "pane", "read", pane, "--source", "recent-unwrapped", "--lines", "200"),
         );
-        console.log(`===== ${computer.name}'s agreements and landing log =====`);
+        console.log(`===== ${computer.name}'s landing log =====`);
         for (const entry of events(computer)) {
-          if (/^(agreements|landing)\./.test(entry.event))
-            console.log(JSON.stringify(entry).slice(0, 900));
+          if (/^landing\./.test(entry.event)) console.log(JSON.stringify(entry).slice(0, 900));
         }
       }
       for (const herdr of [anaHerdr, bobHerdr])

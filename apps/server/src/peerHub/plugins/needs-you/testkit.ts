@@ -8,7 +8,6 @@ export const emptyStatus = (): PeerHubStatus => ({
   email: "me@acme.test",
   pendingSignIn: null,
   workspaces: [],
-  requests: [],
   joinable: [],
   workspaceRoot: "",
   environmentId: "computer",
@@ -73,23 +72,6 @@ export const richStatus = (): PeerHubStatus => ({
           },
         },
       ],
-    },
-  ],
-  requests: [
-    {
-      workspace: "acme",
-      request: {
-        id: "request",
-        project: "app",
-        task: "task",
-        recipient: "me@acme.test",
-        sender: "private@acme.test",
-        title: "Review work",
-        prompt: "PRIVATE_PROMPT",
-        status: "pending",
-        createdAt: SINCE,
-        updatedAt: SINCE,
-      },
     },
   ],
   agents: {

@@ -33,11 +33,6 @@
       "count": 1
     }
   },
-  "apps/server/scripts/peer-lab/agreements.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/scripts/peer-lab/contract.ts": {
     "t3code/no-low-value-comments": {
       "count": 2
@@ -649,57 +644,6 @@
       "count": 1
     }
   },
-  "apps/server/src/peerHub/plugins/agreements/Agreements.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 5
-    }
-  },
-  "apps/server/src/peerHub/plugins/agreements/cli.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/agreements/fixtures.test.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/no-wall-clock-in-tests": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/agreements/hub.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/agreements/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/agreements/rules.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/agreements/text.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/announcements/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/announcements/service.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 3
-    }
-  },
   "apps/server/src/peerHub/plugins/capacity/Capacity.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1031,24 +975,6 @@
       "count": 2
     }
   },
-  "apps/server/src/peerHub/plugins/requests/Requests.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 3
-    }
-  },
-  "apps/server/src/peerHub/plugins/requests/command.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/requests/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/plugins/resources/index.ts": {
     "t3code/prefer-effect-fn": {
       "count": 1
@@ -1320,52 +1246,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/agreements/AgreementsNeedsYou.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/agreements/AgreementsSection.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/agreements/agreements.logic.ts": {
-    "t3code/no-em-dash-copy": {
-      "count": 2
-    },
-    "t3code/no-low-value-comments": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/agreements/agreements.test.tsx": {
-    "t3code/no-dom-test-environment": {
-      "count": 1
-    },
-    "t3code/require-disposable-render": {
-      "count": 3
-    }
-  },
-  "apps/web/src/components/workspaces/agreements/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/agreements/useAgreementActions.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/announcements/AnnouncementList.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
-  "apps/web/src/components/workspaces/announcements/AnnouncementReceipts.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 2
-    }
-  },
   "apps/web/src/components/workspaces/github/GitHubConnect.tsx": {
     "t3code/no-unreasoned-state-sync": {
       "count": 1
@@ -1407,16 +1287,6 @@
   "apps/web/src/components/workspaces/projectScope.ts": {
     "t3code/no-unreasoned-state-sync": {
       "count": 3
-    }
-  },
-  "apps/web/src/components/workspaces/requests/RequestNotifier.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 5
-    }
-  },
-  "apps/web/src/components/workspaces/requests/TeamRequests.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
     }
   },
   "apps/web/src/components/workspaces/rooms/DraftChat.tsx": {
@@ -1749,14 +1619,6 @@
       "count": 1
     }
   },
-  "packages/client-runtime/src/peer/agreements.ts": {
-    "t3code/no-em-dash-copy": {
-      "count": 1
-    },
-    "t3code/no-low-value-comments": {
-      "count": 2
-    }
-  },
   "packages/client-runtime/src/peer/changes.ts": {
     "t3code/no-low-value-comments": {
       "count": 2
@@ -1798,11 +1660,6 @@
   "packages/client-runtime/src/peerSettings.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
-    }
-  },
-  "packages/contracts/src/peer/agreements.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 3
     }
   },
   "packages/contracts/src/peer/base.ts": {

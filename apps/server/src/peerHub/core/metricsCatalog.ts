@@ -206,13 +206,6 @@ export const CATALOG = defineEvents({
   "jujutsu.undo": ev({ operations: "count", outcome: { enum: ["done", "refused", "conflict"] } }),
   // Changes: how many changes a report held, never which, whose or what they said.
   "changes.reported": ev({ changes: "count", ms: "ms" }),
-  // Agreements: how much of an agreement an agent was told (its size, never its words), that one
-  // fell due, and how one closed; never which one, between which tasks, or whose.
-  "agreements.told": ev({ chars: "count" }),
-  "agreements.due": ev({}),
-  "agreements.closed": ev({
-    why: { enum: ["handled", "not-needed", "replaced", "removed", "expired", "landed"] },
-  }),
   cli: ev({
     outcome: { enum: ["ok", "refused", "failed"] },
     command: {
@@ -343,9 +336,6 @@ export const CATALOG = defineEvents({
   "herdr.runtime.restarted": herdrRuntime,
   "herdr.runtime.upgraded": herdrRuntime,
   "herdr.runtime.failed": herdrRuntime,
-  "announcement.told": ev({}),
-  "announcement.ack": ev({}),
-  "announcement.sync.failed": ev({}),
   "mcp.session": ev({ listChars: "count" }),
   "mcp.call": ev({ chars: "count", isError: "flag" }),
 } as const);

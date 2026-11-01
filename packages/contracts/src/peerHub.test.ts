@@ -52,22 +52,22 @@ describe("what the signed-in Hub says of itself in the status", () => {
       hub: {
         version: "0.8.4",
         commit: "a6bde95",
-        features: { requests: 1, settings: 1 },
+        features: { changes: 1, settings: 1 },
         featuresOff: ["resources"],
       },
     });
     expect(hub).toEqual({
       version: "0.8.4",
       commit: "a6bde95",
-      features: { requests: 1, settings: 1 },
+      features: { changes: 1, settings: 1 },
       featuresOff: ["resources"],
     });
   });
 
   it("takes a Hub that says less: one before the list of what is off, or before the catalog", () => {
-    expect(
-      decodeStatus({ ...statusBeforeHubInfo, hub: { features: { requests: 1 } } }).hub,
-    ).toEqual({ features: { requests: 1 } });
+    expect(decodeStatus({ ...statusBeforeHubInfo, hub: { features: { changes: 1 } } }).hub).toEqual(
+      { features: { changes: 1 } },
+    );
     expect(decodeStatus({ ...statusBeforeHubInfo, hub: {} }).hub).toEqual({});
   });
 

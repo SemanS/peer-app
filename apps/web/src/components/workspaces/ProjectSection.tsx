@@ -107,13 +107,7 @@ export function ProjectSection({
             Tasks
           </h2>
           {total === 0 ? null : <NavCount>{tasksCountLabel(total)}</NavCount>}
-          <ProjectActions
-            environmentId={environmentId}
-            status={status}
-            project={project}
-            plugins={plugins}
-            activeThread={activeThread}
-          />
+          <ProjectActions environmentId={environmentId} status={status} project={project} />
         </div>
       ) : null}
       <div className="flex flex-col gap-1">

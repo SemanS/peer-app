@@ -16,7 +16,7 @@ describe("the plugin registry", () => {
     assert.deepStrictEqual(validatePlugins(peerPlugins()), []);
     assert.deepStrictEqual(
       validatePlugins([
-        { id: "requests", commands: [{ name: "request" }] },
+        { id: "changes", commands: [{ name: "change" }] },
         { id: "audit", commands: [{ name: "audit" }] },
         { id: "two-words", commands: [] },
       ]),

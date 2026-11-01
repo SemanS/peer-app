@@ -1,6 +1,5 @@
 import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
 import { SettlePlugin } from "../plugins/settle/index.ts";
-import { AgreementsPlugin } from "../plugins/agreements/index.ts";
 import { ChangesPlugin } from "../plugins/changes/index.ts";
 import { ResourcesPlugin } from "../plugins/resources/index.ts";
 /**
@@ -14,7 +13,6 @@ import { McpPlugin } from "../plugins/mcp/index.ts";
 
 import { AuditPlugin } from "../plugins/audit/index.ts";
 import { CardPlugin } from "../plugins/card/index.ts";
-import { AnnouncementsPlugin } from "../plugins/announcements/index.ts";
 import { CapacityPlugin } from "../plugins/capacity/index.ts";
 import { GitHubPlugin } from "../plugins/github/index.ts";
 import { HerdrPlugin } from "../plugins/herdr/index.ts";
@@ -22,7 +20,6 @@ import { JujutsuPlugin } from "../plugins/jujutsu/index.ts";
 import { ObservePlugin } from "../plugins/observe/index.ts";
 import { RoomsPlugin } from "../plugins/rooms/index.ts";
 import { ToolTrustPlugin } from "../plugins/tool-trust/index.ts";
-import { RequestsPlugin } from "../plugins/requests/index.ts";
 import { SettingsPlugin } from "../plugins/settings/index.ts";
 import type { PeerPluginEntry } from "./plugin.ts";
 
@@ -59,18 +56,15 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   JujutsuPlugin,
   GitHubPlugin,
   CapacityPlugin,
-  RequestsPlugin,
   ObservePlugin,
 
   CardPlugin,
   AuditPlugin,
   ToolTrustPlugin,
   McpPlugin,
-  AnnouncementsPlugin,
   NeedsYouPlugin,
   SettlePlugin,
   ResourcesPlugin,
-  AgreementsPlugin,
   ChangesPlugin,
   RoomsPlugin,
   SettingsPlugin,

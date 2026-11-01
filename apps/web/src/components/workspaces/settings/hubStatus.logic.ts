@@ -123,16 +123,6 @@ const FEATURES: ReadonlyArray<Feature> = [
     },
   },
   {
-    id: "requests",
-    name: "Team requests",
-    without: "plugin",
-    words: {
-      on: "People can ask a teammate’s agent to take on a task.",
-      off: "Team requests can’t be sent: this Hub doesn’t run them.",
-      newer: "Team requests can’t be sent until the Hub is updated.",
-    },
-  },
-  {
     id: "observe",
     name: "Observe",
     without: "plugin",
@@ -140,26 +130,6 @@ const FEATURES: ReadonlyArray<Feature> = [
       on: "Teammates can watch a thread you share, live.",
       off: "Shared threads can’t be watched live: this Hub doesn’t run it.",
       newer: "Shared threads can’t be watched live until the Hub is updated.",
-    },
-  },
-  {
-    id: "announcements",
-    name: "Announcements",
-    without: "nothing",
-    words: {
-      on: "Leads and services can tell a project’s agents something once.",
-      off: "Announcements can’t be posted: this Hub doesn’t run them.",
-      newer: "Announcements can’t be posted until the Hub is updated.",
-    },
-  },
-  {
-    id: "agreements",
-    name: "Agreements",
-    without: "plugin",
-    words: {
-      on: "What the agents of two tasks agree is kept for those tasks and told to whoever works on either one later.",
-      off: "Agreements can’t be kept: this Hub doesn’t run them.",
-      newer: "Agreements can’t be kept until the Hub is updated.",
     },
   },
 ];

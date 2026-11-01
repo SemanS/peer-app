@@ -15,7 +15,6 @@ const PRE_PLUGIN_FEATURES: ReadonlySet<string> = new Set<PeerPluginId>([
   "herdr",
   "github",
   "capacity",
-  "requests",
   "observe",
 ]);
 

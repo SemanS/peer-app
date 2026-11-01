@@ -9,12 +9,12 @@ it("does not invoke Hub hooks or reports for a local project on a signed-in envi
   const plugins: PeerBrokerPlugins = {
     ...NO_PLUGINS,
     active: [
-      { id: "requests", title: "Team requests", requiresHub: true, contributions: {} },
+      { id: "changes", title: "Changes", requiresHub: true, contributions: {} },
       { id: "audit", title: "Local audit", contributions: {} },
     ],
     commands: [
       {
-        plugin: "requests",
+        plugin: "changes",
         command: {
           name: "ask",
           usage: "ask",
@@ -24,7 +24,7 @@ it("does not invoke Hub hooks or reports for a local project on a signed-in envi
       },
     ],
     reportSessions: [
-      { plugin: "requests", add: (_workspace, sessions) => Effect.succeed(sessions) },
+      { plugin: "changes", add: (_workspace, sessions) => Effect.succeed(sessions) },
     ],
   };
   const local = pluginsForWorkspace(plugins, PEER_LOCAL_WORKSPACE);
@@ -44,19 +44,19 @@ it("refuses a public Hub command from a local checkout before running it", async
     }),
     plugins: async () => ({
       ...NO_PLUGINS,
-      active: [{ id: "agreements", title: "Agreements", requiresHub: true, contributions: {} }],
+      active: [{ id: "changes", title: "Changes", requiresHub: true, contributions: {} }],
       commands: [
         {
-          plugin: "agreements",
+          plugin: "changes",
           command: {
-            name: "agreements",
-            usage: "agreements",
-            summary: "Read team agreements",
+            name: "changes",
+            usage: "changes",
+            summary: "Read the team's changes",
             public: true,
             run: () =>
               Effect.sync(() => {
                 ran = true;
-                return "Team agreements";
+                return "Changes";
               }),
           },
         },
@@ -65,7 +65,7 @@ it("refuses a public Hub command from a local checkout before running it", async
   }));
   try {
     await expect(
-      fixture.broker.runCli("agreements", [], { "x-peer-cwd": fixture.root }),
+      fixture.broker.runCli("changes", [], { "x-peer-cwd": fixture.root }),
     ).rejects.toMatchObject({ outcome: "refused" });
     expect(ran).toBe(false);
   } finally {

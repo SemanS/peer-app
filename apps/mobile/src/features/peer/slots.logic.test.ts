@@ -4,7 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { PeerMobilePlugin } from "./slotTypes";
 import { alwaysWorkspaceSectionsAt, selectPeerPlugins, workspaceSectionsAt } from "./slots.logic";
 
-const REGISTRY = ["herdr", "requests", "rooms"].map((id) => ({ id }));
+const REGISTRY = ["herdr", "changes", "rooms"].map((id) => ({ id }));
 
 const plugin = (id: string, active = true): PeerPluginState => ({
   id,
@@ -21,16 +21,17 @@ const ids = (selected: ReadonlyArray<{ readonly id: string }>) => selected.map((
 
 describe("selectPeerPlugins", () => {
   it("selects only the plugins that are active, in registry order", () => {
-    const listed = status([plugin("requests"), plugin("herdr", false)]);
-    expect(ids(selectPeerPlugins(REGISTRY, listed))).toEqual(["requests"]);
-    expect(ids(selectPeerPlugins(REGISTRY, status([plugin("requests"), plugin("herdr")])))).toEqual(
-      ["herdr", "requests"],
-    );
+    const listed = status([plugin("changes"), plugin("herdr", false)]);
+    expect(ids(selectPeerPlugins(REGISTRY, listed))).toEqual(["changes"]);
+    expect(ids(selectPeerPlugins(REGISTRY, status([plugin("changes"), plugin("herdr")])))).toEqual([
+      "herdr",
+      "changes",
+    ]);
   });
 
   it("selects the features that existed before plugins when the status lists none", () => {
-    expect(ids(selectPeerPlugins(REGISTRY, status()))).toEqual(["herdr", "requests"]);
-    expect(ids(selectPeerPlugins(REGISTRY, status([])))).toEqual(["herdr", "requests"]);
+    expect(ids(selectPeerPlugins(REGISTRY, status()))).toEqual(["herdr"]);
+    expect(ids(selectPeerPlugins(REGISTRY, status([])))).toEqual(["herdr"]);
   });
 
   it("ignores a plugin the registry does not know", () => {
@@ -50,22 +51,20 @@ describe("workspace sections", () => {
     id: "herdr",
     workspaceSections: [{ place: "end", Component: Nothing }],
   };
-  const requests: PeerMobilePlugin = {
-    id: "requests",
+  const changes: PeerMobilePlugin = {
+    id: "changes",
     workspaceSections: [{ place: "tasks", Component: Nothing }],
   };
 
   it("lists a place's sections in registry order", () => {
-    expect(workspaceSectionsAt([herdr, requests], "tasks").map((s) => s.key)).toEqual([
-      "requests:0",
-    ]);
-    expect(workspaceSectionsAt([herdr, requests], "end").map((s) => s.key)).toEqual(["herdr:0"]);
+    expect(workspaceSectionsAt([herdr, changes], "tasks").map((s) => s.key)).toEqual(["changes:0"]);
+    expect(workspaceSectionsAt([herdr, changes], "end").map((s) => s.key)).toEqual(["herdr:0"]);
     expect(workspaceSectionsAt([], "end")).toEqual([]);
   });
 
   it("keys every section of a plugin apart", () => {
     const both: PeerMobilePlugin = {
-      id: "requests",
+      id: "changes",
       workspaceSections: [
         { place: "tasks", Component: Nothing },
         { place: "end", Component: Nothing },
@@ -73,8 +72,8 @@ describe("workspace sections", () => {
       ],
     };
     expect(workspaceSectionsAt([both], "tasks").map((s) => s.key)).toEqual([
-      "requests:0",
-      "requests:2",
+      "changes:0",
+      "changes:2",
     ]);
   });
 
@@ -126,17 +125,17 @@ it("keeps a plugin's task views out of older, disabled and forced-off environmen
 });
 
 it("keeps plans task views out of older, disabled and forced-off environments", () => {
-  const registry = [...REGISTRY, { id: "agreements" }];
-  expect(ids(selectPeerPlugins(registry, status([plugin("agreements")])))).toEqual(["agreements"]);
-  for (const reason of ["off", "hub", "PEER_AGREEMENTS=off"]) {
+  const registry = [...REGISTRY, { id: "jujutsu" }];
+  expect(ids(selectPeerPlugins(registry, status([plugin("jujutsu")])))).toEqual(["jujutsu"]);
+  for (const reason of ["off", "hub", "PEER_JUJUTSU=off"]) {
     expect(
       ids(
         selectPeerPlugins(
           registry,
-          status([{ ...plugin("agreements", false), enabled: reason === "hub", reason }]),
+          status([{ ...plugin("jujutsu", false), enabled: reason === "hub", reason }]),
         ),
       ),
-    ).not.toContain("agreements");
+    ).not.toContain("jujutsu");
   }
-  expect(ids(selectPeerPlugins(registry, status()))).not.toContain("agreements");
+  expect(ids(selectPeerPlugins(registry, status()))).not.toContain("jujutsu");
 });

@@ -6,8 +6,6 @@
  * the contract as it was, so his code is right in his checkout and wrong once both branches are
  * merged, unless he knows what Ana changes before he writes it. The arms run on the same seeds:
  *
- *   LAB_AGREEMENTS=off Peer with agreements turned off, so that a settled overlap is kept by the Hub
- *                      and told to nobody (`deferred` measures it).
  *   LAB_PEER=off       No Peer: coordination is off for the agents.
  *   LAB_KERNEL=1       Only the kernel: every Hub feature and plugin outside presence, messages,
  *                      rooms and the agents' adapters is off (KERNEL_FEATURES_OFF, KERNEL_PLUGINS_OFF).
@@ -33,28 +31,19 @@ import * as NodePath from "node:path";
 
 import { peerAdded, type HookOut, type LabEvent } from "./told.ts";
 
-export type Arm = "none" | "peer" | "no-agreements" | "kernel";
+export type Arm = "none" | "peer" | "kernel";
 
 export const ARM_LABELS: Readonly<Record<Arm, string>> = {
   none: "no Peer: coordination turned off for both agents (LAB_PEER=off)",
   peer: "Peer as it is",
-  "no-agreements": "agreements off: Peer as it is, with agreements turned off (LAB_AGREEMENTS=off)",
   kernel: "kernel only: presence, messages, rooms and the agents' adapters (LAB_KERNEL=1)",
 };
 
 /** The Hub features outside the kernel: `LAB_KERNEL=1` starts the lab's Hub without them. */
-export const KERNEL_FEATURES_OFF = [
-  "agreements",
-  "announcements",
-  "changes",
-  "github",
-  "requests",
-  "resources",
-] as const;
+export const KERNEL_FEATURES_OFF = ["changes", "github", "resources"] as const;
 
 /** The plugins outside the kernel that need no Hub feature and have no operator's switch: turned off at each computer. */
 export const KERNEL_PLUGINS_OFF = [
-  "announcements",
   "capacity",
   "changes",
   "github",
@@ -63,20 +52,12 @@ export const KERNEL_PLUGINS_OFF = [
   "settle",
 ] as const;
 
-/** The arm the environment names: `LAB_PEER=off`, `LAB_AGREEMENTS=off`, `LAB_KERNEL=1`, or none. */
+/** The arm the environment names: `LAB_PEER=off`, `LAB_KERNEL=1`, or none. */
 export function armOf(env: Readonly<Record<string, string | undefined>>): Arm {
   if (env.LAB_PEER !== undefined && env.LAB_PEER !== "off")
     throw new Error(`LAB_PEER is off, not ${env.LAB_PEER}`);
-  // `LAB_AGREEMENTS=on` is what Peer does by default: it names no arm of its own.
-  if (
-    env.LAB_AGREEMENTS !== undefined &&
-    env.LAB_AGREEMENTS !== "off" &&
-    env.LAB_AGREEMENTS !== "on"
-  )
-    throw new Error(`LAB_AGREEMENTS is off or on, not ${env.LAB_AGREEMENTS}`);
   const named: Arm[] = [
     ...(env.LAB_PEER === "off" ? (["none"] as const) : []),
-    ...(env.LAB_AGREEMENTS === "off" ? (["no-agreements"] as const) : []),
     ...(env.LAB_KERNEL === "1" ? (["kernel"] as const) : []),
   ];
   if (named.length > 1)
@@ -84,18 +65,9 @@ export function armOf(env: Readonly<Record<string, string | undefined>>): Arm {
   return named[0] ?? "peer";
 }
 
-/** Whether the agreements plugin is on at the computers: every arm but those that turn it off. */
-export const agreementsOn = (arm: Arm) => arm !== "no-agreements" && arm !== "kernel";
-
-/**
- * What an arm adds to each computer's environment. The plugin switches are the operator's
- * (`PEER_AGREEMENTS=off`); an arm that keeps a plugin on removes the switch the lab inherited, if
- * any. The kernel arm also takes the two others an operator can turn off.
- */
-export const armEnv = (arm: Arm): Record<string, string | undefined> => ({
-  PEER_AGREEMENTS: agreementsOn(arm) ? undefined : "off",
-  ...(arm === "kernel" ? { PEER_JUJUTSU: "off" } : {}),
-});
+/** What an arm adds to each computer's environment: the kernel arm turns off what an operator can. */
+export const armEnv = (arm: Arm): Record<string, string | undefined> =>
+  arm === "kernel" ? { PEER_JUJUTSU: "off" } : {};
 
 /** The project both agents start from: invoices in dollars. Plain ES modules, so that nothing builds. */
 export const SEED: Readonly<Record<string, string>> = {

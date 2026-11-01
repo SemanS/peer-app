@@ -1,4 +1,3 @@
-import { agreementsWebPlugin } from "./agreements";
 import { changesWebPlugin } from "./changes";
 
 import { needsYouWebPlugin } from "./needs-you";
@@ -16,7 +15,6 @@ import { roomsWebPlugin } from "./rooms";
  * `slots.types.ts`.
  */
 import type { PeerHubStatus } from "@t3tools/contracts";
-import { announcementsWebPlugin } from "./announcements";
 import { settingsWebPlugin } from "./settings";
 
 import { auditWebPlugin } from "./audit";
@@ -27,7 +25,6 @@ import { jujutsuWebPlugin } from "./jujutsu";
 import { observeWebPlugin } from "./observe";
 import { toolTrustWebPlugin } from "./tool-trust";
 import { mcpWebPlugin } from "./mcp";
-import { requestsWebPlugin } from "./requests";
 import { selectPeerPlugins } from "./slots.logic";
 import type { PeerWebPlugin } from "./slots.types";
 
@@ -39,18 +36,15 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   jujutsuWebPlugin,
   githubWebPlugin,
   capacityWebPlugin,
-  requestsWebPlugin,
   observeWebPlugin,
 
   auditWebPlugin,
   toolTrustWebPlugin,
   mcpWebPlugin,
-  announcementsWebPlugin,
   needsYouWebPlugin,
   settleWebPlugin,
   resourcesWebPlugin,
 
-  agreementsWebPlugin,
   changesWebPlugin,
   roomsWebPlugin,
   settingsWebPlugin,

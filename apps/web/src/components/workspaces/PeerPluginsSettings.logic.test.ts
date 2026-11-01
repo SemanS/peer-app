@@ -23,17 +23,17 @@ describe("pluginRows", () => {
   });
   it("gives owners a switch that shows their choice", () => {
     const rows = pluginRows(
-      [state("requests"), state("observe", { enabled: false, active: false, reason: "off" })],
+      [state("changes"), state("observe", { enabled: false, active: false, reason: "off" })],
       OWNER,
     );
     expect(rows.map((row) => [row.id, row.control, row.on, row.state])).toEqual([
-      ["requests", "switch", true, "on"],
+      ["changes", "switch", true, "on"],
       ["observe", "switch", false, "off"],
     ]);
   });
 
   it("gives everyone else no switch, only the state", () => {
-    const rows = pluginRows([state("requests"), state("herdr", { enabled: false })], {
+    const rows = pluginRows([state("changes"), state("herdr", { enabled: false })], {
       owner: false,
       pending: null,
     });
@@ -44,11 +44,11 @@ describe("pluginRows", () => {
   });
 
   it("says the Hub must be updated for a plugin it does not serve", () => {
-    const [row] = pluginRows([state("requests", { active: false, reason: "hub" })], OWNER);
+    const [row] = pluginRows([state("changes", { active: false, reason: "hub" })], OWNER);
     expect(row).toMatchObject({ on: true, state: "hub" });
     expect(row?.note).toContain("Hub must be updated");
     const [off] = pluginRows(
-      [state("requests", { enabled: false, active: false, reason: "off" })],
+      [state("changes", { enabled: false, active: false, reason: "off" })],
       OWNER,
     );
     expect(off?.note).toBeNull();
@@ -88,7 +88,7 @@ describe("pluginRows", () => {
   });
 
   it("marks the plugin whose change is in flight", () => {
-    const rows = pluginRows([state("requests"), state("observe")], {
+    const rows = pluginRows([state("changes"), state("observe")], {
       owner: true,
       pending: "observe",
     });
@@ -97,11 +97,11 @@ describe("pluginRows", () => {
 });
 
 describe("reasonText", () => {
-  const hub = { hub: { features: { requests: 1 }, featuresOff: ["rooms"] } };
+  const hub = { hub: { features: { changes: 1 }, featuresOff: ["rooms"] } };
 
   it("says a plugin the Hub does not serve needs a newer Hub, as an older Hub's silence allows", () => {
     expect(reasonText("hub", {}, "rooms")).toBe("needs a newer Peer Hub.");
-    expect(reasonText("hub", { hub: { features: { requests: 1 } } }, "rooms")).toBe(
+    expect(reasonText("hub", { hub: { features: { changes: 1 } } }, "rooms")).toBe(
       "needs a newer Peer Hub.",
     );
   });

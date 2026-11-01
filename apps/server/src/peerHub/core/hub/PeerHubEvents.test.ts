@@ -14,10 +14,10 @@ import * as PeerHubEvents from "./PeerHubEvents.ts";
 
 /** What the acme workspace's event stream sends; ana-laptop is this environment. */
 const EVENTS = [
-  'event: requests\ndata: {"origin":"bob-laptop"}\n\n',
+  'event: changes\ndata: {"origin":"bob-laptop"}\n\n',
   'event: plans\ndata: {"origin":"bob-laptop","plan":"q4"}\n\n',
   'event: gossip\ndata: {"origin":"bob-laptop"}\n\n',
-  'event: requests\ndata: {"origin":"ana-laptop"}\n\n',
+  'event: changes\ndata: {"origin":"ana-laptop"}\n\n',
   'event: rooms.changed\ndata: {"origin":"ana-laptop","projectId":"pay","proposed":2}\n\n',
   'event: work\ndata: {"origin":"ana-laptop"}\n\n',
   'event: coord\ndata: {"origin":"bob-laptop"}\n\n',
@@ -99,24 +99,24 @@ describe("the Hub's change pings", () => {
   it.effect("reach the active listeners that follow them, and nobody else", () =>
     Effect.gen(function* () {
       const { heard } = yield* following((heard) => [
-        listening("requests", { changes: ["requests"] }, heard),
+        listening("changes", { changes: ["changes"] }, heard),
         listening("rooms", { changes: ["rooms.changed"], ownEcho: true }, heard),
-        listening("audit", { changes: ["requests"] }, heard, false),
+        listening("audit", { changes: ["changes"] }, heard, false),
         listening("herdr", { changes: ["done"] }, heard),
         listening("observe", { changes: ["plans"] }, heard),
       ]);
       // Connecting is a resync for every active listener. Nobody follows `gossip`; this
-      // environment's own `requests` reach no listener that skips its own echo; the inactive find
+      // environment's own `changes` reach no listener that skips its own echo; the inactive find
       // plugin hears nothing, not even `resync`.
       assert.deepStrictEqual(yield* nextHeard(heard, 12), [
-        "requests resync acme - ",
+        "changes resync acme - ",
         "rooms resync acme - ",
         "herdr resync acme - ",
         "observe resync acme - ",
-        "requests requests acme bob-laptop ",
+        "changes changes acme bob-laptop ",
         "observe plans acme bob-laptop q4",
         "rooms rooms.changed acme ana-laptop pay,2",
-        "requests resync acme - ",
+        "changes resync acme - ",
         "rooms resync acme - ",
         "herdr resync acme - ",
         "observe resync acme - ",

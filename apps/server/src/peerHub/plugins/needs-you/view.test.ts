@@ -34,7 +34,6 @@ describe("phone's Needs You status view", () => {
     const view = needsYouView(large);
     expect(() => decode(view)).not.toThrow();
     expect(JSON.stringify(view).length).toBeLessThan(JSON.stringify(large).length / 4);
-    expect(view.requests).toEqual(seed.requests);
     expect(view.workspaces[0]?.projects[0]?.work.tasks).toEqual(
       seed.workspaces[0]?.projects[0]?.work.tasks,
     );
@@ -82,6 +81,5 @@ describe("phone's Needs You status view", () => {
         },
       }),
     ).not.toEqual(needsYouView(seed));
-    expect(needsYouView({ ...seed, requests: [] })).not.toEqual(needsYouView(seed));
   });
 });

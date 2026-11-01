@@ -6,12 +6,7 @@ import { type PeerHubStartAgentInput, type PeerHubError } from "@t3tools/contrac
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
-import {
-  bindPlugin,
-  type PeerRequestAcceptor,
-  type PeerTaskLauncher,
-  type PeerLifecycleEvent,
-} from "../plugin.ts";
+import { bindPlugin, type PeerTaskLauncher, type PeerLifecycleEvent } from "../plugin.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerWork from "./PeerWork.ts";
 import * as PeerStatus from "../status/PeerStatus.ts";
@@ -28,7 +23,6 @@ const input: PeerHubStartAgentInput = {
 const program = (
   check: (fixture: {
     start: (input: PeerHubStartAgentInput) => Effect.Effect<unknown, PeerHubError>;
-    accepted: Array<Parameters<PeerRequestAcceptor["accept"]>[0]>;
     launched: Array<Parameters<PeerTaskLauncher["launch"]>[0]>;
     plugins: PeerPlugins.PeerPlugins["Service"];
     unavailable: { current: string | null };
@@ -42,8 +36,7 @@ const program = (
   Effect.gen(function* () {
     const created: Array<PeerLifecycleEvent> = [],
       worktree: { current: string | undefined } = { current: undefined };
-    const accepted: Array<Parameters<PeerRequestAcceptor["accept"]>[0]> = [],
-      launched: Array<Parameters<PeerTaskLauncher["launch"]>[0]> = [];
+    const launched: Array<Parameters<PeerTaskLauncher["launch"]>[0]> = [];
     const unavailable: { current: string | null } = { current: null },
       task = {
         id: "krk-1",
@@ -54,9 +47,9 @@ const program = (
         createdAt: "2026-10-09",
         updatedAt: "2026-10-09",
       };
-    const requests = bindPlugin({
-      id: "requests",
-      title: "Team requests",
+    const changes = bindPlugin({
+      id: "changes",
+      title: "Changes",
       summary: "test",
       defaultEnabled: true,
       layer: Layer.empty,
@@ -65,13 +58,6 @@ const program = (
           Effect.sync(() => {
             created.push(event);
           }),
-        requestAcceptor: {
-          accept: (asked) =>
-            Effect.sync(() => {
-              accepted.push(asked);
-              return { prompt: `${asked.instruction ?? asked.fallback}\nFenced request data` };
-            }),
-        },
       }),
     });
     const herdr = bindPlugin({
@@ -114,7 +100,7 @@ const program = (
     const core = yield* Layer.build(
       coreLayer(yield* seedState(paymentsSeed(hub.url)), {
         session: "person",
-        plugins: [requests, herdr],
+        plugins: [changes, herdr],
       }),
     );
     const status = yield* PeerStatus.PeerStatus.pipe(Effect.provide(core));
@@ -137,7 +123,6 @@ const program = (
     yield* read;
     yield* check({
       start: (asked) => startAgent(asked).pipe(Effect.provide(core)),
-      accepted,
       launched,
       plugins,
       unavailable,
@@ -148,7 +133,7 @@ const program = (
       runs: yield* PeerRuns.PeerRuns.pipe(Effect.provide(core)),
     });
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
-describe("request launch ordering", () => {
+describe("a launch", () => {
   it.effect(
     "forwards the reviewed ordinary prompt exactly and keeps blank-only service fallback",
     () =>
@@ -189,63 +174,17 @@ describe("request launch ordering", () => {
         }),
       ),
   );
-  it.effect("uses the acceptor prompt for old and new clients and keeps ordinary starts", () =>
-    program((f) =>
-      Effect.gen(function* () {
-        yield* f.start({ ...input, requestId: "one", prompt: "UNTRUSTED EDITED CLIENT TEXT" });
-        assert.isTrue(f.launched[0]!.prompt.startsWith("KRK-1: Split payments."));
-        assert.notInclude(f.launched[0]!.prompt, "UNTRUSTED");
-        assert.include(f.launched[0]!.prompt, "Fenced request data");
-        yield* f.start({
-          ...input,
-          requestId: "two",
-          instruction: "My own instruction",
-          prompt: "UNTRUSTED",
-        });
-        assert.isTrue(f.launched[1]!.prompt.startsWith("My own instruction"));
-        yield* f.start({ ...input, prompt: "Ordinary start" });
-        assert.equal(f.launched[2]!.prompt, "Ordinary start");
-        yield* f.start(input);
-        assert.isTrue(f.launched[3]!.prompt.startsWith("KRK-1: Split payments."));
-        assert.equal(f.accepted.length, 2);
-      }),
-    ),
-  );
-  it.effect("does not accept anything after local failure or with requests disabled", () =>
-    program((f) =>
-      Effect.gen(function* () {
-        const asked = { ...input, requestId: "one" };
-        f.unavailable.current = "herdr not running";
-        assert.isTrue(Result.isFailure(yield* f.start(asked).pipe(Effect.result)));
-        f.unavailable.current = null;
-        assert.isTrue(
-          Result.isFailure(
-            yield* f.start({ ...asked, repositoryId: "missing" }).pipe(Effect.result),
-          ),
-        );
-        f.task.status = "done";
-        yield* f.read;
-        assert.isTrue(Result.isFailure(yield* f.start(asked).pipe(Effect.result)));
-        f.task.status = "open";
-        yield* f.read;
-        yield* f.plugins.setPlugin({ id: "requests", enabled: false });
-        assert.isTrue(Result.isFailure(yield* f.start(asked).pipe(Effect.result)));
-        assert.deepStrictEqual(f.accepted, []);
-        assert.deepStrictEqual(f.launched, []);
-      }),
-    ),
-  );
 });
 describe("the run a launch starts", () => {
   it.effect("creates the run before the launch and hands its identity to the agent", () =>
     program((f) =>
       Effect.gen(function* () {
-        yield* f.start({ ...input, requestId: "one" });
+        yield* f.start(input);
         const env = f.launched[0]!.env;
         assert.strictEqual(env.PEER_TASK, "krk-1");
         const run = f.runs.book.get(env.PEER_RUN!)!;
         assert.isTrue(f.runs.book.claim(run.id, env.PEER_RUN_TOKEN));
-        assert.include(run, { task: "krk-1", agent: "codex", runtime: "herdr", requestId: "one" });
+        assert.include(run, { task: "krk-1", agent: "codex", runtime: "herdr" });
         // The launcher's thread key is the same run's, which the herdr session then joins by pane.
         assert.strictEqual(f.runs.book.holderOf("herdr:term")?.id, run.id);
         assert.strictEqual(f.runs.book.get(run.id)!.pane, "pane");

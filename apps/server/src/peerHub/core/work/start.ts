@@ -1,11 +1,10 @@
 // @effect-diagnostics nodeBuiltinImport:off - where a task's own checkout goes under the workspace root.
 /**
  * Starting an agent on a task (`peerHub.startAgent`). Core checks that the task is open, the
- * repository is the project's and the project lets people's own capacity in; takes the team
- * request the start answers through the active request acceptor (team requests'); creates the run
- * and launches the agent in a checkout of its own through the active task launcher (herdr's), in
- * that run (`launchInRun`), so the run alone puts the agent on the task; then reports it. Without the plugin a step needs, it fails before anything
- * happens, saying that plugin is turned off or needs a newer Hub.
+ * repository is the project's and the project lets people's own capacity in; creates the run and
+ * launches the agent in a checkout of its own through the active task launcher (herdr's), in that run
+ * (`launchInRun`), so the run alone puts the agent on the task; then reports it. Without the plugin a
+ * step needs, it fails before anything happens, saying that plugin is turned off or needs a newer Hub.
  *
  * @module peerHub/core/work/start
  */
@@ -58,28 +57,11 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
     return yield* hubError(
       "This project needs an approved commercial or shared provider. Start a Peer thread with an allowed provider instead.",
     );
-  // Starting from a team request needs team requests, which say whether it still waits.
-  const acceptor =
-    input.requestId === undefined ? undefined : yield* plugins.require("requestAcceptor");
   const launcher = yield* plugins.require("taskLauncher");
   const unavailable = yield* launcher.unavailable;
   if (unavailable !== null) return yield* hubError(unavailable);
 
-  let requestedPrompt: string | undefined;
   const fallback = `${task.key === undefined ? "" : `${task.key}: `}${task.title}. Work in your own checkout and coordinate shared changes through Peer.`;
-  if (acceptor !== undefined && input.requestId !== undefined) {
-    requestedPrompt = (yield* acceptor.accept({
-      workspace: workspace.slug,
-      project: project.id,
-      task: task.id,
-      requestId: input.requestId,
-      ...(input.instruction === undefined ? {} : { instruction: input.instruction }),
-      fallback,
-    })).prompt;
-    // Publish the accepted ownership even if runtime startup later fails.
-    yield* refreshWork;
-    yield* status.publish;
-  }
   const checkout = state.checkoutPath(
     (yield* state.read).persisted,
     workspace.slug,
@@ -94,34 +76,23 @@ export const startAgent = Effect.fn("PeerWork.startAgent")(function* (
       task: task.id,
       agent: input.harness,
       runtime: "herdr",
-      requestId: input.requestId,
     },
     (env) =>
-      launcher
-        .launch({
-          checkout,
-          baseBranch: input.baseBranch ?? repository.branch,
-          worktrees: NodePath.join(
-            state.workspaceRoot,
-            ".worktrees",
-            workspace.slug,
-            project.id,
-            repository.id,
-          ),
-          task,
-          harness: input.harness,
-          prompt: requestedPrompt ?? (input.prompt?.trim() ? input.prompt : fallback),
-          env,
-        })
-        .pipe(
-          Effect.mapError((failure) =>
-            input.requestId === undefined
-              ? failure
-              : hubError(
-                  `${failure.detail} The request is accepted. Inspect herdr and the task before starting another agent.`,
-                ),
-          ),
+      launcher.launch({
+        checkout,
+        baseBranch: input.baseBranch ?? repository.branch,
+        worktrees: NodePath.join(
+          state.workspaceRoot,
+          ".worktrees",
+          workspace.slug,
+          project.id,
+          repository.id,
         ),
+        task,
+        harness: input.harness,
+        prompt: input.prompt?.trim() ? input.prompt : fallback,
+        env,
+      }),
   );
   yield* refreshWork;
   yield* work.taskWorktreeCreated(

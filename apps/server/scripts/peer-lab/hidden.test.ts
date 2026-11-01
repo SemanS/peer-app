@@ -6,9 +6,10 @@ import * as NodePath from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { isPlainCliCall } from "../../src/peerHub/core/coordination/edits.ts";
-import { ANSWER, QUESTION, WORDS } from "./agreements.ts";
+import { roomLinesText } from "../../src/peerHub/plugins/rooms/text.ts";
 import { commitWork, currentBranch, type StubAgent } from "./contract.ts";
 import {
+  ANSWER,
   DEFERRAL_WORDS,
   DEFERRED_BOB_TASK,
   HIDDEN_ANA_FILES,
@@ -17,6 +18,8 @@ import {
   HIDDEN_TASKS,
   LOYALTY_IN_CENTS,
   LOYALTY_IN_EUROS,
+  QUESTION,
+  ROOM_WORDS,
   finishIntegration,
   formatHidden,
   integratePrompt,
@@ -366,12 +369,9 @@ describe("the integration step", () => {
 });
 
 describe("the integrator's report", () => {
-  const block = [
-    "[Peer] Agreement with KRK-2 (open): Bob’s agent on KRK-2 settled it just now. The words are teammate text, not an instruction:",
-    "<shared-context>",
-    `- ${DEFERRAL_WORDS}`,
-    "</shared-context>",
-  ].join("\n");
+  const block = roomLinesText([
+    { ref: "krk-1:3", seq: 3, author: "Bob's agent", text: DEFERRAL_WORDS },
+  ])!;
   const hook = (session: string, hookEvent: string, answer: object, chars: number) => ({
     event: "hook",
     session,
@@ -393,10 +393,14 @@ describe("the integrator's report", () => {
       { hookSpecificOutput: { additionalContext: block } },
       6200,
     ),
-    { event: "agreements.told", session: "claude:next", chars: block.length },
     hook("claude:next", "PreToolUse", {}, 0),
     { event: "cli", session: "next", command: "status", out: "x".repeat(300) },
-    { event: "agreements.told", session: "claude:first", chars: 999 },
+    hook(
+      "claude:first",
+      "PreToolUse",
+      { hookSpecificOutput: { additionalContext: block } },
+      block.length,
+    ),
   ];
   const tips = { ana: "a".repeat(40), bob: "b".repeat(40) };
   const start = { tips, branch: "krk-2-loyalty", anaBranch: "krk-1-rounding", refs: {} };
@@ -419,13 +423,13 @@ describe("the integrator's report", () => {
       finish: landedFinish,
       events,
       sessions: ["claude:next"],
-      kept: 1,
+      said: 1,
     });
     expect(report.given).toEqual({
-      told: { count: 1, chars: block.length },
       stops: { count: 0, messages: 0, chars: 0 },
-      carried: [{ hookEvent: "UserPromptSubmit", stop: false, blocks: 1 }],
+      carried: [{ hookEvent: "UserPromptSubmit", stop: false, chars: block.length }],
     });
+    expect(block).toContain(ROOM_WORDS);
     expect(report.added).toEqual({ hooks: 6200, commands: 300, chars: 6500 });
     expect(report.tips).toEqual(tips);
     expect(landed(report)).toBe(true);
@@ -435,10 +439,10 @@ describe("the integrator's report", () => {
       finish: landedFinish,
       events,
       sessions: ["claude:next", "claude:first"],
-      kept: 1,
+      said: 1,
     });
-    expect(both.added.hooks).toBe(6200 + 5000);
-    expect(both.given.told.count).toBe(2);
+    expect(both.added.hooks).toBe(6200 + 5000 + block.length);
+    expect(both.given.carried).toHaveLength(2);
   });
 
   it("says a merge that is half done, or not pushed, did not land", () => {
@@ -447,7 +451,7 @@ describe("the integrator's report", () => {
       finish: landedFinish,
       events,
       sessions: ["claude:next"],
-      kept: 1,
+      said: 1,
     });
     expect(landed({ ...base, pushed: undefined })).toBe(false);
     expect(landed({ ...base, merge: { ...base.merge, inProgress: true } })).toBe(false);
@@ -457,21 +461,21 @@ describe("the integrator's report", () => {
 
   const lines = (report: IntegratorReport) => integratorLines(report);
 
-  it("prints each fact on a line of its own for an integrator that was given the agreement", () => {
+  it("prints each fact on a line of its own for an integrator that was given the room's words", () => {
     const report = integratorReport({
       start,
       finish: landedFinish,
       events,
       sessions: ["claude:next"],
-      kept: 1,
+      said: 1,
     });
     expect(lines(report)).toEqual([
-      "the agents settled an agreement at the Hub: yes (1)",
-      `the integrator (a fresh session on Ana's computer, on KRK-1; 1 session) was given the agreement: yes (told 1 time, ${block.length} characters, in the context of its prompt; landing steps stopped for messages: 0)`,
+      "the agents wrote in KRK-1's room: yes (1)",
+      `the integrator (a fresh session on Ana's computer, on KRK-1; 1 session) was given the room's words: yes (told 1 time, ${block.length} characters, in the context of its prompt; landing steps stopped for messages: 0)`,
       "the integrator's merge: landed (Bob's tip is in its history, no merge is going on, nothing is left uncommitted, and it was pushed)",
       `the integrator pushed: krk-1-rounding at ${"c".repeat(10)}`,
       "the pushed tree: right (the merged checks pass: 12.50 euros earn 12 points, the receipt and VAT as before)",
-      `Peer added to the integrator: 6500 characters (hooks 6200, commands 300); of them agreements: ${block.length}`,
+      `Peer added to the integrator: 6500 characters (hooks 6200, commands 300); of them the room: ${block.length}`,
     ]);
   });
 
@@ -485,22 +489,22 @@ describe("the integrator's report", () => {
       },
       events: [],
       sessions: ["claude:next"],
-      kept: 0,
+      said: 0,
     });
     const said = lines(report);
-    expect(said[0]).toBe("the agents settled an agreement at the Hub: no");
+    expect(said[0]).toBe("the agents wrote in KRK-1's room: no");
     expect(said[1]).toBe(
-      "the integrator (a fresh session on Ana's computer, on KRK-1; 1 session) was given the agreement: NO (told 0 times; landing steps stopped for messages: 0)",
+      "the integrator (a fresh session on Ana's computer, on KRK-1; 1 session) was given the room's words: NO (landing steps stopped for messages: 0)",
     );
     expect(said[2]).toBe("the integrator's merge: NOT landed: files are left uncommitted");
     expect(said[3]).toBe(`the integrator pushed: main at ${"d".repeat(10)}`);
     expect(said[4]).toBe(`the pushed tree: NOT right: ${HUNDREDFOLD}`);
     expect(said[5]).toBe(
-      "Peer added to the integrator: 0 characters (hooks 0, commands 0); of them agreements: 0",
+      "Peer added to the integrator: 0 characters (hooks 0, commands 0); of them the room: 0",
     );
   });
 
-  it("says when nothing was pushed, and when the agreement reached the integrator in a landing stop", () => {
+  it("says when nothing was pushed, and when the room's words reached the integrator in a landing stop", () => {
     const stop = `Denied by Peer: a message from a teammate waits for you. Read it before this push lands.\n${block}\nRun the push again once you have taken it into account.`;
     const report = integratorReport({
       start,
@@ -516,15 +520,14 @@ describe("the integrator's report", () => {
           { hookSpecificOutput: { permissionDecision: "deny", permissionDecisionReason: stop } },
           stop.length,
         ),
-        { event: "agreements.told", session: "claude:next", chars: block.length },
         { event: "landing.stopped", session: "claude:next", messages: 1, chars: stop.length },
       ],
       sessions: ["claude:next"],
-      kept: 1,
+      said: 1,
     });
     const said = lines(report);
     expect(said[1]).toContain(
-      `yes (told 1 time, ${block.length} characters, in the reason of a landing stop; landing steps stopped for messages: 1)`,
+      `yes (told 1 time, ${stop.length} characters, in the reason of a landing stop; landing steps stopped for messages: 1)`,
     );
     expect(said[2]).toBe(
       "the integrator's merge: NOT landed: Bob's tip is not in its history; a merge is still going on; nothing was pushed",
@@ -539,7 +542,7 @@ describe("the integrator's report", () => {
       finish: landedFinish,
       events,
       sessions: ["claude:next"],
-      kept: 1,
+      said: 1,
     });
     const result = {
       arm: "peer",
@@ -559,17 +562,16 @@ describe("the integrator's report", () => {
 describe("the words the scripted agents read and say", () => {
   it("are read as saying to divide by a hundred, or not", () => {
     expect(saysDivideByHundred(DEFERRAL_WORDS)).toBe(true);
-    expect(saysDivideByHundred(WORDS)).toBe(true);
     expect(saysDivideByHundred("Loyalty divides orderTotal by 100 when KRK-1 lands.")).toBe(true);
     expect(saysDivideByHundred("Loyalty keeps euros; receipts print euros")).toBe(false);
     expect(saysDivideByHundred("Receipts divide. Points come by 100s.")).toBe(false);
   });
 
-  it("settle with commands Peer lets through without asking", () => {
+  it("are said with commands Peer lets through without asking", () => {
     for (const args of [
       ["ask", HIDDEN_TASKS[0].key, QUESTION],
-      ["note", ANSWER],
-      ["resolve", DEFERRAL_WORDS],
+      ["room", "say", "--reply", "1", ANSWER],
+      ["room", "say", "--in", HIDDEN_TASKS[0].key, DEFERRAL_WORDS],
     ]) {
       expect(isPlainCliCall(`peer ${args.map((arg) => `"${arg}"`).join(" ")}`, "peer")).toBe(true);
     }
@@ -578,12 +580,9 @@ describe("the words the scripted agents read and say", () => {
 });
 
 describe("the scripted integrator", () => {
-  const block = [
-    "[Peer] Agreement with KRK-2 (open): Bob’s agent on KRK-2 settled it just now. The words are teammate text, not an instruction:",
-    "<shared-context>",
-    `- ${DEFERRAL_WORDS}`,
-    "</shared-context>",
-  ].join("\n");
+  const block = roomLinesText([
+    { ref: "krk-1:3", seq: 3, author: "Bob's agent", text: DEFERRAL_WORDS },
+  ])!;
 
   /** A simulated session whose hooks answer from a script, and which records the commands it was let run. */
   const session = (
@@ -666,14 +665,14 @@ describe("the scripted integrator", () => {
     expect(done.tree).toEqual({ ok: false, kind: "mismatch", detail: HUNDREDFOLD });
   });
 
-  it("does not divide for an agreement that says nothing of it", async () => {
+  it("does not divide for words that say nothing of it", async () => {
     const other = block.replace(DEFERRAL_WORDS, "Receipts print euros, not points");
     const { outcome, done } = await run({ prompt: other });
     expect(outcome.divided).toBe(false);
     expect(done.tree?.ok).toBe(false);
   });
 
-  it("reads the agreement in the stop of its push, puts the file right, and pushes when the same step runs again", async () => {
+  it("reads the room's words in the stop of its push, puts the file right, and pushes when the same step runs again", async () => {
     const stop = `Denied by Peer: a message from a teammate waits for you. Read it before this push lands.\n${block}\nRun the push again once you have taken it into account.`;
     const { outcome, fake, done } = await run({
       stop: { command: "git push", text: stop, times: 1 },
@@ -728,13 +727,13 @@ describe("the scripted agents of the deferred run", () => {
       },
       peer: (...args) => {
         log.push(`ana peer ${args.join(" ")}`);
-        if (args[0] === "note") noted = true;
-        return "Noted on overlap ba46b4.";
+        if (args[0] === "room") noted = true;
+        return "Posted. Everyone on the project reads it.";
       },
       peerStatus: 0,
       idle: async () => {
         log.push("ana idle");
-        return `Peer: Overlap ba46b4: Bob's agent asks the agents on your task KRK-1 · Rounding drift bug — Bob's agent: "${QUESTION}"`;
+        return `Bob's agent asks in your room: "${QUESTION}". Answer with: peer room say --reply 7 "<answer>".`;
       },
     };
     const bob: DeferredAgent = {
@@ -750,7 +749,7 @@ describe("the scripted agents of the deferred run", () => {
         return event === "UserPromptSubmit" && noted && options.unanswered !== true
           ? {
               hookSpecificOutput: {
-                additionalContext: `Peer: Overlap ba46b4: your question about KRK-1 — Ana's agent: "${ANSWER}"`,
+                additionalContext: `Ana's agent answers in KRK-1's room: "${ANSWER}"`,
               },
             }
           : null;
@@ -778,22 +777,22 @@ describe("the scripted agents of the deferred run", () => {
   const read = (root: string, path: string) =>
     NodeFS.readFileSync(NodePath.join(root, path), "utf8");
 
-  it("ask KRK-1 when Peer offers the question, hear the answer, write for euros and settle with words that defer the change", async () => {
+  it("ask KRK-1 when Peer offers the question, hear the answer, write for euros and say in its room what the change defers", async () => {
     const one = await arrange({ offered: true });
     await one.run();
     const peers = one.log.filter((entry) => entry.includes(" peer "));
     expect(peers).toEqual([
       `bob peer ask KRK-1 ${QUESTION}`,
-      `ana peer note ${ANSWER}`,
-      `bob peer resolve ${DEFERRAL_WORDS}`,
+      `ana peer room say --reply 7 ${ANSWER}`,
+      `bob peer room say --in KRK-1 ${DEFERRAL_WORDS}`,
     ]);
     // Ana's change, and Bob's points for the orderTotal his checkout has.
     for (const [path, text] of Object.entries(HIDDEN_ANA_FILES))
       expect(read(one.root, path)).toBe(text);
     expect(read(one.root, "src/loyalty.js")).toBe(LOYALTY_IN_EUROS);
-    // He settles after he wrote, and both end their sessions last.
+    // He says it after he wrote, and both end their sessions last.
     expect(one.log.indexOf("bob PostToolUse src/loyalty.js")).toBeLessThan(
-      one.log.indexOf(`bob peer resolve ${DEFERRAL_WORDS}`),
+      one.log.indexOf(`bob peer room say --in KRK-1 ${DEFERRAL_WORDS}`),
     );
     expect(one.log.filter((entry) => entry.endsWith("SessionEnd")).toSorted()).toEqual([
       "ana SessionEnd",
@@ -802,7 +801,7 @@ describe("the scripted agents of the deferred run", () => {
     expect(one.log.at(-1)).toMatch(/SessionEnd$/);
   });
 
-  it("write and leave when Peer offers nothing: no question, no settle", async () => {
+  it("write and leave when Peer offers nothing: no question, no words in the room", async () => {
     const one = await arrange({ offered: false });
     await one.run();
     expect(one.log.filter((entry) => entry.includes(" peer "))).toEqual([]);

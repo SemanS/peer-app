@@ -3,12 +3,11 @@
 /**
  * Nothing lands unread (G8). Before a session's work lands, Peer gives it every message addressed to
  * it that it has not read: the notes teammates wrote in its overlaps (their questions, answers, and
- * a person's request to settle one) and the notices plugins flag `landing` (a decision on a request
- * it made, an agreement kept for its task). Work lands when a `git commit`, `git push`,
- * `gh pr create`, `gh pr merge`, `jj commit`, `jj squash`, `jj new` or `jj git push` runs in the
- * agent's shell (`isLanding`). Peer stops the step once to give the messages; the same step again
- * runs, unless something new came meanwhile. Advice (an announcement) never stops a step:
- * it reaches the agent as at any other, and a plugin's notice that is not flagged is advice.
+ * a person's request to settle one) and the notices plugins flag `landing` (words in its room). Work
+ * lands when a `git commit`, `git push`, `gh pr create`, `gh pr merge`, `jj commit`, `jj squash`,
+ * `jj new` or `jj git push` runs in the agent's shell (`isLanding`). Peer stops the step once to give
+ * the messages; the same step again runs, unless something new came meanwhile. A plugin's notice that
+ * is not flagged is advice: it never stops a step, and reaches the agent as at any other.
  *
  * What is a landing step goes by the words of the command only, never by its output or a model: a
  * command hidden in a script or an alias is not recognized.

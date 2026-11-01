@@ -1,15 +1,6 @@
-import type {
-  EnvironmentId,
-  PeerHubStatus,
-  PeerProjectState,
-  PeerAgentRequest,
-} from "@t3tools/contracts";
-import {
-  PEER_REQUEST_REASON_MAX,
-  ProviderDriverKind,
-  defaultInstanceIdForDriver,
-} from "@t3tools/contracts";
-import { InboxIcon, PlayIcon } from "lucide-react";
+import type { EnvironmentId, PeerHubStatus, PeerProjectState } from "@t3tools/contracts";
+import { ProviderDriverKind, defaultInstanceIdForDriver } from "@t3tools/contracts";
+import { PlayIcon } from "lucide-react";
 import { Fragment, useId, useRef, useState, type ReactNode } from "react";
 import * as Schema from "effect/Schema";
 import { useNavigate } from "@tanstack/react-router";
@@ -23,7 +14,6 @@ import { useRelativeTimeTick } from "../../settings/settingsLayout";
 
 import { serverEnvironment } from "../../../state/server";
 import { useAtomCommand } from "../../../state/use-atom-command";
-import { formatRelativeTimeLabel } from "../../../timestampFormat";
 import { Button } from "../../ui/button";
 import { Dialog, DialogClose, DialogPopup } from "../../ui/dialog";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../../ui/select";
@@ -36,13 +26,11 @@ import {
   PeerDialogFooter,
   PeerDialogHeader,
   PeerDialogMessage,
-  PeerFenced,
   PeerField,
 } from "../PeerDialog";
 import { ProjectMark } from "../signals";
 import { failureMessage } from "../WorkspaceAccess";
 import { launchLine, launchNote, projectVcs, vcsWords } from "../vcsWords";
-import { personName } from "../workTree.logic";
 import type { TaskLauncherProps } from "../slots.types";
 import {
   capacityLine,
@@ -52,21 +40,17 @@ import {
   startFromOptions,
   presetStartFrom,
   startFromReady,
-  startInput,
   withPresetOption,
   type StartFromChoice,
 } from "./StartTaskAgent.logic";
 
 type Harness = "claude" | "codex";
 
-/**
- * A task launch stays explicit: its own checkout, chosen harness, and a visible prompt. With a
- * teammate's request it is how the person accepts it, or declines it with a reason the sender sees.
- */
+/** A task launch stays explicit: its own checkout, chosen harness, and a visible prompt. */
 export function StartTaskAgent(props: TaskLauncherProps) {
   return (
     <TaskAgentSession
-      key={`${props.environmentId}:${props.status.email}:${props.workspace}:${props.project.project.id}:${props.taskId}:${props.request?.id ?? "task"}`}
+      key={`${props.environmentId}:${props.status.email}:${props.workspace}:${props.project.project.id}:${props.taskId}`}
       {...props}
     />
   );
@@ -79,11 +63,8 @@ function TaskAgentSession({
   taskId,
   taskLabel,
   status,
-  request,
   initialOpen = false,
-  initialView = "accept",
   baseBranch: presetBase,
-  onDecline,
   onClose,
   inline = false,
   initialPrompt,
@@ -107,13 +88,9 @@ function TaskAgentSession({
       taskId={taskId}
       taskLabel={taskLabel}
       status={status}
-      request={request}
-      initialView={initialView}
       presetBase={presetBase}
-      onDecline={onDecline}
       busy={busy}
       setBusy={setBusy}
-      onDone={close}
       inline={inline}
       initialPrompt={initialPrompt}
       initialRepositoryId={selectedRepository}
@@ -163,13 +140,9 @@ function LaunchForm({
   taskId,
   taskLabel,
   status,
-  request,
-  initialView,
   presetBase,
-  onDecline,
   busy,
   setBusy,
-  onDone,
   inline,
   initialPrompt,
   initialRepositoryId,
@@ -181,13 +154,9 @@ function LaunchForm({
   readonly taskId: string;
   readonly taskLabel: string;
   readonly status: PeerHubStatus;
-  readonly request: PeerAgentRequest | undefined;
-  readonly initialView: "accept" | "decline";
   readonly presetBase: string | undefined;
-  readonly onDecline: ((reason: string) => Promise<string | null>) | undefined;
   readonly busy: boolean;
   readonly setBusy: (busy: boolean) => void;
-  readonly onDone: () => void;
   readonly inline: boolean;
   readonly initialPrompt: string | undefined;
   readonly initialRepositoryId: string | undefined;
@@ -195,11 +164,8 @@ function LaunchForm({
 }) {
   const formId = useId();
   const start = useAtomCommand(serverEnvironment.peerHubStartAgent, { reportFailure: false });
-  const [view, setView] = useState(
-    request !== undefined && onDecline !== undefined ? initialView : "accept",
-  );
   const [started, setStarted] = useState(false);
-  const draftKey = `peer:task-launch:${environmentId}:${status.email ?? "local"}:${workspace}:${project.project.id}:${taskId}:${request?.id ?? "task"}`;
+  const draftKey = `peer:task-launch:${environmentId}:${status.email ?? "local"}:${workspace}:${project.project.id}:${taskId}:task`;
   const [selectedHarness, setHarness] = useLocalStorage(
     `${draftKey}:agent`,
     null as Harness | null,
@@ -233,31 +199,28 @@ function LaunchForm({
   const navigate = useNavigate();
   const launchLock = useRef(false);
   const repositories = project.repositories.filter((repo) => repo.state === "ready");
+  const task = project.work.tasks.find((candidate) => candidate.id === taskId);
+  const instructionLabel = [task?.key, task?.title ?? taskLabel].filter(Boolean).join(": ");
   const repository =
     initialRepositoryId === undefined
       ? repositories[0]
       : repositories.find((repo) => repo.id === initialRepositoryId);
   // The chosen checkout decides where the agent starts; with none ready, the project's kind here.
   const words = vcsWords(repository?.vcs ?? projectVcs(project.repositories));
-  const task = project.work.tasks.find((candidate) => candidate.id === taskId);
-  const instructionLabel = [task?.key, task?.title ?? taskLabel].filter(Boolean).join(": ");
   const [editedPrompt, setPrompt] = useLocalStorage(
     `${draftKey}:prompt`,
     null as string | null,
     Schema.NullOr(Schema.String),
   );
   const [additional, setAdditional] = useLocalStorage(`${draftKey}:additional`, "", Schema.String);
-  const prompt =
-    editedPrompt ??
-    (request !== undefined ? `${instructionLabel}.`.slice(0, 2_000) : (initialPrompt ?? taskLabel));
+  const prompt = editedPrompt ?? initialPrompt ?? taskLabel;
   const launchPrompt =
-    request !== undefined || additional.trim() === ""
+    additional.trim() === ""
       ? prompt
       : prompt.trim() === ""
         ? additional.trim()
         : `${prompt}\n\nAdditional instructions:\n${additional.trim()}`;
-  const promptTooLong = launchPrompt.length > (request === undefined ? 20_000 : 2_000);
-  const [reason, setReason] = useState("");
+  const promptTooLong = launchPrompt.length > 20_000;
   const [choice, setChoice] = useState<StartFromChoice>(presetStartFrom(presetBase));
   const threadShells = useThreadShells();
   // The work tree the board reads, built here rather than carried in: only bookmarks of other
@@ -280,7 +243,6 @@ function LaunchForm({
     guidance.blocked ??
     (repository === undefined ? "The selected repository is not ready on this computer." : null);
   const capacity = capacityLine(project, harness);
-  const sender = request === undefined ? undefined : personName(project, request.sender);
   const colorKey = `${workspace}/${project.project.id}`;
 
   const accept = () => {
@@ -301,7 +263,7 @@ function LaunchForm({
     void start({
       environmentId,
       input: {
-        ...startInput(request, launchPrompt),
+        prompt: launchPrompt,
         workspace,
         projectId: project.project.id,
         taskId,
@@ -320,7 +282,7 @@ function LaunchForm({
           setMessage({
             text:
               result.value.promptError ??
-              "Agent started in its own checkout. Find it under this task or in Needs you.",
+              "Agent started in its own checkout. Find it under this task.",
             failed: result.value.promptError !== undefined,
           });
         }
@@ -331,99 +293,14 @@ function LaunchForm({
       });
   };
 
-  const decline = () => {
-    if (busy || onDecline === undefined) return;
-    setBusy(true);
-    setMessage(undefined);
-    void onDecline(reason.trim())
-      .then((failure) => {
-        if (failure === null) onDone();
-        else setMessage({ text: failure, failed: true });
-      })
-      .finally(() => setBusy(false));
-  };
-
   const context = (
     <>
       <ProjectMark name={project.project.name} colorKey={colorKey} className="size-3.5" />
       <span className="text-foreground/80">{project.project.name}</span>
       <span aria-hidden>·</span>
-      {request === undefined ? (
-        <span className="truncate">{taskLabel}</span>
-      ) : (
-        <>
-          <span>{formatRelativeTimeLabel(request.createdAt)}</span>
-          <span aria-hidden>·</span>
-          <span>waits only for you</span>
-        </>
-      )}
+      <span className="truncate">{taskLabel}</span>
     </>
   );
-
-  if (view === "decline" && request !== undefined && sender !== undefined) {
-    return (
-      <>
-        <PeerDialogHeader
-          icon={InboxIcon}
-          tone="team"
-          title={`Team request from ${sender}`}
-          context={context}
-        />
-        <PeerDialogBody>
-          <form
-            id={formId}
-            className="flex flex-col gap-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              decline();
-            }}
-          >
-            <PeerFenced who={sender}>
-              <span className="font-medium">{request.title}</span>
-              {"\n"}
-              {request.prompt}
-            </PeerFenced>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-baseline justify-between gap-3">
-                <label htmlFor={`${formId}-reason`} className="text-sm text-foreground">
-                  Tell {sender} why (optional). {sender} sees exactly this.
-                </label>
-                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                  {reason.length}/{PEER_REQUEST_REASON_MAX}
-                </span>
-              </div>
-              <Textarea
-                id={`${formId}-reason`}
-                autoFocus
-                value={reason}
-                disabled={busy}
-                maxLength={PEER_REQUEST_REASON_MAX}
-                placeholder="For example: I'm on the release today. Can it wait until Monday?"
-                onChange={(event) => setReason(event.target.value)}
-              />
-            </div>
-            {message === undefined ? null : (
-              <PeerDialogMessage tone={message.failed ? "error" : "neutral"}>
-                {message.text}
-              </PeerDialogMessage>
-            )}
-          </form>
-        </PeerDialogBody>
-        <PeerDialogFooter
-          secondary={
-            <Button variant="ghost" disabled={busy} onClick={() => setView("accept")}>
-              Back
-            </Button>
-          }
-          note="The request closes for both of you. Nothing runs on your computer."
-        >
-          <Button type="submit" form={formId} disabled={busy}>
-            {busy ? "Declining…" : "Decline request"}
-          </Button>
-        </PeerDialogFooter>
-      </>
-    );
-  }
 
   const Body = inline ? Fragment : PeerDialogBody;
   const footer = (children: ReactNode) =>
@@ -436,18 +313,7 @@ function LaunchForm({
       </div>
     ) : (
       <PeerDialogFooter
-        note={
-          request === undefined || sender === undefined
-            ? `Runs in an isolated checkout on ${environment?.label ?? "this computer"}.`
-            : `${sender} sees “Accepted by you”. Nothing runs on your computer before you accept.`
-        }
-        secondary={
-          request !== undefined && onDecline !== undefined && !started ? (
-            <Button variant="ghost" disabled={busy} onClick={() => setView("decline")}>
-              Decline…
-            </Button>
-          ) : undefined
-        }
+        note={`Runs in an isolated checkout on ${environment?.label ?? "this computer"}.`}
       >
         {children}
       </PeerDialogFooter>
@@ -456,11 +322,9 @@ function LaunchForm({
     <>
       {inline ? null : (
         <PeerDialogHeader
-          icon={request === undefined ? PlayIcon : InboxIcon}
-          tone={request === undefined ? "working" : "team"}
-          title={
-            sender === undefined ? "Start an agent on this task" : `Team request from ${sender}`
-          }
+          icon={PlayIcon}
+          tone="working"
+          title="Start an agent on this task"
           context={context}
         />
       )}
@@ -473,13 +337,6 @@ function LaunchForm({
             accept();
           }}
         >
-          {request === undefined || sender === undefined ? null : (
-            <PeerFenced who={sender}>
-              <span className="font-medium">{request.title}</span>
-              {"\n"}
-              {request.prompt}
-            </PeerFenced>
-          )}
           {blocked === null ? null : (
             <PeerCallout tone="needs">
               <span className="flex flex-col gap-1">
@@ -559,28 +416,26 @@ function LaunchForm({
               ) : null}
             </div>
           </div>
-          {request === undefined ? (
-            <PeerField
-              label={
-                prompt.trim() === "" ? "Task instructions" : "Additional instructions (optional)"
+          <PeerField
+            label={
+              prompt.trim() === "" ? "Task instructions" : "Additional instructions (optional)"
+            }
+            htmlFor={`${formId}-additional`}
+          >
+            <Textarea
+              id={`${formId}-additional`}
+              rows={2}
+              value={additional}
+              disabled={busy || started}
+              maxLength={2_000}
+              placeholder={
+                prompt.trim() === ""
+                  ? "What should the agent do? The task’s title goes with it."
+                  : "Anything the agent should know beyond the task brief"
               }
-              htmlFor={`${formId}-additional`}
-            >
-              <Textarea
-                id={`${formId}-additional`}
-                rows={2}
-                value={additional}
-                disabled={busy || started}
-                maxLength={2_000}
-                placeholder={
-                  prompt.trim() === ""
-                    ? "What should the agent do? The task’s title goes with it."
-                    : "Anything the agent should know beyond the task brief"
-                }
-                onChange={(event) => setAdditional(event.target.value)}
-              />
-            </PeerField>
-          ) : null}
+              onChange={(event) => setAdditional(event.target.value)}
+            />
+          </PeerField>
           <details className="rounded-lg border border-border/60 p-3">
             <summary className="cursor-pointer text-sm text-muted-foreground">
               Advanced · checkout and generated instructions
@@ -706,21 +561,13 @@ function LaunchForm({
                 </p>
               </PeerField>
               <p className="text-xs text-muted-foreground">{launchNote(words)}</p>
-              <PeerField
-                label={request === undefined ? "Generated first prompt" : "Your instruction"}
-                htmlFor={`${formId}-prompt`}
-                hint={
-                  request === undefined
-                    ? undefined
-                    : `${sender ?? "Your teammate"}'s words reach your agent fenced, after your instruction.`
-                }
-              >
+              <PeerField label="Generated first prompt" htmlFor={`${formId}-prompt`}>
                 <Textarea
                   id={`${formId}-prompt`}
                   rows={8}
                   value={prompt}
                   disabled={busy || started}
-                  maxLength={request === undefined ? 20_000 : 2_000}
+                  maxLength={20_000}
                   onChange={(event) => setPrompt(event.target.value)}
                 />
               </PeerField>
@@ -766,13 +613,7 @@ function LaunchForm({
               !startReady
             }
           >
-            {busy
-              ? "Starting…"
-              : started
-                ? "Started"
-                : request === undefined
-                  ? "Start agent"
-                  : "Accept & start"}
+            {busy ? "Starting…" : started ? "Started" : "Start agent"}
           </Button>
         </>,
       )}

@@ -69,13 +69,13 @@ describe("stable local alert episodes", () => {
     expect(f.calls).toEqual([]);
     await p.setAlerts(true);
     await p.reconcile(richStatus(), [], NOW);
-    expect(f.calls).toHaveLength(3);
+    expect(f.calls).toHaveLength(2);
     for (const call of f.calls) {
       expect(() => decode(call.state)).not.toThrow();
       expect(call.state?.deepLink).toBe(`/threads/computer/${call.id}`);
     }
     await p.reconcile({ ...richStatus(), syncing: true }, [], NOW + 60_000);
-    expect(f.calls).toHaveLength(3);
+    expect(f.calls).toHaveLength(2);
     expect(JSON.stringify(f.logs)).not.toMatch(/Ship work|Agent work|Review work|PRIVATE_/);
   });
   it("requests catch-up after restored states become available, including an early empty source read", async () => {
@@ -91,7 +91,7 @@ describe("stable local alert episodes", () => {
       () => {},
       async () => {
         requested++;
-        expect(restarted.source()).toHaveLength(3);
+        expect(restarted.source()).toHaveLength(2);
       },
     );
     await restarted.load();
@@ -114,8 +114,8 @@ describe("stable local alert episodes", () => {
     await restarted.reconcile(richStatus(), [], NOW + 30_000);
     expect(f.calls).toEqual([]);
     expect(restarted.source()[0]?.state.updatedAt).toBe(since);
-    await restarted.reconcile({ ...richStatus(), requests: [] }, [], NOW + 40_000);
-    expect(f.calls).toHaveLength(1);
+    await restarted.reconcile({ ...richStatus(), signedIn: false }, [], NOW + 40_000);
+    expect(f.calls).toHaveLength(2);
     expect(f.calls[0]?.state).toBeNull();
   });
   it("gives blocked, answered, blocked a new episode and withdraws all when switched off or signed out", async () => {
@@ -125,7 +125,6 @@ describe("stable local alert episodes", () => {
     await p.setAlerts(true);
     const status = {
       ...richStatus(),
-      requests: [],
       coordination: { ...richStatus().coordination, overlaps: [] },
     };
     await p.reconcile(status, [], NOW);

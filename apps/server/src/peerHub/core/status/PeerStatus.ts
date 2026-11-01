@@ -308,7 +308,6 @@ const make = Effect.gen(function* () {
                     : { echoedCode: s.persisted.pendingSignIn.echoedCode }),
                 },
           workspaces,
-          requests: [],
           joinable: signedIn ? s.persisted.joinable : [],
           domainOffers: signedIn ? (s.persisted.domainOffers ?? []) : [],
           removedFrom: signedIn ? (s.persisted.removedFrom ?? []) : [],

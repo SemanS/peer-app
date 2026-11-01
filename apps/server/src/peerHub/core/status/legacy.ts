@@ -7,7 +7,6 @@
  * @module peerHub/core/status/legacy
  */
 import {
-  PeerAgentRequest,
   PeerGitHubState,
   PeerHubStatus,
   PeerProjectState,
@@ -71,14 +70,6 @@ export const LEGACY_PLACES: ReadonlyArray<LegacyPlace> = [
         })),
       })),
     }),
-  ),
-  legacyPlace(
-    "requests",
-    Schema.UndefinedOr(
-      Schema.Array(Schema.Struct({ workspace: Schema.String, request: PeerAgentRequest })),
-    ),
-    [],
-    (status, requests) => ({ ...status, requests }),
   ),
   legacyPlace("observe", Schema.Array(Schema.String), [], (status, sharedThreads) => ({
     ...status,

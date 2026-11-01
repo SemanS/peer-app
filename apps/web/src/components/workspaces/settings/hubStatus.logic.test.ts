@@ -20,21 +20,12 @@ const plugin = (id: string, overrides: Partial<PeerPluginState> = {}): PeerPlugi
 });
 
 /** A Hub that serves everything: every plugin that needs a feature is active. */
-const everything = ["settings", "requests", "observe", "agreements"].map((id) => plugin(id));
+const everything = ["settings", "observe"].map((id) => plugin(id));
 
 const flags = { pathRules: true, github: true };
 
 /** Every feature of the Hub this app has words for. */
-const ALL = [
-  "settings",
-  "resources",
-  "github",
-  "audit",
-  "requests",
-  "observe",
-  "announcements",
-  "agreements",
-];
+const ALL = ["settings", "resources", "github", "audit", "observe"];
 
 /** What a Hub with the catalog says: it serves `serves`, and its operator turned `off` off. */
 const catalog = (serves: ReadonlyArray<string>, off: ReadonlyArray<string> = []): PeerHubInfo => ({
@@ -64,10 +55,7 @@ describe("the features of a Hub that serves them all", () => {
       "resources",
       "github",
       "audit",
-      "requests",
       "observe",
-      "announcements",
-      "agreements",
     ]);
     expect(list.every((row) => row.state === "on" && row.label === "Connected")).toBe(true);
   });
@@ -119,11 +107,11 @@ describe("a feature a Hub with a catalog does not serve", () => {
   it("is told by the catalog, not by whether the Hub serves settings", () => {
     const list = rows({
       hub: catalog(
-        ALL.filter((id) => id !== "requests" && id !== "settings"),
-        ["requests"],
+        ALL.filter((id) => id !== "observe" && id !== "settings"),
+        ["observe"],
       ),
     });
-    expect(byId(list, "requests")?.state).toBe("off-hub");
+    expect(byId(list, "observe")?.state).toBe("off-hub");
     expect(byId(list, "settings")?.state).toBe("newer");
   });
 
@@ -141,31 +129,25 @@ describe("a feature a Hub with a catalog does not serve", () => {
 describe("what the Hub says is not what this computer chose", () => {
   it("does not call a plugin turned off here a fact about a Hub that serves it", () => {
     const off = everything.map((entry) =>
-      entry.id === "requests" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
+      entry.id === "observe" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
     );
     const list = rows({ hub: catalog(ALL), plugins: off });
-    expect(byId(list, "requests")).toMatchObject({ state: "on", label: "Connected" });
+    expect(byId(list, "observe")).toMatchObject({ state: "on", label: "Connected" });
     expect(featuresFootnote(list)).not.toContain("this computer");
   });
 
   it("lists a feature whose plugin this build has not, as the Hub says", () => {
     const list = rows({
       hub: catalog(ALL),
-      plugins: everything.filter((entry) => entry.id !== "requests"),
+      plugins: everything.filter((entry) => entry.id !== "observe"),
     });
-    expect(byId(list, "requests")?.state).toBe("on");
+    expect(byId(list, "observe")?.state).toBe("on");
   });
 });
 
 describe("the features of the plugins this version of Peer has", () => {
-  it("has words for Agreements and Plans, not the line for what it knows nothing of", () => {
+  it("has words for Observe, not the line for what it knows nothing of", () => {
     const list = rows({ hub: catalog(ALL) });
-    expect(byId(list, "agreements")).toMatchObject({
-      name: "Agreements",
-      state: "on",
-      effect:
-        "What the agents of two tasks agree is kept for those tasks and told to whoever works on either one later.",
-    });
     expect(byId(list, "observe")).toMatchObject({
       name: "Observe",
       state: "on",
@@ -177,16 +159,15 @@ describe("the features of the plugins this version of Peer has", () => {
   it("says what each means for the workspace when the Hub does not run it", () => {
     const list = rows({
       hub: catalog(
-        ALL.filter((id) => id !== "agreements" && id !== "observe"),
-        ["agreements"],
+        ALL.filter((id) => id !== "observe"),
+        ["observe"],
       ),
     });
-    expect(byId(list, "agreements")).toMatchObject({
+    expect(byId(list, "observe")).toMatchObject({
       state: "off-hub",
       label: "Not available",
-      effect: "Agreements can’t be kept: this Hub doesn’t run them.",
+      effect: "Shared threads can’t be watched live: this Hub doesn’t run it.",
     });
-    expect(byId(list, "observe")).toMatchObject({ state: "newer" });
   });
 });
 
@@ -219,9 +200,7 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
       "settings",
       "resources",
       "github",
-      "requests",
       "observe",
-      "agreements",
     ]);
     expect(list.every((row) => row.state === "on" && row.label === "Connected")).toBe(true);
   });
@@ -239,16 +218,15 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
       effect: "Settings can be read here but not changed until the Hub is updated.",
     });
     expect(byId(list, "observe")?.state).toBe("newer");
-    expect(byId(list, "requests")?.state).toBe("on");
   });
 
   it("still tells from the plugins when the catalog has no list of what is off", () => {
     const list = rows({
-      hub: { features: { requests: 1, settings: 1 } },
+      hub: { features: { changes: 1, settings: 1 } },
       plugins: without("observe"),
     });
     expect(byId(list, "observe")?.state).toBe("off-hub");
-    expect(byId(list, "requests")?.state).toBe("on");
+    expect(byId(list, "settings")?.state).toBe("on");
   });
 
   it("says what path rules turned off do, naming the projects that have them", () => {
@@ -278,15 +256,15 @@ describe("what the app cannot tell", () => {
 
   it("leaves out the features no plugin waits for, which an older Hub says nothing of", () => {
     const list = rows();
-    for (const id of ["audit", "announcements"]) {
+    for (const id of ["audit"]) {
       expect(byId(list, id)).toBeUndefined();
     }
   });
 
   it("leaves out a plugin the build does not have", () => {
-    const list = rows({ plugins: everything.filter((entry) => entry.id !== "requests") });
-    expect(byId(list, "requests")).toBeUndefined();
-    expect(byId(list, "observe")).toBeDefined();
+    const list = rows({ plugins: everything.filter((entry) => entry.id !== "observe") });
+    expect(byId(list, "observe")).toBeUndefined();
+    expect(byId(list, "settings")).toBeDefined();
   });
 
   it("is only coordination for an environment that lists no plugins", () => {
@@ -295,9 +273,9 @@ describe("what the app cannot tell", () => {
 
   it("does not call a plugin turned off here a fact about the Hub", () => {
     const off = everything.map((entry) =>
-      entry.id === "requests" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
+      entry.id === "observe" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
     );
-    expect(byId(rows({ plugins: off }), "requests")).toMatchObject({
+    expect(byId(rows({ plugins: off }), "observe")).toMatchObject({
       state: "off-here",
       label: "Off",
       effect: "Turned off on this computer. Its owner turns it on in Coordination & plugins.",
@@ -306,11 +284,11 @@ describe("what the app cannot tell", () => {
 
   it("says who forced a plugin off", () => {
     const locked = everything.map((entry) =>
-      entry.id === "requests"
+      entry.id === "observe"
         ? { ...entry, enabled: false, active: false, reason: "the operator", locked: true }
         : entry,
     );
-    expect(byId(rows({ plugins: locked }), "requests")?.effect).toBe("Forced off by the operator.");
+    expect(byId(rows({ plugins: locked }), "observe")?.effect).toBe("Forced off by the operator.");
   });
 });
 
@@ -359,7 +337,7 @@ describe("around the table", () => {
 
   it("explains a choice made on this computer when one is in the table", () => {
     const off = everything.map((entry) =>
-      entry.id === "requests" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
+      entry.id === "observe" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
     );
     expect(featuresFootnote(rows({ plugins: off }))).toContain(
       "“Off” is a choice made on this computer, in Coordination & plugins.",
@@ -381,7 +359,7 @@ describe("around the table", () => {
 
   it("shows no build for a Hub that does not name one", () => {
     expect(hubBuild(undefined)).toBeNull();
-    expect(hubBuild({ features: { requests: 1 } })).toBeNull();
+    expect(hubBuild({ features: { changes: 1 } })).toBeNull();
     expect(hubBuild({ version: " ", commit: "" })).toBeNull();
   });
 });
@@ -404,9 +382,9 @@ describe("a feature in the status language", () => {
       label: "Not available",
     });
     const off = everything.map((entry) =>
-      entry.id === "requests" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
+      entry.id === "observe" ? { ...entry, enabled: false, active: false, reason: "off" } : entry,
     );
-    expect(byId(rows({ plugins: off }), "requests")).toMatchObject({
+    expect(byId(rows({ plugins: off }), "observe")).toMatchObject({
       connection: "off",
       label: "Off",
     });

@@ -1,4 +1,3 @@
-import { PEER_REQUEST_REASON_MAX } from "@t3tools/contracts";
 import { BanIcon } from "lucide-react";
 import { useId, useState } from "react";
 
@@ -11,6 +10,8 @@ import {
   PeerDialogHeader,
   PeerStackedField,
 } from "../PeerDialog";
+
+const REASON_MAX = 300;
 
 /** Declining a message, with a reason everyone in the room reads, or without one. */
 export function DeclineDialog({
@@ -43,7 +44,7 @@ export function DeclineDialog({
               id={fieldId}
               autoFocus
               value={reason}
-              maxLength={PEER_REQUEST_REASON_MAX}
+              maxLength={REASON_MAX}
               onChange={(event) => setReason(event.target.value)}
             />
           </PeerStackedField>

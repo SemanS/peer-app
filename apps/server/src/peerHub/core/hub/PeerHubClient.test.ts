@@ -34,9 +34,9 @@ describe("the Hub's feature catalog", () => {
         // Until a Hub says otherwise, it serves what Hubs from before the catalog did.
         assert.deepStrictEqual(yield* client.features, PeerHubClient.LEGACY_HUB_FEATURES);
 
-        answer.current = () => [200, meAnswer({ requests: 1, observe: 2, plans: 1 })];
+        answer.current = () => [200, meAnswer({ changes: 1, observe: 2, plans: 1 })];
         yield* client.me;
-        assert.deepStrictEqual(yield* client.features, { requests: 1, observe: 2, plans: 1 });
+        assert.deepStrictEqual(yield* client.features, { changes: 1, observe: 2, plans: 1 });
 
         answer.current = () => [200, meAnswer()];
         yield* client.me;
@@ -78,7 +78,7 @@ describe("what the Hub says of itself", () => {
         answer.current = () => [
           200,
           meAnswer(
-            { requests: 1, settings: 1 },
+            { changes: 1, settings: 1 },
             { featuresOff: ["resources"], hub: { version: "0.8.4", commit: "a6bde95" } },
           ),
         ];
@@ -86,16 +86,16 @@ describe("what the Hub says of itself", () => {
         assert.deepStrictEqual(yield* client.hubInfo, {
           version: "0.8.4",
           commit: "a6bde95",
-          features: { requests: 1, settings: 1 },
+          features: { changes: 1, settings: 1 },
           featuresOff: ["resources"],
         });
 
         // A Hub with a catalog and no list of what is off says only that, and only what it knows.
-        answer.current = () => [200, meAnswer({ requests: 1 }, { hub: { version: "0.8.3" } })];
+        answer.current = () => [200, meAnswer({ changes: 1 }, { hub: { version: "0.8.3" } })];
         yield* client.me;
         assert.deepStrictEqual(yield* client.hubInfo, {
           version: "0.8.3",
-          features: { requests: 1 },
+          features: { changes: 1 },
         });
 
         answer.current = () => [
@@ -105,7 +105,7 @@ describe("what the Hub says of itself", () => {
         yield* client.me.pipe(Effect.result);
         assert.deepStrictEqual(yield* client.hubInfo, {
           version: "0.8.3",
-          features: { requests: 1 },
+          features: { changes: 1 },
         });
 
         yield* client.signOut;
@@ -124,7 +124,7 @@ describe("the Hub client", () => {
       );
       const answered = yield* client.request(Schema.Struct({ ok: Schema.Boolean }), {
         workspace: "acme team",
-        path: "/requests",
+        path: "/rooms",
         method: "POST",
         body: { op: "one" },
       });
@@ -132,7 +132,7 @@ describe("the Hub client", () => {
       assert.deepStrictEqual(hub.calls, [
         {
           method: "POST",
-          url: "/v1/workspaces/acme%20team/requests",
+          url: "/v1/workspaces/acme%20team/rooms",
           authorization: "Bearer phs_test",
           body: '{"op":"one"}',
         },
@@ -142,7 +142,7 @@ describe("the Hub client", () => {
         Effect.provide(coreLayer(yield* seedState(signedInState(hub.url)))),
       );
       const refused = yield* signedOut
-        .request(Schema.Struct({ ok: Schema.Boolean }), { workspace: "acme", path: "/requests" })
+        .request(Schema.Struct({ ok: Schema.Boolean }), { workspace: "acme", path: "/rooms" })
         .pipe(Effect.result);
       assert.isTrue(Result.isFailure(refused) && refused.failure.detail === "Sign in first.");
       assert.strictEqual(hub.calls.length, 1);

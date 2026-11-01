@@ -16,7 +16,6 @@ export function needsYouView(status: PeerHubStatus): PeerHubStatus {
     sharedThreads: [],
     syncing: false,
     toolTrust: undefined,
-    announcements: undefined,
     mcp: undefined,
     workspaces: status.workspaces.map((workspace) => ({
       ...workspace,

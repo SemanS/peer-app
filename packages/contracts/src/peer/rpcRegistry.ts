@@ -4,21 +4,11 @@ import {
   PeerContextArchive,
   PeerContextArchiveInput,
 } from "./contextView.ts";
-import {
-  AgreementsRpcGroup,
-  AgreementsRpcScopes,
-  PEER_AGREEMENTS_METHODS,
-} from "./agreements.rpc.ts";
 import { PEER_RESOURCES_METHODS, ResourcesRpcGroup, ResourcesRpcScopes } from "./resources.rpc.ts";
 import { PeerHubSubscribeInput } from "./needs-you.ts";
 import { PEER_NEEDS_YOU_METHODS, NeedsYouRpcGroup, NeedsYouRpcScopes } from "./needs-you.rpc.ts";
 import { PEER_SETTLE_METHODS, SettleRpcGroup, SettleRpcScopes } from "./settle.rpc.ts";
 import { PEER_TOOL_TRUST_METHODS, PeerToolTrustRpcs, ToolTrustRpcScopes } from "./toolTrust.rpc.ts";
-import {
-  PEER_ANNOUNCEMENTS_METHODS,
-  AnnouncementsRpcGroup,
-  AnnouncementsRpcScopes,
-} from "./announcements.rpc.ts";
 /**
  * Peer's WebSocket RPCs. Core's group and each plugin's group merge into `PeerRpcGroup`, which
  * `rpc.ts` merges into `WsRpcGroup`; their scopes merge into `PEER_RPC_SCOPES`, which the server's
@@ -98,7 +88,6 @@ import { HerdrRpcGroup, HerdrRpcScopes, PEER_HERDR_METHODS } from "./herdr.rpc.t
 import { McpRpcGroup, McpRpcScopes, PEER_MCP_METHODS } from "./mcp.rpc.ts";
 import { ObserveRpcGroup, ObserveRpcScopes, PEER_OBSERVE_METHODS } from "./observe.rpc.ts";
 import { PeerHubSetPluginInput } from "./plugin.ts";
-import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
 import { PEER_SETTINGS_METHODS, SettingsRpcGroup, SettingsRpcScopes } from "./settings.rpc.ts";
 import { PEER_ROOMS_METHODS, RoomsRpcGroup, RoomsRpcScopes } from "./rooms.rpc.ts";
 import { CardRpcGroup, CardRpcScopes, PEER_CARD_METHODS } from "./card.rpc.ts";
@@ -557,20 +546,17 @@ const PeerCoreRpcScopes = {
 /** Every Peer method, as `WS_METHODS` spreads them. */
 export const PEER_WS_METHODS = {
   ...PEER_RESOURCES_METHODS,
-  ...PEER_AGREEMENTS_METHODS,
   ...PEER_CHANGES_METHODS,
   ...PEER_CORE_METHODS,
   ...PEER_HERDR_METHODS,
   ...PEER_JUJUTSU_METHODS,
   ...PEER_GITHUB_METHODS,
   ...PEER_CAPACITY_METHODS,
-  ...PEER_REQUESTS_METHODS,
   ...PEER_OBSERVE_METHODS,
   ...PEER_MCP_METHODS,
 
   ...PEER_AUDIT_METHODS,
   ...PEER_TOOL_TRUST_METHODS,
-  ...PEER_ANNOUNCEMENTS_METHODS,
   ...PEER_NEEDS_YOU_METHODS,
   ...PEER_SETTLE_METHODS,
   ...PEER_SETTINGS_METHODS,
@@ -581,19 +567,16 @@ export const PEER_WS_METHODS = {
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   ResourcesRpcGroup,
-  AgreementsRpcGroup,
   ChangesRpcGroup,
   HerdrRpcGroup,
   JujutsuRpcGroup,
   GitHubRpcGroup,
   CapacityRpcGroup,
-  RequestsRpcGroup,
   ObserveRpcGroup,
   McpRpcGroup,
 
   AuditRpcGroup,
   PeerToolTrustRpcs,
-  AnnouncementsRpcGroup,
   NeedsYouRpcGroup,
   SettleRpcGroup,
   SettingsRpcGroup,
@@ -605,20 +588,17 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
 export const PEER_RPC_SCOPES = {
   ...ResourcesRpcScopes,
-  ...AgreementsRpcScopes,
   ...ChangesRpcScopes,
   ...PeerCoreRpcScopes,
   ...HerdrRpcScopes,
   ...JujutsuRpcScopes,
   ...GitHubRpcScopes,
   ...CapacityRpcScopes,
-  ...RequestsRpcScopes,
   ...ObserveRpcScopes,
   ...McpRpcScopes,
 
   ...AuditRpcScopes,
   ...ToolTrustRpcScopes,
-  ...AnnouncementsRpcScopes,
   ...NeedsYouRpcScopes,
   ...SettleRpcScopes,
   ...SettingsRpcScopes,

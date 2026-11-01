@@ -36,10 +36,7 @@ const DEFAULT_HUB_URL = process.env.PEER_HUB_URL?.trim() || "https://hub.webinso
 export type HubFeatures = Readonly<Record<string, number>>;
 
 /** What a Hub from before the feature catalog serves. */
-export const LEGACY_HUB_FEATURES: HubFeatures = {
-  requests: 1,
-  observe: 1,
-};
+export const LEGACY_HUB_FEATURES: HubFeatures = { observe: 1 };
 
 /** The features a `/v1/me` answer lists; a Hub without a catalog serves the legacy set. */
 export const featuresOf = (me: HubApi.HubMe): HubFeatures => me.features ?? LEGACY_HUB_FEATURES;

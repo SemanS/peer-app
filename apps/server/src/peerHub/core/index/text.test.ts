@@ -327,7 +327,7 @@ describe("what changed in a context the agent read", () => {
     assert.include(text, "Read the current version: peer context KRK-11");
     assert.include(
       text,
-      "Check changed assumptions and contradictory observations with their conditions before handoff",
+      "Check changed assumptions and contradictory observations with their conditions before your work lands.",
     );
   });
 

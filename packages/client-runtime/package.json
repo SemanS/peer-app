@@ -545,10 +545,6 @@
       "types": "./src/peer/observe.ts",
       "default": "./src/peer/observe.ts"
     },
-    "./peer/requests": {
-      "types": "./src/peer/requests.ts",
-      "default": "./src/peer/requests.ts"
-    },
     "./peer/taskTitle": {
       "types": "./src/peer/taskTitle.ts",
       "default": "./src/peer/taskTitle.ts"
@@ -576,9 +572,6 @@
       "types": "./src/peerToolTrust.ts",
       "default": "./src/peerToolTrust.ts"
     },
-    "./peer/announcements": "./src/peer/announcements.ts",
-    "./peer-announcements": "./src/peer/announcements.ts",
-    "./peer/agreements": "./src/peer/agreements.ts",
     "./peer/jujutsu": "./src/peer/jujutsu.ts",
     "./peer/changes": "./src/peer/changes.ts",
     "./peer/contextView": "./src/peer/contextView.ts",

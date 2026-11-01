@@ -52,10 +52,9 @@ const change = (id: string, over: Record<string, unknown> = {}) => ({
 });
 
 describe("jujutsu and changes registration", () => {
-  it("places the plugin ids after herdr and agreements, with settings last", () => {
+  it("places the plugin id after herdr, with settings last", () => {
     const ids: ReadonlyArray<string> = PEER_PLUGIN_IDS;
     expect(ids.indexOf("jujutsu")).toBe(ids.indexOf("herdr") + 1);
-    expect(ids.indexOf("changes")).toBe(ids.indexOf("agreements") + 1);
     expect(ids.at(-1)).toBe("settings");
   });
 

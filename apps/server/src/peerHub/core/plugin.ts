@@ -206,7 +206,6 @@ export interface PeerContributions {
   /** What a plugin adds to one of this computer's threads in the work report (observe). */
   readonly threadReport?: (threadKey: string) => { readonly observable?: boolean };
   readonly taskLauncher?: PeerTaskLauncher;
-  readonly requestAcceptor?: PeerRequestAcceptor;
   /** Whether this person shares unfinished work on origin: nothing else may push it there. */
   readonly wipSharing?: { readonly on: Effect.Effect<boolean> };
 }
@@ -283,12 +282,12 @@ export interface PeerHooks {
     readonly wakes: boolean;
     /**
      * True only for a message addressed to the agent that it must have read before its work lands:
-     * a decision on a request it made, an agreement kept for its task, or the push notice (jujutsu:
-     * the session pushes a change that builds on a teammate's unmerged bookmark, so it should use
-     * that bookmark as the pull request's `--base`) (G8, "nothing lands unread"). A landing step (a `git commit`, `git push`, `gh pr create` or `gh pr merge` in its
-     * shell) then stops once to give the agent this text, and the same step again runs. Advice never sets it: dependencies and announcements reach the agent
-     * as at any other step. A notice marks its text told
-     * when it reads it, as any notice does, so the stop and the next ordinary step never both say it.
+     * words in its room, or the push notice (jujutsu: the session pushes a change that builds on a
+     * teammate's unmerged bookmark, so it should use that bookmark as the pull request's `--base`)
+     * (G8, "nothing lands unread"). A landing step (a `git commit`, `git push`, `gh pr create` or
+     * `gh pr merge` in its shell) then stops once to give the agent this text, and the same step
+     * again runs. Advice never sets it. A notice marks its text told when it reads it, as any notice
+     * does, so the stop and the next ordinary step never both say it.
      */
     readonly landing?: boolean;
     /** At most 1,200 characters per plugin and step; at a tool call's step, `ctx` has the call. */
@@ -622,18 +621,6 @@ export interface PeerTaskLauncher {
     },
     PeerHubError
   >;
-}
-
-/** Takes a pending request addressed to this person for this task, once (requests). */
-export interface PeerRequestAcceptor {
-  readonly accept: (input: {
-    readonly workspace: string;
-    readonly project: string;
-    readonly task: string;
-    readonly requestId: string;
-    readonly instruction?: string;
-    readonly fallback: string;
-  }) => Effect.Effect<{ readonly prompt: string }, PeerHubError>;
 }
 
 /** Clones, explains and finds pull requests for the repositories it owns (github). */

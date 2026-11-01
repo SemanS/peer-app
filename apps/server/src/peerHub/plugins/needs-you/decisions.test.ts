@@ -18,23 +18,17 @@ describe("local alert decision points", () => {
     );
     expect(points.map((p) => [p.kind, p.phase, p.title])).toEqual([
       ["agent", "waiting_for_input", "Agent work"],
-      ["request", "waiting_for_approval", "Request: Review work"],
       ["overlap", "waiting_for_approval", "Overlap: APP-1 · Ship work"],
       ["stale", "waiting_for_input", "Inputs changed: APP-1 · Ship work"],
     ]);
     expect(points.every((p) => p.headline.length > 0)).toBe(true);
     expect(JSON.stringify(points)).not.toMatch(/PRIVATE_|private@|me@|Private sender/);
-    expect(points.find((p) => p.kind === "request")?.since).toBe(SINCE);
   });
   it("excludes other recipients, nonlocal overlaps and signed-out state", () => {
     const status = richStatus();
     expect(decisionPoints({ ...status, signedIn: false }, [], NOW)).toEqual([]);
     const filtered = {
       ...status,
-      requests: status.requests?.map((v) => ({
-        ...v,
-        request: { ...v.request, recipient: "other@acme.test" },
-      })),
       coordination: {
         ...status.coordination,
         sessions: status.coordination.sessions.map((s) => ({ ...s, local: false })),
@@ -47,7 +41,7 @@ describe("local alert decision points", () => {
         [],
         NOW,
       ).map((p) => p.kind),
-    ).toEqual(["agent", "request"]);
+    ).toEqual(["agent"]);
   });
   it("cleans titles, falls back to the project and caps urgent points at25", () => {
     const status = richStatus();
@@ -55,7 +49,6 @@ describe("local alert decision points", () => {
     const points = decisionPoints(
       {
         ...status,
-        requests: [],
         agents: {
           herdr: "running",
           list: Array.from({ length: 30 }, (_, n) => ({

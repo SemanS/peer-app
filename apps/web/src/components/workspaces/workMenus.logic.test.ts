@@ -124,33 +124,15 @@ describe("a task's chats and teammates in its menu", () => {
     expect(taskMenuItems({ task, canStartThread: false })[0]?.disabled).toBe(true);
   });
 
-  it("asks a teammate right after it, only while a plugin can", () => {
-    const ids = (canRequestTeammate: boolean | undefined) =>
-      taskMenuItems({ task, canStartThread: true, canRequestTeammate }).map((item) => item.id);
-    expect(ids(true)).toEqual([
-      "new-thread",
-      "request-teammate",
-      "rename",
-      "toggle-done",
-      "remove",
-    ]);
-    expect(ids(false)).toEqual(["new-thread", "rename", "toggle-done", "remove"]);
-    expect(ids(undefined)).toEqual(ids(false));
-    const request = taskMenuItems({ task, canStartThread: true, canRequestTeammate: true })[1];
-    expect(request?.label).toBe("Request a teammate…");
-  });
-
-  it("keeps the teammate item above the area move and its one divider", () => {
+  it("keeps the area move below the chat, with its one divider", () => {
     const items = taskMenuItems({
       task,
       canStartThread: true,
-      canRequestTeammate: true,
       areas: ["Orders"],
       area: "Orders",
     });
     expect(items.map((item) => item.id)).toEqual([
       "new-thread",
-      "request-teammate",
       "move-area",
       "rename",
       "toggle-done",

@@ -14,21 +14,13 @@
  * real run, made the rule). What a careful Bob learns of Ana's change then belongs to whoever lands both
  * branches, so `LAB_INTEGRATE=1` (implied by `deferred`) adds the step that measures it: after both agents
  * finish, a fresh session on Ana's computer, on KRK-1, is asked to merge Bob's branch into hers and push it,
- * and the lab runs its checks on what was pushed. The arms are the default (agreements on),
- * `LAB_AGREEMENTS=off` and `LAB_PEER=off`.
+ * and the lab runs its checks on what was pushed. Peer gives that session what the room of KRK-1 says
+ * at its landing step. The arms are the default and `LAB_PEER=off`.
  */
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
-import {
-  ANSWER,
-  QUESTION,
-  agreementWords,
-  agreementsGiven,
-  wasGiven,
-  type AgreementsGiven,
-} from "./agreements.ts";
 import {
   ARM_LABELS,
   currentBranch,
@@ -39,7 +31,65 @@ import {
   type StubAgent,
   type Work,
 } from "./contract.ts";
-import { peerAdded, plainSession, type LabEvent } from "./told.ts";
+import { peerAdded, plainSession, toldTexts, type HookOut, type LabEvent } from "./told.ts";
+
+/** What Bob's agent asks in KRK-1's room, and what Ana's answers there. */
+export const QUESTION =
+  "Does orderTotal() keep its unit in your work? My loyalty points are computed from it.";
+export const ANSWER =
+  "orderTotal(order) returns integer cents once this lands: 1250 for 12.50 euros.";
+
+/** How a room's words reach a session that never heard them: `roomLinesText`, at a landing step. */
+export const ROOM_WORDS = "Your room has words you did not hear";
+
+/** Where a session was given its room's words: a hook of this event answered with them. */
+export interface Carried {
+  readonly hookEvent: string;
+  readonly stop: boolean;
+  readonly chars: number;
+}
+
+/** What a computer's log says of the room's words given to sessions, and of the landing stops. */
+export interface RoomGiven {
+  /** `landing.stopped`: landing steps stopped for messages, with how many messages and characters. */
+  readonly stops: { readonly count: number; readonly messages: number; readonly chars: number };
+  /** The hook answers that carried the room's words, in order. */
+  readonly carried: ReadonlyArray<Carried>;
+}
+
+const sum = (list: ReadonlyArray<LabEvent>, field: string) =>
+  list.reduce((chars, entry) => chars + (typeof entry[field] === "number" ? entry[field] : 0), 0);
+
+/** What Peer gave `sessions` of their room, from the debug log of their computer. */
+export function roomGiven(
+  events: ReadonlyArray<LabEvent>,
+  sessions: ReadonlyArray<string>,
+): RoomGiven {
+  const plain = new Set(sessions.map(plainSession));
+  const mine = events.filter(
+    (entry) => entry.session !== undefined && plain.has(plainSession(entry.session)),
+  );
+  const stops = mine.filter((entry) => entry.event === "landing.stopped");
+  const carried = mine.flatMap((entry): Carried[] => {
+    if (entry.event !== "hook") return [];
+    const words = toldTexts([entry]).filter((text) => text.includes(ROOM_WORDS));
+    if (words.length === 0) return [];
+    const answer = entry.answer as NonNullable<HookOut> | undefined;
+    return [
+      {
+        hookEvent: String(entry.hookEvent),
+        stop: answer?.hookSpecificOutput?.permissionDecision === "deny",
+        chars: words.reduce((chars, text) => chars + text.length, 0),
+      },
+    ];
+  });
+  return {
+    stops: { count: stops.length, messages: sum(stops, "messages"), chars: sum(stops, "chars") },
+    carried,
+  };
+}
+
+export const wasGiven = (given: RoomGiven) => given.carried.length > 0;
 
 const ORDERS_IN_EUROS = [
   'import { roundEuros } from "./money.js";',
@@ -433,12 +483,12 @@ export function finishIntegration(input: {
 /** What the integration step found, for the report and for the result the lab prints as JSON. */
 export interface IntegratorReport {
   readonly tips: IntegrationStart["tips"];
-  /** The agreements the Hub holds for Ana's and Bob's tasks that are not closed. */
-  readonly kept: number;
+  /** The messages agents wrote in the room of Ana's task, as the Hub holds them. */
+  readonly said: number;
   /** The sessions the fresh agent ran as, as Ana's log names them. */
   readonly sessions: ReadonlyArray<string>;
-  /** What Peer gave those sessions of agreements, from Ana's debug log. */
-  readonly given: AgreementsGiven;
+  /** What Peer gave those sessions of their room, from Ana's debug log. */
+  readonly given: RoomGiven;
   readonly merge: IntegratorMerge;
   readonly pushed: IntegrationFinish["pushed"];
   readonly tree: Check | undefined;
@@ -452,16 +502,16 @@ export function integratorReport(input: {
   /** Ana's debug log. */
   readonly events: ReadonlyArray<LabEvent>;
   readonly sessions: ReadonlyArray<string>;
-  readonly kept: number;
+  readonly said: number;
 }): IntegratorReport {
   const each = input.sessions.map((one) => peerAdded(input.events, plainSession(one)));
   const total = (field: "hooks" | "commands" | "chars") =>
     each.reduce((sum, one) => sum + one[field], 0);
   return {
     tips: input.start.tips,
-    kept: input.kept,
+    said: input.said,
     sessions: input.sessions,
-    given: agreementsGiven(input.events, input.sessions),
+    given: roomGiven(input.events, input.sessions),
     merge: input.finish.merge,
     pushed: input.finish.pushed,
     tree: input.finish.tree,
@@ -510,8 +560,8 @@ export function formatHidden(result: HiddenResult): ReadonlyArray<string> {
   ];
 }
 
-/** Where in the integrator's session an agreement reached it. */
-const reached = (carried: AgreementsGiven["carried"]) =>
+/** Where in the integrator's session its room's words reached it. */
+const reached = (carried: RoomGiven["carried"]) =>
   [
     ...new Set(
       carried.map((one) =>
@@ -528,6 +578,7 @@ const reached = (carried: AgreementsGiven["carried"]) =>
 export function integratorLines(one: IntegratorReport): ReadonlyArray<string> {
   const { given, merge, pushed, tree } = one;
   const times = (count: number) => `${count} time${count === 1 ? "" : "s"}`;
+  const heard = given.carried.reduce((chars, one) => chars + one.chars, 0);
   const problems = [
     ...(merge.bobMerged ? [] : ["Bob's tip is not in its history"]),
     ...(merge.inProgress ? ["a merge is still going on"] : []),
@@ -535,16 +586,16 @@ export function integratorLines(one: IntegratorReport): ReadonlyArray<string> {
     ...(pushed === undefined ? ["nothing was pushed"] : []),
   ];
   return [
-    `the agents settled an agreement at the Hub: ${one.kept === 0 ? "no" : `yes (${one.kept})`}`,
-    `the integrator (a fresh session on Ana's computer, on KRK-1; ${one.sessions.length} session${one.sessions.length === 1 ? "" : "s"}) was given the agreement: ${
+    `the agents wrote in KRK-1's room: ${one.said === 0 ? "no" : `yes (${one.said})`}`,
+    `the integrator (a fresh session on Ana's computer, on KRK-1; ${one.sessions.length} session${one.sessions.length === 1 ? "" : "s"}) was given the room's words: ${
       wasGiven(given)
-        ? `yes (told ${times(given.told.count)}, ${given.told.chars} characters, ${reached(given.carried)}; landing steps stopped for messages: ${given.stops.count})`
-        : `NO (told ${times(given.told.count)}; landing steps stopped for messages: ${given.stops.count})`
+        ? `yes (told ${times(given.carried.length)}, ${heard} characters, ${reached(given.carried)}; landing steps stopped for messages: ${given.stops.count})`
+        : `NO (landing steps stopped for messages: ${given.stops.count})`
     }`,
     `the integrator's merge: ${problems.length === 0 ? "landed (Bob's tip is in its history, no merge is going on, nothing is left uncommitted, and it was pushed)" : `NOT landed: ${problems.join("; ")}`}`,
     `the integrator pushed: ${pushed === undefined ? "nothing" : `${pushed.ref} at ${pushed.sha.slice(0, 10)}`}`,
     `the pushed tree: ${tree === undefined ? "not checked: nothing was pushed" : tree.ok ? "right (the merged checks pass: 12.50 euros earn 12 points, the receipt and VAT as before)" : `NOT right: ${tree.detail}`}`,
-    `Peer added to the integrator: ${one.added.chars} characters (hooks ${one.added.hooks}, commands ${one.added.commands}); of them agreements: ${given.told.chars}`,
+    `Peer added to the integrator: ${one.added.chars} characters (hooks ${one.added.hooks}, commands ${one.added.commands}); of them the room: ${heard}`,
   ];
 }
 
@@ -614,7 +665,7 @@ export const LOYALTY_IN_CENTS = [
   "",
 ].join("\n");
 
-/** How a scripted agent reads the words of an agreement: whether they say the points are divided by a hundred. */
+/** How a scripted agent reads the words of its room: whether they say the points are divided by a hundred. */
 export const saysDivideByHundred = (words: string) => /\bdivid\w*\b[^.;]*\bby 100\b/i.test(words);
 
 /** What the deferred stand-ins ask of the lab's simulated agent beyond the contract's: its exit status and its wait. */
@@ -635,9 +686,10 @@ export interface DeferredStubInput {
 /**
  * The scripted agents of the deferred dry run, who do what Peer's words say. Ana changes `orderTotal` and
  * its uses, and idles. Bob writes his points for the `orderTotal` his checkout has: if Peer offers him
- * `peer ask` he asks KRK-1 about it, hears her answer (cents), and settles the overlap with words that
- * defer the change to whoever lands both; with no Peer he writes and leaves. They end their sessions.
- * It checks the machinery (the ask, the settle, the agreement the Hub keeps) and spends nothing.
+ * `peer ask` he asks KRK-1 about it, hears her answer (cents), and says in KRK-1's room, in words that
+ * defer the change, what whoever lands both has to do; with no Peer he writes and leaves. They end
+ * their sessions. It checks the machinery (the ask, the answer, the words in the room) and spends
+ * nothing.
  */
 export async function runDeferredStub(input: DeferredStubInput) {
   const { ana, bob, pause, told } = input;
@@ -674,8 +726,10 @@ export async function runDeferredStub(input: DeferredStubInput) {
     }
     told(`${bob.name} (peer ask ${HIDDEN_TASKS[0].key})`, asked);
     if (bob.peerStatus !== 0) throw new Error(`Bob's scripted agent could not ask: ${asked}`);
-    hear("ana", [await Promise.race([woken, pause(15_000).then(() => null)])]);
-    hear("ana", [ana.peer("note", ANSWER)]);
+    const question = await Promise.race([woken, pause(15_000).then(() => null)]);
+    hear("ana", [question]);
+    const seq = /--reply (\d+)/.exec(question ?? "")?.[1];
+    hear("ana", [ana.peer("room", "say", ...(seq === undefined ? [] : ["--reply", seq]), ANSWER)]);
     for (let step = 0; step < 80 && !answered; step += 1) {
       hear("bob", textsOf(bob.hook("UserPromptSubmit", { prompt: "continue" })));
       answered = heard.bob.some((text) => text.includes(ANSWER));
@@ -686,9 +740,9 @@ export async function runDeferredStub(input: DeferredStubInput) {
   // His branch must stay right with the code it has: euros.
   await write(bob, "bob", "src/loyalty.js", LOYALTY_IN_EUROS);
   if (answered) {
-    const settled = bob.peer("resolve", DEFERRAL_WORDS);
-    told(`${bob.name} (peer resolve)`, settled);
-    if (bob.peerStatus !== 0) throw new Error(`Bob's scripted agent could not settle: ${settled}`);
+    const said = bob.peer("room", "say", "--in", HIDDEN_TASKS[0].key, DEFERRAL_WORDS);
+    told(`${bob.name} (peer room say)`, said);
+    if (bob.peerStatus !== 0) throw new Error(`Bob's scripted agent could not say it: ${said}`);
   }
   for (const agent of [ana, bob]) agent.hook("SessionEnd", { reason: "exit" });
   return heard;
@@ -708,9 +762,9 @@ export interface IntegratorStubInput {
  * The scripted integrator of the dry run: asked to merge Bob's branch and push, it merges, makes sure it
  * works by what Peer told it, and pushes. If that says the points are to be divided by a hundred, it puts
  * Bob's file right and commits, whether it read so at its prompt or in the stop of a landing step (a
- * stop is read and the same step again runs, as an agent would). With nothing told of any agreement it
- * makes sure of nothing, which is what an agent that never heard of the change does, and the pushed tree
- * shows it.
+ * stop is read and the same step again runs, as an agent would). With nothing told of the change it
+ * makes sure of nothing, which is what an agent that never heard of it does, and the pushed tree shows
+ * it.
  */
 export async function runIntegratorStub(input: IntegratorStubInput) {
   const { integrator, checkout, branch, told } = input;
@@ -750,15 +804,13 @@ export async function runIntegratorStub(input: IntegratorStubInput) {
   hear(...asked);
   told(
     `the integrator, a fresh session of ${integrator.name.replace(/ agent$/, "")} computer (asked: ${prompt})`,
-    agreementWords(asked)
-      .map((words) => `an agreement: ${words}`)
-      .join("\n") || null,
+    asked.filter((text) => text.includes(ROOM_WORDS)).join("\n") || null,
   );
   run(`git merge --no-edit ${branch}`);
   // "Make sure it works": by what it has been told of the merge, once.
   let divided = false;
   const makeSure = () => {
-    if (divided || !agreementWords(heard).some(saysDivideByHundred)) return;
+    if (divided || !heard.some(saysDivideByHundred)) return;
     divided = true;
     const path = "src/loyalty.js";
     hear(...textsOf(integrator.edit("PreToolUse", path)));

@@ -178,29 +178,29 @@ describe("Peer plugins", () => {
         const hub = yield* standInHub(answer);
         const core = yield* startedCore(
           yield* seedState(signedInSeed(hub.url)),
-          [fakePlugin({ id: "requests", hubFeature: { id: "requests", revision: 2 } }, seen)],
+          [fakePlugin({ id: "changes", hubFeature: { id: "changes", revision: 2 } }, seen)],
           "phs_test",
         );
-        // Before a Hub answered, the legacy set (requests at revision 1) is all Peer assumes, and no
+        // Before a Hub answered, the legacy set (no changes) is all Peer assumes, and no
         // Hub said whether it serves more: the plugin waits for one, it does not need a newer one.
         const waiting = {
-          id: "requests",
-          title: "The requests plugin",
+          id: "changes",
+          title: "The changes plugin",
           enabled: true,
           active: false,
           reason: "hub-unknown",
         };
         assert.deepStrictEqual(yield* core.plugins.states, [waiting]);
         assert.strictEqual(
-          yield* refusal(core.plugins.requireActive("requests")),
-          "The requests plugin waits for a Peer Hub: it works once this environment is signed in and its Hub answers.",
+          yield* refusal(core.plugins.requireActive("changes")),
+          "The changes plugin waits for a Peer Hub: it works once this environment is signed in and its Hub answers.",
         );
         assert.strictEqual(yield* Queue.size(seen), 0);
 
-        answer.current = () => [200, meAnswer({ requests: 2, observe: 1 })];
+        answer.current = () => [200, meAnswer({ changes: 2, observe: 1 })];
         yield* core.client.me;
         assert.strictEqual(yield* Queue.take(seen), "started");
-        assert.isTrue(yield* core.plugins.isActive("requests"));
+        assert.isTrue(yield* core.plugins.isActive("changes"));
 
         answer.current = () => [200, meAnswer({ observe: 1 })];
         yield* core.client.me;
@@ -209,16 +209,16 @@ describe("Peer plugins", () => {
         assert.strictEqual(yield* Queue.size(seen), 0);
         assert.deepStrictEqual(yield* core.plugins.states, [
           {
-            id: "requests",
-            title: "The requests plugin",
+            id: "changes",
+            title: "The changes plugin",
             enabled: true,
             active: false,
             reason: "hub",
           },
         ]);
         assert.strictEqual(
-          yield* refusal(core.plugins.requireActive("requests")),
-          "The requests plugin needs a newer Peer Hub.",
+          yield* refusal(core.plugins.requireActive("changes")),
+          "The changes plugin needs a newer Peer Hub.",
         );
 
         // Signed out, the last Hub's answer no longer says anything of the next one.

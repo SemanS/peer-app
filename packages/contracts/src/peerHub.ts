@@ -24,7 +24,6 @@ import { PeerGitHubState } from "./peer/github.ts";
 import { PeerLocalAgent } from "./peer/herdr.ts";
 import { PeerPluginState } from "./peer/plugin.ts";
 import { peerPluginStatusFields } from "./peer/registry.ts";
-import { PeerAgentRequest } from "./peer/requests.ts";
 import { PeerWorkRun } from "./peer/runs.ts";
 
 // Schemas plugins share moved to `peer/base.ts`, and each plugin's to `peer/<id>.ts`; their names
@@ -38,7 +37,6 @@ export * from "./peer/github.ts";
 export * from "./peer/herdr.ts";
 export * from "./peer/observe.ts";
 export * from "./peer/card.ts";
-export * from "./peer/requests.ts";
 
 /**
  * Peer Hub: the workspace service a Peer environment signs in to.
@@ -685,9 +683,6 @@ export const PeerHubStatus = Schema.Struct({
     }),
   ),
   workspaces: Schema.Array(PeerWorkspaceState),
-  requests: Schema.optional(
-    Schema.Array(Schema.Struct({ workspace: Schema.String, request: PeerAgentRequest })),
-  ),
   joinable: Schema.Array(PeerJoinableWorkspace),
   domainOffers: Schema.optional(Schema.Array(PeerDomainOffer)),
   removedFrom: Schema.optional(Schema.Array(PeerRemovedWorkspace)),
@@ -1006,10 +1001,6 @@ export const PeerHubStaleReadsInput = Schema.Struct({
 export type PeerHubStaleReadsInput = typeof PeerHubStaleReadsInput.Type;
 
 export const PeerHubStartAgentInput = Schema.Struct({
-  /** Claim this recipient request before starting; never launch twice on retry. */
-  requestId: Schema.optional(TrimmedNonEmptyString),
-  /** The recipient's own words; request starts ignore the legacy prompt field. */
-  instruction: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(2_000))),
   workspace: TrimmedNonEmptyString,
   projectId: TrimmedNonEmptyString,
   taskId: TrimmedNonEmptyString,

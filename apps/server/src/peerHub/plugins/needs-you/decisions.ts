@@ -76,19 +76,6 @@ export function decisionPoints(
       headline: agent.status === "blocked" ? "Agent needs input" : "Agent finished",
     });
   }
-  for (const { workspace, request } of status.requests ?? []) {
-    if (request.status !== "pending" || request.recipient !== status.email) continue;
-    add(needsYouKey.request(workspace, request.id), {
-      kind: "request",
-      phase: "waiting_for_approval",
-      rank: 2,
-      title: `Request: ${request.title}`,
-      project: projectName(status, workspace, request.project),
-      model: "Peer",
-      headline: "Teammate request",
-      since: request.createdAt,
-    });
-  }
   const own = status.coordination.sessions.filter((s) => s.local && s.email === status.email);
   if (status.coordination.enabled)
     for (const overlap of status.coordination.overlaps) {

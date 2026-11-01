@@ -16,8 +16,6 @@ import {
   TOTAL_IN_CENTS,
   TOTAL_IN_DOLLARS,
   agentReport,
-  ARM_LABELS,
-  agreementsOn,
   armEnv,
   armOf,
   commitWork,
@@ -79,51 +77,15 @@ describe("the arms", () => {
     expect(armOf({ LAB_KERNEL: "0" })).toBe("peer");
   });
 
-  it("names the arm that turns agreements off, and takes agreements on to be what Peer does anyway", () => {
-    expect(armOf({ LAB_AGREEMENTS: "off" })).toBe("no-agreements");
-    expect(armOf({ LAB_AGREEMENTS: "on" })).toBe("peer");
-    // `on` names no arm of its own: it is the default, so it goes with another arm.
-    expect(armOf({ LAB_AGREEMENTS: "on", LAB_PEER: "off" })).toBe("none");
-    expect(ARM_LABELS["no-agreements"]).toMatch(/agreements off/);
-    expect(ARM_LABELS["no-agreements"]).toMatch(/LAB_AGREEMENTS=off/);
-  });
-
   it("refuses two arms at once and a word it does not know", () => {
     expect(() => armOf({ LAB_PEER: "on" })).toThrow(/LAB_PEER is off/);
-    expect(() => armOf({ LAB_AGREEMENTS: "maybe" })).toThrow(/LAB_AGREEMENTS is off or on/);
-    expect(() => armOf({ LAB_AGREEMENTS: "off", LAB_PEER: "off" })).toThrow(/2 arms/);
     expect(() => armOf({ LAB_KERNEL: "1", LAB_PEER: "off" })).toThrow(/2 arms/);
   });
 
-  it("turns the plugins off by the operator's switches, and takes away one the lab inherited", () => {
-    expect(armEnv("none")).toEqual({ PEER_AGREEMENTS: undefined });
-    expect(armEnv("peer")).toEqual({ PEER_AGREEMENTS: undefined });
-    expect(armEnv("no-agreements")).toEqual({ PEER_AGREEMENTS: "off" });
-    expect(armEnv("kernel")).toEqual({
-      PEER_AGREEMENTS: "off",
-      PEER_JUJUTSU: "off",
-    });
-    // `undefined` drops the variable from a child's environment, even one the operator set.
-    const env = {
-      PEER_AGREEMENTS: "off",
-      PATH: process.env.PATH,
-      ...armEnv("peer"),
-    };
-    const child = NodeChildProcess.spawnSync(
-      process.execPath,
-      ["-p", "[process.env.PEER_AGREEMENTS].join()"],
-      { env, encoding: "utf8" },
-    );
-    expect(child.stdout.trim()).toBe("");
-  });
-
-  it("says when agreements are on, as the lab checks each computer's Peer against it", () => {
-    const arms = ["none", "peer", "no-agreements", "kernel"] as const;
-    expect(arms.map(agreementsOn)).toEqual([true, true, false, false]);
-    // A plugin an arm has on is one its environment leaves alone, and one off is switched off.
-    for (const arm of arms) {
-      expect(armEnv(arm).PEER_AGREEMENTS === undefined).toBe(agreementsOn(arm));
-    }
+  it("turns off what an operator can in the kernel arm, and nothing in the others", () => {
+    expect(armEnv("none")).toEqual({});
+    expect(armEnv("peer")).toEqual({});
+    expect(armEnv("kernel")).toEqual({ PEER_JUJUTSU: "off" });
   });
 });
 

@@ -78,7 +78,6 @@ export function TaskRow({
 }) {
   const navigate = useNavigate();
   const [renaming, setRenaming] = useState(false);
-  const [requesting, setRequesting] = useState(false);
   const [treeDialog, setTreeDialog] = useState<"add-under" | "move-under" | null>(null);
   const tree = servesTree(project);
   const label = taskLabel(task);
@@ -86,10 +85,6 @@ export function TaskRow({
   const model = taskRowModel({ task, needOf });
   const stateLabel = rowStateLabel(model.state);
   const active = activeThread === taskRouteKey(scope, task.id);
-  const RequestDialog = plugins.find(
-    (plugin) => plugin.requestTeammate !== undefined,
-  )?.requestTeammate;
-  const canRequest = RequestDialog !== undefined && projectState !== undefined;
 
   const openRoom = () =>
     void navigate({
@@ -115,7 +110,6 @@ export function TaskRow({
         ...taskMenuItems({
           task,
           canStartThread: t3ProjectId !== undefined,
-          canRequestTeammate: canRequest,
           inReview: task.inReview === true,
           areas,
           area: taskArea,
@@ -135,7 +129,6 @@ export function TaskRow({
       if ((moved.area ?? undefined) !== taskArea)
         void actions.moveTaskToArea(scope, task, moved.area);
     } else if (choice === "new-thread") startThread();
-    else if (choice === "request-teammate") setRequesting(true);
     else if (choice === "add-under" || choice === "move-under") setTreeDialog(choice);
     else if (choice === "make-group" || choice === "make-task")
       void actions.changeTaskTree(
@@ -281,18 +274,6 @@ export function TaskRow({
           task={task}
           onMove={(parent) => void actions.moveTaskUnder(scope, task, parent)}
           onClose={() => setTreeDialog(null)}
-        />
-      ) : null}
-      {requesting && canRequest ? (
-        <RequestDialog
-          environmentId={environmentId}
-          status={status}
-          project={project}
-          task={{ id: task.id, label }}
-          open
-          onOpenChange={(open) => {
-            if (!open) setRequesting(false);
-          }}
         />
       ) : null}
     </li>

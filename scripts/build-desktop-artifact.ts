@@ -52,7 +52,8 @@ import { selectDesktopRuntimeExternalDependencies } from "./lib/desktop-external
 import { resolveCatalogDependencies } from "./lib/resolve-catalog.ts";
 import {
   createStagePatchedDependencies,
-  DesktopStageLockfile,
+  type DesktopStageLockfile,
+  parseDesktopStageLockfile,
 } from "./lib/desktop-stage-patches.ts";
 
 export { createStagePatchedDependencies } from "./lib/desktop-stage-patches.ts";
@@ -129,7 +130,6 @@ const decodeReleasePackageManifest = Schema.decodeEffect(
   Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)),
 );
 const decodeWorkspaceConfig = Schema.decodeEffect(fromYaml(WorkspaceConfig));
-const decodeDesktopStageLockfile = Schema.decodeEffect(fromYaml(DesktopStageLockfile));
 const encodeStageWorkspaceConfig = Schema.encodeEffect(fromYaml(StageWorkspaceConfig));
 
 export const readWorkspaceConfig = Effect.fn("readWorkspaceConfig")(function* () {
@@ -3767,9 +3767,19 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     });
   }
   const workspaceConfig = yield* readWorkspaceConfig();
-  const stageLockfile = yield* fs
-    .readFileString(path.join(repoRoot, "pnpm-lock.yaml"))
-    .pipe(Effect.flatMap(decodeDesktopStageLockfile));
+  const stageLockfile = yield* fs.readFileString(path.join(repoRoot, "pnpm-lock.yaml")).pipe(
+    Effect.flatMap((source) =>
+      Effect.try({
+        try: () => parseDesktopStageLockfile(source),
+        catch: (cause) =>
+          new DesktopBuildDependencyResolutionError({
+            kind: "stage-patches",
+            manifestPath: "pnpm-lock.yaml",
+            cause,
+          }),
+      }),
+    ),
+  );
   const workspaceCatalog = workspaceConfig.catalog ?? {};
   const workspaceOverrides = workspaceConfig.overrides ?? {};
   const workspacePatchedDependencies = workspaceConfig.patchedDependencies ?? {};

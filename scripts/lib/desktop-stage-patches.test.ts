@@ -1,6 +1,10 @@
 import { assert, describe, it } from "@effect/vitest";
+import { YAMLParseError } from "yaml";
 
-import { createStagePatchedDependencies } from "./desktop-stage-patches.ts";
+import {
+  createStagePatchedDependencies,
+  parseDesktopStageLockfile,
+} from "./desktop-stage-patches.ts";
 
 const patches = {
   "@cursor/sdk@1.0.40": "patches/cursor.patch",
@@ -140,5 +144,47 @@ describe("desktop stage dependency patches", () => {
       () => createStagePatchedDependencies(patches, { "@cursor/sdk": "1.0.41" }, lockfile()),
       /1\.0\.41.*1\.0\.40|1\.0\.40.*1\.0\.41/,
     );
+  });
+});
+
+describe("desktop stage pnpm lockfile", () => {
+  const workspace = `lockfileVersion: '9.0'
+importers:
+  apps/server:
+    dependencies:
+      zod: {version: 4.6.6}
+  apps/desktop: {}
+snapshots:
+  zod@4.6.6: {}
+`;
+
+  it("reads the workspace graph after pnpm 12's package-manager document", () => {
+    const manager = `lockfileVersion: '9.0'
+importers:
+  .:
+    packageManagerDependencies:
+      pnpm: {version: 12.14.0}
+snapshots:
+  pnpm@12.14.0: {}
+`;
+    const graph = parseDesktopStageLockfile(`---\n${manager}---\n${workspace}`);
+    assert.deepStrictEqual(createStagePatchedDependencies(patches, { zod: "4.6.6" }, graph), {
+      "zod@4.6.6": "patches/zod4.patch",
+    });
+  });
+
+  it("still reads the legacy single-document workspace graph", () => {
+    assert.deepStrictEqual(
+      createStagePatchedDependencies(
+        patches,
+        { zod: "4.6.6" },
+        parseDesktopStageLockfile(workspace),
+      ),
+      { "zod@4.6.6": "patches/zod4.patch" },
+    );
+  });
+
+  it("rejects malformed YAML instead of silently discarding a bad document", () => {
+    assert.throws(() => parseDesktopStageLockfile(`broken: [\n---\n${workspace}`), YAMLParseError);
   });
 });

@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { parseAllDocuments } from "yaml";
 
 const DependencyReferences = Schema.Record(Schema.String, Schema.String);
 const ImporterDependencies = Schema.Record(
@@ -26,6 +27,16 @@ export const DesktopStageLockfile = Schema.Struct({
 export type DesktopStageLockfile = typeof DesktopStageLockfile.Type;
 
 const decodeLockfile = Schema.decodeUnknownSync(DesktopStageLockfile);
+
+/** pnpm 12 prepends its package-manager lock; the workspace graph remains the final document. */
+export function parseDesktopStageLockfile(source: string): DesktopStageLockfile {
+  const documents = parseAllDocuments(source);
+  for (const document of documents) {
+    if (document.errors.length > 0) throw document.errors[0];
+  }
+  return decodeLockfile(documents.at(-1)?.toJS());
+}
+
 const exactVersion = /^\d+\.\d+\.\d+(?:-[\da-zA-Z.-]+)?(?:\+[\da-zA-Z.-]+)?$/;
 
 function packageIdentity(snapshotId: string): string {

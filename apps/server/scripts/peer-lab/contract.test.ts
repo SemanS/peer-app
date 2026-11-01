@@ -16,7 +16,6 @@ import {
   TOTAL_IN_CENTS,
   TOTAL_IN_DOLLARS,
   agentReport,
-  armEnv,
   armOf,
   commitWork,
   currentBranch,
@@ -77,12 +76,6 @@ describe("the arms", () => {
 
   it("refuses two arms at once and a word it does not know", () => {
     expect(() => armOf({ LAB_PEER: "on" })).toThrow(/LAB_PEER is off/);
-  });
-
-  it("turns off what an operator can in the kernel arm, and nothing in the others", () => {
-    expect(armEnv("none")).toEqual({});
-    expect(armEnv("peer")).toEqual({});
-    expect(armEnv("kernel")).toEqual({ PEER_JUJUTSU: "off" });
   });
 });
 

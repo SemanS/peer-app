@@ -365,11 +365,7 @@ const CONTRACT_BOB_TASK = CONTRACT_DEFERRED
     ? HIDDEN_BOB_TASK
     : BOB_TASK;
 /** The contract scenario's arm: `LAB_PEER=off`, or Peer as it is. */
-const ARM = CONTRACT
-  ? armOf(process.env)
-  : MEMORY || READY
-    ? ("kernel" as const)
-    : ("peer" as const);
+const ARM = CONTRACT ? armOf(process.env) : ("peer" as const);
 /** With real agents, a keeper idle this long gives way (production waits ten minutes). */
 const REAL_IDLE_SECS = 45;
 /** The server the computers run: the bundle in apps/server/dist, or `LAB_SERVER_BIN` (a private build, `vp pack -d <dir>`). */
@@ -4193,7 +4189,7 @@ const memoryProgram = Effect.gen(function* () {
   say(
     "memory",
     MEMORY_ADAPTER
-      ? `adapter variant, Peer ${peerOff ? "off" : "kernel"}, Ana ${anaKind}, Bob ${bobKind}`
+      ? `adapter variant, Peer ${peerOff ? "off" : "on"}, Ana ${anaKind}, Bob ${bobKind}`
       : `arm ${MEMORY_ARM}, agent ${anaKind}`,
   );
   const servers = memoryServers(vikingUrl(), kontextBin());

@@ -14,6 +14,8 @@ import { useLayoutEffect, useRef } from "react";
 
 import { cn } from "../../lib/utils";
 import ChatMarkdown from "../ChatMarkdown";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { agentTimelineRows, type PeerAgentTool } from "./AgentTimeline.logic";
 
 const TOOL_ICON: Readonly<Record<string, LucideIcon>> = {
   Bash: SquareTerminalIcon,
@@ -69,7 +71,13 @@ export function AgentTimeline({
           view.entries.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing yet.</p>
           ) : (
-            view.entries.map((entry) => <AgentStep key={entry.id} entry={entry} cwd={view.cwd} />)
+            agentTimelineRows(view.entries).map((row) =>
+              row.kind === "step" ? (
+                <AgentStep key={row.entry.id} entry={row.entry} cwd={view.cwd} />
+              ) : (
+                <AgentTools key={row.tools[0]?.id} label={row.label} tools={row.tools} />
+              ),
+            )
           )
         ) : (
           <>
@@ -103,28 +111,56 @@ function AgentStep({
     );
   }
   if (entry.kind === "text") return <ChatMarkdown text={entry.text} cwd={cwd} />;
-  const Icon = TOOL_ICON[entry.name] ?? WrenchIcon;
+  return <AgentTool tool={entry} />;
+}
+
+function AgentTools({
+  label,
+  tools,
+}: {
+  readonly label: string;
+  readonly tools: ReadonlyArray<PeerAgentTool>;
+}) {
   return (
+    <div className="flex min-w-0 flex-col gap-1.5 text-xs">
+      <p className="text-muted-foreground">{label}</p>
+      <div className="flex min-w-0 flex-col gap-1.5 border-s border-border ps-3">
+        {tools.map((tool) => (
+          <AgentTool key={tool.id} tool={tool} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AgentTool({ tool }: { readonly tool: PeerAgentTool }) {
+  const Icon = TOOL_ICON[tool.name] ?? WrenchIcon;
+  const row = (
     <div className="flex min-w-0 items-start gap-2 text-xs">
       <Icon
         aria-hidden
         className={cn(
           "mt-0.5 size-3.5 shrink-0",
-          entry.failed ? "text-destructive" : "text-muted-foreground",
+          tool.failed ? "text-destructive" : "text-muted-foreground",
         )}
       />
       <div className="min-w-0 flex-1">
-        <p className={cn("truncate text-foreground", entry.name === "Bash" && "font-mono")}>
-          {entry.summary}
+        <p className={cn("truncate text-foreground", tool.summary.startsWith("$ ") && "font-mono")}>
+          {tool.summary}
         </p>
-        {entry.result === undefined ? null : (
-          <p
-            className={cn("truncate", entry.failed ? "text-destructive" : "text-muted-foreground")}
-          >
-            {entry.result}
+        {tool.result === undefined ? null : (
+          <p className={cn("truncate", tool.failed ? "text-destructive" : "text-muted-foreground")}>
+            {tool.result}
           </p>
         )}
       </div>
     </div>
+  );
+  if (tool.detail === undefined) return row;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={row} />
+      <TooltipPopup variant="code">{tool.detail}</TooltipPopup>
+    </Tooltip>
   );
 }

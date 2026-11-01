@@ -7,8 +7,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { HubCoordView, HubOverlap } from "../hub/coordApi.ts";
 import { CoordinationBroker } from "./Broker.ts";
-import { NO_PLUGINS } from "./host.ts";
-import { brokerFixture } from "./testkit.ts";
+import { brokerFixture, wakingNotices } from "./testkit.ts";
 
 const NATIVE_ID = "native-one";
 const THREAD = "peer:original-thread";
@@ -51,7 +50,10 @@ async function dormantFixture(agent: "claude" | "codex") {
   };
   const admitted: Array<{ session: string; text: string; thread: string }> = [];
   let independentQueues = 0;
+  const notices = wakingNotices();
+  notices.tell("already-read", "We are waiting for the humans to decide.");
   const fixture = await brokerFixture(() => ({
+    plugins: async () => notices.plugins,
     placeOf: async () => ({ workspace: state.workspace, project: "app", root: cwd }),
     threadOf: async (nativeId) => (nativeId === NATIVE_ID ? THREAD : undefined),
     threadAgent: async () => ({ agent, nativeId: state.selectedNative, cwd }),
@@ -85,7 +87,11 @@ async function dormantFixture(agent: "claude" | "codex") {
   expect(session).not.toBeNull();
   await NodeFSP.mkdir(NodePath.dirname(session!.ownContextPath), { recursive: true });
   await NodeFSP.writeFile(session!.ownContextPath, `# Private context\n\n${PRIVATE_CONTEXT}\n`);
-  expect(await fixture.broker.wakingNews(session!, NO_PLUGINS)).toContain("waiting for the humans");
+  // It heard the overlap at a step and what woke it, before it went idle.
+  expect(fixture.broker.news(session!, { team: false })).toContain("waiting for the humans");
+  expect(await fixture.broker.wakingNews(session!, notices.plugins)).toContain(
+    "waiting for the humans",
+  );
   await fixture.broker.saveMemories();
   // The provider exits when its idle lease expires. Only the persisted provider-session
   // projection knows why: native SessionEnd hooks need not include the release reason.
@@ -109,6 +115,7 @@ async function dormantFixture(agent: "claude" | "codex") {
         ],
       },
     ]);
+  const newNotice = () => notices.tell("new-message", NEW_MESSAGE);
   const resume = async (broker: CoordinationBroker) => {
     state.resumable = false;
     state.runtime = "idle";
@@ -127,6 +134,8 @@ async function dormantFixture(agent: "claude" | "codex") {
     contextPath: session!.ownContextPath,
     setOverlaps,
     newNote,
+    newNotice,
+    told: notices.told,
     resume,
   };
 }
@@ -137,7 +146,7 @@ describe("native Peer agents after idle process release", () => {
     async (agent) => {
       const fixture = await dormantFixture(agent);
       try {
-        fixture.newNote(fixture.broker);
+        fixture.newNotice();
         await fixture.broker.wakeIdle();
         fixture.state.resumable = false;
         fixture.state.wakePending = "unknown";
@@ -167,7 +176,7 @@ describe("native Peer agents after idle process release", () => {
         const release = await fixture.broker.beginCheckoutChange(fixture.root);
         fixture.state.workspace = "@local";
         release();
-        fixture.newNote(fixture.broker);
+        fixture.newNotice();
         await fixture.broker.wakeIdle();
         expect(fixture.admitted).toEqual([]);
         expect(fixture.broker.dormantSessions.get(fixture.sessionId)?.workspace).toBe("@local");
@@ -189,7 +198,7 @@ describe("native Peer agents after idle process release", () => {
           entered.resolve();
           return admission.promise;
         };
-        fixture.newNote(fixture.broker);
+        fixture.newNotice();
         waking = fixture.broker.wakeIdle();
         await entered.promise;
         await expect(fixture.broker.beginCheckoutChange(fixture.root)).rejects.toMatchObject({
@@ -229,7 +238,7 @@ describe("native Peer agents after idle process release", () => {
           await creating.promise;
           return session;
         };
-        fixture.newNote(fixture.broker);
+        fixture.newNotice();
         waking = fixture.broker.wakeIdle();
         await entered.promise;
         const release = await fixture.broker.beginCheckoutChange(fixture.root);
@@ -261,7 +270,7 @@ describe("native Peer agents after idle process release", () => {
 
         fixture.state.task = "completed-task";
         fixture.state.completedTasks.add("completed-task");
-        fixture.newNote(fixture.broker);
+        fixture.newNotice();
         await fixture.broker.wakeIdle();
         expect(fixture.admitted).toEqual([]);
       } finally {
@@ -283,7 +292,7 @@ describe("native Peer agents after idle process release", () => {
           entered.resolve();
           return admission.promise;
         };
-        fixture.newNote(broker);
+        fixture.newNotice();
         waking = broker.wakeIdle();
         await entered.promise;
         const live = await broker.createSession(
@@ -292,7 +301,7 @@ describe("native Peer agents after idle process release", () => {
           undefined,
         );
         expect(live?.thread).toBe(THREAD);
-        expect(live?.memory.seenNotes.has("new-message")).toBe(false);
+        expect(fixture.told(live!).has("new-message")).toBe(false);
         admission.resolve(true);
         await waking;
         expect(fixture.admitted).toHaveLength(1);
@@ -301,7 +310,6 @@ describe("native Peer agents after idle process release", () => {
         await broker.stop();
         broker = new CoordinationBroker(fixture.broker.host);
         fixture.state.admission = undefined;
-        fixture.newNote(broker);
         await broker.wakeIdle();
         expect(fixture.admitted).toHaveLength(1);
       } finally {
@@ -332,7 +340,7 @@ describe("native Peer agents after idle process release", () => {
           }
           return originalSave();
         };
-        fixture.newNote(broker);
+        fixture.newNotice();
         waking = broker.wakeIdle();
         await entered.promise;
         const live = await broker.createSession(
@@ -348,7 +356,6 @@ describe("native Peer agents after idle process release", () => {
         fixture.broker.saveMemories = originalSave;
         await broker.stop();
         broker = new CoordinationBroker(fixture.broker.host);
-        fixture.newNote(broker);
         await broker.wakeIdle();
         expect(fixture.admitted).toHaveLength(1);
       } finally {
@@ -388,7 +395,7 @@ describe("native Peer agents after idle process release", () => {
           }
           return remembered;
         };
-        fixture.newNote(broker);
+        fixture.newNotice();
         waking = broker.wakeIdle();
         await offered.promise;
         pauseRead = true;
@@ -410,10 +417,9 @@ describe("native Peer agents after idle process release", () => {
         await broker.stop();
         broker = new CoordinationBroker(fixture.broker.host);
         fixture.state.admission = undefined;
-        fixture.newNote(broker);
         await broker.wakeIdle();
         expect(fixture.admitted).toHaveLength(1);
-        expect(live?.memory.seenNotes.has("new-message")).toBe(true);
+        expect(fixture.told(live!).has("new-message")).toBe(true);
       } finally {
         admission.resolve(false);
         promotion.resolve();
@@ -438,10 +444,10 @@ describe("native Peer agents after idle process release", () => {
           entered.resolve();
           return admission.promise;
         };
-        fixture.newNote(fixture.broker);
+        fixture.newNotice();
         waking = fixture.broker.wakeIdle();
         await entered.promise;
-        await fixture.broker.createSession(
+        const live = await fixture.broker.createSession(
           agent,
           { session_id: NATIVE_ID, cwd: fixture.root },
           undefined,
@@ -450,6 +456,7 @@ describe("native Peer agents after idle process release", () => {
         await waking;
         fixture.state.admission = undefined;
         await fixture.broker.saveMemories();
+        expect(fixture.told(live!).has("new-message")).toBe(false);
 
         const answer = await fixture.resume(fixture.broker);
         expect(JSON.stringify(answer)).toContain(NEW_MESSAGE);
@@ -464,7 +471,7 @@ describe("native Peer agents after idle process release", () => {
   );
 
   it.each(["claude", "codex"] as const)(
-    "resumes %s for a confirmed human agreement on a resolved overlap",
+    "does not resume %s for a confirmed human agreement on a resolved overlap, which it hears when it starts again",
     async (agent) => {
       const fixture = await dormantFixture(agent);
       try {
@@ -487,14 +494,11 @@ describe("native Peer agents after idle process release", () => {
         ]);
         await fixture.broker.wakeIdle();
         await fixture.broker.wakeIdle();
-        expect(fixture.admitted).toEqual([
-          {
-            session: fixture.sessionId,
-            thread: THREAD,
-            text: expect.stringContaining(words),
-          },
-        ]);
+        expect(fixture.admitted).toEqual([]);
         expect(fixture.broker.reportFor("acme")).toEqual([]);
+
+        const answer = await fixture.resume(fixture.broker);
+        expect(JSON.stringify(answer)).toContain(words);
       } finally {
         await fixture.dispose();
       }
@@ -502,7 +506,27 @@ describe("native Peer agents after idle process release", () => {
   );
 
   it.each(["claude", "codex"] as const)(
-    "resumes %s once in the original thread for a new overlap message",
+    "does not resume %s for a new overlap message, which it hears when it starts again",
+    async (agent) => {
+      const fixture = await dormantFixture(agent);
+      try {
+        fixture.newNote(fixture.broker);
+        await fixture.broker.wakeIdle();
+        await fixture.broker.wakeIdle();
+        expect(fixture.admitted).toEqual([]);
+        expect(fixture.independentQueues()).toBe(0);
+
+        const answer = await fixture.resume(fixture.broker);
+        expect(JSON.stringify(answer)).toContain(NEW_MESSAGE);
+        expect(fixture.broker.sessions.get(fixture.sessionId)?.thread).toBe(THREAD);
+      } finally {
+        await fixture.dispose();
+      }
+    },
+  );
+
+  it.each(["claude", "codex"] as const)(
+    "resumes %s once in the original thread for a notice that wakes it",
     async (agent) => {
       const fixture = await dormantFixture(agent);
       try {
@@ -510,7 +534,7 @@ describe("native Peer agents after idle process release", () => {
         expect(fixture.admitted).toEqual([]);
         expect(fixture.broker.reportFor("acme")).toEqual([]);
 
-        fixture.newNote(fixture.broker);
+        fixture.newNotice();
         await fixture.broker.wakeIdle();
         await fixture.broker.wakeIdle();
         expect(fixture.admitted).toEqual([
@@ -534,7 +558,7 @@ describe("native Peer agents after idle process release", () => {
   );
 
   it.each(["claude", "codex"] as const)(
-    "keeps old and unrelated notes silent after a %s broker restart",
+    "keeps notes and what it heard silent after a %s broker restart, and wakes it once for a new notice",
     async (agent) => {
       const fixture = await dormantFixture(agent);
       let broker = fixture.broker;
@@ -562,12 +586,11 @@ describe("native Peer agents after idle process release", () => {
         expect(fixture.admitted).toEqual([]);
         expect(broker.reportFor("acme")).toEqual([]);
 
-        fixture.newNote(broker);
+        fixture.newNotice();
         await broker.wakeIdle();
         expect(fixture.admitted).toHaveLength(1);
         await broker.stop();
         broker = new CoordinationBroker(fixture.broker.host);
-        fixture.newNote(broker);
         await broker.wakeIdle();
         expect(fixture.admitted).toHaveLength(1);
       } finally {
@@ -583,10 +606,14 @@ describe("native Peer agents after idle process release", () => {
       const fixture = await dormantFixture(agent);
       try {
         fixture.state.taken = false;
-        fixture.newNote(fixture.broker);
+        fixture.newNotice();
         await fixture.broker.wakeIdle();
         expect(fixture.admitted).toHaveLength(1);
         expect(fixture.broker.reportFor("acme")).toEqual([]);
+        // Refused, it stays unheard: the next round offers it again. The resume below cannot show
+        // that, since a new conversation forgets what plugins told it.
+        await fixture.broker.wakeIdle();
+        expect(fixture.admitted).toHaveLength(2);
 
         await fixture.broker.saveMemories();
         const answer = await fixture.resume(fixture.broker);
@@ -604,7 +631,7 @@ describe("native Peer agents after idle process release", () => {
     async (agent) => {
       const fixture = await dormantFixture(agent);
       try {
-        fixture.newNote(fixture.broker);
+        fixture.newNotice();
         fixture.state.resumable = false;
         await fixture.broker.wakeIdle();
         expect(fixture.admitted).toEqual([]);

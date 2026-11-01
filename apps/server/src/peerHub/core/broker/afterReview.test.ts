@@ -34,7 +34,11 @@ it("runs post-review steps after commitment in order, bounds the budget and pres
           title: "two",
           contributions: { afterReview: () => Effect.succeed(["Second"]) },
         },
-        { id: "ask", title: "broken", contributions: { afterReview: () => Effect.die("broken") } },
+        {
+          id: "observe",
+          title: "broken",
+          contributions: { afterReview: () => Effect.die("broken") },
+        },
       ],
     }),
   }));
@@ -84,7 +88,11 @@ it("carries the plugins' review facts in the move to review, never in done, and 
               }),
           },
         },
-        { id: "ask", title: "broken", contributions: { reviewFacts: () => Effect.die("broken") } },
+        {
+          id: "observe",
+          title: "broken",
+          contributions: { reviewFacts: () => Effect.die("broken") },
+        },
       ],
     }),
   }));

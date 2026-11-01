@@ -6,12 +6,13 @@ import {
 } from "./agentTools.ts";
 
 describe("coordination tool contracts", () => {
-  it("has one tool per core command an agent calls, plus the ask and knowledge tools", () => {
-    // help and log are for people at a shell; ask and knowledge are plugin commands core carries.
+  it("has one tool per core command an agent calls, plus the ask, note and knowledge tools", () => {
+    // help and log are for people at a shell; ask, note and knowledge are plugins' commands.
     expect(new Set(tools.map((t) => t.command))).toEqual(
       new Set([
         ...CORE_COMMANDS.filter((command) => command !== "help" && command !== "log"),
         "ask",
+        "note",
         "knowledge",
       ]),
     );
@@ -65,7 +66,8 @@ describe("coordination tool contracts", () => {
     // One task's view carries its runs.
     expect(args("peer_task", { action: "show", task: "APP-1" })).toEqual(["show", "APP-1"]);
     expect(args("peer_run", {})).toEqual([]);
-    expect(args("peer_note", { text: "Ana first", overlap: "ab" })).toEqual([
+    expect(args("peer_note", { text: "Ana first" })).toEqual(["Ana first"]);
+    expect(args("peer_resolve", { text: "Ana first", overlap: "ab" })).toEqual([
       "Ana first",
       "--overlap",
       "ab",
@@ -148,6 +150,7 @@ describe("coordination tool contracts", () => {
   it("rejects flags disguised as text and invalid bounded inputs", () => {
     for (const [name, args] of [
       ["peer_note", { text: "--overlap" }],
+      ["peer_note", { text: "Ana first", overlap: "ab" }],
       ["peer_ask", { work: "APP-1", question: "--help" }],
       ["peer_claim", { paths: [] }],
       ["peer_claim", { paths: ["--help"] }],

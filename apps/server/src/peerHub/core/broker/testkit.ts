@@ -21,9 +21,11 @@ import { createMetricsLog, debugPathOf } from "../metricsLog.ts";
 import * as PeerState from "../state/PeerState.ts";
 
 import { brokerPlugins } from "../coordination/PeerCoordination.ts";
+import type { PeerSessionView } from "../plugin.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import { CoordinationBroker } from "./Broker.ts";
-import { NO_PLUGINS, type PeerBrokerHost } from "./host.ts";
+import { NO_PLUGINS, type PeerBrokerHost, type PeerBrokerPlugins } from "./host.ts";
+import type { LocalSession } from "./sessions.ts";
 
 /** A host's `plugins` as core gives the broker those of `plugins`, active or not, each time. */
 export const pluginsOf = (
@@ -32,6 +34,43 @@ export const pluginsOf = (
   plugins: () =>
     Effect.runPromise(brokerPlugins.pipe(Effect.provideService(PeerPlugins.PeerPlugins, plugins))),
 });
+
+/**
+ * A plugin that wakes an idle agent, the way ownership tells an owner's decision: each message once,
+ * in the notice or at the session's start, marked in `session.told`, which core keeps across restarts
+ * and forgets with a new conversation. `tell` gives it a message; a local project does not have it.
+ */
+export function wakingNotices() {
+  const messages = new Map<string, string>();
+  const unheard = (session: PeerSessionView) =>
+    Effect.sync(() => {
+      const told = session.told!("ownership");
+      const fresh = [...messages].filter(([id]) => !told.has(id));
+      for (const [id] of fresh) told.add(id);
+      return fresh.length === 0 ? null : fresh.map(([, text]) => text).join("\n\n");
+    });
+  const plugins: PeerBrokerPlugins = {
+    ...NO_PLUGINS,
+    active: [
+      {
+        id: "ownership",
+        title: "fake",
+        requiresHub: true,
+        contributions: {
+          hooks: {
+            sessionStart: ({ session }) => unheard(session),
+            notices: [{ wakes: true, read: ({ session }) => unheard(session) }],
+          },
+        },
+      },
+    ],
+  };
+  return {
+    plugins,
+    tell: (id: string, text: string) => void messages.set(id, text),
+    told: (session: LocalSession) => session.pluginTold.get("ownership") ?? new Set<string>(),
+  };
+}
 
 const environment = Layer.mock(ServerEnvironment.ServerEnvironment)({
   getEnvironmentId: Effect.succeed(EnvironmentId.make("ana-laptop")),

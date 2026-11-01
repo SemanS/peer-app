@@ -15,7 +15,8 @@ import type {
 } from "../hub/coordApi.ts";
 import { CoordinationBroker } from "./Broker.ts";
 import { NO_PLUGINS } from "./host.ts";
-import { brokerFixture } from "./testkit.ts";
+import type { LocalSession } from "./sessions.ts";
+import { brokerFixture, wakingNotices } from "./testkit.ts";
 
 const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
 
@@ -160,30 +161,46 @@ describe("input manifest authority binding", () => {
   });
 });
 
+/** What wakes Ana's agent: an owner's decision on a call of hers. */
+const decided = () => {
+  const notices = wakingNotices();
+  notices.tell("accepted", "Vir accepted your call.");
+  return notices;
+};
+
+/** What its next step tells it of its overlaps. */
+const overlapNews = (broker: CoordinationBroker, session: LocalSession) =>
+  broker.news(session, { team: false });
+
 describe("what an agent heard, across a Peer restart", () => {
-  it("does not wake an agent for an overlap it heard before Peer restarted", async () => {
+  it("does not wake an agent for what it heard before Peer restarted, or tell it again", async () => {
+    const notices = decided();
     const fixture = await brokerFixture();
     try {
       const before = await meet(fixture.broker, fixture.root, viewWith(overlap));
-      const heard = await fixture.broker.wakingNews(before, NO_PLUGINS);
+      const heard = overlapNews(fixture.broker, before);
       expect(heard).toContain("I rename total()");
       expect(heard).toContain("quiet");
+      expect(await fixture.broker.wakingNews(before, notices.plugins)).toContain("Vir accepted");
       // Peer quits for an update and starts again; the agent still waits in its runtime.
       await fixture.broker.stop();
       const again = new CoordinationBroker(fixture.broker.host);
       const after = await meet(again, fixture.root, viewWith(overlap));
-      expect(await again.wakingNews(after, NO_PLUGINS)).toBeNull();
+      expect(await again.wakingNews(after, notices.plugins)).toBeNull();
+      expect(overlapNews(again, after)).toBeNull();
       await again.stop();
     } finally {
       await fixture.dispose();
     }
   });
 
-  it("still wakes it for a note or an overlap that came while Peer was down", async () => {
+  it("still wakes it for a notice that came while Peer was down, and leaves a note or an overlap for its next step", async () => {
+    const notices = decided();
     const fixture = await brokerFixture();
     try {
       const before = await meet(fixture.broker, fixture.root, viewWith(overlap));
-      expect(await fixture.broker.wakingNews(before, NO_PLUGINS)).not.toBeNull();
+      expect(overlapNews(fixture.broker, before)).not.toBeNull();
+      expect(await fixture.broker.wakingNews(before, notices.plugins)).not.toBeNull();
       await fixture.broker.stop();
       const again = new CoordinationBroker(fixture.broker.host);
       const note = {
@@ -193,12 +210,14 @@ describe("what an agent heard, across a Peer restart", () => {
         text: "Renamed; pull before you push",
         at: ago(0),
       };
+      notices.tell("declined", "Vir declined your other call.");
       const after = await meet(
         again,
         fixture.root,
         viewWith({ ...overlap, notes: [...overlap.notes, note], updatedAt: note.at }),
       );
-      const told = await again.wakingNews(after, NO_PLUGINS);
+      expect(await again.wakingNews(after, notices.plugins)).toBe("Vir declined your other call.");
+      const told = overlapNews(again, after);
       expect(told).toContain("pull before you push");
       expect(told).not.toContain("I rename total()");
       const cart: HubOverlap = {
@@ -210,7 +229,8 @@ describe("what an agent heard, across a Peer restart", () => {
         updatedAt: ago(0),
       };
       again.views.set("acme", viewWith({ ...overlap, notes: [...overlap.notes, note] }, cart));
-      expect(await again.wakingNews(after, NO_PLUGINS)).toContain("src/cart.js");
+      expect(await again.wakingNews(after, notices.plugins)).toBeNull();
+      expect(overlapNews(again, after)).toContain("src/cart.js");
       await again.stop();
     } finally {
       await fixture.dispose();
@@ -218,16 +238,19 @@ describe("what an agent heard, across a Peer restart", () => {
   });
 
   it("tells it again what still waited for its next step when Peer stopped", async () => {
+    const notices = decided();
     const fixture = await brokerFixture();
     try {
       const before = await meet(fixture.broker, fixture.root, viewWith(overlap));
-      const heard = await fixture.broker.wakingNews(before, NO_PLUGINS);
-      // It went back to work before the wake reached it: the news waits for its next step.
-      before.pending.push(heard!);
+      const news = overlapNews(fixture.broker, before);
+      const woken = await fixture.broker.wakingNews(before, notices.plugins);
+      // It went back to work before the wake reached it: both wait for its next step.
+      before.pending.push(news!, woken!);
       await fixture.broker.stop();
       const again = new CoordinationBroker(fixture.broker.host);
       const after = await meet(again, fixture.root, viewWith(overlap));
-      expect(await again.wakingNews(after, NO_PLUGINS)).toContain("I rename total()");
+      expect(await again.wakingNews(after, notices.plugins)).toContain("Vir accepted");
+      expect(overlapNews(again, after)).toContain("I rename total()");
       await again.stop();
     } finally {
       await fixture.dispose();
@@ -235,15 +258,18 @@ describe("what an agent heard, across a Peer restart", () => {
   });
 
   it("keeps what it heard when Peer ends without stopping", async () => {
+    const notices = decided();
     const fixture = await brokerFixture();
     try {
       const before = await meet(fixture.broker, fixture.root, viewWith(overlap));
-      expect(await fixture.broker.wakingNews(before, NO_PLUGINS)).not.toBeNull();
+      expect(overlapNews(fixture.broker, before)).not.toBeNull();
+      expect(await fixture.broker.wakingNews(before, notices.plugins)).not.toBeNull();
       // What the broker's tick writes; then the process is gone, without `stop`.
       await fixture.broker.saveMemories();
       const again = new CoordinationBroker(fixture.broker.host);
       const after = await meet(again, fixture.root, viewWith(overlap));
-      expect(await again.wakingNews(after, NO_PLUGINS)).toBeNull();
+      expect(await again.wakingNews(after, notices.plugins)).toBeNull();
+      expect(overlapNews(again, after)).toBeNull();
       await again.stop();
     } finally {
       await fixture.dispose();

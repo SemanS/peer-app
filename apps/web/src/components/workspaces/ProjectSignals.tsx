@@ -4,9 +4,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { LayersIcon } from "lucide-react";
 
 import { cn } from "../../lib/utils";
-import { Badge } from "../ui/badge";
 import { WorkSectionLabel } from "./marks";
-import { TONE_BADGE, TONE_SURFACE, TONE_TEXT } from "./signals";
+import { TONE_SURFACE, TONE_TEXT } from "./signals";
 import type { PeerWebPlugin, ProjectSignal } from "./slots.types";
 import type { WorkProjectNode } from "./workTree.logic";
 
@@ -127,41 +126,5 @@ export function SignalTiles({
         })}
       </div>
     </section>
-  );
-}
-
-/** The signals that count something, as colored chips: a project card, the Work board's strip. */
-export function SignalChips({
-  signals,
-  onOpen,
-}: {
-  readonly signals: ReadonlyArray<ProjectSignal>;
-  readonly onOpen?: (signal: ProjectSignal) => void;
-}) {
-  const counting = signals.filter((signal) => signal.count !== null && signal.count > 0);
-  if (counting.length === 0) return null;
-  return (
-    <span className="flex flex-wrap items-center gap-1">
-      {counting.map((signal) => (
-        <Badge
-          key={signal.id}
-          variant={TONE_BADGE[signal.tone]}
-          size="sm"
-          render={
-            onOpen === undefined ? undefined : (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onOpen(signal);
-                }}
-              />
-            )
-          }
-        >
-          {signal.chip?.(signal.count ?? 0) ?? `${signal.label} · ${signal.count}`}
-        </Badge>
-      ))}
-    </span>
   );
 }

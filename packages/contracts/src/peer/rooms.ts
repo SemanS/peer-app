@@ -54,15 +54,12 @@ export type PeerRoomReachValue = typeof PeerRoomReachValue.Type;
 export const PeerRoomCapacity = Schema.Literals(["personal", "shared"]);
 export type PeerRoomCapacity = typeof PeerRoomCapacity.Type;
 
-/** The side of a diff an anchor's line is on. */
-export const PEER_ROOM_ANCHOR_SIDES = ["old", "new"] as const;
-
 /** Where a message sits on the change. The Hub stores no code with it. */
 export const PeerRoomAnchor = Schema.Struct({
   path: Schema.String,
   line: Schema.Number,
   endLine: Schema.optional(Schema.Number),
-  /** One of `PEER_ROOM_ANCHOR_SIDES`. */
+  /** The side of the diff the line is on: `old` or `new`. */
   side: Schema.String,
   /** The diff's `head` it was made on, so a moved change can say so. */
   commit: Schema.optional(Schema.String),

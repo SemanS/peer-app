@@ -15,14 +15,3 @@ export function useWorkScope(): readonly [string, (scope: string) => void] {
   const [stored, setStored] = useLocalStorage("peer:work-scope", null, StoredScope);
   return [stored ?? ALL_PROJECTS, setStored];
 }
-
-const StoredLayout = Schema.NullOr(Schema.Literals(["board", "list"]));
-
-/**
- * How the Work screen lays tasks out, the board or the list (`peer:work-board-layout`, which the
- * Work board reads too). The sidebar's Tasks row sets it to the list.
- */
-export function useWorkLayout(): readonly ["board" | "list", (layout: "board" | "list") => void] {
-  const [stored, setStored] = useLocalStorage("peer:work-board-layout", null, StoredLayout);
-  return [stored ?? "list", setStored];
-}

@@ -22,9 +22,6 @@ export const PEER_ACCEPTANCE_PLUGIN = {
 /** What the Hub keeps: a note of at most 300 characters; an `op` of at most 64. */
 export const PEER_ACCEPTANCE_LIMITS = { noteChars: 300, opChars: 64 } as const;
 
-/** The kinds of a task's acceptance history: given, then perhaps withdrawn. */
-export const PEER_ACCEPTANCE_EVENT_KINDS = ["accepted", "withdrawn"] as const;
-
 /**
  * How an acceptance was given: by a lead's (or an admin's) own move (`person`, what an older Hub
  * means by leaving it out), or by the project's review policy in the name of the lead who set it
@@ -47,7 +44,7 @@ export const PeerAcceptance = Schema.Struct({
 });
 export type PeerAcceptance = typeof PeerAcceptance.Type;
 
-/** One entry of a task's acceptance history, oldest first; `kind` is one of `PEER_ACCEPTANCE_EVENT_KINDS`. */
+/** One entry of a task's acceptance history, oldest first; `kind` is `accepted` or `withdrawn`. */
 export const PeerAcceptanceEvent = Schema.Struct({
   kind: Schema.String,
   by: Schema.String,

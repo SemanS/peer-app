@@ -25,7 +25,6 @@ const execFileAsync = NodeUtil.promisify(NodeChildProcess.execFile);
 const probe = NodeChildProcess.spawnSync("jj", ["--version"], { encoding: "utf8" });
 const probedVersion = probe.status === 0 ? parseJjVersion(probe.stdout) : null;
 
-export const JJ_VERSION: string | null = probedVersion;
 export const JJ_AVAILABLE: boolean = probedVersion !== null && isJjVersionSupported(probedVersion);
 
 /**

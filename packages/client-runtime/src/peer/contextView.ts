@@ -105,12 +105,6 @@ export function contextFromStatus(
   };
 }
 
-export const CONTEXT_INPUT_LABELS = {
-  complete: "Recorded context versions match",
-  "revalidation-required": "Recorded context reads need confirmation",
-  unavailable: "Context read history is unavailable",
-} as const;
-
 /**
  * What the recorded reads say, in words that keep "nothing was recorded" apart from "nothing was
  * read" and "nothing needed reading".

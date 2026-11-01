@@ -159,40 +159,6 @@ describe("the invite tree", () => {
 });
 
 describe("the pick tree", () => {
-  const pick = (keys: ReadonlyArray<string>, state = Tree.initialPick(change)) => {
-    let current = state;
-    for (const key of keys) {
-      const next = Tree.pickPress(current, key);
-      if ("done" in next) return next.done;
-      current = next.state;
-    }
-    return current;
-  };
-
-  it("returns any row Enter is on: an area, a group or a task", () => {
-    assert.deepStrictEqual(pick(["enter"]), { kind: "area", id: "Hub" });
-    assert.deepStrictEqual(pick(["right", "down", "enter"]), { kind: "group", id: "g1" });
-    assert.deepStrictEqual(pick(["down", "enter"]), { kind: "area", id: "" });
-    // Space selects nothing here.
-    assert.deepStrictEqual(pick(["space", "enter"]), { kind: "area", id: "Hub" });
-  });
-
-  it("opens and closes with the arrows, ← on an item closing its parent", () => {
-    const state = pick(["right", "down", "right", "down", "right", "down", "down"]);
-    assert("nodes" in state);
-    assert.deepStrictEqual(Tree.pickFrame(state, "Which task?").slice(1, -1), [
-      "  ▾ Hub (6)",
-      "    ▾ add-x (1/3) · OpenSpec",
-      "      ▾ 2. Hub feature (1/3)",
-      "          Routes",
-      "❯       ▸ Server ?",
-      "  ▸ No area (1)",
-    ]);
-    const closed = pick(["left", "left"], state);
-    assert("nodes" in closed);
-    assert.deepStrictEqual(Tree.pickRows(closed)[closed.cursor]?.node.id, "g1");
-  });
-
   it("opens the way down to a node it is asked to expand, the cursor on it", () => {
     const state = Tree.initialPick(change, { kind: "task", id: "t2" });
     const row = Tree.pickRows(state)[state.cursor]!;

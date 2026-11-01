@@ -4,8 +4,6 @@ import * as NodePath from "node:path";
 
 import { PEER_MOD_SOURCE } from "./source.ts";
 
-export const CLAUDE_MOD_MIN_VERSION = "2.1.291";
-
 /** Mods start at 2.1.287; this socket adapter is verified against the 2.1.291 API. */
 export function supportsClaudeMod(version: string): boolean {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:\s|$|[+-])/.exec(version.trim());

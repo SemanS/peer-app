@@ -459,48 +459,6 @@ export const initialPick = (nodes: ReadonlyArray<TreeNode>, expand?: Picked): Pi
 export const pickRows = (state: PickState): ReadonlyArray<NodeRow> =>
   nodeRows(state.nodes, state.open, false) as ReadonlyArray<NodeRow>;
 
-const PICK_HINT = "↑↓ move · → open · ← close · Enter choose";
-
-export const pickFrame = (state: PickState, message: string, width = 80) =>
-  windowed(
-    message,
-    pickRows(state).map((row) => nodeLabel(row, state.open.includes(keyOf(row.node)), null)),
-    state.cursor,
-    PICK_HINT,
-    width,
-  );
-
-/** A key in the pick tree: the next state, or the row Enter chose. Space does nothing. */
-export const pickPress = (
-  state: PickState,
-  key: string,
-): { readonly state: PickState } | { readonly done: Picked } => {
-  const all = pickRows(state);
-  const row = all[state.cursor];
-  if (row === undefined) return { state };
-  switch (key) {
-    case "up":
-      return { state: { ...state, cursor: (state.cursor - 1 + all.length) % all.length } };
-    case "down":
-    case "tab":
-      return { state: { ...state, cursor: (state.cursor + 1) % all.length } };
-    case "right":
-    case "left": {
-      const changed = openOrClose(state.open, row, key);
-      if (changed === null) return { state };
-      const next = { ...state, open: changed.open };
-      return {
-        state: key === "left" ? { ...next, cursor: indexOf(pickRows(next), changed.focus) } : next,
-      };
-    }
-    case "enter":
-    case "return":
-      return { done: { kind: row.node.kind, id: row.node.id } };
-    default:
-      return { state };
-  }
-};
-
 /**
  * Start a task's tree: the scopes to mark, opened as the pick tree opens (one area open; with
  * `expand`, the way down to that node, the cursor on it).
@@ -623,14 +581,4 @@ export const treeStartPrompt = (message: string, nodes: ReadonlyArray<TreeNode>,
     startPress,
     message,
     (picked) => (picked.length === 1 ? pickedTitle(nodes, picked[0]!) : `${picked.length} marked`),
-  );
-
-/** The picking tree as a terminal prompt: one row. */
-export const treePickPrompt = (message: string, nodes: ReadonlyArray<TreeNode>, expand?: Picked) =>
-  customPrompt(
-    initialPick(nodes, expand),
-    (state, width) => pickFrame(state, message, width),
-    pickPress,
-    message,
-    (picked) => pickedTitle(nodes, picked),
   );

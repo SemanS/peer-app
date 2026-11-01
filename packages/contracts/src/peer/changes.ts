@@ -31,8 +31,6 @@ export const PEER_CHANGES_LIMITS = {
 /** Why a version exists: the paths or tree changed, only the subject did, or only the parents did. */
 export const PEER_CHANGE_VERSION_KINDS = ["edit", "description", "rebase"] as const;
 export type PeerChangeVersionKind = (typeof PEER_CHANGE_VERSION_KINDS)[number];
-export const isPeerChangeVersionKind = (value: string): value is PeerChangeVersionKind =>
-  (PEER_CHANGE_VERSION_KINDS as ReadonlyArray<string>).includes(value);
 
 /** jj's change ids are 32 letters from k to z; commit ids are 40 hex digits. */
 export const ChangeId = Schema.String.check(Schema.isPattern(/^[k-z]{32}$/));

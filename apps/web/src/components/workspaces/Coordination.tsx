@@ -1,4 +1,3 @@
-export { personName, overlapTopic } from "@t3tools/client-runtime/peer/needs-you";
 import type {
   EnvironmentId,
   PeerCoordinationPolicy,

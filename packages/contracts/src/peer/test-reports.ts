@@ -21,14 +21,6 @@ export const PEER_TEST_REPORTS_PLUGIN = {
   hubFeature: { id: "test-reports", revision: 1 },
 } as const;
 
-/** What the Hub keeps of a report: a summary of 300 characters, 40 items of 240, 24 KiB in all. */
-export const PEER_TEST_REPORT_LIMITS = {
-  summaryChars: 300,
-  itemChars: 240,
-  items: 40,
-  bytes: 24 * 1024,
-} as const;
-
 /** A report's result; the Hub stores `mixed` when the items disagree with the one filed. */
 export const PeerTestReportResult = Schema.Literals(["pass", "fail", "mixed"]);
 export type PeerTestReportResult = typeof PeerTestReportResult.Type;
@@ -57,10 +49,10 @@ export const PeerTestReportItem = Schema.Struct({
 });
 export type PeerTestReportItem = typeof PeerTestReportItem.Type;
 
-/** The author's role when they filed it: `author` (a building session) or `review`. */
-export const PEER_TEST_REPORT_ROLES = ["author", "review"] as const;
-
-/** The latest report of one author on one task. */
+/**
+ * The latest report of one author on one task. The Hub keeps a summary of 300 characters, 40 items
+ * of 240, 24 KiB in all.
+ */
 export const PeerTestReport = Schema.Struct({
   project: Schema.String,
   task: Schema.String,
@@ -69,6 +61,7 @@ export const PeerTestReport = Schema.Struct({
   result: PeerTestReportResult,
   summary: Schema.String,
   items: Schema.Array(PeerTestReportItem),
+  /** The author's role when they filed it: `author` (a building session) or `review`. */
   role: Schema.String,
   at: Schema.String,
   commit: Schema.optional(Schema.String),

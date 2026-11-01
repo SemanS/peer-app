@@ -96,7 +96,6 @@
         "src/storageCleanup.testkit.ts": ["exports"],
         "src/vcs/JjAvailability.ts": ["exports"],
         "src/vcs/JjVcsDriver.ts": ["exports"],
-        "src/vcs/testing/JjTestSupport.ts": ["exports"],
         // Upstream files where Peer added or kept exports that nothing reads yet. Removing
         // the keyword would conflict on the next upstream merge.
         "src/binCli.ts": ["exports"],
@@ -148,17 +147,13 @@
         "src/components/ui/*.tsx": ["exports", "nsExports", "duplicates"],
         // Baseline for Peer's own web code, taken when this check first ran on it. Named
         // file by file so a new unused export in any other Peer file still fails.
-        "src/components/workspaces/Coordination.tsx": ["exports"],
-        "src/components/workspaces/ProjectSignals.tsx": ["exports"],
         "src/components/workspaces/WorkScopePicker.tsx": ["exports"],
-        "src/components/workspaces/WorkspaceAccess.tsx": ["exports"],
         "src/components/workspaces/forecast/integration.logic.ts": ["exports"],
         "src/components/workspaces/handoff/Handoff.tsx": ["exports"],
         "src/components/workspaces/handoff/handoffPresentation.ts": ["exports"],
         "src/components/workspaces/herdr/HerdrRuntimeSettings.logic.ts": ["exports"],
         "src/components/workspaces/jujutsu/pairActions.logic.ts": ["exports"],
         "src/components/workspaces/knowledge/knowledge.logic.ts": ["exports"],
-        "src/components/workspaces/marks.tsx": ["exports"],
         "src/components/workspaces/memory/MemoryRecords.tsx": ["exports"],
         "src/components/workspaces/memory/memory.actions.ts": ["exports"],
         "src/components/workspaces/metrics/Metrics.tsx": ["exports"],
@@ -168,7 +163,6 @@
         "src/components/workspaces/roles/RoleMark.tsx": ["exports"],
         "src/components/workspaces/settings/AiSubscriptionsParts.tsx": ["exports"],
         "src/components/workspaces/settings/DraftBar.tsx": ["exports"],
-        "src/components/workspaces/settings/PeerSettingsPage.tsx": ["exports"],
         "src/components/workspaces/settings/Proposals.tsx": ["exports"],
         "src/components/workspaces/settings/projectAreas.logic.ts": ["duplicates"],
         "src/components/workspaces/settings/projectCapacity.logic.ts": ["exports"],
@@ -178,10 +172,6 @@
         "src/components/workspaces/task/task.logic.ts": ["exports"],
         "src/components/workspaces/usage/usagePalette.ts": ["exports"],
         "src/components/workspaces/vcsWords.ts": ["exports"],
-        "src/components/workspaces/workBoard.logic.ts": ["exports"],
-        "src/components/workspaces/workScope.ts": ["exports"],
-        "src/components/workspaces/workTree.logic.ts": ["exports"],
-        "src/lib/projectPaths.ts": ["exports"],
         // Upstream exports read only by upstream's shell or tests, which Peer's shell
         // replaced. Removing the keyword would conflict on the next upstream merge.
         "src/components/Sidebar.logic.ts": ["exports"],
@@ -202,8 +192,6 @@
         "src/components/sidebar/SidebarProjectFolderHeader.tsx",
         // Peer files nothing imports, kept until a maintainer decides each one.
         "src/bootAppearance.ts",
-        "src/components/workspaces/needs-you/StaleInputsCard.tsx",
-        "src/components/workspaces/settings/CheckoutBadge.tsx",
       ],
     },
     "apps/marketing": {

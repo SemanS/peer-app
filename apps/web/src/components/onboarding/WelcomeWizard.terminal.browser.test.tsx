@@ -50,18 +50,6 @@ const state = vi.hoisted(() => ({
   done: vi.fn(),
 }));
 
-vi.mock("./WorkspaceStep", async () => {
-  const { useEffect } = await import("react");
-  return {
-    // The first-run workspace step is Peer's and has its own tests; these go on to the next step.
-    WorkspaceStep: ({ onContinue }: { readonly onContinue: () => void }) => {
-      useEffect(() => {
-        onContinue();
-      }, [onContinue]);
-      return null;
-    },
-  };
-});
 // Session grants come from per-test atoms so a test can revoke or regrant mid-flow; the
 // real scope checks in ~/state/session read them through the app registry, which the
 // wizard is also rendered with.
@@ -241,6 +229,7 @@ async function enterRemoteAgents() {
       <WelcomeWizard localAvailable onDone={state.done} />
     </RegistryContext.Provider>,
   );
+  await click("Connect another computer");
   await click("Continue");
   expect(pageText()).toContain("Paired computer");
   return screen;
@@ -310,9 +299,9 @@ describe("welcome agent terminal setup", () => {
     expect(state.write).not.toHaveBeenCalled();
     expect(state.close).not.toHaveBeenCalled();
     await click("Continue");
-    await click("Do not import projects");
+    await click("Choose a project later");
     expect(state.complete).toHaveBeenCalledOnce();
-    expect(state.done).toHaveBeenCalledExactlyOnceWith(undefined);
+    expect(state.done).toHaveBeenCalledExactlyOnceWith(undefined, undefined);
   });
 
   it("rejects a retained install action after revocation and allows a terminal-only regrant", async () => {
@@ -431,7 +420,7 @@ describe("welcome agent terminal setup", () => {
     expect(hasViewport()).toBe(false);
     expect(state.close).not.toHaveBeenCalled();
     await click("Continue");
-    expect(pageText()).toContain("Import your projects");
+    expect(pageText()).toContain("Choose your first project");
   });
 
   it("settles accepted pretyping locally after revocation without closing the PTY", async () => {
@@ -462,7 +451,7 @@ describe("welcome agent terminal setup", () => {
     state.write.mockReturnValueOnce(writing.promise);
     await using _screen = await enterRemoteAgents();
     await click("Install");
-    // Peer's first-run workspace step is step 1, so Connect is the second step here.
+    // The start step comes first, so Connect is the second step here.
     await click("Connect, step 2");
     expect(state.close).not.toHaveBeenCalled();
     await act(async () => {

@@ -158,11 +158,7 @@ export class PeerWork extends Context.Service<
      * agent) gets its run as `startAgent`'s does, and the run holds the agent's thread.
      */
     readonly launchRun: <
-      A extends {
-        readonly threadKey: string;
-        readonly paneId: string;
-        readonly root?: string | undefined;
-      },
+      A extends { readonly threadKey: string; readonly paneId: string; readonly root?: string },
       E,
       R,
     >(

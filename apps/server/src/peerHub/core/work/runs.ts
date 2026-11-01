@@ -773,11 +773,7 @@ export type RunEnv = Readonly<Record<string, string>>;
  * checkout it runs in, which is how a later start finds its work.
  */
 export const launchInRun = <
-  A extends {
-    readonly threadKey: string;
-    readonly paneId: string;
-    readonly root?: string | undefined;
-  },
+  A extends { readonly threadKey: string; readonly paneId: string; readonly root?: string },
   E,
   R,
 >(

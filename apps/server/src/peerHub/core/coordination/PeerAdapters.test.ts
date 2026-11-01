@@ -472,48 +472,32 @@ describe("the coordination Peer reports to its clients", () => {
     updatedAt: "2026-10-11T10:00:00Z",
   };
 
-  it.effect(
-    "says what decided an overlap, and which policy each project sets, as the Hub sent them",
-    () =>
-      Effect.gen(function* () {
-        const fixture = yield* Effect.acquireRelease(
-          Effect.promise(() => brokerFixture(() => ({ policy: () => "coordinate" }))),
-          (f) => Effect.promise(f.dispose),
-        );
-        const decision = { policy: "ask", source: "project", pattern: "payments/**" } as const;
-        fixture.broker.views.set("acme", {
-          sessions: [],
-          overlaps: [
-            { ...overlap, decision },
-            { ...overlap, id: "older", files: ["docs/setup.md"] },
-          ],
-          // `lockstep` is a policy of a newer Hub, which this Peer does not apply.
-          policies: { app: "notify", camp: "lockstep" },
-          at: overlap.updatedAt,
-        });
-        const { adapters } = yield* started({
-          settings: hooksOnly,
-          broker: () => fixture.broker,
-        });
-        const { coordination } = yield* adapters.setCoordination({});
-        const decided = coordination.overlaps.find((o) => o.id === overlap.id);
-        const without = coordination.overlaps.find((o) => o.id === "older");
-        assert.deepStrictEqual(decided?.decision, decision);
-        // The project's path rule decides the overlap's policy for every computer.
-        assert.strictEqual(decided?.policy, "ask");
-        // An overlap of a Hub from before decisions carries none, not an empty one.
-        assert.notProperty(without ?? {}, "decision");
-        assert.strictEqual(without?.policy, "notify");
-        assert.deepStrictEqual(coordination.policies, { acme: { app: "notify" } });
-      }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  );
-
-  it.effect("lists no policies while coordination has no view of any workspace", () =>
+  it.effect("says each overlap as a fact: its sessions and its files", () =>
     Effect.gen(function* () {
-      const { adapters } = yield* started({ settings: hooksOnly });
+      const fixture = yield* Effect.acquireRelease(
+        Effect.promise(() => brokerFixture()),
+        (f) => Effect.promise(f.dispose),
+      );
+      fixture.broker.views.set("acme", {
+        sessions: [],
+        overlaps: [overlap],
+        at: overlap.updatedAt,
+      });
+      const { adapters } = yield* started({
+        settings: hooksOnly,
+        broker: () => fixture.broker,
+      });
       const { coordination } = yield* adapters.setCoordination({});
-      assert.deepStrictEqual(coordination.policies, {});
-      assert.deepStrictEqual(coordination.overlaps, []);
+      assert.deepStrictEqual(coordination.overlaps, [
+        {
+          id: overlap.id,
+          workspace: "acme",
+          project: overlap.project,
+          sessions: overlap.sessions,
+          files: overlap.files,
+          updatedAt: overlap.updatedAt,
+        },
+      ]);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

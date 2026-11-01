@@ -25,8 +25,7 @@ const schemas = {
   }),
   claim: Schema.Struct({ paths: paths.check(Schema.isMinLength(1)), intent: optional(text) }),
   release: Schema.Struct({ paths: optional(paths) }),
-  note: Schema.Struct({ text, overlap: optional(text) }),
-  resolve: Schema.Struct({ text, overlap: optional(text) }),
+  note: Schema.Struct({ text }),
   ask: Schema.Struct({ work: text, question: text }),
   task: Schema.Struct({
     action: optional(Schema.Literals(["list", "show", "add", "set", "remove"])),
@@ -48,8 +47,6 @@ const schemas = {
     flat: optional(Schema.Boolean),
   }),
   share: Schema.Struct({ workspace: optional(text), name: optional(text) }),
-  review: empty,
-  done: empty,
   run: empty,
 };
 const string = { type: "string" };
@@ -65,7 +62,6 @@ const definitions = [
   ],
   ["release", "Drop reported claims.", { paths: array }, []],
   ["note", "Tell the agents that share your files, in your room.", { text: string }, ["text"]],
-  ["resolve", "Close overlaps with the agreement.", { text: string, overlap: string }, ["text"]],
   [
     "ask",
     "Ask agents on work yours depends on.",
@@ -163,8 +159,6 @@ export const CORE_AGENT_TOOLS: ReadonlyArray<PeerAgentTool> = definitions.map(
           return (input.paths as string[] | undefined) ?? [];
         case "note":
           return plain("text");
-        case "resolve":
-          return [...plain("text"), ...flag("overlap")];
         case "ask":
           return [...plain("work"), ...plain("question")];
         case "share":

@@ -11,9 +11,10 @@ import { pluginsForWorkspace } from "./pluginScope.ts";
 import type * as NodeHttp from "node:http";
 import * as Effect from "effect/Effect";
 
-import { closerOf, newsFor, startText } from "../coordination/news.ts";
-import { INDEX_ALL, INDEX_SHOWN, indexText } from "../index/text.ts";
+import { newsFor, startText } from "../coordination/news.ts";
+import { EVERY_COMMAND, INDEX_ALL, INDEX_SHOWN, indexText } from "../index/text.ts";
 import type { CoordinationBroker } from "./Broker.ts";
+import { commandsOn } from "./cli.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
 import {
   type PipelineStep,
@@ -148,28 +149,20 @@ export function news(
     readonly plugins?: PeerBrokerPlugins | undefined;
   } = {},
 ): string | null {
-  const view = this.merged(session.workspace, this.views.get(session.workspace));
   const news = newsFor({
     me: this.asHub(session),
-    view,
+    view: this.merged(session.workspace, this.views.get(session.workspace)),
     memory: session.memory,
     nameOf: this.nameOf(session.workspace),
     taskName: this.taskNamer(session.workspace, session.project),
-    closer: (overlap) => closerOf(overlap, view.sessions),
     cli: this.cli,
+    on: options.plugins === undefined ? EVERY_COMMAND : commandsOn(options.plugins),
   });
   if (news !== null) {
     for (const id of news.announced) session.memory.announced.add(id);
-    for (const id of news.seen) session.memory.seenNotes.add(id);
-    this.record("news", {
-      session: session.id,
-      text: news.text,
-      announced: news.announced,
-      seen: news.seen,
-    });
+    this.record("news", { session: session.id, text: news.text, announced: news.announced });
   }
-  // An overlap gone quiet that this agent closes is overlap news too.
-  const parts = [news?.text ?? null, this.settleNews(session)];
+  const parts = [news?.text ?? null];
   const before: string[] = [];
   if (options.pending !== false) {
     parts.push(

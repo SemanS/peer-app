@@ -58,8 +58,7 @@ describe("who a peer command acts for", () => {
   });
 
   it("never guesses a writer from its pane, checkout or recent Bash hook", async () => {
-    const resolve = vi.fn();
-    const fixture = await brokerFixture(() => ({ resolve }));
+    const fixture = await brokerFixture();
     try {
       await fixture.register("one");
       const session = fixture.broker.sessions.get("claude:one")!;
@@ -77,20 +76,20 @@ describe("who a peer command acts for", () => {
               cwd: fixture.root,
               hook_event_name: "PreToolUse",
               tool_name: "Bash",
-              tool_input: { command: "peer resolve hello" },
+              tool_input: { command: "peer claim hello" },
             },
             {},
           );
         const at = session.lastActivity;
         await expect(
-          fixture.broker.runCli("resolve", ["hello"], {
+          fixture.broker.runCli("claim", ["hello"], {
             "x-peer-cwd": fixture.root,
             "x-herdr-pane": "pane-a",
           }),
         ).rejects.toMatchObject({ outcome: "refused" });
         expect(session.lastActivity).toBe(at);
+        expect(session.claims).toEqual([]);
       }
-      expect(resolve).not.toHaveBeenCalled();
       expect(session.pending).toEqual(before.pending);
       expect(session.memory.announced).toEqual(before.announced);
       const next = await fixture.broker.hook(

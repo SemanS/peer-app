@@ -33,7 +33,6 @@ export const PROJECT_TABS = [
   "tasks",
   "repositories",
   "tools",
-  "coordination",
   "history",
 ] as const;
 export type ProjectTab = (typeof PROJECT_TABS)[number];
@@ -61,7 +60,6 @@ export const PROJECT_TAB_LABELS: Readonly<Record<ProjectTab, string>> = {
   tasks: "Tasks",
   repositories: "Repositories",
   tools: "Tools",
-  coordination: "Coordination",
   history: "History",
 };
 

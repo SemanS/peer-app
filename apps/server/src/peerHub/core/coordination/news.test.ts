@@ -2,17 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 
 import type { HubCoordSession, HubOverlap } from "../hub/coordApi.ts";
 import type { BoardEntry } from "../index/text.ts";
-import { type CoordinationView, emptyMemory, taskClaim } from "./edits.ts";
-import {
-  closerOf,
-  newsFor,
-  SETTLE_REQUEST,
-  settleAskedAt,
-  settleNudge,
-  settleRequest,
-  startText,
-  statusText,
-} from "./news.ts";
+import { type CoordinationView, emptyMemory } from "./edits.ts";
+import { newsFor, startText, statusText } from "./news.ts";
 
 const CLI = "/Users/ana/.peer/userdata/coord/peer";
 
@@ -44,8 +35,6 @@ function overlap(extra: Partial<HubOverlap> = {}): HubOverlap {
     project: "app",
     sessions: ["claude:me", "claude:vir"],
     files: ["src/pay.ts"],
-    state: "open",
-    notes: [],
     openedAt: "2026-10-04T10:00:00Z",
     updatedAt: "2026-10-04T10:00:00Z",
     ...extra,
@@ -55,33 +44,39 @@ function overlap(extra: Partial<HubOverlap> = {}): HubOverlap {
 const view = (overlaps: HubOverlap[] = []): CoordinationView => ({ sessions: [me, vir], overlaps });
 
 describe("newsFor", () => {
-  it("tells an agent about a new overlap and the other side's notes once", () => {
+  it("tells an agent once that an overlap exists, and again when files join it", () => {
     const memory = emptyMemory();
-    const noted = overlap({
-      notes: [
-        {
-          id: "n1",
-          session: "claude:vir",
-          email: "vir@acme.test",
-          text: "I rename price() to total()",
-          at: "t",
-        },
-        { id: "n2", session: "claude:me", email: "slavo@acme.test", text: "my own note", at: "t" },
-        { id: "n3", email: "vir@acme.test", text: "Vir here: rename first", at: "t" },
-      ],
-    });
-    const news = newsFor({ me, view: view([noted]), memory, nameOf, cli: CLI });
-    assert.include(
+    const news = newsFor({ me, view: view([overlap()]), memory, nameOf, cli: CLI });
+    assert.strictEqual(
       news?.text,
-      `Overlap abc123 with Vir's agent (Claude Code, "Frontend implementation", branch krk-812-ui), working on this computer, on src/pay.ts (they changed it too)`,
+      `Peer: Overlap with Vir's agent (Claude Code, "Frontend implementation", branch krk-812-ui), working on this computer, on src/pay.ts (they changed it too). Tell them if it concerns your work: ${CLI} note "<text>". Details: ${CLI} status.`,
     );
-    assert.include(news?.text, "Once you agree, close it");
-    assert.include(news?.text, `Vir's agent: "I rename price() to total()"`);
-    assert.include(news?.text, `Vir (person): "Vir here: rename first"`);
-    assert.notInclude(news?.text, "my own note");
     for (const id of news?.announced ?? []) memory.announced.add(id);
-    for (const id of news?.seen ?? []) memory.seenNotes.add(id);
-    assert.isNull(newsFor({ me, view: view([noted]), memory, nameOf, cli: CLI }));
+    assert.isNull(newsFor({ me, view: view([overlap()]), memory, nameOf, cli: CLI }));
+    const grown = overlap({ files: ["src/pay.ts", "src/cart.ts"] });
+    assert.include(
+      newsFor({ me, view: view([grown]), memory, nameOf, cli: CLI })?.text,
+      "on src/pay.ts, src/cart.ts",
+    );
+  });
+
+  it("names no note while the room is off, and speaks of another agent it has not heard of", () => {
+    const news = newsFor({
+      me,
+      view: { sessions: [me], overlaps: [overlap({ files: ["src/other.ts"] })] },
+      memory: emptyMemory(),
+      nameOf,
+      cli: CLI,
+      on: () => false,
+    });
+    assert.notInclude(news?.text, "note");
+    assert.include(news?.text, "src/other.ts");
+    assert.include(news?.text, "they are about to change it");
+  });
+
+  it("says nothing of an overlap between two others", () => {
+    const others = overlap({ sessions: ["claude:vir", "claude:eva"] });
+    assert.isNull(newsFor({ me, view: view([others]), memory: emptyMemory(), nameOf, cli: CLI }));
   });
 });
 
@@ -100,7 +95,7 @@ describe("the project's other work", () => {
 
   const asking = session("claude:me", "slavo@acme.test", [], {
     task: "krk-900",
-    claims: [taskClaim("krk-812")],
+    claims: ["src/pay.ts"],
   });
 
   const entries: BoardEntry[] = [
@@ -112,57 +107,6 @@ describe("the project's other work", () => {
     },
     { scope: "task:x1", handle: "x1", name: "Receipts by mail", agents: [] },
   ];
-
-  it("tells the agents on a task who asks them, and the asker their answer", () => {
-    const question = overlap({
-      sessions: ["claude:me", "claude:vir"],
-      files: ["task:krk-812"],
-      notes: [
-        {
-          id: "q1",
-          session: "claude:me",
-          email: "slavo@acme.test",
-          text: "Where do you keep split amounts?",
-          at: "t",
-        },
-        {
-          id: "a1",
-          session: "claude:vir",
-          email: "vir@acme.test",
-          text: "In Split.amounts",
-          at: "t",
-        },
-      ],
-    });
-    const both: CoordinationView = { sessions: [asking, onTask], overlaps: [question] };
-    const asked = newsFor({
-      me: onTask,
-      view: both,
-      memory: emptyMemory(),
-      nameOf,
-      taskName,
-      cli: CLI,
-    });
-    assert.include(
-      asked?.text,
-      `Overlap abc123: Slavo's agent (Claude Code, on KRK-900 · Receipts, "Backend implementation"), working on another computer, so its edits reach you only through git, asks the agents on your task KRK-812 · Split payments — Slavo's agent: "Where do you keep split amounts?"`,
-    );
-    assert.notInclude(asked?.text, "about to change it");
-    const answered = newsFor({
-      me: asking,
-      view: both,
-      memory: emptyMemory(),
-      nameOf,
-      taskName,
-      cli: CLI,
-    });
-    assert.include(
-      answered?.text,
-      `your question about KRK-812 · Split payments, to Vir's agent (Claude Code, on KRK-812 · Split payments, "Frontend implementation"), working on another computer`,
-    );
-    assert.include(answered?.text, `Vir's agent: "In Split.amounts"`);
-    assert.include(answered?.text, `${CLI} resolve`);
-  });
 
   it("shows peer status by work: the caller's own, then the rest of the project", () => {
     const text = statusText({
@@ -187,11 +131,11 @@ describe("the project's other work", () => {
       taskName,
       cli: "peer",
       mine: {
-        claims: ["src/pay.ts", "task:krk-812"],
+        claims: ["src/pay.ts", "src/cart.ts"],
         task: { name: "KRK-900 · Receipts", status: "review" },
       },
     });
-    assert.include(held, "You hold: src/pay.ts, asked KRK-812 · Split payments.");
+    assert.include(held, "You hold: src/pay.ts, src/cart.ts.");
     assert.include(held, "Your task KRK-900 · Receipts is review.");
     assert.notInclude(held, "unsupported");
     const old = statusText({
@@ -234,132 +178,7 @@ describe("the project's other work", () => {
     });
     assert.include(
       status,
-      'Commands: peer index · peer ask <task> "<question>" · peer note "<text>"',
+      'Commands: peer index · peer ask <task> "<question>" · peer claim <path>... [--intent "<why>"] · peer release',
     );
-  });
-});
-
-describe("settling an overlap", () => {
-  it("names one agent to close it, the same on every computer", () => {
-    const files = overlap({ sessions: ["claude:vir", "claude:me"] });
-    assert.strictEqual(closerOf(files, [vir, me]), "claude:me");
-    assert.strictEqual(closerOf(files, [vir]), "claude:vir", "the one still at work");
-    assert.isUndefined(closerOf(files, []));
-    // A question about a task is closed by the agent that asked it.
-    const question = overlap({ sessions: ["claude:me", "claude:vir"], files: ["task:krk-812"] });
-    const onTask = { ...vir, task: "krk-812" };
-    assert.strictEqual(closerOf(question, [{ ...me, task: "krk-900" }, onTask]), "claude:me");
-    assert.strictEqual(
-      closerOf({ ...question, sessions: ["claude:a", "claude:z"] }, [
-        { id: "claude:a", task: "krk-812" },
-        { id: "claude:z", task: undefined },
-      ]),
-      "claude:z",
-    );
-  });
-
-  it("asks both agents to agree and names who closes it, with what the person adds", () => {
-    const text = settleRequest({
-      closer: "Vir's agent on KRK-812 · Split payments",
-      message: "Payments first, please.",
-      cli: "peer",
-    });
-    assert.isTrue(text.startsWith(SETTLE_REQUEST));
-    assert.include(
-      text,
-      `then Vir's agent on KRK-812 · Split payments closes it: peer resolve "<agreement>"`,
-    );
-    assert.include(text, "If the other agent does not answer, close it with what you will do.");
-    assert.isTrue(text.endsWith(" Payments first, please."));
-  });
-
-  it("knows a person asked until an agent writes again", () => {
-    const asked = {
-      text: `${SETTLE_REQUEST} agree…`,
-      at: "2026-10-05T10:00:00Z",
-    };
-    assert.strictEqual(settleAskedAt([asked]), "2026-10-05T10:00:00Z");
-    assert.isUndefined(settleAskedAt([asked, { session: "claude:vir", text: "ok", at: "t" }]));
-    assert.isUndefined(settleAskedAt([{ text: "Bob first", at: "t" }]));
-  });
-
-  it("does not wake an agent only to say an overlap was closed", () => {
-    const closed = overlap({
-      state: "resolved",
-      notes: [
-        {
-          id: "r1",
-          session: "claude:vir",
-          email: "vir@acme.test",
-          text: "Resolved: Vir first",
-          at: "t",
-        },
-      ],
-    });
-    const memory = emptyMemory();
-    const waking = newsFor({ me, view: view([closed]), memory, nameOf, waking: true, cli: CLI });
-    assert.isNull(waking);
-    const next = newsFor({ me, view: view([closed]), memory, nameOf, cli: CLI });
-    assert.include(next?.text, `Vir's agent: "Resolved: Vir first"`);
-  });
-
-  it("delivers a confirmed human agreement to both idle participants once", () => {
-    const closed = overlap({
-      state: "resolved",
-      resolution: "Apply the coupon before loyalty.",
-      notes: [
-        {
-          id: "slack:action-confirm",
-          email: "vir@acme.test",
-          text: "Agreement confirmed: Apply the coupon before loyalty.",
-          at: "t",
-        },
-      ],
-    });
-    for (const participant of [me, vir]) {
-      const memory = emptyMemory();
-      const input = {
-        me: participant,
-        view: view([closed]),
-        memory,
-        nameOf,
-        waking: true,
-        cli: CLI,
-      };
-      const news = newsFor(input);
-      assert.include(
-        news?.text,
-        `Vir (person): "Agreement confirmed: Apply the coupon before loyalty."`,
-      );
-      for (const id of news?.seen ?? []) memory.seenNotes.add(id);
-      assert.isNull(newsFor(input));
-    }
-  });
-
-  it("tells the closing agent to close a quiet overlap or say what is left", () => {
-    const text = settleNudge({
-      overlap: overlap(),
-      other: "Vir's agent",
-      minutes: 3,
-      taskName: (task) => task,
-      cli: "peer",
-    });
-    assert.include(text, "overlap abc123 with Vir's agent on src/pay.ts has been quiet for 3 min");
-    assert.include(text, `close it now: peer resolve "<agreement>"`);
-    assert.include(text, `peer note "<text>"`);
-  });
-
-  it("tells the agent at work that the other ended and that it closes the overlap", () => {
-    const text = settleNudge({
-      overlap: overlap(),
-      other: "Vir's agent",
-      otherEnded: true,
-      taskName: (task) => task,
-      cli: "peer",
-    });
-    assert.include(text, "overlap abc123 with Vir's agent on src/pay.ts: the other agent ended");
-    assert.include(text, `Close it with what you will do: peer resolve "<agreement>"`);
-    assert.include(text, `write it: peer note "<text>"`);
-    assert.notInclude(text, "quiet");
   });
 });

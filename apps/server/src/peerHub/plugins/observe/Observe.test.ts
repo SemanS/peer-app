@@ -31,7 +31,6 @@ import { ObservePlugin } from "./index.ts";
 
 const coordination: PeerHubStatus["coordination"] = {
   enabled: false,
-  policy: "coordinate",
   claudeHooks: false,
   logPath: "/tmp/coordination.jsonl",
   sessions: [],

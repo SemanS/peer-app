@@ -38,9 +38,6 @@ describe("local coordination presentation", () => {
             project: "p",
             sessions: ["a", "b"],
             files: ["x"],
-            state: "resolved",
-            resolution: "Reviewed",
-            notes: [],
             updatedAt: "2026-10-22T10:00:00Z",
           },
           {
@@ -49,14 +46,12 @@ describe("local coordination presentation", () => {
             project: "p",
             sessions: ["c", "d"],
             files: ["x"],
-            state: "open",
-            notes: [],
             updatedAt: "2026-10-22T10:00:00Z",
           },
         ],
       },
     });
-    expect(local).toMatchObject({ title: "Peer Local · paused", open: 0, resolved: 1 });
+    expect(local).toMatchObject({ title: "Peer Local · paused" });
     expect(local.overlaps).toHaveLength(1);
     expect(local.providers.every((provider) => !provider.ready)).toBe(true);
   });

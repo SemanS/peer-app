@@ -34,7 +34,6 @@ const intent = (session: string, path = "src/session.ts") => ({
   environment: "here",
   session,
   paths: [path],
-  policy: "coordinate" as const,
 });
 
 describe("Peer Local authority", () => {
@@ -45,30 +44,37 @@ describe("Peer Local authority", () => {
       local.intent("app", intent("a")),
       local.intent("app", intent("b")),
     ]);
-    expect(answers.map((a) => a.verdicts[0]?.verdict)).toEqual(["clear", "deny"]);
+    expect(answers.map((a) => a.verdicts[0]?.verdict)).toEqual(["clear", "notify"]);
     const overlap = answers[1]!.overlaps[0]!;
     expect(overlap.files).toEqual(["src/session.ts"]);
-    await local.note(
-      "app",
-      overlap.id,
-      "I will handle the parser; you can update validation.",
-      "b",
-      "note-1",
-    );
-    await local.note(
-      "app",
-      overlap.id,
-      "I will handle the parser; you can update validation.",
-      "b",
-      "note-1",
-    );
-    expect((await local.intent("app", intent("b"))).verdicts[0]?.verdict).toBe("clear");
-    expect((await local.view()).overlaps[0]?.notes).toHaveLength(1);
+    expect(answers[1]!.verdicts[0]?.with).toEqual(["a"]);
+    expect((await local.intent("app", intent("b"))).verdicts[0]?.verdict).toBe("notify");
     const view = await local.report([session("a", ["src/session.ts"])]);
-    expect(view.overlaps[0]).toMatchObject({
-      state: "resolved",
-      resolution: "An agent runtime ended.",
+    expect(view.overlaps).toEqual([]);
+  });
+
+  it("is one overlap for a pair, whichever of them reported first, and grows with its files", async () => {
+    const { local } = await fixture();
+    const one = await local.report([session("a", ["x.ts"]), session("b", ["x.ts"])]);
+    const other = new LocalAuthority(
+      NodePath.join(await fixture().then((f) => f.dir), "s"),
+      "here",
+    );
+    const two = await other.report([session("b", ["x.ts"]), session("a", ["x.ts"])]);
+    expect(two.overlaps[0]?.id).toBe(one.overlaps[0]?.id);
+    const grown = await local.report([
+      session("a", ["x.ts", "y.ts"]),
+      session("b", ["x.ts", "y.ts"]),
+    ]);
+    expect(grown.overlaps).toHaveLength(1);
+    expect(grown.overlaps[0]).toMatchObject({
+      id: one.overlaps[0]?.id,
+      files: ["x.ts", "y.ts"],
+      openedAt: one.overlaps[0]?.openedAt,
     });
+    expect(
+      (await local.coordEvents("app", {})).filter((event) => event.kind === "overlap"),
+    ).toHaveLength(2);
   });
 
   it("holds automatic intents across heartbeats until the runtime ends or changes generation", async () => {
@@ -77,7 +83,7 @@ describe("Peer Local authority", () => {
     await local.report(reports);
     expect((await local.intent("app", intent("a"))).verdicts[0]?.verdict).toBe("clear");
     await local.report(reports);
-    expect((await local.intent("app", intent("b"))).verdicts[0]?.verdict).toBe("deny");
+    expect((await local.intent("app", intent("b"))).verdicts[0]?.verdict).toBe("notify");
     await local.report([session("b")]);
     expect((await local.intent("app", intent("b"))).verdicts[0]?.verdict).toBe("clear");
     await local.report([session("a"), session("b")]);
@@ -96,35 +102,19 @@ describe("Peer Local authority", () => {
     expect((await local.intent("app", intent("b", "src/explicit.ts"))).verdicts[0]?.verdict).toBe(
       "clear",
     );
-    expect((await local.intent("app", intent("b"))).verdicts[0]?.verdict).toBe("deny");
+    expect((await local.intent("app", intent("b"))).verdicts[0]?.verdict).toBe("notify");
   });
 
-  it("keeps restart history but drops claims and previous-run agreements", async () => {
+  it("keeps its history over a restart, but no session, claim or overlap", async () => {
     const { file, local } = await fixture();
     await local.report([session("a", ["src/session.ts"]), session("b", ["src/session.ts"])]);
-    const overlap = (await local.view()).overlaps[0]!;
-    await local.resolve("app", overlap.id, "Reviewed together", "a", "resolve-1");
-    const restarted = new LocalAuthority(file, "here");
-    expect((await restarted.view()).sessions).toEqual([]);
-    expect((await restarted.view()).overlaps[0]?.resolution).toBe("Reviewed together");
-    await restarted.report([session("a"), session("b")]);
-    await restarted.intent("app", intent("a"));
-    expect((await restarted.intent("app", intent("b"))).verdicts[0]?.verdict).toBe("deny");
-  });
-
-  it("does not show old open overlaps as live after restarting while coordination is paused", async () => {
-    const { file, local } = await fixture();
-    await local.report([session("a", ["src/session.ts"]), session("b", ["src/session.ts"])]);
-    const overlap = (await local.view()).overlaps[0]!;
-    await local.note("app", overlap.id, "Keep this review history.", "a", "note");
+    const [event] = await local.coordEvents("app", {});
+    expect(event).toMatchObject({ kind: "overlap", paths: ["src/session.ts"] });
     const restarted = new LocalAuthority(file, "here");
     const view = await restarted.view();
     expect(view.sessions).toEqual([]);
-    expect(view.overlaps[0]).toMatchObject({
-      id: overlap.id,
-      state: "resolved",
-      notes: [{ text: "Keep this review history." }],
-    });
+    expect(view.overlaps).toEqual([]);
+    expect(await restarted.coordEvents("app", {})).toEqual([event]);
   });
 
   it("loads a state file from before: what it holds besides is ignored, what it lacks is empty", async () => {
@@ -138,6 +128,19 @@ describe("Peer Local authority", () => {
         reads: [{ project: "app", scope: "one", session: "a", version: 1 }],
         manifests: {},
         findings: [],
+        operations: [{ key: "k", input: "i", result: "r" }],
+        overlaps: [
+          {
+            id: "old",
+            project: "app",
+            sessions: ["a", "b"],
+            files: ["src/a.ts"],
+            state: "open",
+            notes: [{ id: "n", email: "local", text: "A note from before", at: "t" }],
+            openedAt: "t",
+            updatedAt: "t",
+          },
+        ],
         events: [
           {
             id: "e1",
@@ -255,7 +258,6 @@ describe("Peer Local authority", () => {
           ...host,
           environment: "here",
           email: () => null,
-          policy: () => "coordinate",
           workspaces: () => [],
           placeOf: async () => null,
           report: async () => {
@@ -279,11 +281,11 @@ describe("Peer Local authority", () => {
       ).toContain("clear");
       expect(
         await broker.broker.runCli("claim", ["src/session.ts"], { "x-peer-session": "claude:two" }),
-      ).toContain("wait");
+      ).toContain("notify");
       expect(
         await broker.broker.runCli("status", [], { "x-peer-session": "claude:two" }),
       ).toContain("src/session.ts");
-      expect((await local.view()).overlaps.filter((o) => o.state === "open")).toHaveLength(1);
+      expect((await local.view()).overlaps).toHaveLength(1);
     } finally {
       await broker.dispose();
     }

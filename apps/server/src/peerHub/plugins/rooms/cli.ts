@@ -311,9 +311,7 @@ export const roomCommands = (
   const note = Effect.fn("PeerRoomCli.note")(function* (asked: PeerSessionView, text: string) {
     const { session, run, task } = yield* withRoom(asked);
     const view = yield* agents.view(session.workspace);
-    const mine = view.overlaps.filter(
-      (overlap) => overlap.state === "open" && overlap.sessions.includes(session.id),
-    );
+    const mine = view.overlaps.filter((overlap) => overlap.sessions.includes(session.id));
     const others = view.sessions.filter(
       (other) =>
         other.id !== session.id && mine.some((overlap) => overlap.sessions.includes(other.id)),

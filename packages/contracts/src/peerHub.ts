@@ -216,23 +216,6 @@ export const PeerJoinableWorkspace = Schema.Struct({
 });
 export type PeerJoinableWorkspace = typeof PeerJoinableWorkspace.Type;
 
-/**
- * What an agent about to change a file another agent on the project changed
- * is told: `notify` gives a heads-up, `coordinate` has it write the other
- * agent a note first, `ask` lets its person decide.
- */
-export const PeerCoordinationPolicy = Schema.Literals(["notify", "coordinate", "ask"]);
-export type PeerCoordinationPolicy = typeof PeerCoordinationPolicy.Type;
-
-/**
- * What a project asks of its agents. A person's Settings pick one of the first
- * three for their computer, which only counts where the project sets none;
- * `exclusive` is the project's alone: nobody changes a file another live
- * session holds.
- */
-export const PeerProjectPolicy = Schema.Literals(["notify", "coordinate", "ask", "exclusive"]);
-export type PeerProjectPolicy = typeof PeerProjectPolicy.Type;
-
 /** An agent session at work on a workspace project, as coordination sees it. */
 export const PeerCoordSession = Schema.Struct({
   /** `claude:<session id>` */
@@ -260,63 +243,14 @@ export const PeerCoordSession = Schema.Struct({
 });
 export type PeerCoordSession = typeof PeerCoordSession.Type;
 
-/**
- * What decided an agent's request to change a path, as the Hub records it with the overlap and
- * the ledger events that request caused, so Work can say where a decision came from. `policy` is
- * the one that decided (a plain string: a newer Hub may name one this Peer does not know). `source`
- * says who set it: `project` (its policy, or a path rule, then with its `pattern`) or `client`
- * (this computer's default, because the project sets none). `pathRulesOff` is set when the project
- * has path rules this Hub does not apply. A row from a Hub without decisions has none.
- */
-export const PeerDecision = Schema.Struct({
-  policy: Schema.String,
-  source: Schema.Literals(["project", "client"]),
-  pattern: Schema.optional(Schema.String),
-  pathRulesOff: Schema.optional(Schema.Boolean),
-});
-export type PeerDecision = typeof PeerDecision.Type;
-
-/** What the hub keeps of an overlap's acknowledgements; a hub from before them has none. */
-const overlapAcknowledgements = {
-  /** When the files it covers last changed: an acknowledgement counts only from then on. */
-  filesAt: Schema.optional(Schema.String),
-  /** When each of its sessions acknowledged it, by session id; a note counts as one. */
-  acks: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-};
-
-/** What decided the latest request that touched an overlap; a hub from before decisions has none. */
-const overlapDecision = { decision: Schema.optional(PeerDecision) };
-
-/**
- * Two agent sessions changing the same files. Its notes are the one thing
- * both agents and both people read about it.
- */
+/** Two agent sessions on the same files: a fact Peer reports. */
 export const PeerOverlap = Schema.Struct({
-  policy: Schema.optional(Schema.String),
   id: Schema.String,
   workspace: Schema.String,
   project: Schema.String,
   sessions: Schema.Array(Schema.String),
   files: Schema.Array(Schema.String),
-  state: Schema.Literals(["open", "resolved"]),
-  resolution: Schema.optional(Schema.String),
-  notes: Schema.Array(
-    Schema.Struct({
-      id: Schema.String,
-      /** The agent session that wrote it; none when a person did. */
-      session: Schema.optional(Schema.String),
-      email: Schema.String,
-      text: Schema.String,
-      at: Schema.String,
-    }),
-  ),
   updatedAt: Schema.String,
-  ...overlapAcknowledgements,
-  ...overlapDecision,
-  /** The agent session that closes it once its agents agree. */
-  closer: Schema.optional(Schema.String),
-  /** When a person asked its agents to settle it, unless an agent wrote since. */
-  askedAt: Schema.optional(Schema.String),
 });
 export type PeerOverlap = typeof PeerOverlap.Type;
 
@@ -326,21 +260,14 @@ export const PeerOverlapRecord = Schema.Struct({
   project: Schema.String,
   sessions: Schema.Array(Schema.String),
   files: Schema.Array(Schema.String),
-  state: Schema.Literals(["open", "resolved"]),
-  resolution: Schema.optional(Schema.String),
-  resolvedFiles: Schema.optional(Schema.Array(Schema.String)),
-  notes: PeerOverlap.fields.notes,
-  ...overlapAcknowledgements,
-  ...overlapDecision,
   openedAt: Schema.String,
   updatedAt: Schema.String,
 });
 export type PeerOverlapRecord = typeof PeerOverlapRecord.Type;
 
 /**
- * An agent about to change files asks the hub, which decides in one step: it
- * registers the session as a holder of each path, opens or extends the
- * overlaps with the other live sessions on it, and answers per path.
+ * An agent about to change files tells the hub in one step: it registers the session as a holder of
+ * each path, opens or extends the overlaps with the other live sessions on it, and answers per path.
  */
 export const PeerIntentRequest = Schema.Struct({
   environment: Schema.String,
@@ -348,40 +275,23 @@ export const PeerIntentRequest = Schema.Struct({
   session: Schema.String,
   /** Relative to the repository; at most 50. */
   paths: Schema.Array(Schema.String),
-  /** This computer's own policy: it counts only where the project sets none. */
-  policy: Schema.optional(PeerCoordinationPolicy),
   /** Names this command, so repeating it has no further effect. */
   op: Schema.optional(Schema.String),
 });
 export type PeerIntentRequest = typeof PeerIntentRequest.Type;
 
-/**
- * What the hub decided about one path: `clear` (nobody else, or everything
- * acknowledged), `notify`, `deny` (`coordinate` and not acknowledged), `ask`
- * (the agent's person decides), `held` (`exclusive` and another live session
- * holds it).
- */
-export const PeerIntentVerdictKind = Schema.Literals(["clear", "notify", "deny", "ask", "held"]);
-export type PeerIntentVerdictKind = typeof PeerIntentVerdictKind.Type;
-
 export const PeerIntentVerdict = Schema.Struct({
   path: Schema.String,
-  verdict: PeerIntentVerdictKind,
+  /** `clear`, or `notify`: another agent is on the path. Neither stops anything. */
+  verdict: Schema.String,
   /** The other live sessions on the path. */
   with: Schema.Array(Schema.String),
   /** The overlaps (ids) with them, in `PeerIntentResponse.overlaps`. */
   overlaps: Schema.Array(Schema.String),
-  /** For `held`: the session that holds the path. */
-  holder: Schema.optional(Schema.String),
-  pattern: Schema.optional(Schema.String),
-  policy: Schema.optional(PeerProjectPolicy),
 });
 export type PeerIntentVerdict = typeof PeerIntentVerdict.Type;
 
 export const PeerIntentResponse = Schema.Struct({
-  /** The policy that decided, and whether the project set it or this computer's default did. */
-  policy: PeerProjectPolicy,
-  policySource: Schema.Literals(["project", "client"]),
   verdicts: Schema.Array(PeerIntentVerdict),
   /** The overlaps the verdicts name, in full. */
   overlaps: Schema.Array(PeerOverlapRecord),
@@ -434,7 +344,6 @@ export const PeerCoordinationState = Schema.Struct({
     }),
   ),
   enabled: Schema.Boolean,
-  policy: PeerCoordinationPolicy,
   /** Peer hooks are installed in every configured Claude runtime home. */
   claudeHooks: Schema.Boolean,
   /** At least one configured Claude home has Peer hooks, including a partial installation. */
@@ -451,15 +360,6 @@ export const PeerCoordinationState = Schema.Struct({
   logPath: Schema.String,
   sessions: Schema.Array(PeerCoordSession),
   overlaps: Schema.Array(PeerOverlap),
-  /**
-   * The policy each project sets itself, as the Hub last said, by workspace and then project. A
-   * workspace is listed once its view was read, and a project that sets no policy is not listed:
-   * this computer's `policy` decides there. An environment from before this sends none. Policies
-   * are plain strings, since a newer Hub may name one this Peer does not know.
-   */
-  policies: Schema.optional(
-    Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.String)),
-  ),
 });
 export type PeerCoordinationState = typeof PeerCoordinationState.Type;
 
@@ -697,7 +597,6 @@ export const PeerHubSetCoordinationInput = Schema.Struct({
   /** Older clients use this for Claude coordination. claudeHooks takes precedence when present. */
   claudeMod: Schema.optional(Schema.Boolean),
   enabled: Schema.optional(Schema.Boolean),
-  policy: Schema.optional(PeerCoordinationPolicy),
   /** Add Peer's hooks to Claude Code's user settings, or take them out. */
   claudeHooks: Schema.optional(Schema.Boolean),
   /** Add Peer's hooks to configured Codex runtime homes, or take them out. */
@@ -712,35 +611,8 @@ export const PeerHubSetCoordinationInput = Schema.Struct({
 });
 export type PeerHubSetCoordinationInput = typeof PeerHubSetCoordinationInput.Type;
 
-export const PeerHubOverlapNoteInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  project: TrimmedNonEmptyString,
-  overlap: TrimmedNonEmptyString,
-  text: TrimmedNonEmptyString,
-});
-export type PeerHubOverlapNoteInput = typeof PeerHubOverlapNoteInput.Type;
-
-/** A person asks the agents on an overlap to settle it between them and close it. */
-export const PeerHubSettleOverlapInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  project: TrimmedNonEmptyString,
-  overlap: TrimmedNonEmptyString,
-  /** What the person adds for both agents. */
-  message: Schema.optional(Schema.String),
-});
-export type PeerHubSettleOverlapInput = typeof PeerHubSettleOverlapInput.Type;
-
-export const PeerHubResolveOverlapInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  project: TrimmedNonEmptyString,
-  overlap: TrimmedNonEmptyString,
-  resolution: TrimmedNonEmptyString,
-});
-export type PeerHubResolveOverlapInput = typeof PeerHubResolveOverlapInput.Type;
-
 /** One committed coordination transition, with its participants. */
 export const PeerCoordEvent = Schema.Struct({
-  reason: Schema.optional(Schema.String),
   status: Schema.optional(Schema.String),
   fromStatus: Schema.optional(Schema.String),
   link: Schema.optional(Schema.String),
@@ -754,29 +626,12 @@ export const PeerCoordEvent = Schema.Struct({
   run: Schema.optional(Schema.String),
   environment: Schema.optional(Schema.String),
   task: Schema.optional(Schema.String),
-  scope: Schema.optional(Schema.String),
   paths: Schema.Array(Schema.String),
   overlap: Schema.optional(Schema.String),
-  version: Schema.optional(Schema.Number),
-  epoch: Schema.optional(Schema.Number),
   participants: Schema.Array(Schema.String),
   op: Schema.optional(Schema.String),
-  /** What decided the request this event records, when the Hub says (see `PeerDecision`). */
-  decision: Schema.optional(PeerDecision),
 });
 export type PeerCoordEvent = typeof PeerCoordEvent.Type;
-
-export const PeerHubCoordEventsInput = Schema.Struct({
-  workspace: TrimmedNonEmptyString,
-  project: TrimmedNonEmptyString,
-  task: Schema.optional(TrimmedNonEmptyString),
-  path: Schema.optional(TrimmedNonEmptyString),
-  limit: Schema.optional(
-    Schema.Number.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 500 })),
-  ),
-  revision: Schema.optional(Schema.String),
-});
-export type PeerHubCoordEventsInput = typeof PeerHubCoordEventsInput.Type;
 
 export const PeerHubStartAgentInput = Schema.Struct({
   workspace: TrimmedNonEmptyString,

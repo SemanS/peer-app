@@ -74,32 +74,25 @@ const record = {
   project: "app",
   sessions: ["claude:ana", "claude:bob"],
   files: ["src/pay.ts"],
-  state: "open",
-  notes: [],
-  filesAt: "2026-10-06T10:00:00Z",
-  acks: { "claude:ana": "2026-10-06T10:00:01Z" },
   openedAt: "2026-10-06T10:00:00Z",
   updatedAt: "2026-10-06T10:00:01Z",
 } satisfies CoordApi.HubOverlap;
 
-describe("deciding an edit at the hub", () => {
+describe("telling the hub of an edit", () => {
   const request = {
     environment: "ana-laptop",
     session: "claude:bob",
     paths: ["src/pay.ts"],
-    policy: "coordinate",
     op: "op-1",
   } as const;
 
   it.effect("asks for a verdict on each path, and reads the overlaps it carries", () =>
     Effect.gen(function* () {
       const answer = {
-        policy: "coordinate",
-        policySource: "client",
         verdicts: [
           {
             path: "src/pay.ts",
-            verdict: "deny",
+            verdict: "notify",
             with: ["claude:ana"],
             overlaps: ["abc123def456"],
           },
@@ -109,8 +102,8 @@ describe("deciding an edit at the hub", () => {
       } satisfies CoordApi.HubIntentAnswer;
       const hub = yield* recordingHub((_request, response) => json(response, 200, answer));
       const api = yield* HubApi.make;
-      const decided = yield* api.intent(hub.url, "phs_test", "acme", "app", request);
-      assert.deepStrictEqual(decided, answer);
+      const told = yield* api.intent(hub.url, "phs_test", "acme", "app", request);
+      assert.deepStrictEqual(told, answer);
       assert.deepStrictEqual(hub.requests, [
         {
           method: "POST",
@@ -122,23 +115,27 @@ describe("deciding an edit at the hub", () => {
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 
-  it.effect("takes a 404 or 405, with or without JSON, for a hub that has no such thing", () =>
+  it.effect("reads what a hub keeps sending for one release, and ignores it", () =>
     Effect.gen(function* () {
+      const answer = {
+        policy: "notify",
+        policySource: "project",
+        verdicts: [
+          {
+            path: "src/pay.ts",
+            verdict: "notify",
+            with: ["claude:ana"],
+            overlaps: ["abc123def456"],
+          },
+        ],
+        overlaps: [{ ...record, state: "open", notes: [] }],
+        at: "2026-10-06T10:00:02Z",
+      };
+      const hub = yield* recordingHub((_request, response) => json(response, 200, answer));
       const api = yield* HubApi.make;
-      for (const answer of [
-        (response: NodeHttp.ServerResponse) =>
-          json(response, 404, { error: { code: "not_found", message: "no such route" } }),
-        (response: NodeHttp.ServerResponse) => response.writeHead(404).end(),
-        (response: NodeHttp.ServerResponse) => response.writeHead(405).end(),
-      ]) {
-        const hub = yield* recordingHub((_request, response) => answer(response));
-        const decided = yield* api.intent(hub.url, "phs_test", "acme", "app", request);
-        assert.isTrue(CoordApi.isUnsupported(decided));
-        const acknowledged = yield* api.ack(hub.url, "phs_test", "acme", "app", "abc123def456", {
-          session: "claude:bob",
-        });
-        assert.isTrue(CoordApi.isUnsupported(acknowledged));
-      }
+      const told = yield* api.intent(hub.url, "phs_test", "acme", "app", request);
+      assert.deepStrictEqual(told.overlaps, [record]);
+      assert.notProperty(told, "policy");
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 
@@ -166,21 +163,6 @@ describe("deciding an edit at the hub", () => {
       assert.isTrue(
         Result.isFailure(unexpected) && unexpected.failure.detail.includes("unexpected shape"),
       );
-
-      // A verdict this Peer does not know is no verdict: the caller falls back, it does not guess.
-      const newer = yield* recordingHub((_request, response) =>
-        json(response, 200, {
-          policy: "coordinate",
-          policySource: "project",
-          verdicts: [{ path: "src/pay.ts", verdict: "defer", with: [], overlaps: [] }],
-          overlaps: [],
-          at: "2026-10-06T10:00:02Z",
-        }),
-      );
-      const unknown = yield* api
-        .intent(newer.url, "phs_test", "acme", "app", request)
-        .pipe(Effect.result);
-      assert.isTrue(Result.isFailure(unknown));
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 
@@ -197,105 +179,18 @@ describe("deciding an edit at the hub", () => {
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 
-  it.effect(
-    "acknowledges an overlap for a session, and sends an op with a note or a resolution",
-    () =>
-      Effect.gen(function* () {
-        const hub = yield* recordingHub((_request, response) => json(response, 200, record));
-        const api = yield* HubApi.make;
-        const acknowledged = yield* api.ack(hub.url, "phs_test", "acme", "app", "abc123def456", {
-          session: "claude:bob",
-          op: "op-2",
-        });
-        assert.isFalse(CoordApi.isUnsupported(acknowledged));
-        yield* api.noteOverlap(hub.url, "phs_test", "acme", "app", "abc123def456", {
-          session: "claude:bob",
-          text: "I only change pay()",
-          op: "op-3",
-        });
-        yield* api.resolveOverlap(hub.url, "phs_test", "acme", "app", "abc123def456", {
-          session: "claude:bob",
-          resolution: "Ana first",
-        });
-        assert.deepStrictEqual(
-          hub.requests.map(({ url, body }) => [url, body]),
-          [
-            [
-              "/v1/workspaces/acme/coord/app/abc123def456/ack",
-              { session: "claude:bob", op: "op-2" },
-            ],
-            [
-              "/v1/workspaces/acme/coord/app/abc123def456/notes",
-              { session: "claude:bob", text: "I only change pay()", op: "op-3" },
-            ],
-            [
-              "/v1/workspaces/acme/coord/app/abc123def456/resolve",
-              { session: "claude:bob", resolution: "Ana first" },
-            ],
-          ],
-        );
-      }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
-  );
-
-  it.effect("reads a view with project policies and acknowledgements, and one without", () =>
+  it.effect("reads a view as a hub sends it, with what it keeps for one release", () =>
     Effect.gen(function* () {
       const api = yield* HubApi.make;
-      const decision = { policy: "coordinate", source: "project", pattern: "src/**" } as const;
-      const newer = yield* recordingHub((_request, response) =>
+      const hub = yield* recordingHub((_request, response) =>
         json(response, 200, {
           sessions: [],
-          overlaps: [{ ...record, decision }],
-          // A policy from a hub newer than this Peer must not cost it the view.
-          policies: { app: "exclusive", site: "lockstep" },
+          overlaps: [{ ...record, state: "open", notes: [] }, record],
           at: "2026-10-06T10:00:02Z",
         }),
       );
-      const view = yield* api.coordination(newer.url, "phs_test", "acme");
-      assert.deepStrictEqual(view.policies, { app: "exclusive", site: "lockstep" });
-      assert.deepStrictEqual(view.overlaps[0]?.acks, { "claude:ana": "2026-10-06T10:00:01Z" });
-      assert.strictEqual(view.overlaps[0]?.filesAt, "2026-10-06T10:00:00Z");
-      // What decided the overlap comes through with it, for Work to say.
-      assert.deepStrictEqual(view.overlaps[0]?.decision, decision);
-
-      const { filesAt: _at, acks: _acks, ...older } = record;
-      const before = yield* recordingHub((_request, response) =>
-        json(response, 200, { sessions: [], overlaps: [older], at: "2026-10-06T10:00:02Z" }),
-      );
-      const plain = yield* api.coordination(before.url, "phs_test", "acme");
-      assert.isUndefined(plain.policies);
-      assert.isUndefined(plain.overlaps[0]?.acks);
-      assert.isUndefined(plain.overlaps[0]?.decision);
-    }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
-  );
-
-  it.effect("keeps the decision an overlap carries when the hub answers an intent or a note", () =>
-    Effect.gen(function* () {
-      const api = yield* HubApi.make;
-      const decision = { policy: "ask", source: "client", pathRulesOff: true } as const;
-      const answer = {
-        policy: "ask",
-        policySource: "client",
-        verdicts: [],
-        overlaps: [{ ...record, decision }],
-        at: "2026-10-06T10:00:02Z",
-      };
-      const hub = yield* recordingHub((request, response) =>
-        json(response, 200, request.url?.endsWith("/intent") ? answer : { ...record, decision }),
-      );
-      const intent = yield* api.intent(hub.url, "phs_test", "acme", "app", {
-        environment: "ana-laptop",
-        session: "claude:bob",
-        paths: ["src/pay.ts"],
-      });
-      assert.isFalse(CoordApi.isUnsupported(intent));
-      assert.deepStrictEqual(
-        CoordApi.isUnsupported(intent) ? undefined : intent.overlaps[0]?.decision,
-        decision,
-      );
-      const noted = yield* api.noteOverlap(hub.url, "phs_test", "acme", "app", record.id, {
-        text: "I only change pay()",
-      });
-      assert.deepStrictEqual(noted.decision, decision);
+      const view = yield* api.coordination(hub.url, "phs_test", "acme");
+      assert.deepStrictEqual(view.overlaps, [record, record]);
     }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer)),
   );
 });

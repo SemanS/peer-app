@@ -172,13 +172,12 @@ describe("overlaps on a task", () => {
     local: false,
     ...(task === undefined ? {} : { task }),
   });
-  const overlap = (id: string, sessions: ReadonlyArray<string>, state: "open" | "resolved") => ({
+  const overlap = (id: string, sessions: ReadonlyArray<string>) => ({
     id,
     workspace: "acme",
     project: "app",
     sessions,
     files: ["src/pay.ts"],
-    state,
   });
   const status = (input: {
     readonly overlaps: ReadonlyArray<ReturnType<typeof overlap>>;
@@ -209,16 +208,14 @@ describe("overlaps on a task", () => {
     session("also-mine", "me@acme.dev", undefined),
   ];
 
-  it("marks each task one of the overlap's agents works on, while the overlap is open", () => {
-    const open = status({ sessions, overlaps: [overlap("o1", ["mine", "eva"], "open")] });
+  it("marks each task one of the overlap's agents works on", () => {
+    const open = status({ sessions, overlaps: [overlap("o1", ["mine", "eva"])] });
     expect(taskHasOverlap(open, where, "a")).toBe(true);
     expect(taskHasOverlap(open, where, "b")).toBe(true);
     expect(taskHasOverlap(open, where, "c")).toBe(false);
-    const resolved = status({ sessions, overlaps: [overlap("o1", ["mine", "eva"], "resolved")] });
-    expect(taskHasOverlap(resolved, where, "a")).toBe(false);
     const off = status({
       sessions,
-      overlaps: [overlap("o1", ["mine", "eva"], "open")],
+      overlaps: [overlap("o1", ["mine", "eva"])],
       enabled: false,
     });
     expect(taskHasOverlap(off, where, "a")).toBe(false);
@@ -228,7 +225,7 @@ describe("overlaps on a task", () => {
   it("names the overlap by the other agent's task, its key before its title", () => {
     const hub = status({
       sessions,
-      overlaps: [overlap("o1", ["mine", "eva"], "open")],
+      overlaps: [overlap("o1", ["mine", "eva"])],
     });
     const project = { ...where, tasks };
     expect(taskOverlap(hub, project, "a")).toEqual({ id: "o1", label: "overlaps Allergen check" });
@@ -240,17 +237,17 @@ describe("overlaps on a task", () => {
 
   it("names a colleague's agent that works on no task, and says when it is yours", () => {
     const project = { ...where, tasks };
-    const colleague = status({ sessions, overlaps: [overlap("o1", ["mine", "loose"], "open")] });
+    const colleague = status({ sessions, overlaps: [overlap("o1", ["mine", "loose"])] });
     expect(taskOverlap(colleague, project, "a")?.label).toBe("overlaps Loose’s agent");
-    const yours = status({ sessions, overlaps: [overlap("o2", ["mine", "also-mine"], "open")] });
+    const yours = status({ sessions, overlaps: [overlap("o2", ["mine", "also-mine"])] });
     expect(taskOverlap(yours, project, "a")?.label).toBe("overlaps your other agent");
   });
 
   it("names the colleague when both agents work on the task", () => {
     const project = { ...where, tasks };
-    const both = status({ sessions, overlaps: [overlap("o1", ["mine", "ana"], "open")] });
+    const both = status({ sessions, overlaps: [overlap("o1", ["mine", "ana"])] });
     expect(taskOverlap(both, project, "a")).toEqual({ id: "o1", label: "overlaps Ana’s agent" });
-    const ours = status({ sessions, overlaps: [overlap("o2", ["mine", "mine-too"], "open")] });
+    const ours = status({ sessions, overlaps: [overlap("o2", ["mine", "mine-too"])] });
     expect(taskOverlap(ours, project, "a")?.label).toBe("overlaps another agent");
   });
 
@@ -259,10 +256,9 @@ describe("overlaps on a task", () => {
     const hub = status({
       sessions,
       overlaps: [
-        overlap("o1", ["mine", "eva"], "open"),
-        overlap("o2", ["mine", "loose"], "open"),
-        overlap("o3", ["mine", "eva"], "open"),
-        overlap("o4", ["mine", "ana"], "resolved"),
+        overlap("o1", ["mine", "eva"]),
+        overlap("o2", ["mine", "loose"]),
+        overlap("o3", ["mine", "eva"]),
       ],
     });
     expect(taskOverlap(hub, project, "a")).toEqual({
@@ -271,17 +267,15 @@ describe("overlaps on a task", () => {
     });
   });
 
-  it("says nothing when the overlap is closed, off, or in another project", () => {
+  it("says nothing when coordination is off, or in another project", () => {
     const project = { ...where, tasks };
-    const resolved = status({ sessions, overlaps: [overlap("o1", ["mine", "eva"], "resolved")] });
-    expect(taskOverlap(resolved, project, "a")).toBeUndefined();
     const off = status({
       sessions,
-      overlaps: [overlap("o1", ["mine", "eva"], "open")],
+      overlaps: [overlap("o1", ["mine", "eva"])],
       enabled: false,
     });
     expect(taskOverlap(off, project, "a")).toBeUndefined();
-    const hub = status({ sessions, overlaps: [overlap("o1", ["mine", "eva"], "open")] });
+    const hub = status({ sessions, overlaps: [overlap("o1", ["mine", "eva"])] });
     expect(taskOverlap(hub, { workspace: "acme", projectId: "web", tasks }, "a")).toBeUndefined();
   });
 });

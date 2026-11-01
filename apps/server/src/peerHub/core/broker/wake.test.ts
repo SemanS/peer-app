@@ -60,7 +60,7 @@ describe("advisory tool wake delivery", () => {
     },
   );
   it.each(["claude", "codex"])(
-    "leaves a colleague's note on an overlap for the next step of an idle %s agent",
+    "leaves an overlap for the next step of an idle %s agent",
     async (agent) => {
       const queueCodex = vi.fn(async () => true);
       const fixture = await brokerFixture(() => ({ queueCodex }));
@@ -79,16 +79,6 @@ describe("advisory tool wake delivery", () => {
               project: "app",
               sessions: [session!.id, "claude:zed"],
               files: ["pay.ts"],
-              state: "open",
-              notes: [
-                {
-                  id: "note",
-                  session: "claude:zed",
-                  email: "zed@acme.test",
-                  text: "Renamed; pull before you push",
-                  at,
-                },
-              ],
               openedAt: at,
               updatedAt: at,
             },
@@ -108,7 +98,7 @@ describe("advisory tool wake delivery", () => {
           },
           { "x-peer-agent": agent },
         );
-        expect(JSON.stringify(next)).toContain("pull before you push");
+        expect(JSON.stringify(next)).toContain("Overlap with another agent on pay.ts");
       } finally {
         await fixture.dispose();
       }

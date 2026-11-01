@@ -23,13 +23,9 @@ import type { CoordinationBroker } from "./Broker.ts";
 import { messageOf } from "./log.ts";
 import type { LocalSession } from "./sessions.ts";
 
-const KINDS = [
-  "announced",
-  "seenNotes",
-  "acknowledged",
-  "settled",
-  "notified",
-] as const satisfies ReadonlyArray<keyof SessionMemory>;
+const KINDS = ["announced", "acknowledged", "notified"] as const satisfies ReadonlyArray<
+  keyof SessionMemory
+>;
 
 /** Of each list, the file keeps the newest this many. */
 const KEPT = 500;

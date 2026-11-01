@@ -1,21 +1,13 @@
 import { useState } from "react";
 import { taskShortTitle } from "@t3tools/client-runtime/peer/taskTitle";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  ChevronsUpDownIcon,
-  Layers2Icon,
-  PencilIcon,
-  PlusIcon,
-  Share2Icon,
-  ShieldIcon,
-} from "lucide-react";
+import { ChevronsUpDownIcon, Layers2Icon, PencilIcon, PlusIcon, Share2Icon } from "lucide-react";
 
 import { openCommandPalette } from "../../commandPaletteBus";
 import { useFileContextMenu } from "../../fileContextMenu";
 import { cn } from "../../lib/utils";
 import { projectIconColorClassName } from "../../projectIconColors";
 import type { SidebarProjectSnapshot } from "../../sidebarProjectGrouping";
-import { Badge } from "../ui/badge";
 import {
   Menu,
   MenuGroup,
@@ -259,13 +251,12 @@ function ProjectMenuBody({
     const first = { scope: current.scope, name: current.name ?? row.name };
     saveSets(joinProjects(sets, id, first, row), scopeOfSet(id));
   };
-  // What the menu does on the project in scope: its coordination, settings, folder and removal.
+  // What the menu does on the project in scope: its settings, folder and removal.
   const menu = actionsForScope(current.scope, { status, groups });
   const leave = () => {
     if (isMobile) setOpenMobile(false);
   };
   const folder = menu?.folder;
-  const coordination = menu?.kind === "workspace" ? menu.coordination : null;
   return (
     <>
       <MenuRadioGroup value={current.scope} onValueChange={(value) => onChange(String(value))}>
@@ -363,25 +354,6 @@ function ProjectMenuBody({
           <MenuSeparator />
           <MenuGroup>
             <MenuGroupLabel>{menu.name}</MenuGroupLabel>
-            {coordination === null ? null : (
-              <MenuItem
-                onClick={() => {
-                  leave();
-                  void openSettings(coordination.action.location);
-                }}
-              >
-                <ShieldIcon aria-hidden />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate">{coordination.title}</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {coordination.detail}
-                  </span>
-                </span>
-                <Badge variant="outline" size="control">
-                  {coordination.action.label}
-                </Badge>
-              </MenuItem>
-            )}
             <MenuItem
               inset
               onClick={() => {

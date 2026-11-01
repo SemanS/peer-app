@@ -24,7 +24,6 @@ describe("coordination tool contracts", () => {
       "peer_claim",
       "peer_release",
       "peer_note",
-      "peer_resolve",
       "peer_ask",
       "peer_task",
       "peer_share",
@@ -50,11 +49,6 @@ describe("coordination tool contracts", () => {
     expect(args("peer_task", { action: "show", task: "APP-1" })).toEqual(["show", "APP-1"]);
     expect(args("peer_run", {})).toEqual([]);
     expect(args("peer_note", { text: "Ana first" })).toEqual(["Ana first"]);
-    expect(args("peer_resolve", { text: "Ana first", overlap: "ab" })).toEqual([
-      "Ana first",
-      "--overlap",
-      "ab",
-    ]);
     expect(args("peer_claim", { paths: ["resource:preview"] })).toEqual(["resource:preview"]);
     expect(args("peer_task", {})).toEqual(["list"]);
     expect(args("peer_task", { action: "add", title: "Diarization", key: "STR-9" })).toEqual([

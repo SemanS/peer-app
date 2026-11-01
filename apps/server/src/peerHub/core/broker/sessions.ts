@@ -66,14 +66,7 @@ export interface LocalSession {
   /** Its hooks being answered now: what they tell it has not reached it yet. */
   answering: number;
   /** Files whose edit its person was asked about, with what an approval settles: the edit happening means they approved. */
-  readonly asked: Map<
-    string,
-    {
-      readonly keys: ReadonlyArray<string>;
-      readonly overlaps: ReadonlyArray<string>;
-      readonly filesAt: ReadonlyMap<string, string | undefined>;
-    }
-  >;
+  readonly asked: Map<string, ReadonlyArray<string>>;
   /** Where its memory file is (`sessionMemory.ts`). */
   readonly memoryPath: string;
   /** What Peer tells it at its next step. */

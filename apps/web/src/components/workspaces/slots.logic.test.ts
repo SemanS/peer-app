@@ -25,7 +25,6 @@ const status = (plugins?: ReadonlyArray<PeerPluginState>): PeerHubStatus => ({
   agents: { herdr: "not-running", list: [] },
   coordination: {
     enabled: true,
-    policy: "coordinate",
     claudeHooks: false,
     logPath: "/home/ana/coordination.jsonl",
     sessions: [],

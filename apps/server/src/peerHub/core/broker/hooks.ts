@@ -447,12 +447,10 @@ export async function answerHook(
         session.files = [...session.files.filter((f) => f !== changed), changed].slice(-MAX_FILES);
         const asked = session.asked.get(changed);
         if (asked !== undefined) {
-          // The edit ran after its person was asked: they approved, which the hub hears too.
-          for (const key of asked.keys) session.memory.acknowledged.add(key);
+          // The edit ran after its person was asked: they approved.
+          for (const key of asked) session.memory.acknowledged.add(key);
           session.asked.delete(changed);
-          this.record("ask.approved", { session: session.id, file: changed, keys: asked.keys });
-          for (const overlap of asked.overlaps)
-            void this.ackOverlap(session, overlap, asked.filesAt.get(overlap));
+          this.record("ask.approved", { session: session.id, file: changed, keys: asked });
         }
         this.markDirty();
       }

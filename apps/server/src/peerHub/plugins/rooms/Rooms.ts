@@ -590,12 +590,7 @@ const make = Effect.gen(function* () {
       if (run === undefined || session.task === undefined) return;
       const view = yield* agents.view(session.workspace);
       for (const overlap of view.overlaps) {
-        if (
-          overlap.state !== "open" ||
-          !overlap.sessions.includes(session.id) ||
-          lines.has(overlap.id)
-        )
-          continue;
+        if (!overlap.sessions.includes(session.id) || lines.has(overlap.id)) continue;
         lines.add(overlap.id);
         const other = view.sessions.find(
           (candidate) => overlap.sessions.includes(candidate.id) && candidate.id !== session.id,

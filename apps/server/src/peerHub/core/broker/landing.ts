@@ -2,12 +2,11 @@
 /* oxlint-disable oxc/no-this-in-exported-function -- The broker's methods: Broker.ts lists them on each broker, and their `this` parameter lets them run on nothing else. */
 /**
  * Nothing lands unread (G8). Before a session's work lands, Peer gives it every message addressed to
- * it that it has not read: the notes teammates wrote in its overlaps (their questions, answers, and
- * a person's request to settle one) and the notices plugins flag `landing` (words in its room). Work
- * lands when a `git commit`, `git push`, `gh pr create`, `gh pr merge`, `jj commit`, `jj squash`,
- * `jj new` or `jj git push` runs in the agent's shell (`isLanding`). Peer stops the step once to give
- * the messages; the same step again runs, unless something new came meanwhile. A plugin's notice that
- * is not flagged is advice: it never stops a step, and reaches the agent as at any other.
+ * it that it has not read: the notices plugins flag `landing` (words in its room). Work lands when a
+ * `git commit`, `git push`, `gh pr create`, `gh pr merge`, `jj commit`, `jj squash`, `jj new` or
+ * `jj git push` runs in the agent's shell (`isLanding`). Peer stops the step once to give the
+ * messages; the same step again runs, unless something new came meanwhile. A plugin's notice that is
+ * not flagged is advice: it never stops a step, and reaches the agent as at any other.
  *
  * What is a landing step goes by the words of the command only, never by its output or a model: a
  * command hidden in a script or an alias is not recognized.
@@ -15,17 +14,8 @@
  * @module peerHub/core/broker/landing
  */
 import { gitCommands } from "../../shellCommands.ts";
-import { cutText, plain } from "../../peerText.ts";
-import {
-  type CoordinationView,
-  editHookAnswer,
-  type NameOf,
-  noContest,
-  overlapSubject,
-  type TaskNamer,
-} from "../coordination/edits.ts";
-import { unseenNotes } from "../coordination/news.ts";
-import type { HubOverlap } from "../hub/coordApi.ts";
+import { cutText } from "../../peerText.ts";
+import { editHookAnswer, noContest } from "../coordination/edits.ts";
 import type { PeerToolContext } from "../plugin.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import { type PipelineStep, type PreparedDelivery, remainingMs, stepNotices } from "./pipeline.ts";
@@ -63,80 +53,24 @@ export function landingKind(command: string): string | undefined {
  */
 export const isLanding = (command: string): boolean => landingKind(command) !== undefined;
 
-/** A teammate's note, quoted in a stop, at most this long. */
-const NOTE_MAX = 600;
-/** What a note was about (its files, or the task asked about), at most this long. */
-const SUBJECT_MAX = 200;
-
-/** The messages waiting for a session at a landing step, as the stop gives them. */
-export interface WaitingMessages {
-  /** One block per message: teammates' notes in the session's overlaps, then the plugins' notices. */
-  readonly blocks: ReadonlyArray<string>;
-  /** How many of the blocks, the last ones, are plugins' notices. */
-  readonly fromPlugins: number;
-  /** The notes, by id, that now count as shown to the session. */
-  readonly notes: ReadonlyArray<string>;
-}
-
 /**
- * A teammate's note as the stop gives it: who wrote it and about what, then its words in quotes,
- * cleaned of what a reader cannot see and of tags that could pose as Peer's or the harness's.
- */
-function noteBlock(input: {
-  readonly note: HubOverlap["notes"][number];
-  readonly overlap: HubOverlap;
-  readonly view: CoordinationView;
-  readonly nameOf: NameOf;
-  readonly taskName: TaskNamer;
-}): string {
-  const { note, overlap, view, nameOf, taskName } = input;
-  const name = plain(nameOf(note.email), 60);
-  const task = view.sessions.find((session) => session.id === note.session)?.task;
-  // The task's key says which agent it is, as a title would at greater length.
-  const key = task === undefined ? "" : `${plain(taskName(task).split(" · ")[0] ?? task, 40)} · `;
-  const author = note.session === undefined ? `${name} (person)` : `${key}${name}’s agent`;
-  const subject = plain(overlapSubject(overlap.files, taskName), SUBJECT_MAX);
-  return `[teammate text] ${author}, in your overlap on ${subject}:\n"${plain(note.text, NOTE_MAX)}"`;
-}
-
-/**
- * The messages the session has not read, which the landing step waits for: the notes of its
- * overlaps that an ordinary step would give it (`unseenNotes`), then the plugins' notices flagged
- * `landing`, read for at most `budgetMs`. Null when nothing waits. The notes count as shown from
- * here on, as at an ordinary step; a plugin marks its own text told when it reads it.
+ * The messages the session has not read, which the landing step waits for: the plugins' notices
+ * flagged `landing`, read for at most `budgetMs`; one block each. A plugin marks its own text told
+ * when it reads it.
  */
 export async function landingMessages(
   this: CoordinationBroker,
-  session: LocalSession,
   step: PipelineStep,
   ctx: PeerToolContext,
   budgetMs: number,
-): Promise<WaitingMessages | null> {
-  const view = this.merged(session.workspace, this.views.get(session.workspace));
-  const nameOf = this.nameOf(session.workspace);
-  const taskName = this.taskNamer(session.workspace, session.project);
-  const notes = view.overlaps
-    .filter((overlap) => overlap.sessions.includes(session.id))
-    .flatMap((overlap) =>
-      unseenNotes(overlap, session.id, session.memory).map((note) => ({
-        id: note.id,
-        block: noteBlock({ note, overlap, view, nameOf, taskName }),
-      })),
-    );
-  for (const { id } of notes) session.memory.seenNotes.add(id);
-  const theirs = (await stepNotices(step, ctx, { landing: budgetMs }))?.blocks ?? [];
-  if (notes.length + theirs.length === 0) return null;
-  return {
-    blocks: [...notes.map(({ block }) => block), ...theirs],
-    fromPlugins: theirs.length,
-    notes: notes.map(({ id }) => id),
-  };
+): Promise<ReadonlyArray<string>> {
+  return (await stepNotices(step, ctx, { landing: budgetMs }))?.blocks ?? [];
 }
 
 /** A stop's reason, at most this long, so a landing step costs the agent no more. */
 const STOP_MAX = 2000;
 /** What the line that names the rest takes, at most, with its line break. */
-const MORE_ROOM = 70;
+const MORE_ROOM = 40;
 
 const waits = (count: number) =>
   count === 1
@@ -145,16 +79,15 @@ const waits = (count: number) =>
 
 /**
  * What a stop says: `head`, as many of the messages as fit within the bound (the first always goes,
- * cut if it alone is more), `tail`, and when some did not fit, the line that ends it: how to read
- * the rest.
+ * cut if it alone is more), `tail`, and when some did not fit, how many wait for the next step.
+ * `carried` is how many it says.
  */
 export function stopText(input: {
   readonly head: string;
   readonly blocks: ReadonlyArray<string>;
   readonly tail?: string;
-  readonly cli: string;
-}): string {
-  const { head, blocks, tail, cli } = input;
+}): { readonly text: string; readonly carried: number } {
+  const { head, blocks, tail } = input;
   const room = STOP_MAX - head.length - (tail?.length ?? 0) - MORE_ROOM;
   const carried: string[] = [];
   let used = 0;
@@ -165,42 +98,41 @@ export function stopText(input: {
     used += text.length + 1;
   }
   const left = blocks.length - carried.length;
-  return [
-    head,
-    ...carried,
-    ...(tail === undefined ? [] : [tail]),
-    ...(left === 0 ? [] : [`${left} more: read ${left === 1 ? "it" : "them"} with ${cli} status.`]),
-  ].join("\n");
+  return {
+    text: [
+      head,
+      ...carried,
+      ...(tail === undefined ? [] : [tail]),
+      ...(left === 0 ? [] : [`${left} more at your next step.`]),
+    ].join("\n"),
+    carried: carried.length,
+  };
 }
 
 /** What a hook's stop says: that messages wait, the messages, and to run the step again. */
-const stopReason = (cli: string, kind: string, blocks: ReadonlyArray<string>) => {
+const stopReason = (kind: string, blocks: ReadonlyArray<string>) => {
   const them = blocks.length === 1 ? "it" : "them";
   return stopText({
     head: `Denied by Peer: ${waits(blocks.length)}. Read ${them} before this ${kind} lands.`,
     blocks,
     tail: `Run the ${kind} again once you have taken ${them} into account.`,
-    cli,
   });
 };
 
 /**
  * A delivery that puts the messages back should the stop never reach the agent (its hook script
- * stopped waiting): the notes count as unread again and the plugins' texts, which marked
- * themselves told, wait for the agent's next step.
+ * stopped waiting): the plugins' texts, which marked themselves told, wait for its next step.
  */
 const putBack = (
   session: LocalSession,
   reason: string,
-  waiting: WaitingMessages,
+  blocks: ReadonlyArray<string>,
 ): PreparedDelivery => ({
   plugin: "core",
   first: false,
   text: reason,
   notify: async (state) => {
-    if (state !== "dropped") return;
-    for (const id of waiting.notes) session.memory.seenNotes.delete(id);
-    session.pending.push(...waiting.blocks.slice(waiting.blocks.length - waiting.fromPlugins));
+    if (state === "dropped") session.pending.push(...blocks);
   },
 });
 
@@ -220,15 +152,16 @@ export async function landingStop(
 ): Promise<Record<string, unknown> | null> {
   if (remainingMs(step) === 0) return null;
   const ctx = this.toolContext(session, body, "pre-tool", remainingMs(step));
-  const waiting = await this.landingMessages(session, step, ctx, budgetMs);
-  if (waiting === null) return null;
-  const reason = stopReason(this.cli, landingKind(command) ?? "step", waiting.blocks);
+  const blocks = await this.landingMessages(step, ctx, budgetMs);
+  if (blocks.length === 0) return null;
+  const { text: reason, carried } = stopReason(landingKind(command) ?? "step", blocks);
   this.record("landing.stopped", {
     session: session.id,
-    messages: waiting.blocks.length,
+    messages: blocks.length,
     chars: reason.length,
   });
-  step.deliveries?.push(putBack(session, reason, waiting));
+  session.pending.push(...blocks.slice(carried));
+  step.deliveries?.push(putBack(session, reason, blocks.slice(0, carried)));
   return (
     editHookAnswer(session.agent, [{ ...noContest(), decision: "deny", reason }])?.output ?? null
   );

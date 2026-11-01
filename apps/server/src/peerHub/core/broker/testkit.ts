@@ -132,20 +132,11 @@ export async function restarted(broker: CoordinationBroker) {
 
 /**
  * A broker for Ana in a temporary checkout, its host built of fakes and `overrides`. `register`
- * makes a Claude Code session there known, `find` runs `peer find` as one, and `dispose` stops the
- * broker and removes the checkout.
+ * makes a Claude Code session there known, and `dispose` stops the broker and removes the checkout.
  */
 export async function brokerFixture(overrides?: (host: PeerBrokerHost) => Partial<PeerBrokerHost>) {
-  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-find-test-"));
-  await NodeFSP.mkdir(NodePath.join(root, ".ai", "decisions"), { recursive: true });
-  await NodeFSP.writeFile(
-    NodePath.join(root, ".ai", "decisions", "prices.md"),
-    "---\nid: prices\ntitle: Keep prices in cents\n---\nPrices are integers.\n",
-  );
+  const root = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "peer-broker-test-"));
   const view = { sessions: [], overlaps: [], at: new Date().toISOString() };
-  const unavailable = async (): Promise<never> => {
-    throw new Error("not used by find");
-  };
   const host: PeerBrokerHost = {
     socketPath: NodePath.join(root, "peer.sock"),
     scriptsDir: NodePath.join(root, "scripts"),
@@ -159,11 +150,8 @@ export async function brokerFixture(overrides?: (host: PeerBrokerHost) => Partia
     queueCodex: async () => false,
     nameOf: () => "Ana",
     email: () => "ana@acme.test",
-    policy: () => "notify",
     report: async () => view,
     view: async () => view,
-    note: unavailable,
-    resolve: unavailable,
     workspaces: () => ["acme"],
     changed: () => undefined,
     taskOf: () => undefined,
@@ -179,11 +167,9 @@ export async function brokerFixture(overrides?: (host: PeerBrokerHost) => Partia
   const register = async (id: string) => {
     await broker["sessionFor"]("claude", { session_id: id, cwd: root }, undefined);
   };
-  const find = (id: string) =>
-    broker["runCli"]("find", ["format prices"], { "x-peer-session": `claude:${id}` });
   const dispose = async () => {
     await broker.stop();
     await NodeFSP.rm(root, { recursive: true, force: true });
   };
-  return { register, find, dispose, broker, root, debugPath: debugPathOf(broker.host.logPath) };
+  return { register, dispose, broker, root, debugPath: debugPathOf(broker.host.logPath) };
 }

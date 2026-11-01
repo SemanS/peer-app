@@ -57,7 +57,6 @@ export function approvalSignals(input: {
       ? status.coordination.overlaps
           .filter(
             (overlap) =>
-              overlap.state === "open" &&
               overlap.workspace === project.workspace &&
               overlap.project === project.projectId &&
               overlap.sessions.some((session) => mine.has(session)),

@@ -15,10 +15,10 @@ import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 import { vi } from "vite-plus/test";
 
-import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
+import { brokerFixture, pluginsOf, wakingNotices } from "../../core/broker/testkit.ts";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import { brokerPlugins } from "../../core/coordination/PeerCoordination.ts";
-import type { HubOverlap, ReportedSession } from "../../core/hub/coordApi.ts";
+import type { ReportedSession } from "../../core/hub/coordApi.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
 import * as PeerStatus from "../../core/status/PeerStatus.ts";
 import { coreLayer, paymentsSeed, paymentsT3, seedState, standInHub } from "../../core/testkit.ts";
@@ -34,7 +34,6 @@ afterEach(() => vi.unstubAllEnvs());
 
 const coordination: PeerHubStatus["coordination"] = {
   enabled: false,
-  policy: "coordinate",
   claudeHooks: false,
   logPath: "/tmp/coordination.jsonl",
   sessions: [],
@@ -326,23 +325,6 @@ describe("starting an agent on a task", () => {
   );
 });
 
-/** An open overlap of `session` with Vir's agent, on which Vir's agent just wrote `text`. */
-const noteTo = (session: string, text: string): HubOverlap => {
-  const now = new Date().toISOString();
-  return {
-    id: `overlap-${session}`,
-    project: "app",
-    sessions: [`claude:${session}`, "claude:vir"],
-    files: ["src/pay.ts"],
-    state: "open",
-    notes: [
-      { id: `note-${session}`, session: "claude:vir", email: "vir@acme.test", text, at: now },
-    ],
-    openedAt: now,
-    updatedAt: now,
-  };
-};
-
 describe("waking an idle agent herdr runs", () => {
   it.effect(
     "goes through herdr while it is on; while it is off, news waits for the next step",
@@ -365,8 +347,16 @@ describe("waking an idle agent herdr runs", () => {
         };
         const { client, asked, woken } = standInHerdr(agents);
         const { status, plugins } = yield* anaWithHerdr(client);
+        const notices = wakingNotices();
         const fixture = yield* Effect.acquireRelease(
-          Effect.promise(() => brokerFixture(() => pluginsOf(plugins))),
+          Effect.promise(() =>
+            brokerFixture(() => ({
+              plugins: async () => {
+                const built = await pluginsOf(plugins).plugins!();
+                return { ...built, active: [...built.active, ...notices.plugins.active] };
+              },
+            })),
+          ),
           (made) => Effect.promise(() => made.dispose()),
         );
         yield* Effect.promise(async () => {
@@ -381,11 +371,7 @@ describe("waking an idle agent herdr runs", () => {
             "w1:p2",
           );
         });
-        const overlaps = [
-          noteTo("one", "I rename pay() first"),
-          noteTo("two", "Keep the old export"),
-        ];
-        fixture.broker["views"].set("acme", { sessions: [], overlaps, at: overlaps[0]!.updatedAt });
+        notices.tell("rename", "I rename pay() first");
 
         yield* plugins.setPlugin({ id: "herdr", enabled: false });
         yield* Effect.promise(() => fixture.broker["wakeIdle"]());
@@ -393,7 +379,7 @@ describe("waking an idle agent herdr runs", () => {
           asked.some((line) => line.startsWith("wake")),
           "herdr wakes nobody while off",
         );
-        // The note reaches the agent at its next step.
+        // The message reaches the agent at its next step.
         const next = yield* Effect.promise(() =>
           fixture.broker["hook"](
             {

@@ -177,7 +177,6 @@ function status(project: PeerProjectState, role: "owner" | "member" = "owner"): 
     },
     coordination: {
       enabled: false,
-      policy: "coordinate",
       claudeHooks: false,
       logPath: "",
       sessions: [],
@@ -389,8 +388,6 @@ describe("why a thread concerns you", () => {
               project: "kirkwood",
               sessions: ["claude:s-me", "claude:s-yev"],
               files: ["src/pay.ts"],
-              state: "open" as const,
-              notes: [],
               updatedAt: "2026-10-03T11:59:00Z",
             },
           ],

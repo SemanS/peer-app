@@ -116,7 +116,7 @@ describe("what plugins add to hook answers", () => {
     }
   });
 
-  it("tells of a note on an overlap before any plugin's notice", async () => {
+  it("tells of an overlap before any plugin's notice", async () => {
     const fixture = await brokerFixture(() => ({ plugins: async () => only(chatty) }));
     try {
       await fixture.register("one");
@@ -126,16 +126,6 @@ describe("what plugins add to hook answers", () => {
         project: "app",
         sessions: ["claude:one", "claude:vir"],
         files: ["src/pay.ts"],
-        state: "open",
-        notes: [
-          {
-            id: "n1",
-            session: "claude:vir",
-            email: "vir@acme.test",
-            text: "I rename pay() first",
-            at: now,
-          },
-        ],
         openedAt: now,
         updatedAt: now,
       };
@@ -151,10 +141,8 @@ describe("what plugins add to hook answers", () => {
           {},
         ),
       );
-      expect(text).toContain("I rename pay() first");
-      expect(text.indexOf("I rename pay() first")).toBeLessThan(
-        text.indexOf("Lore applies to your change."),
-      );
+      expect(text).toContain("src/pay.ts");
+      expect(text.indexOf("src/pay.ts")).toBeLessThan(text.indexOf("Lore applies to your change."));
     } finally {
       await fixture.dispose();
     }

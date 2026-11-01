@@ -10,7 +10,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as PeerAgents from "../../core/coordination/PeerAgents.ts";
 import * as PeerPlugins from "../../core/plugins/PeerPlugins.ts";
-import { brokerFixture, pluginsOf } from "../../core/broker/testkit.ts";
+import { brokerFixture, pluginsOf, wakingNotices } from "../../core/broker/testkit.ts";
 import { coreLayer } from "../../core/testkit.ts";
 import { McpPlugin } from "./index.ts";
 import { bindPlugin, type PeerPluginEntry } from "../../core/plugin.ts";
@@ -145,79 +145,71 @@ describe("coordination tool sessions", () => {
       }),
     ),
   );
-  it.effect(
-    "wakes a published herdr pane on overlap notes and delivers the note at its next tool call",
-    () =>
-      program((fixture, plugins) =>
-        Effect.gen(function* () {
-          fixture.broker.localRuntimeAgents = async () => [
+  it.effect("wakes a published herdr pane on a notice and delivers it at its next tool call", () =>
+    program((fixture, plugins) =>
+      Effect.gen(function* () {
+        fixture.broker.localRuntimeAgents = async () => [
+          {
+            id: "herdr:cursor:pane-native",
+            paneId: "pane",
+            agent: "cursor",
+            title: "agent",
+            status: "idle",
+            cwd: fixture.root,
+          },
+        ];
+        const command = yield* commandOf(plugins);
+        const paneHeaders = { "x-peer-mcp": "wake-pane", "x-herdr-pane": "pane" };
+        yield* command.stdio!({ line: status, headers: paneHeaders });
+        const session = fixture.broker.sessions.get("cursor:pane-native")!;
+        session.status = "idle";
+        const me = fixture.broker.asHub(session);
+        fixture.broker.views.set("acme", {
+          sessions: [me, { ...me, id: "other", email: "bob@acme.test" }],
+          overlaps: [
             {
-              id: "herdr:cursor:pane-native",
-              paneId: "pane",
-              agent: "cursor",
-              title: "agent",
-              status: "idle",
-              cwd: fixture.root,
+              id: "overlap-1",
+              project: "app",
+              sessions: [session.id, "other"],
+              files: ["a.ts"],
+              openedAt: "2026-10-09T10:00:00Z",
+              updatedAt: "2026-10-09T10:00:00Z",
             },
-          ];
-          const command = yield* commandOf(plugins);
-          const paneHeaders = { "x-peer-mcp": "wake-pane", "x-herdr-pane": "pane" };
-          yield* command.stdio!({ line: status, headers: paneHeaders });
-          const session = fixture.broker.sessions.get("cursor:pane-native")!;
-          session.status = "idle";
-          const me = fixture.broker.asHub(session);
-          fixture.broker.views.set("acme", {
-            sessions: [me, { ...me, id: "other", email: "bob@acme.test" }],
-            overlaps: [
-              {
-                id: "overlap-1",
-                project: "app",
-                sessions: [session.id, "other"],
-                files: ["a.ts"],
-                state: "open",
-                notes: [
-                  {
-                    id: "note-1",
-                    email: "bob@acme.test",
-                    session: "other",
-                    text: "I will finish the adapter first.",
-                    at: "2026-10-09T10:00:00Z",
-                  },
-                ],
-                openedAt: "2026-10-09T10:00:00Z",
-                updatedAt: "2026-10-09T10:00:00Z",
-              },
-            ],
-            at: "2026-10-09T10:00:00Z",
-          });
-          const prompts: string[] = [];
-          let wake: () => void = () => undefined;
-          const woken = new Promise<void>((resolve) => {
-            wake = resolve;
-          });
-          const runtime: PeerRuntimeProvider = {
-            prefix: "herdr:",
-            title: () => undefined,
-            pane: () => undefined,
-            status: () => "idle",
-            view: () => Effect.die("unused"),
-            threads: () => Effect.succeed([]),
-            wake: (_id, _pane, text) =>
-              Effect.sync(() => {
-                prompts.push(text);
-                wake();
-                return { status: "queued" };
-              }),
-          };
-          yield* Effect.promise(() => fixture.broker.wakeRuntime({ ...NO_PLUGINS, runtime }));
-          yield* Effect.promise(() => woken);
-          assert.deepEqual(prompts, ["[Peer coordination update]"]);
-          const answer = JSON.parse(yield* command.stdio!({ line: status, headers: paneHeaders }));
-          assert.include(answer.result.content[0].text, "I will finish the adapter first.");
-          const next = JSON.parse(yield* command.stdio!({ line: status, headers: paneHeaders }));
-          assert.notInclude(next.result.content[0].text, "I will finish the adapter first.");
-        }),
-      ),
+          ],
+          at: "2026-10-09T10:00:00Z",
+        });
+        const prompts: string[] = [];
+        let wake: () => void = () => undefined;
+        const woken = new Promise<void>((resolve) => {
+          wake = resolve;
+        });
+        const runtime: PeerRuntimeProvider = {
+          prefix: "herdr:",
+          title: () => undefined,
+          pane: () => undefined,
+          status: () => "idle",
+          view: () => Effect.die("unused"),
+          threads: () => Effect.succeed([]),
+          wake: (_id, _pane, text) =>
+            Effect.sync(() => {
+              prompts.push(text);
+              wake();
+              return { status: "queued" };
+            }),
+        };
+        const notices = wakingNotices();
+        notices.tell("first", "I will finish the adapter first.");
+        yield* Effect.promise(() =>
+          fixture.broker.wakeRuntime({ ...NO_PLUGINS, ...notices.plugins, runtime }),
+        );
+        yield* Effect.promise(() => woken);
+        assert.deepEqual(prompts, ["[Peer coordination update]"]);
+        const answer = JSON.parse(yield* command.stdio!({ line: status, headers: paneHeaders }));
+        assert.include(answer.result.content[0].text, "I will finish the adapter first.");
+        const next = JSON.parse(yield* command.stdio!({ line: status, headers: paneHeaders }));
+        assert.notInclude(next.result.content[0].text, "I will finish the adapter first.");
+      }),
+    ),
   );
   it.effect(
     "retains sessions across ordinary workspace sync and closes them after access is removed",
@@ -511,7 +503,9 @@ describe("coordination tool sessions", () => {
               headers,
             }),
           );
-          assert.lengthOf(catalog.result.tools, 19);
+          assert.isFalse(
+            catalog.result.tools.some((tool: { name: string }) => tool.name === "peer_extra"),
+          );
         }),
       [extra],
     );
@@ -559,7 +553,9 @@ describe("coordination tool sessions", () => {
           answers.map((answer) => answer.id),
           [1, 2, 3],
         );
-        assert.lengthOf(answers[1].result.tools, 19);
+        assert.isTrue(
+          answers[1].result.tools.some((tool: { name: string }) => tool.name === "peer_status"),
+        );
         assert.isUndefined(answers[2].result.isError);
         assert.equal(fixture.broker.sessions.size, 0);
       }),

@@ -330,7 +330,6 @@ const SIGNED_OUT: PeerHubStatus = {
   agents: { herdr: "not-running", list: [] },
   coordination: {
     enabled: false,
-    policy: "coordinate",
     claudeHooks: false,
     logPath: "",
     sessions: [],

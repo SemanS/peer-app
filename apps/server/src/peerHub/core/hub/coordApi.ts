@@ -1,6 +1,6 @@
 /**
- * The Hub's coordination API: this environment's agent sessions and their overlaps, and the Hub's
- * decision on an agent's intent to change files. Core's Hub client offers these beside its other
+ * The Hub's coordination API: this environment's agent sessions and their overlaps, and what an
+ * agent's intent to change files finds there. Core's Hub client offers these beside its other
  * endpoints (`hubApi.ts`).
  *
  * @module peerHub/core/hub/coordApi
@@ -44,12 +44,6 @@ export type HubOverlap = typeof HubOverlap.Type;
 const CoordView = Schema.Struct({
   sessions: Schema.Array(HubCoordSession),
   overlaps: Schema.Array(HubOverlap),
-  /**
-   * The policy each project sets (see `PeerProjectPolicy`); a project without one is not listed, and a
-   * hub from before project policies sends none. Read with `projectPolicy`: a newer hub may name a policy
-   * this Peer does not know, which must not cost it the whole view.
-   */
-  policies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   at: Schema.String,
 });
 
@@ -58,13 +52,6 @@ export type HubCoordView = typeof CoordView.Type;
 export type HubIntentRequest = PeerIntentRequest;
 export type HubIntentAnswer = PeerIntentResponse;
 export type HubIntentVerdict = PeerIntentResponse["verdicts"][number];
-
-/** What an answer is when the hub has no such route: a hub from before it. Not an error. */
-export interface HubUnsupported {
-  readonly unsupported: true;
-}
-const UNSUPPORTED: HubUnsupported = { unsupported: true };
-export const isUnsupported = (answer: object): answer is HubUnsupported => "unsupported" in answer;
 
 /** One agent session as this environment reports it for coordination. */
 export interface ReportedSession {
@@ -111,42 +98,10 @@ export const coordinationApi = (
       body,
     }),
 
-  noteOverlap: (
-    hubUrl: string,
-    session: string,
-    slug: string,
-    project: string,
-    overlap: string,
-    body: { readonly session?: string; readonly text: string; readonly op?: string },
-  ) =>
-    request(HubOverlap, {
-      hubUrl,
-      path: workspacePath(slug, `/coord/${segment(project)}/${segment(overlap)}/notes`),
-      method: "POST",
-      session,
-      body,
-    }),
-
-  resolveOverlap: (
-    hubUrl: string,
-    session: string,
-    slug: string,
-    project: string,
-    overlap: string,
-    body: { readonly session?: string; readonly resolution: string; readonly op?: string },
-  ) =>
-    request(HubOverlap, {
-      hubUrl,
-      path: workspacePath(slug, `/coord/${segment(project)}/${segment(overlap)}/resolve`),
-      method: "POST",
-      session,
-      body,
-    }),
-
   /**
-   * An agent about to change files asks the hub, which registers it as their holder and decides in
-   * one step (see `PeerIntentResponse`). Unsupported: a hub from before it. Fails when the hub does
-   * not answer within `timeoutMs`, or refuses.
+   * An agent about to change files tells the hub, which registers it as their holder and says who
+   * else is on each in one step (see `PeerIntentResponse`). Fails when the hub does not answer
+   * within `timeoutMs`, or refuses.
    */
   intent: (
     hubUrl: string,
@@ -162,26 +117,7 @@ export const coordinationApi = (
       method: "POST",
       session,
       body,
-      unsupported: { value: UNSUPPORTED },
       ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
-    }),
-
-  /** An agent session acknowledges an overlap (a note counts as one too). Unsupported: a hub from before it. */
-  ack: (
-    hubUrl: string,
-    session: string,
-    slug: string,
-    project: string,
-    overlap: string,
-    body: { readonly session: string; readonly op?: string; readonly filesAt?: string },
-  ) =>
-    request(HubOverlap, {
-      hubUrl,
-      path: workspacePath(slug, `/coord/${segment(project)}/${segment(overlap)}/ack`),
-      method: "POST",
-      session,
-      body,
-      unsupported: { value: UNSUPPORTED },
     }),
 
   coordEvents: (

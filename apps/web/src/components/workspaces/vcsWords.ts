@@ -5,7 +5,6 @@
  * other's words.
  */
 import { projectVcs, vcsWords, type PeerVcsKind } from "@t3tools/client-runtime/peer/vcsWords";
-import type { PeerHubStatus } from "@t3tools/contracts";
 import type { VcsTerminology } from "@t3tools/shared/vcs";
 
 import type { WorkProjectNode, WorkThreadNode } from "./workTree.logic";
@@ -19,16 +18,6 @@ export function kindsOf(kinds: Iterable<PeerVcsKind | undefined>): ReadonlyArray
   if (seen.size === 0) return ["git"];
   return (["git", "jj"] as const).filter((kind) => seen.has(kind));
 }
-
-/** The kinds of this computer's ready checkouts, across its workspaces: what settings speak of. */
-export const computerKinds = (status: Pick<PeerHubStatus, "workspaces">) =>
-  kindsOf(
-    status.workspaces.flatMap((workspace) =>
-      workspace.projects.flatMap((project) =>
-        project.repositories.flatMap((repo) => (repo.state === "ready" ? [repo.vcs] : [])),
-      ),
-    ),
-  );
 
 function threadsOf(project: WorkProjectNode): ReadonlyArray<WorkThreadNode> {
   return [
@@ -83,6 +72,3 @@ export const boardSearchPlaceholder = (kinds: ReadonlyArray<PeerVcsKind>) =>
 
 export const issueKeyHint = (kind: PeerVcsKind) =>
   `From your tracker, such as Jira or Linear. A chat whose ${vcsWords(kind).refNoun} names it joins this task.`;
-
-export const experimentStartStep = (kinds: ReadonlyArray<PeerVcsKind>) =>
-  `On both, start that agent in herdr in that checkout, each on a ${nounOf(kinds, "refNoun", " or ")} of its own.`;

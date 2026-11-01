@@ -10,13 +10,12 @@ import { pluginsForWorkspace } from "./pluginScope.ts";
 import * as NodeCrypto from "node:crypto";
 
 import { runtimeStillPresent } from "../../workLifecycle.ts";
-import type { HubOverlap, ReportedSession } from "../hub/coordApi.ts";
+import type { ReportedSession } from "../hub/coordApi.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import { mergeMcpObservations } from "./observations.ts";
 import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";
 import { messageOf } from "./log.ts";
 import { handlers } from "./pipeline.ts";
-import { overlapSubject } from "../coordination/edits.ts";
 
 const ACTIVE_SYNC_MS = 3000;
 const IDLE_SYNC_MS = 20_000;
@@ -185,12 +184,7 @@ export function sync(this: CoordinationBroker, only?: string): Promise<void> {
             status: s.status,
           })),
           sessions: view.sessions.length,
-          overlaps: view.overlaps.map((o) => ({
-            id: o.id,
-            state: o.state,
-            files: o.files,
-            notes: o.notes.length,
-          })),
+          overlaps: view.overlaps.map((o) => ({ id: o.id, files: o.files })),
           ms: Date.now() - started,
         });
         this.afterViewChange(workspace);
@@ -219,20 +213,9 @@ export function tick(this: CoordinationBroker) {
   if (this.savingMemories === null) void this.saveMemories();
 }
 
-export function applyOverlap(this: CoordinationBroker, workspace: string, overlap: HubOverlap) {
-  const view = this.views.get(workspace);
-  if (view === undefined) return;
-  this.views.set(workspace, {
-    ...view,
-    overlaps: [...view.overlaps.filter((o) => o.id !== overlap.id), overlap],
-  });
-  this.afterViewChange(workspace);
-}
-
 export function afterViewChange(this: CoordinationBroker, workspace: string) {
   const view = this.views.get(workspace);
   for (const overlap of view?.overlaps ?? []) {
-    if (overlap.state !== "open") continue;
     // People here are shown an overlap once: its sessions here remember it, across a restart too.
     const local = overlap.sessions.flatMap((id) => this.sessions.get(id) ?? []);
     if (local.length === 0 || local.some((session) => session.memory.notified.has(overlap.id)))
@@ -246,7 +229,7 @@ export function afterViewChange(this: CoordinationBroker, workspace: string) {
         : `${this.host.nameOf(workspace, other.email)}'s agent`;
     void this.notifyPeople(
       `Peer: overlap with ${who}`,
-      `${overlapSubject(overlap.files, this.taskNamer(workspace, overlap.project))} · ${overlap.project}`,
+      `${overlap.files.join(", ")} · ${overlap.project}`,
     );
     this.record("overlap.opened", {
       workspace,

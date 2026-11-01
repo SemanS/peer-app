@@ -31,8 +31,6 @@ export function localCoordination(
         "Agents in repositories opened on this environment coordinate here. Your local history stays on this environment."),
     sessions,
     overlaps,
-    open: overlaps.filter((o) => o.state === "open").length,
-    resolved: overlaps.filter((o) => o.state === "resolved").length,
     providers: [
       { name: "Claude Code", ready: coordination.enabled && coordination.claudeHooks },
       {

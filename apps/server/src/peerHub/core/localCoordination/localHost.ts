@@ -22,16 +22,11 @@ export function withLocalCoordination(
     workspaces: () => [...new Set([...host.workspaces(), PEER_LOCAL_WORKSPACE])],
     report: (w, sessions) => (isLocal(w) ? local.report(sessions) : host.report(w, sessions)),
     view: (w) => (isLocal(w) ? local.view() : host.view(w)),
-    note: (w, ...args) => (isLocal(w) ? local.note(...args) : host.note(w, ...args)),
-    resolve: (w, ...args) => (isLocal(w) ? local.resolve(...args) : host.resolve(w, ...args)),
     intent: (w, project, request, timeout) =>
       isLocal(w)
         ? local.intent(project, request)
-        : (host.intent?.(w, project, request, timeout) ?? Promise.resolve({ unsupported: true })),
-    ack: (w, ...args) =>
-      isLocal(w)
-        ? local.ack(...args)
-        : (host.ack?.(w, ...args) ?? Promise.resolve({ unsupported: true })),
+        : (host.intent?.(w, project, request, timeout) ??
+          Promise.reject(new Error("This Hub takes no intents."))),
     coordEvents: (w, ...args) =>
       isLocal(w)
         ? local.coordEvents(...args)

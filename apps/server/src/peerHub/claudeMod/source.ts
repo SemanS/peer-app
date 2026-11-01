@@ -213,18 +213,15 @@ const peerActive = __PEER_ACTIVE__;
     return cliRequest($, command, args.length ? args.join('\0') + '\0' : '');
   }
 
-  // The tools Peer serves agents, as its MCP server lists them for this session; the three below
+  // The tools Peer serves agents, as its MCP server lists them for this session; the two below
   // when that server is off or this Peer is older.
   const LEGACY = [
-    { name: 'peer_context', command: 'context', description: 'Read the current shared context of your work or a named task; records the version you read.', inputSchema: {
-      type: 'object', properties: { work: { type: 'string' } }, additionalProperties: false,
-    }, args: (e) => e.work ? [e.work] : [] },
     { name: 'peer_ask', command: 'ask', description: 'Ask agents working on a named task a short question.', inputSchema: {
       type: 'object', properties: { work: { type: 'string' }, question: { type: 'string' } }, required: ['work', 'question'], additionalProperties: false,
     }, args: (e) => [e.work, e.question] },
     { name: 'peer_note', command: 'note', description: 'Write a short coordination note to the agents sharing your files.', inputSchema: {
-      type: 'object', properties: { text: { type: 'string' }, overlap: { type: 'string' } }, required: ['text'], additionalProperties: false,
-    }, args: (e) => [e.text, ...(e.overlap ? ['--overlap', e.overlap] : [])] },
+      type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false,
+    }, args: (e) => [e.text] },
   ];
   // Tool name → the argument names its schema declares: an event carries the engine's keys as well.
   let served = new Map(LEGACY.map((tool) => [tool.name, Object.keys(tool.inputSchema.properties)]));

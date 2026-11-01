@@ -1,22 +1,18 @@
 /**
- * Agents on the same project staying out of each other's way without reading each other's
- * conversations, at an edit.
+ * Agents on the same project hearing of each other without reading each other's conversations, at
+ * an edit.
  *
  * Every agent session reports which files of the project's repository it changed. The hub finds
- * pairs that share a file (overlaps) and keeps one short thread of notes per overlap. An agent hears
- * about another only when it is about to touch something that agent changed, and then only a few
- * lines: who, what they work on, their latest note, and how to answer. It reads more (`peer status`)
- * or writes a note (`peer note`) when it decides to. People see the same overlaps and notes in Peer.
+ * pairs that share a file (overlaps). An agent hears about another only when it is about to touch
+ * something that agent changed, and then only a few lines: who, what they work on, and how to tell
+ * them. Nothing here stops an edit: the agent reads more (`peer status`) or writes to the room
+ * (`peer note`) when it decides to.
  *
  * This module is the pure part: what a tool call edits, and what an agent about to change a file
- * hears, from the view or from the Hub's verdict, and when the Hub gave none. The broker asks the
- * Hub and applies the answer (`overlaps.ts`).
+ * hears from the Hub's verdict. The broker asks the Hub and applies the answer (`overlaps.ts`).
  *
  * @module peerHub/core/coordination/edits
  */
-import type { PeerCoordinationPolicy, PeerProjectPolicy } from "@t3tools/contracts";
-
-import { neutral } from "../../peerText.ts";
 import { run } from "../local.ts";
 import type { HubCoordSession, HubIntentVerdict, HubOverlap } from "../hub/coordApi.ts";
 
@@ -180,11 +176,6 @@ export function touches(a: string, b: string): boolean {
   return a === b || (a.endsWith("/") && b.startsWith(a)) || (b.endsWith("/") && a.startsWith(b));
 }
 
-/** What a session changed or claimed. */
-function pathsOf(session: HubCoordSession): ReadonlyArray<string> {
-  return [...session.files, ...session.claims];
-}
-
 /** The overlap's short id agents type: enough of it to be unique in practice. */
 export const shortId = (overlapId: string) => overlapId.slice(0, 6);
 
@@ -193,23 +184,17 @@ export const shortId = (overlapId: string) => overlapId.slice(0, 6);
  * and the broker keeps them on disk, so a restart does not tell it again (`broker/sessionMemory.ts`).
  */
 export interface SessionMemory {
-  /** Overlaps (by id, or `with:<session>` before the hub named one) it answered or its person approved. */
+  /** What it heard at an edit or its person approved: contests (`contestKey`) and plugins' asks. */
   readonly acknowledged: Set<string>;
-  /** Notes it was shown. */
-  readonly seenNotes: Set<string>;
   /** Overlaps it was told about. */
   readonly announced: Set<string>;
-  /** Quiet overlaps it was asked to close, as `<overlap id>:<how many notes it had>`. */
-  readonly settled: Set<string>;
   /** Overlaps its people were shown a notification of, by id. */
   readonly notified: Set<string>;
 }
 
 export const emptyMemory = (): SessionMemory => ({
   acknowledged: new Set(),
-  seenNotes: new Set(),
   announced: new Set(),
-  settled: new Set(),
   notified: new Set(),
 });
 
@@ -249,29 +234,6 @@ export function describe(session: HubCoordSession, nameOf: NameOf, taskName?: Ta
   return `${nameOf(session.email)}'s agent (${details.join(", ")})`;
 }
 
-/** A claim on a task (`peer ask`): talking with the agents at work on it, not changing files. */
-export const taskClaim = (task: string) => `task:${task}`;
-
-/** The task a claim or an overlap's path names, when it is a task claim. */
-export function claimedTask(path: string): string | undefined {
-  return path.startsWith("task:") && path.length > "task:".length
-    ? path.slice("task:".length)
-    : undefined;
-}
-
-/** What an overlap is about, as agents and people read it: the files, or the task asked about. */
-export function overlapSubject(files: ReadonlyArray<string>, taskName: TaskNamer): string {
-  const asked = files.flatMap((path) => {
-    const task = claimedTask(path);
-    return task === undefined ? [] : [taskName(task)];
-  });
-  const paths = files.filter((path) => claimedTask(path) === undefined);
-  return [
-    ...(asked.length === 0 ? [] : [`a question about ${asked.join(", ")}`]),
-    ...(paths.length === 0 ? [] : [paths.join(", ")]),
-  ].join(" and ");
-}
-
 /**
  * Where another agent works, said once: on another computer its edits reach this one only
  * through git, which an agent cannot tell from the files it sees.
@@ -282,21 +244,13 @@ export function whereFrom(me: HubCoordSession, other: HubCoordSession): string {
     : "on another computer, so its edits reach you only through git";
 }
 
-const between = (overlap: HubOverlap, me: string, other: string) =>
-  overlap.sessions.includes(me) && overlap.sessions.includes(other);
-
-/** The newest note on an overlap written by anyone but `me`. */
-function latestOtherNote(overlap: HubOverlap | undefined, me: string) {
-  return overlap?.notes.findLast((note) => note.session !== me);
-}
-
 export interface EditAnswer {
   readonly decision?: "deny" | "ask";
   /** Why, for the agent (deny) or the person (ask). */
   readonly reason?: string;
   /** A heads-up the agent reads next to the tool result. */
   readonly context?: string;
-  /** One per contested file and other session: what an answer (note, approval) settles. */
+  /** One per contested file and other session: what telling the agent settles. */
   readonly keys: ReadonlyArray<string>;
   /** The overlaps the hub already knows that this answer was about. */
   readonly overlaps: ReadonlyArray<string>;
@@ -313,176 +267,13 @@ export const contestKey = (overlapOrSession: string, file: string) => `${overlap
 /** An overlap is news again when files join it. */
 export const announcementKey = (overlap: HubOverlap) => `${overlap.id}:${overlap.files.length}`;
 
-/** A file contested with another session: what an answer about it is worded from. */
-export interface Contest {
-  /** The other session; none when the hub said the file is contested without saying with whom. */
-  readonly otherId: string | undefined;
-  /** Its session when this computer has it in view: the hub may name one it has not heard of yet. */
-  readonly other: HubCoordSession | undefined;
-  readonly overlap: HubOverlap | undefined;
-  /** What settles it (`contestKey`). */
-  readonly key: string;
-}
-
-/**
- * What to tell a session about to change `file`: nothing when nobody else at
- * work on the project changed or claimed it; otherwise, by policy, a
- * heads-up, a request to write the other agent a note first, or a question
- * for its person — once per overlap, until something new happens.
- */
-export function decideEdit(input: {
-  readonly policy: PeerCoordinationPolicy;
-  readonly me: HubCoordSession;
-  readonly file: string;
-  readonly view: CoordinationView;
-  readonly memory: SessionMemory;
-  readonly nameOf: NameOf;
-  readonly taskName?: TaskNamer;
-  readonly cli: string;
-}): EditAnswer {
-  const { me, file, view } = input;
-  if (generatedFile(file)) return noContest();
-  const others = view.sessions.filter(
-    (session) =>
-      session.id !== me.id &&
-      session.project === me.project &&
-      pathsOf(session).some((path) => touches(path, file)),
-  );
-  const contests = others.flatMap((other): Contest[] => {
-    const overlap = view.overlaps.find(
-      (o) => o.project === me.project && between(o, me.id, other.id),
-    );
-    // An agreement that covered this file settles it.
-    if (overlap?.state === "resolved" && overlap.resolvedFiles?.includes(file)) return [];
-    return [
-      {
-        otherId: other.id,
-        other,
-        overlap,
-        key: contestKey(overlap?.id ?? `with:${other.id}`, file),
-      },
-    ];
-  });
-  return composeEditAnswer({ ...input, contests });
-}
-
-/**
- * The words for an edit of `file` that is contested, by policy: a heads-up, a request to write
- * the other agent a note first, or a question for the person. A contest the session already
- * answered (`memory`) is not said again. The contests come from the view (`decideEdit`) or from
- * what the hub decided (`answerForVerdict`).
- */
-function composeEditAnswer(input: {
-  readonly policy: PeerCoordinationPolicy;
-  readonly me: HubCoordSession;
-  readonly file: string;
-  readonly contests: ReadonlyArray<Contest>;
-  readonly memory: SessionMemory;
-  readonly nameOf: NameOf;
-  readonly taskName?: TaskNamer;
-  readonly cli: string;
-}): EditAnswer {
-  const { me, file, contests, memory } = input;
-  if (contests.length === 0) return noContest();
-  const contested = contests.flatMap((c) => (c.otherId === undefined ? [] : [c.otherId]));
-  const fresh = contests.filter((contest) => !memory.acknowledged.has(contest.key));
-  if (fresh.length === 0) return { keys: [], overlaps: [], with: contested };
-
-  const lines = fresh.map(({ other, overlap }) => {
-    const note = latestOtherNote(overlap, me.id);
-    const said = note === undefined ? "" : ` Their note: "${neutral(note.text)}"`;
-    const id = overlap === undefined ? "" : ` [overlap ${shortId(overlap.id)}]`;
-    // The hub named a session this computer has not heard of yet: all it can say is that it is there.
-    if (other === undefined) {
-      return `Another agent on this project is also working on ${file}.${said}${id}`;
-    }
-    const intent = other.intent === undefined ? "" : ` They said they are: ${other.intent}.`;
-    // A claim, or the hub's record of an intent, is not a change yet.
-    const did = other.files.some((path) => touches(path, file))
-      ? "also changed"
-      : "is also about to change";
-    return `${describe(other, input.nameOf, input.taskName)}, working ${whereFrom(me, other)}, ${did} ${file}.${intent}${said}${id}`;
-  });
-  const heading = `Peer: ${lines.join(" ")}`;
-  const keys = fresh.map((contest) => contest.key);
-  const overlaps = fresh.flatMap((contest) =>
-    contest.overlap === undefined ? [] : [contest.overlap.id],
-  );
-  switch (input.policy) {
-    case "notify":
-      return {
-        context: `${heading} If your change interacts with theirs, tell them: ${input.cli} note "<what you change and why>".`,
-        keys,
-        overlaps,
-        with: contested,
-      };
-    case "ask":
-      return { decision: "ask", reason: heading, keys, overlaps, with: contested };
-    case "coordinate":
-      return {
-        decision: "deny",
-        reason: `${heading} Peer coordinates the agents on this project: before editing ${file}, tell them your plan with ${input.cli} note "<your plan for ${file}>" — it only posts a short note both agents and their people see, and changes no files. Then edit if the plans fit; if they clash, propose a split in the note and check replies with ${input.cli} status.`,
-        keys,
-        overlaps,
-        with: contested,
-      };
-  }
-}
-
 /** The most paths one intent to the hub carries. */
 export const INTENT_MAX_PATHS = 50;
 
-const PROJECT_POLICIES: ReadonlySet<string> = new Set(["notify", "coordinate", "ask", "exclusive"]);
-
-const isProjectPolicy = (value: string): value is PeerProjectPolicy => PROJECT_POLICIES.has(value);
-
 /**
- * The policy that holds while the hub gives no verdict: the project's own when this computer
- * heard it with the last view, else the person's Settings. A policy this Peer does not know
- * (a newer hub's) counts as none.
- */
-export function policyWithoutHub(
-  policies: Readonly<Record<string, string>> | undefined,
-  project: string,
-  settings: PeerCoordinationPolicy,
-): PeerProjectPolicy {
-  const named = policies?.[project];
-  return named !== undefined && isProjectPolicy(named) ? named : settings;
-}
-
-/**
- * The policy that decided an overlap: what the project decided (its policy, or the path rule the
- * hub recorded) where the hub says so, else `fallback`. A project decides for every computer, but
- * a `client` decision is the default of the computer that asked, which may be another one: it
- * never replaces this computer's own. A policy this Peer does not know (a newer hub's) counts as
- * none, as in `policyWithoutHub`.
- */
-export function policyOfDecision(
-  decision: { readonly policy: string; readonly source: "project" | "client" } | undefined,
-  fallback: PeerProjectPolicy,
-): PeerProjectPolicy {
-  return decision?.source === "project" && isProjectPolicy(decision.policy)
-    ? decision.policy
-    : fallback;
-}
-
-/** The policies projects set themselves that this Peer applies, by project: those it does not know are left out. */
-export function knownPolicies(
-  policies: Readonly<Record<string, string>> | undefined,
-): Readonly<Record<string, PeerProjectPolicy>> {
-  return Object.fromEntries(
-    Object.entries(policies ?? {})
-      .filter((entry): entry is [string, PeerProjectPolicy] => isProjectPolicy(entry[1]))
-      .toSorted(([a], [b]) => a.localeCompare(b)),
-  );
-}
-
-/**
- * What the hub's verdict on one file tells the agent. The hub decided; this words it from the
- * sessions and overlaps it named, as `decideEdit` words what it finds in the view: a session the
- * view does not have yet (the hub recorded it just now) is described generically. What this
- * computer remembers of having told the agent counts for a heads-up and a question to its person,
- * not for a denial: that is the hub's to lift, with an acknowledgement.
+ * What the hub's verdict on one file tells the agent, once per contest, worded from the sessions
+ * and overlaps it named: a session the view does not have yet (the hub recorded it just now) is
+ * described generically. Whatever it says, the agent goes on.
  */
 export function answerForVerdict(input: {
   readonly verdict: HubIntentVerdict;
@@ -494,9 +285,11 @@ export function answerForVerdict(input: {
   readonly nameOf: NameOf;
   readonly taskName?: TaskNamer;
   readonly cli: string;
+  /** Whether Peer's texts may name `peer note`. */
+  readonly note: boolean;
 }): EditAnswer {
-  const { verdict, me } = input;
-  const file = verdict.pattern === undefined ? verdict.path : `pattern ${verdict.pattern}`;
+  const { verdict, me, memory } = input;
+  const file = verdict.path;
   if (verdict.verdict === "clear") return noContest();
   const named = input.overlaps.filter((overlap) => verdict.overlaps.includes(overlap.id));
   const others = [
@@ -505,98 +298,37 @@ export function answerForVerdict(input: {
       ...named.flatMap((overlap) => overlap.sessions.filter((id) => id !== me.id)),
     ]),
   ];
-  const contests: Contest[] = others.map((id) => {
-    const overlap = named.find((o) => between(o, me.id, id));
+  const contests = (others.length === 0 ? [undefined] : others).map((id) => {
+    const overlap = id === undefined ? undefined : named.find((o) => o.sessions.includes(id));
     return {
-      otherId: id,
+      id,
       other: input.sessions.find((session) => session.id === id),
       overlap,
-      key: contestKey(overlap?.id ?? `with:${id}`, file),
+      key: contestKey(overlap?.id ?? `with:${id ?? "unknown"}`, file),
     };
   });
-  // The hub said the file is contested, not with whom: contested all the same.
-  if (contests.length === 0) {
-    contests.push({
-      otherId: undefined,
-      other: undefined,
-      overlap: undefined,
-      key: contestKey("with:unknown", file),
-    });
-  }
-  const words = {
-    me,
-    file,
-    contests,
-    nameOf: input.nameOf,
-    ...(input.taskName === undefined ? {} : { taskName: input.taskName }),
-    cli: input.cli,
+  const fresh = contests.filter((contest) => !memory.acknowledged.has(contest.key));
+  if (fresh.length === 0) return { ...noContest(), with: others };
+  const lines = fresh.map(({ other }) => {
+    if (other === undefined) return `Another agent on this project is also working on ${file}.`;
+    const intent = other.intent === undefined ? "" : ` They said they are: ${other.intent}.`;
+    // A claim, or the hub's record of an intent, is not a change yet.
+    const did = other.files.some((path) => touches(path, file))
+      ? "also changed"
+      : "is also about to change";
+    return `${describe(other, input.nameOf, input.taskName)}, working ${whereFrom(me, other)}, ${did} ${file}.${intent}`;
+  });
+  const tell = input.note
+    ? ` If your change interacts with theirs, tell them: ${input.cli} note "<what you change and why>".`
+    : "";
+  return {
+    context: `Peer: ${lines.join(" ")}${tell}`,
+    keys: fresh.map((contest) => contest.key),
+    overlaps: fresh.flatMap((contest) =>
+      contest.overlap === undefined ? [] : [contest.overlap.id],
+    ),
+    with: others,
   };
-  switch (verdict.verdict) {
-    case "notify":
-      return composeEditAnswer({ ...words, policy: "notify", memory: input.memory });
-    case "ask":
-      return composeEditAnswer({ ...words, policy: "ask", memory: input.memory });
-    case "deny":
-      return composeEditAnswer({ ...words, policy: "coordinate", memory: emptyMemory() });
-    case "held": {
-      const holderId = verdict.holder ?? verdict.with[0];
-      const holder = input.sessions.find((session) => session.id === holderId);
-      const who =
-        holder === undefined
-          ? "Another agent on this project"
-          : describe(holder, input.nameOf, input.taskName);
-      return {
-        decision: "deny",
-        reason: `Peer: ${who} holds ${file} in this project, which lets one agent at a time change a file. Wait until it is done with it, or write it a note asking for it: ${input.cli} note "<why you need ${file}>".`,
-        keys: [],
-        overlaps: verdict.overlaps,
-        with: verdict.with,
-      };
-    }
-  }
-}
-
-/**
- * What an edit of `files` hears when the hub gave no verdict in time, by the policy that holds
- * without it: `coordinate` and `exclusive` stop it, to try again in a moment; `ask` leaves it to
- * the person, once for the files not asked about yet (a Codex agent asks, and its next try passes:
- * `memory` has them once asked); `notify` lets it through, and its files reach the next report,
- * where the hub finds the overlaps afterwards.
- */
-export function unverifiedAnswer(input: {
-  readonly policy: PeerProjectPolicy;
-  readonly files: ReadonlyArray<string>;
-  readonly memory: SessionMemory;
-}): EditAnswer {
-  switch (input.policy) {
-    case "notify":
-      return noContest();
-    case "ask": {
-      const unasked = input.files.filter(
-        (file) => !input.memory.acknowledged.has(contestKey("unconfirmed", file)),
-      );
-      const [first] = unasked;
-      if (first === undefined) return noContest();
-      const more = unasked.length > 1 ? ` (and ${unasked.length - 1} more)` : "";
-      return {
-        decision: "ask",
-        reason: `Peer could not confirm this edit with your team's hub: another agent may be changing ${first}${more} too.`,
-        keys: unasked.map((file) => contestKey("unconfirmed", file)),
-        overlaps: [],
-        with: [],
-      };
-    }
-    case "coordinate":
-    case "exclusive":
-      return {
-        decision: "deny",
-        reason:
-          "Peer could not confirm this edit with your team's hub, so it did not run. Try again in a moment. If the hub stays unreachable, your person can switch this project to notify.",
-        keys: [],
-        overlaps: [],
-        with: [],
-      };
-  }
 }
 
 /**

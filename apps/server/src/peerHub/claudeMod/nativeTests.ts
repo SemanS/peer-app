@@ -204,14 +204,14 @@ test('interrupted requests never acknowledge delivery', async ($, on) => {
   expect(requests.length).toBe(1);
 });
 
-test('native peer_context sends bounded arguments directly to the broker', async ($, on) => {
+test('native peer_ask sends bounded arguments directly to the broker', async ($, on) => {
   session(on);
   let request;
-  on('http.fetch', ($, e) => { request = e; return http('Shared context v7'); });
-  const result = await $.tool.call({ tool: 'mcp__peer__peer_context', work: 'KRK-812' });
-  expect(result.result).toBe('Shared context v7');
-  expect(request.url).toBe('http://peer/cli/context');
-  expect(request.init.body).toBe('KRK-812\0');
+  on('http.fetch', ($, e) => { request = e; return http('Asked.'); });
+  const result = await $.tool.call({ tool: 'mcp__peer__peer_ask', work: 'KRK-812', question: 'Where?' });
+  expect(result.result).toBe('Asked.');
+  expect(request.url).toBe('http://peer/cli/ask');
+  expect(request.init.body).toBe('KRK-812\0Where?\0');
 });
 
 test('the Mod serves the tools Peer lists for its session and passes only their arguments', async ($, on) => {
@@ -244,7 +244,7 @@ test('the Mod serves the tools Peer lists for its session and passes only their 
   expect(refused.deny).toContain('peer: refused: no.');
 });
 
-test('without Peer\'s tool list the Mod keeps its three tools', async ($, on) => {
+test('without Peer\'s tool list the Mod keeps its two tools', async ($, on) => {
   session(on);
   const registered = [];
   on('session.start', ($, e) => ({ cwd: e.cwd }));
@@ -253,11 +253,11 @@ test('without Peer\'s tool list the Mod keeps its three tools', async ($, on) =>
   on('tool.register', ($, e) => { registered.push(e.name); return { value: { tool: 'mcp__peer__' + e.name } }; });
   on('http.fetch', ($, e) => e.url === 'http://peer/cli/mcp'
     ? http('peer: refused: mcp is turned off on this environment.', 409)
-    : http('Shared context v7'));
+    : http('Asked.'));
   await $.session.start({ cwd: '/work', surface: null, isInteractive: false });
-  expect(registered).toEqual(['peer_context', 'peer_ask', 'peer_note']);
-  const result = await $.tool.call({ tool: 'mcp__peer__peer_context', work: 'KRK-812' });
-  expect(result.result).toBe('Shared context v7');
+  expect(registered).toEqual(['peer_ask', 'peer_note']);
+  const result = await $.tool.call({ tool: 'mcp__peer__peer_ask', work: 'KRK-812', question: 'Where?' });
+  expect(result.result).toBe('Asked.');
 });
 
 test('headless SDK sessions do not create hidden model turns for a wake', async ($, on) => {
@@ -384,10 +384,10 @@ test('the Mod tools render broker refusals, missing sockets and a lost answer as
   const board = await $.command.run({ command: 'peer', args: '' });
   expect(board.text).toContain('peer: refused:');
   socketAvailable = false;
-  answer = await $.tool.call({ tool: 'mcp__peer__peer_context' });
+  answer = await $.tool.call({ tool: 'mcp__peer__peer_note', text: 'hello' });
   expect(answer.deny).toContain('peer: not running:');
   socketAvailable = true; hang = true;
-  const waiting = $.tool.call({ tool: 'mcp__peer__peer_context' });
+  const waiting = $.tool.call({ tool: 'mcp__peer__peer_note', text: 'hello' });
   await clock.advance(8001);
   answer = await waiting;
   expect(answer.deny).toContain('peer: uncertain: Peer did not answer within 8 s');

@@ -131,7 +131,7 @@ describe("PeerState", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("loads and saves a peer-hub.json from before plugins unchanged", () =>
+  it.effect("loads a peer-hub.json from before plugins, and saves what it still reads", () =>
     Effect.gen(function* () {
       const baseDir = yield* seeded(BEFORE_PLUGINS_WITHOUT_ASSIGNMENTS);
       const state = yield* startState(baseDir);
@@ -142,7 +142,10 @@ describe("PeerState", () => {
       assert.isUndefined(persisted.pluginData);
 
       yield* state.updatePersisted((current) => current);
-      assert.strictEqual(yield* readFile(stateFile(baseDir)), BEFORE_PLUGINS_WITHOUT_ASSIGNMENTS);
+      const saved = JSON.parse(yield* readFile(stateFile(baseDir)));
+      assert.strictEqual(saved.hubUrl, "https://hub.acme.test");
+      assert.deepStrictEqual(saved.sharedThreads, ["peer:thread-1"]);
+      assert.deepStrictEqual(saved.coordination, { enabled: true });
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

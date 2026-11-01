@@ -19,16 +19,6 @@ async function dormantFixture(agent: "claude" | "codex") {
     project: "app",
     sessions: [sessionId, "claude:teammate"],
     files: ["src/discounts.ts"],
-    state: "open",
-    notes: [
-      {
-        id: "already-read",
-        session: "claude:teammate",
-        email: "teammate@acme.test",
-        text: "We are waiting for the humans to decide.",
-        at: now,
-      },
-    ],
     openedAt: now,
     updatedAt: now,
   };
@@ -83,7 +73,7 @@ async function dormantFixture(agent: "claude" | "codex") {
   );
   expect(session).not.toBeNull();
   // It heard the overlap at a step and what woke it, before it went idle.
-  expect(fixture.broker.news(session!, { pending: false })).toContain("waiting for the humans");
+  expect(fixture.broker.news(session!, { pending: false })).toContain("src/discounts.ts");
   expect(await fixture.broker.wakingNews(session!, notices.plugins)).toContain(
     "waiting for the humans",
   );
@@ -100,16 +90,6 @@ async function dormantFixture(agent: "claude" | "codex") {
     current = { ...current, overlaps };
     broker.views.set("acme", current);
   };
-  const newNote = (broker: CoordinationBroker) =>
-    setOverlaps(broker, [
-      {
-        ...overlap,
-        notes: [
-          ...overlap.notes,
-          { id: "new-message", email: "ana@acme.test", text: NEW_MESSAGE, at: now },
-        ],
-      },
-    ]);
   const newNotice = () => notices.tell("new-message", NEW_MESSAGE);
   const resume = async (broker: CoordinationBroker) => {
     state.resumable = false;
@@ -127,7 +107,6 @@ async function dormantFixture(agent: "claude" | "codex") {
     admitted,
     independentQueues: () => independentQueues,
     setOverlaps,
-    newNote,
     newNotice,
     told: notices.told,
     resume,
@@ -464,92 +443,7 @@ describe("native Peer agents after idle process release", () => {
   );
 
   it.each(["claude", "codex"] as const)(
-    "does not resume %s for a confirmed human agreement on a resolved overlap, which it hears when it starts again",
-    async (agent) => {
-      const fixture = await dormantFixture(agent);
-      try {
-        const words = "Agreement confirmed: apply the coupon before loyalty.";
-        fixture.setOverlaps(fixture.broker, [
-          {
-            ...fixture.overlap,
-            state: "resolved",
-            resolution: "apply the coupon before loyalty",
-            notes: [
-              ...fixture.overlap.notes,
-              {
-                id: "human-confirmation",
-                email: "ana@acme.test",
-                text: words,
-                at: fixture.overlap.updatedAt,
-              },
-            ],
-          },
-        ]);
-        await fixture.broker.wakeIdle();
-        await fixture.broker.wakeIdle();
-        expect(fixture.admitted).toEqual([]);
-        expect(fixture.broker.reportFor("acme")).toEqual([]);
-
-        const answer = await fixture.resume(fixture.broker);
-        expect(JSON.stringify(answer)).toContain(words);
-      } finally {
-        await fixture.dispose();
-      }
-    },
-  );
-
-  it.each(["claude", "codex"] as const)(
-    "does not resume %s for a new overlap message, which it hears when it starts again",
-    async (agent) => {
-      const fixture = await dormantFixture(agent);
-      try {
-        fixture.newNote(fixture.broker);
-        await fixture.broker.wakeIdle();
-        await fixture.broker.wakeIdle();
-        expect(fixture.admitted).toEqual([]);
-        expect(fixture.independentQueues()).toBe(0);
-
-        const answer = await fixture.resume(fixture.broker);
-        expect(JSON.stringify(answer)).toContain(NEW_MESSAGE);
-        expect(fixture.broker.sessions.get(fixture.sessionId)?.thread).toBe(THREAD);
-      } finally {
-        await fixture.dispose();
-      }
-    },
-  );
-
-  it.each(["claude", "codex"] as const)(
-    "resumes %s once in the original thread for a notice that wakes it",
-    async (agent) => {
-      const fixture = await dormantFixture(agent);
-      try {
-        await fixture.broker.wakeIdle();
-        expect(fixture.admitted).toEqual([]);
-        expect(fixture.broker.reportFor("acme")).toEqual([]);
-
-        fixture.newNotice();
-        await fixture.broker.wakeIdle();
-        await fixture.broker.wakeIdle();
-        expect(fixture.admitted).toEqual([
-          {
-            session: fixture.sessionId,
-            thread: THREAD,
-            text: expect.stringContaining(NEW_MESSAGE),
-          },
-        ]);
-        expect(fixture.independentQueues()).toBe(0);
-        expect(fixture.broker.reportFor("acme")).toEqual([]);
-
-        await fixture.resume(fixture.broker);
-        expect(fixture.broker.sessions.get(fixture.sessionId)?.thread).toBe(THREAD);
-      } finally {
-        await fixture.dispose();
-      }
-    },
-  );
-
-  it.each(["claude", "codex"] as const)(
-    "keeps notes and what it heard silent after a %s broker restart, and wakes it once for a new notice",
+    "keeps what it heard silent after a %s broker restart, and wakes it once for a new notice",
     async (agent) => {
       const fixture = await dormantFixture(agent);
       let broker = fixture.broker;
@@ -563,14 +457,6 @@ describe("native Peer agents after idle process release", () => {
             id: "someone-elses-overlap",
             project: "another-project",
             sessions: ["claude:someone-else", "codex:another-agent"],
-            notes: [
-              {
-                id: "unrelated",
-                email: "ana@acme.test",
-                text: NEW_MESSAGE,
-                at: fixture.overlap.updatedAt,
-              },
-            ],
           },
         ]);
         await broker.wakeIdle();

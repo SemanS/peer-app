@@ -251,7 +251,6 @@ const make = Effect.gen(function* () {
           ...overlap,
           workspace: PEER_LOCAL_WORKSPACE,
         })),
-        policies: {},
       };
       return {
         local: {
@@ -261,7 +260,6 @@ const make = Effect.gen(function* () {
           ...(local.error === null ? {} : { error: local.error }),
         },
         enabled: s.persisted.coordination?.enabled ?? true,
-        policy: s.persisted.coordination?.policy ?? "coordinate",
         claudeHooks: claudeHooksInstalled,
         claudeHooksPresent: claudeSettings.some((claude) => hasPeerHooks(claude ?? {}, dir)),
         claudeMod: false,
@@ -290,26 +288,12 @@ const make = Effect.gen(function* () {
         })),
         overlaps: snapshot.overlaps.map((overlap) => ({
           id: overlap.id,
-          policy: overlap.policy,
           workspace: overlap.workspace,
           project: overlap.project,
           sessions: overlap.sessions,
           files: overlap.files,
-          state: overlap.state,
-          ...(overlap.resolution === undefined ? {} : { resolution: overlap.resolution }),
-          notes: overlap.notes.map((note) => ({
-            id: note.id,
-            ...(note.session === undefined ? {} : { session: note.session }),
-            email: note.email,
-            text: note.text,
-            at: note.at,
-          })),
           updatedAt: overlap.updatedAt,
-          ...(overlap.closer === undefined ? {} : { closer: overlap.closer }),
-          ...(overlap.askedAt === undefined ? {} : { askedAt: overlap.askedAt }),
-          ...(overlap.decision === undefined ? {} : { decision: overlap.decision }),
         })),
-        policies: snapshot.policies,
       } satisfies PeerHubStatus["coordination"];
     });
 
@@ -317,17 +301,13 @@ const make = Effect.gen(function* () {
     "PeerAdapters.setCoordination",
   )(function* (input) {
     const claudeHooks = input.claudeHooks ?? input.claudeMod;
-    const current = (yield* state.read).persisted.coordination ?? {
-      enabled: true,
-      policy: "coordinate" as const,
-    };
+    const current = (yield* state.read).persisted.coordination ?? { enabled: true };
     // Hooks run Peer's scripts, which coordination writes: installing them turns it on.
     const next = {
       enabled:
         claudeHooks === true || input.codexHooks === true
           ? true
           : (input.enabled ?? current.enabled),
-      policy: input.policy ?? current.policy,
       ...(claudeHooks === undefined
         ? current.claudeHooks === undefined
           ? {}

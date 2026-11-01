@@ -29,9 +29,6 @@ import {
   PeerHubCreateTaskInput,
   PeerHubCreateTaskResult,
   PeerHubFindWorkspaceInput,
-  PeerHubOverlapNoteInput,
-  PeerHubResolveOverlapInput,
-  PeerHubSettleOverlapInput,
   PeerHubSetCoordinationInput,
   PeerHubShareProjectInput,
   PeerHubTaskInput,
@@ -54,8 +51,6 @@ import {
   PeerHubJoinWorkspaceInput,
   PeerHubStartAgentInput,
   PeerHubStartAgentResult,
-  PeerHubCoordEventsInput,
-  PeerCoordEvent,
   PeerHubFoundingInput,
   PeerInvitation,
   PeerInvitationList,
@@ -100,7 +95,6 @@ export const PEER_CORE_METHODS = {
   peerHubDeleteTask: "peerHub.deleteTask",
   peerHubAssignThread: "peerHub.assignThread",
   peerHubStartAgent: "peerHub.startAgent",
-  peerHubCoordEvents: "peerHub.coordEvents",
   peerHubShareProject: "peerHub.shareProject",
   peerHubUnshareProject: "peerHub.unshareProject",
   peerHubBindCheckout: "peerHub.bindCheckout",
@@ -109,9 +103,6 @@ export const PEER_CORE_METHODS = {
   peerHubUseJujutsu: "peerHub.useJujutsu",
   peerHubSetCoordination: "peerHub.setCoordination",
   peerHubSetPlugin: "peerHub.setPlugin",
-  peerHubNoteOverlap: "peerHub.noteOverlap",
-  peerHubResolveOverlap: "peerHub.resolveOverlap",
-  peerHubSettleOverlap: "peerHub.settleOverlap",
   peerHubAcceptFounding: "peerHub.acceptFounding",
   peerHubDeclineFounding: "peerHub.declineFounding",
   peerHubInvitations: "peerHub.invitations",
@@ -199,24 +190,6 @@ const WsPeerHubSetPluginRpc = Rpc.make(PEER_CORE_METHODS.peerHubSetPlugin, {
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 
-const WsPeerHubNoteOverlapRpc = Rpc.make(PEER_CORE_METHODS.peerHubNoteOverlap, {
-  payload: PeerHubOverlapNoteInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-const WsPeerHubResolveOverlapRpc = Rpc.make(PEER_CORE_METHODS.peerHubResolveOverlap, {
-  payload: PeerHubResolveOverlapInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
-const WsPeerHubSettleOverlapRpc = Rpc.make(PEER_CORE_METHODS.peerHubSettleOverlap, {
-  payload: PeerHubSettleOverlapInput,
-  success: PeerHubStatus,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-
 const WsPeerHubCreateTaskRpc = Rpc.make(PEER_CORE_METHODS.peerHubCreateTask, {
   payload: PeerHubCreateTaskInput,
   success: PeerHubCreateTaskResult,
@@ -244,11 +217,6 @@ const WsPeerHubAssignThreadRpc = Rpc.make(PEER_CORE_METHODS.peerHubAssignThread,
 const WsPeerHubStartAgentRpc = Rpc.make(PEER_CORE_METHODS.peerHubStartAgent, {
   payload: PeerHubStartAgentInput,
   success: PeerHubStartAgentResult,
-  error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
-});
-const WsPeerHubCoordEventsRpc = Rpc.make(PEER_CORE_METHODS.peerHubCoordEvents, {
-  payload: PeerHubCoordEventsInput,
-  success: Schema.Array(PeerCoordEvent),
   error: Schema.Union([PeerHubError, EnvironmentAuthorizationError]),
 });
 const WsPeerHubShareProjectRpc = Rpc.make(PEER_CORE_METHODS.peerHubShareProject, {
@@ -373,7 +341,6 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubDeleteTaskRpc,
   WsPeerHubAssignThreadRpc,
   WsPeerHubStartAgentRpc,
-  WsPeerHubCoordEventsRpc,
   WsPeerHubShareProjectRpc,
   WsPeerHubUnshareProjectRpc,
   WsPeerHubBindCheckoutRpc,
@@ -382,9 +349,6 @@ export const PeerCoreRpcGroup = RpcGroup.make(
   WsPeerHubUseJujutsuRpc,
   WsPeerHubSetCoordinationRpc,
   WsPeerHubSetPluginRpc,
-  WsPeerHubNoteOverlapRpc,
-  WsPeerHubResolveOverlapRpc,
-  WsPeerHubSettleOverlapRpc,
   WsPeerHubAcceptFoundingRpc,
   WsPeerHubDeclineFoundingRpc,
   WsPeerHubInvitationsRpc,
@@ -404,7 +368,6 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubDeleteTask]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubAssignThread]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubStartAgent]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubCoordEvents]: AuthOrchestrationReadScope,
   [PEER_CORE_METHODS.peerHubShareProject]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubUnshareProject]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubBindCheckout]: AuthAccessWriteScope,
@@ -415,9 +378,6 @@ const PeerCoreRpcScopes = {
   [PEER_CORE_METHODS.peerHubSetCoordination]: AuthAccessWriteScope,
   // Which plugins run here is the environment owner's choice, like coordination itself.
   [PEER_CORE_METHODS.peerHubSetPlugin]: AuthAccessWriteScope,
-  [PEER_CORE_METHODS.peerHubNoteOverlap]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubResolveOverlap]: AuthOrchestrationOperateScope,
-  [PEER_CORE_METHODS.peerHubSettleOverlap]: AuthOrchestrationOperateScope,
   [PEER_CORE_METHODS.peerHubStartSignIn]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubFinishSignIn]: AuthAccessWriteScope,
   [PEER_CORE_METHODS.peerHubMembers]: AuthAccessReadScope,

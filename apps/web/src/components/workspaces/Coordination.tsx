@@ -1,9 +1,4 @@
-import type {
-  EnvironmentId,
-  PeerCoordinationPolicy,
-  PeerHubStatus,
-  PeerHubSetCoordinationInput,
-} from "@t3tools/contracts";
+import type { EnvironmentId, PeerHubStatus, PeerHubSetCoordinationInput } from "@t3tools/contracts";
 import type { AtomCommandResult } from "@t3tools/client-runtime/state/runtime";
 import { useState } from "react";
 
@@ -11,33 +6,9 @@ import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
-import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { stackedThreadToast, toastManager } from "../ui/toast";
-import { computerKinds, experimentStartStep } from "./vcsWords";
 import { failureMessage } from "./WorkspaceAccess";
 import { withFinally } from "~/lib/withFinally";
-
-const POLICIES: ReadonlyArray<{
-  readonly value: PeerCoordinationPolicy;
-  readonly label: string;
-  readonly hint: string;
-}> = [
-  {
-    value: "notify",
-    label: "Notify",
-    hint: "An agent about to change a file another agent changed hears who and what they work on, and goes on.",
-  },
-  {
-    value: "coordinate",
-    label: "Coordinate",
-    hint: "An overlapping edit waits until your agent acknowledges the current overlap or writes a coordination note. You can follow the agreement here.",
-  },
-  {
-    value: "ask",
-    label: "Ask me",
-    hint: "Your agent asks you before it changes a file another agent changed.",
-  },
-];
 
 function report(title: string, result: AtomCommandResult<unknown, unknown>) {
   const message = failureMessage(result);
@@ -52,18 +23,13 @@ const AGENTS = [
   { hooks: "codexHooks", name: "Codex" },
 ] as const;
 
-/**
- * Settings → Peer → Coordination & plugins: agents coordinating with the team's (experimental).
- * The page that shows the default policy itself leaves it out of these controls (`hidePolicy`).
- */
+/** Settings → Peer → Plugins: agents coordinating with the team's, through their hooks. */
 export function CoordinationControls({
   environmentId,
   status,
-  hidePolicy = false,
 }: {
   readonly environmentId: EnvironmentId;
   readonly status: PeerHubStatus;
-  readonly hidePolicy?: boolean;
 }) {
   const set = useAtomCommand(serverEnvironment.peerHubSetCoordination, { reportFailure: false });
   const [busy, setBusy] = useState(false);
@@ -92,33 +58,6 @@ export function CoordinationControls({
       </label>
       {coordination.enabled ? (
         <>
-          {hidePolicy ? null : (
-            <>
-              <p className="text-xs text-muted-foreground">
-                Default overlap policy on this environment. A project's policy in Peer Hub takes
-                precedence.
-              </p>
-              <ToggleGroup
-                className="w-full"
-                aria-label="Default overlap policy on this environment"
-                variant="segmented"
-                value={[coordination.policy]}
-                onValueChange={(next) => {
-                  const policy = POLICIES.find((p) => p.value === next[0])?.value;
-                  if (policy !== undefined) void run({ policy });
-                }}
-              >
-                {POLICIES.map((policy) => (
-                  <Toggle key={policy.value} className="flex-1" value={policy.value}>
-                    {policy.label}
-                  </Toggle>
-                ))}
-              </ToggleGroup>
-              <p className="text-xs text-muted-foreground">
-                {POLICIES.find((p) => p.value === coordination.policy)?.hint}
-              </p>
-            </>
-          )}
           {AGENTS.map((agent) => {
             const added = coordination[agent.hooks] === true;
             const present =
@@ -240,53 +179,10 @@ export function CoordinationControls({
             <code className="rounded bg-muted px-1 py-px text-2xs select-all">
               {coordination.logPath}
             </code>
-            . Enable detailed logging in Settings → Peer → Coordination & plugins.
+            . Enable detailed logging in Settings → Peer → Plugins.
           </p>
-          <ExperimentSteps status={status} />
         </>
       ) : null}
-    </div>
-  );
-}
-
-/** A short experiment to run on two computers, so the log shows how agents settle an overlap. */
-function ExperimentSteps({ status }: { readonly status: PeerHubStatus }) {
-  const [open, setOpen] = useState(false);
-  if (!open) {
-    return (
-      <Button className="self-start" size="xs" variant="ghost" onClick={() => setOpen(true)}>
-        Experiment: two agents, one file
-      </Button>
-    );
-  }
-  return (
-    <div className="flex flex-col gap-1.5 rounded-md border border-border p-2 text-xs text-muted-foreground">
-      <p className="font-medium text-foreground">Experiment: two agents, one file</p>
-      <ol className="list-decimal space-y-1 pl-4">
-        <li>
-          On both computers: the same workspace project cloned, coordination on, Coordinate, and
-          Peer's hooks added to the agent you use there (Claude Code or Codex).
-        </li>
-        <li>{experimentStartStep(computerKinds(status))}</li>
-        <li>
-          Computer A: “In apps/server/src/webhooks.rs every delivery should also send user-agent:
-          app-webhooks/&lt;version&gt; and webhook-attempt: &lt;n&gt; (1-based); pass the attempt
-          from round() into post(). Keep it small, do not run cargo, do not push.”
-        </li>
-        <li>
-          A minute later, computer B: “In apps/server/src/webhooks.rs let post() sign the delivery
-          itself (give it the secret instead of a ready signature) and rename sign() to signature(),
-          keeping the specification test. Keep it small, do not run cargo, do not push.”
-        </li>
-        <li>
-          Turn on the debug log first in Settings → Peer → Coordination & plugins, watch the
-          Overlaps section of Work, then send both coordination.debug.jsonl files. The regular log
-          contains no detail.
-        </li>
-      </ol>
-      <Button className="self-start" size="xs" variant="ghost" onClick={() => setOpen(false)}>
-        Hide
-      </Button>
     </div>
   );
 }

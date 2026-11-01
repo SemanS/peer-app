@@ -221,7 +221,6 @@ export const changesSeed = (hubUrl: string, email: string = BOB) =>
 
 const COORDINATION: PeerHubStatus["coordination"] = {
   enabled: false,
-  policy: "coordinate",
   claudeHooks: false,
   logPath: "/tmp/coordination.jsonl",
   sessions: [],

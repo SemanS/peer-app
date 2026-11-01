@@ -109,7 +109,7 @@ export function LocalWork({
         <>
           <p>
             {local.sessions.filter((session) => session.status === "working").length} running ·{" "}
-            {local.open} open overlaps
+            {local.overlaps.length} overlaps
           </p>
           <p className="text-xs text-muted-foreground">
             {local.providers
@@ -126,8 +126,7 @@ export function LocalWork({
           {local.overlaps.slice(0, 8).map((overlap) => (
             <details key={overlap.id} className="rounded-md border p-3">
               <summary className="cursor-pointer font-medium">
-                {overlap.state === "open" ? "Overlap detected" : "Overlap resolved"} ·{" "}
-                {overlap.files.join(", ")}
+                Overlap · {overlap.files.join(", ")}
               </summary>
               <div className="mt-2 flex flex-col gap-2 text-xs">
                 <p>
@@ -135,10 +134,6 @@ export function LocalWork({
                     .map((id) => local.sessions.find((s) => s.id === id)?.label ?? id)
                     .join(" ↔ ")}
                 </p>
-                {overlap.resolution === undefined ? null : <p>{overlap.resolution}</p>}
-                {overlap.notes.slice(-3).map((note) => (
-                  <p key={note.id}>{note.text}</p>
-                ))}
               </div>
             </details>
           ))}

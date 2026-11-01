@@ -171,7 +171,7 @@ describe("the Hub client", () => {
       assert.isUndefined(persisted.sharedThreads);
       assert.deepStrictEqual(persisted.localCheckouts, { "acme/pay/app": "/Users/ana/code/pay" });
       assert.deepStrictEqual(persisted.plugins, { find: false });
-      assert.deepStrictEqual(persisted.coordination, { enabled: false, policy: "notify" });
+      assert.deepStrictEqual(persisted.coordination, { enabled: false });
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

@@ -227,71 +227,14 @@ describe("projectButtonLines", () => {
 });
 
 describe("the menu's actions on a workspace project", () => {
-  const status = (coordination: object = {}, email: string | null = "ana@webinson.test") =>
-    ({
-      email,
-      coordination: {
-        enabled: true,
-        policy: "notify",
-        policies: { webinson: { ordering: "coordinate", receipts: undefined } },
-        ...coordination,
-      },
-    }) as unknown as Pick<PeerHubStatus, "coordination" | "email">;
+  const status = (email: string | null = "ana@webinson.test") =>
+    ({ email }) as unknown as Pick<PeerHubStatus, "email">;
   const state = (id: string, extra: object = {}, repositories: ReadonlyArray<object> = []) =>
     ({
       project: { id, name: id === "ordering" ? "Ordering demo" : "Receipt printer", ...extra },
       repositories,
     }) as unknown as Pick<PeerProjectState, "project" | "repositories">;
   const workspace = (role: PeerWorkspaceRole) => ({ slug: "webinson", name: "Webinson", role });
-
-  it("says this computer's default, and offers Change…", () => {
-    const actions = workspaceProjectActions({
-      status: status(),
-      workspace: workspace("member"),
-      state: state("receipts"),
-    });
-    expect(actions).toMatchObject({
-      kind: "workspace",
-      name: "Receipt printer",
-      coordination: {
-        title: "Coordination: notify",
-        detail: "Your default on this computer",
-        action: { label: "Change…", location: { kind: "computer", section: "coordination" } },
-      },
-    });
-  });
-
-  it("says the project decides, and offers its Settings", () => {
-    const actions = workspaceProjectActions({
-      status: status({}, "ana@webinson.test"),
-      workspace: workspace("member"),
-      state: state("ordering"),
-    });
-    expect(actions.kind === "workspace" && actions.coordination).toEqual({
-      title: "Coordination: coordinate",
-      detail: "Set by the project",
-      action: {
-        label: "Settings",
-        location: {
-          kind: "project",
-          workspace: "webinson",
-          projectId: "ordering",
-          tab: "coordination",
-        },
-      },
-    });
-  });
-
-  it("has no coordination row while coordination is off or its policies are unknown", () => {
-    for (const coordination of [{ enabled: false }, { policies: undefined }]) {
-      const actions = workspaceProjectActions({
-        status: status(coordination),
-        workspace: workspace("owner"),
-        state: state("ordering"),
-      });
-      expect(actions.kind === "workspace" && actions.coordination).toBeNull();
-    }
-  });
 
   it("sends Project settings to the project's page", () => {
     const actions = workspaceProjectActions({
@@ -328,7 +271,7 @@ describe("the menu's actions on a workspace project", () => {
   it("offers Remove from workspace… to whoever shared the project and to admins, not to others", () => {
     const removable = (role: PeerWorkspaceRole, email: string, addedBy: string | undefined) => {
       const actions = workspaceProjectActions({
-        status: status({}, email),
+        status: status(email),
         workspace: workspace(role),
         state: state("ordering", addedBy === undefined ? {} : { addedBy }),
       });
@@ -381,7 +324,7 @@ describe("openFolderLabel", () => {
 describe("actionsForScope", () => {
   const status = {
     email: "ana@webinson.test",
-    coordination: { enabled: true, policy: "notify", policies: { webinson: {} } },
+    coordination: { enabled: true },
     workspaces: [
       {
         slug: "webinson",

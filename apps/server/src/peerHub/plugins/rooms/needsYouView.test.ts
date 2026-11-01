@@ -18,7 +18,6 @@ const emptyStatus = (): PeerHubStatus => ({
   agents: { herdr: "running", list: [] },
   coordination: {
     enabled: true,
-    policy: "ask",
     claudeHooks: false,
     logPath: "",
     sessions: [],
@@ -112,10 +111,7 @@ const richStatus = (): PeerHubStatus => ({
         project: "app",
         sessions: ["claude:s"],
         files: ["PRIVATE_PATH"],
-        state: "open",
-        notes: [{ id: "n", email: "private@acme.test", text: "PRIVATE_NOTE", at: SINCE }],
         updatedAt: SINCE,
-        policy: "ask",
       },
     ],
   },

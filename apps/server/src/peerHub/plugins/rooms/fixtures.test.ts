@@ -57,7 +57,6 @@ export const messageOf = (over: Partial<PeerRoomMessage> = {}): PeerRoomMessage 
 
 const COORDINATION: PeerHubStatus["coordination"] = {
   enabled: false,
-  policy: "coordinate",
   claudeHooks: false,
   logPath: "/tmp/coordination.jsonl",
   sessions: [],

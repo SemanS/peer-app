@@ -1346,11 +1346,6 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:peer-hub:start-agent",
       tag: WS_METHODS.peerHubStartAgent,
     }),
-    peerHubCoordEvents: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:peer-hub:coord-events",
-      tag: WS_METHODS.peerHubCoordEvents,
-      staleTimeMs: 0,
-    }),
     peerHubShareProject: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:share-project",
       tag: WS_METHODS.peerHubShareProject,
@@ -1436,18 +1431,6 @@ export function createServerEnvironmentAtoms<R, E>(
     peerHubSetPlugin: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:peer-hub:set-plugin",
       tag: WS_METHODS.peerHubSetPlugin,
-    }),
-    peerHubNoteOverlap: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:note-overlap",
-      tag: WS_METHODS.peerHubNoteOverlap,
-    }),
-    peerHubResolveOverlap: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:resolve-overlap",
-      tag: WS_METHODS.peerHubResolveOverlap,
-    }),
-    peerHubSettleOverlap: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:peer-hub:settle-overlap",
-      tag: WS_METHODS.peerHubSettleOverlap,
     }),
     scheduledTaskWebhookDeliveries: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:scheduled-task:webhook-deliveries",

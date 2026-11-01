@@ -17,8 +17,7 @@ import { brokerFixture } from "./testkit.ts";
  */
 const HELP_WITHOUT_PLUGINS = [
   "peer — coordinate with the other agents on this project through Peer.",
-  "  peer status                     who works on what in this project, your overlaps and their notes",
-  '  peer resolve "<agreement>" [--overlap <id>]  close your open overlaps with what was agreed',
+  "  peer status                     who works on what in this project, and your overlaps",
   '  peer claim <path>... [--intent "<why>"]   files or directories/ you are about to change',
   "  peer release [<path>...]        drop claims",
   "  peer index [<page>]             who works on what in this project",
@@ -91,16 +90,13 @@ const cli = (socket: string, command: string, session: string) =>
 
 describe("the peer command", () => {
   it.each([
-    ["coordinate", "clear", "clear"],
-    ["notify", "notify", "notify"],
-    ["coordinate", "deny", "wait"],
-    ["exclusive", "held", "held"],
-    ["ask", "ask", "ask your person"],
-  ] as const)("claim maps %s/%s to an advisory %s verdict", async (policy, verdict, expected) => {
+    ["clear", "clear"],
+    ["notify", "notify"],
+    // What an older Hub may still say: nothing stops an agent.
+    ["deny", "notify"],
+  ] as const)("claim says %s as %s", async (verdict, expected) => {
     const fixture = await brokerFixture(() => ({
       intent: async (_workspace, _project, input) => ({
-        policy,
-        policySource: "project",
         at: "2026-10-09T10:00:00Z",
         verdicts: input.paths.map((path) => ({
           path,
@@ -120,26 +116,8 @@ describe("the peer command", () => {
       await fixture.dispose();
     }
   });
-  it("legacy intent answers are cached, while failed intent retains an explicitly unverified held path", async () => {
-    let calls = 0;
-    const fixture = await brokerFixture(() => ({
-      intent: async () => {
-        calls++;
-        return { unsupported: true };
-      },
-    }));
-    try {
-      await fixture.register("one");
-      const headers = { "x-peer-session": "claude:one" };
-      await fixture.broker.runCli("claim", ["a.ts"], headers);
-      await fixture.broker.runCli("claim", ["b.ts"], headers);
-      expect(calls).toBe(1);
-      expect(await fixture.broker.runCli("release", [], headers)).not.toContain("held until");
-    } finally {
-      await fixture.dispose();
-    }
+  it("a failed intent retains an explicitly unverified held path", async () => {
     const failed = await brokerFixture(() => ({
-      policy: () => "coordinate",
       intent: async () => {
         throw new Error("deadline");
       },
@@ -147,7 +125,9 @@ describe("the peer command", () => {
     try {
       await failed.register("one");
       const headers = { "x-peer-session": "claude:one" };
-      expect(await failed.broker.runCli("claim", ["a.ts"], headers)).toContain("wait");
+      expect(await failed.broker.runCli("claim", ["a.ts"], headers)).toContain(
+        "a.ts: notify — The Hub could not be reached",
+      );
       expect(await failed.broker.runCli("release", [], headers)).toContain(
         "a.ts: held until this session ends",
       );
@@ -155,14 +135,12 @@ describe("the peer command", () => {
       await failed.dispose();
     }
   });
-  it("claims use the intent decision and release names only Hub-held paths", async () => {
+  it("claims tell the hub and release names only Hub-held paths", async () => {
     const calls: string[][] = [];
     const fixture = await brokerFixture(() => ({
       intent: async (_workspace, _project, input) => {
         calls.push([...input.paths]);
         return {
-          policy: "coordinate",
-          policySource: "client",
           at: "2026-10-09T10:00:00.000Z",
           verdicts: input.paths.map((path) => ({ path, verdict: "clear", with: [], overlaps: [] })),
           overlaps: [],

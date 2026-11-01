@@ -34,7 +34,6 @@ const SEED = [
 
 const coordination: PeerHubStatus["coordination"] = {
   enabled: true,
-  policy: "coordinate",
   claudeHooks: true,
   logPath: "/tmp/coordination.jsonl",
   sessions: [],

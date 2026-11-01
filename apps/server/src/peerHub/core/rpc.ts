@@ -51,7 +51,6 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
     Effect.gen(function* () {
       const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
       const work = yield* PeerWork.PeerWork;
-      const coordination = yield* PeerCoordination.PeerCoordination;
       const adapters = yield* PeerAdapters.PeerAdapters;
       const plugins = yield* PeerPlugins.PeerPlugins;
       const status = yield* PeerStatus.PeerStatus;
@@ -161,12 +160,6 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
               Start.startAgent(input).pipe(Effect.provideContext(core)),
               PEER_TRACE,
             ),
-          [PEER_CORE_METHODS.peerHubCoordEvents]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubCoordEvents,
-              coordination.coordEvents(input),
-              PEER_TRACE,
-            ),
           [PEER_CORE_METHODS.peerHubShareProject]: (input) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubShareProject,
@@ -246,24 +239,6 @@ const coreRpcLayer = (wrap: PeerRpcWrap) =>
             wrap.effect(
               PEER_CORE_METHODS.peerHubSetPlugin,
               plugins.setPlugin(input).pipe(Effect.andThen(status.publish)),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubNoteOverlap]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubNoteOverlap,
-              coordination.noteOverlap(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubResolveOverlap]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubResolveOverlap,
-              coordination.resolveOverlap(input),
-              PEER_TRACE,
-            ),
-          [PEER_CORE_METHODS.peerHubSettleOverlap]: (input) =>
-            wrap.effect(
-              PEER_CORE_METHODS.peerHubSettleOverlap,
-              coordination.settleOverlap(input),
               PEER_TRACE,
             ),
         }),

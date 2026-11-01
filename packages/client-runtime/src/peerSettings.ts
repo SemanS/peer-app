@@ -1,11 +1,7 @@
 /**
  * Peer's settings, as the pages of the settings area reason about them: a draft of the settings
- * document turned into the sets a save sends, where a value comes from, what a coordination
- * decision was.
- * Pure, and free of what Hermes lacks, so web and mobile share it.
- *
- * The Hub decides all of this too (the rules are its `coord/rules.rs` and the app's `hubPolicy.ts`);
- * what is here is how the pages show it before and after it asks.
+ * document turned into the sets a save sends. Pure, and free of what Hermes lacks, so web and mobile
+ * share it.
  *
  * @module peerSettings
  */
@@ -103,87 +99,6 @@ export function setsFor(
 /** Whether `inner` is `outer` or below it. */
 const within = (outer: Path, inner: Path) =>
   outer.length <= inner.length && outer.every((key, i) => key === inner[i]);
-
-export interface EffectivePolicy {
-  readonly value: string;
-  readonly source: "project" | "computer";
-  /** What this computer set, which the project's own policy beats: shown struck through. */
-  readonly overridden?: { readonly value: string };
-}
-
-/**
- * The coordination policy that counts in a project: its own, where it sets one, else this
- * computer's default. `policies` has each project's own policy by id (`policiesOf`).
- */
-export function effectivePolicy(
-  policies: Readonly<Record<string, string | undefined>>,
-  project: string,
-  computerDefault: string,
-): EffectivePolicy {
-  const own = Object.hasOwn(policies, project) ? policies[project] : undefined;
-  if (own === undefined) return { value: computerDefault, source: "computer" };
-  return own === computerDefault
-    ? { value: own, source: "project" }
-    : { value: own, source: "project", overridden: { value: computerDefault } };
-}
-
-/** Each project's own coordination policy by id, absent where it sets none. */
-export const policiesOf = (
-  projects: Readonly<Record<string, { readonly coordination?: { readonly policy?: string } }>>,
-): Record<string, string | undefined> =>
-  Object.fromEntries(Object.entries(projects).map(([id, p]) => [id, p.coordination?.policy]));
-
-/** What the Hub records of the policy that decided an overlap or a ledger event. */
-export interface PolicyDecision {
-  readonly policy: string;
-  /** `project` (its policy or a path rule) or `client` (this computer's default). */
-  readonly source: "project" | "client";
-  readonly pattern?: string | undefined;
-  readonly pathRulesOff?: boolean | undefined;
-}
-
-/** The parts of a decision in words: what the chip and the text both say. */
-export interface DecisionParts {
-  readonly policy: string;
-  /** Where it came from: `payments/** in Booking`, `Booking's policy`, `your computer, Camp-bot has no policy`. */
-  readonly from: string;
-  /** The project has path rules the Hub did not apply. */
-  readonly pathRulesOff: boolean;
-}
-
-/**
- * A decision in parts. A `client` decision is the default of the computer that asked: `computer`
- * says whether that is this one (`yours`, the default) or another, which the words then say.
- */
-export function decisionParts(
-  decision: PolicyDecision,
-  projectName?: string,
-  computer: "yours" | "another" = "yours",
-): DecisionParts {
-  const project = projectName ?? "the project";
-  const from =
-    decision.source === "client"
-      ? `${computer === "yours" ? "your computer" : "another computer's default"}, ${project} has no policy`
-      : decision.pattern !== undefined
-        ? `${decision.pattern} in ${project}`
-        : `${projectName === undefined ? "the project" : projectName}'s policy`;
-  return { policy: decision.policy, from, pathRulesOff: decision.pathRulesOff === true };
-}
-
-/**
- * A decision in words: `coordinate · payments/** in Booking`, `coordinate · Booking's policy`,
- * `ask · your computer, Camp-bot has no policy`, with `· path rules were off` when the project has
- * path rules the Hub does not apply. Null for a row of an older Hub, which records none.
- */
-export function decisionText(
-  decision: PolicyDecision | null | undefined,
-  projectName?: string,
-  computer: "yours" | "another" = "yours",
-): string | null {
-  if (decision === null || decision === undefined) return null;
-  const { policy, from, pathRulesOff } = decisionParts(decision, projectName, computer);
-  return [policy, from, ...(pathRulesOff ? ["path rules were off"] : [])].join(" · ");
-}
 
 const HARNESSES: Readonly<Record<string, string>> = {
   claude: "Claude Code",

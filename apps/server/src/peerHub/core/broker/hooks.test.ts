@@ -421,8 +421,8 @@ describe("the broker's hooks", () => {
     }
   });
 
-  it("applies each policy at the broker deadline", async () => {
-    const fixture = await brokerFixture(() => ({ policy: () => "notify" }));
+  it("lets an edit go on at the broker deadline", async () => {
+    const fixture = await brokerFixture();
     try {
       await fixture.register("one");
       fixture.broker["answerHook"] = () => new Promise(() => {});
@@ -434,22 +434,9 @@ describe("the broker's hooks", () => {
         tool_name: "Edit",
         tool_input: { file_path: "price.ts" },
       };
-      for (const policy of ["notify", "ask", "coordinate", "exclusive"] as const) {
-        fixture.broker["views"].set("acme", {
-          sessions: [],
-          overlaps: [],
-          at: new Date().toISOString(),
-          policies: { app: policy },
-        });
-        const pending = fixture.broker["hookInTime"](body, {});
-        await vi.advanceTimersByTimeAsync(4000);
-        const result = await pending;
-        if (policy === "notify") expect(result).toBeNull();
-        else
-          expect(result?.hookSpecificOutput).toMatchObject({
-            permissionDecision: policy === "ask" ? "ask" : "deny",
-          });
-      }
+      const pending = fixture.broker["hookInTime"](body, {});
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(await pending).toBeNull();
       const read = fixture.broker["hookInTime"](
         { ...body, tool_name: "Bash", tool_input: { command: "git status" } },
         {},

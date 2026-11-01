@@ -26,12 +26,7 @@ const CORE_HELP: { readonly [Name in Exclude<(typeof CORE_COMMANDS)[number], "he
     status: {
       name: "status",
       usage: "status",
-      summary: "who works on what in this project, your overlaps and their notes",
-    },
-    resolve: {
-      name: "resolve",
-      usage: 'resolve "<agreement>" [--overlap <id>]',
-      summary: "close your open overlaps with what was agreed",
+      summary: "who works on what in this project, and your overlaps",
     },
     claim: {
       name: "claim",

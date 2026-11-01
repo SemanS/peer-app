@@ -129,16 +129,6 @@ export class PeerAgents extends Context.Service<
     readonly viewChanges: Stream.Stream<string>;
     /** Something changed at the Hub: every workspace's view is read again within a moment. */
     readonly hubChanged: Effect.Effect<void>;
-    /**
-     * A session's note on one of its overlaps; both its agents hear it. The same `op` adds no
-     * second note.
-     */
-    readonly note: (input: {
-      readonly session: string;
-      readonly overlap: string;
-      readonly text: string;
-      readonly op: string;
-    }) => Effect.Effect<void, PeerHubError>;
     /** A line in the coordination log; a plugin's events start with its id. */
     readonly log: (event: string, fields: Readonly<Record<string, unknown>>) => Effect.Effect<void>;
     /**
@@ -297,16 +287,6 @@ const make = Effect.gen(function* () {
       ask((running) => running.viewOf(workspace), { sessions: [], overlaps: [] }),
     viewChanges: Stream.fromPubSub(changes),
     hubChanged: ask((running) => running.hubChanged(), undefined),
-    note: ({ session, overlap, text, op }) => {
-      const running = broker;
-      return running === null
-        ? Effect.void
-        : Effect.tryPromise({
-            try: () => running.noteFor(session, overlap, text, op),
-            catch: (failure) =>
-              isHubError(failure) ? failure : new PeerHubError({ detail: messageOf(failure) }),
-          });
-    },
     log: (event, fields) => ask((running) => running.logEvent(event, fields), undefined),
     continueRun: (input) =>
       Effect.promise(async () => {

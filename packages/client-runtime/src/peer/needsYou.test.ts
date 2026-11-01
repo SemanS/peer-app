@@ -166,7 +166,6 @@ function status(project: PeerProjectState, role: "owner" | "member" = "owner"): 
     },
     coordination: {
       enabled: false,
-      policy: "coordinate",
       claudeHooks: false,
       logPath: "",
       sessions: [],

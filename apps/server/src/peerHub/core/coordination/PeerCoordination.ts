@@ -18,13 +18,7 @@ import * as NodePath from "node:path";
 import {
   MessageId,
   PEER_PLUGIN_REASONS,
-  PEER_LOCAL_WORKSPACE,
   PeerHubError,
-  type PeerCoordEvent,
-  type PeerHubCoordEventsInput,
-  type PeerHubOverlapNoteInput,
-  type PeerHubResolveOverlapInput,
-  type PeerHubSettleOverlapInput,
   type PeerHubStatus,
 } from "@t3tools/contracts";
 import * as Context from "effect/Context";
@@ -141,7 +135,7 @@ export class PeerCoordination extends Context.Service<
     readonly localView: Effect.Effect<import("../hub/coordApi.ts").HubCoordView, PeerHubError>;
     /** Starts the broker; one already running stays. */
     readonly start: Effect.Effect<void, PeerHubError>;
-    /** Stops the broker; its agents' contexts pass to the next agents on their work. */
+    /** Stops the broker. */
     readonly stop: Effect.Effect<void>;
     /** The running broker, null while coordination is off; the status reads its snapshot. */
     readonly broker: () => CoordinationBroker | null;
@@ -149,20 +143,6 @@ export class PeerCoordination extends Context.Service<
     readonly handedOver: Effect.Effect<void>;
     /** The Hub says a workspace's coordination changed: the broker reads it within a moment. */
     readonly hubChanged: Effect.Effect<void>;
-    /** A person's note on an overlap; both agents hear it. */
-    readonly noteOverlap: (
-      input: PeerHubOverlapNoteInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    readonly resolveOverlap: (
-      input: PeerHubResolveOverlapInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    /** A person asks the agents on an overlap to settle it between them and close it. */
-    readonly settleOverlap: (
-      input: PeerHubSettleOverlapInput,
-    ) => Effect.Effect<PeerHubStatus, PeerHubError>;
-    readonly coordEvents: (
-      input: PeerHubCoordEventsInput,
-    ) => Effect.Effect<ReadonlyArray<PeerCoordEvent>, PeerHubError>;
   }
 >()("t3/peerHub/core/coordination/PeerCoordination") {}
 
@@ -315,7 +295,6 @@ const make = Effect.gen(function* () {
     },
     nameOf: state.nameOf,
     email: () => current().persisted.email,
-    policy: () => current().persisted.coordination?.policy ?? "coordinate",
     workspaces: () => {
       const { persisted } = current();
       return persisted.email === null ? [] : persisted.workspaces.map((w) => w.slug);
@@ -376,33 +355,9 @@ const make = Effect.gen(function* () {
       ),
     view: (workspace) =>
       withHub((hubUrl, session) => hubApi.coordination(hubUrl, session, workspace)),
-    note: (workspace, project, overlap, text, author, op) =>
-      withHub((hubUrl, session) =>
-        hubApi.noteOverlap(hubUrl, session, workspace, project, overlap, {
-          ...(author === undefined ? {} : { session: author }),
-          text,
-          ...(op === undefined ? {} : { op }),
-        }),
-      ),
-    resolve: (workspace, project, overlap, resolution, author, op) =>
-      withHub((hubUrl, session) =>
-        hubApi.resolveOverlap(hubUrl, session, workspace, project, overlap, {
-          ...(author === undefined ? {} : { session: author }),
-          resolution,
-          ...(op === undefined ? {} : { op }),
-        }),
-      ),
     intent: (workspace, project, request, timeoutMs) =>
       withHub((hubUrl, session) =>
         hubApi.intent(hubUrl, session, workspace, project, request, { timeoutMs }),
-      ),
-    ack: (workspace, project, overlap, agentSession, op, filesAt) =>
-      withHub((hubUrl, session) =>
-        hubApi.ack(hubUrl, session, workspace, project, overlap, {
-          session: agentSession,
-          op,
-          ...(filesAt === undefined ? {} : { filesAt }),
-        }),
       ),
     coordEvents: (workspace, project, filter) =>
       withHub((hubUrl, session) => hubApi.coordEvents(hubUrl, session, workspace, project, filter)),
@@ -444,68 +399,8 @@ const make = Effect.gen(function* () {
   });
   yield* Effect.addFinalizer(() => stop);
 
-  /** A person's action on an overlap through the running broker: its agents hear of it at once. */
   const onBroker = <A>(act: () => Promise<A>) =>
     Effect.tryPromise({ try: act, catch: (failure) => hubError(messageOf(failure)) });
-
-  const noteOverlap: PeerCoordination["Service"]["noteOverlap"] = Effect.fn(
-    "PeerCoordination.noteOverlap",
-  )(function* (input) {
-    const running = broker;
-    if (running !== null) {
-      yield* onBroker(() =>
-        running.personNote(input.workspace, input.project, input.overlap, input.text),
-      );
-    } else {
-      yield* onBroker(() =>
-        host().note(input.workspace, input.project, input.overlap, input.text, undefined),
-      );
-    }
-    return yield* publish;
-  });
-
-  const resolveOverlap: PeerCoordination["Service"]["resolveOverlap"] = Effect.fn(
-    "PeerCoordination.resolveOverlap",
-  )(function* (input) {
-    const running = broker;
-    if (running !== null) {
-      yield* onBroker(() =>
-        running.personResolve(input.workspace, input.project, input.overlap, input.resolution),
-      );
-    } else {
-      yield* onBroker(() =>
-        host().resolve(input.workspace, input.project, input.overlap, input.resolution, undefined),
-      );
-    }
-    return yield* publish;
-  });
-
-  const settleOverlap: PeerCoordination["Service"]["settleOverlap"] = Effect.fn(
-    "PeerCoordination.settleOverlap",
-  )(function* (input) {
-    const running = broker;
-    if (running === null) {
-      return yield* hubError("Turn agent coordination on to have the agents settle it.");
-    }
-    yield* onBroker(() =>
-      running.personSettle(input.workspace, input.project, input.overlap, input.message),
-    );
-    return yield* publish;
-  });
-
-  const coordEvents: PeerCoordination["Service"]["coordEvents"] = Effect.fn(
-    "PeerCoordination.coordEvents",
-  )(function* (input) {
-    if (input.workspace === PEER_LOCAL_WORKSPACE)
-      return yield* onBroker(() => local.coordEvents(input.project, input));
-    yield* state.project(input.workspace, input.project);
-    const { hubUrl, session } = yield* client.session;
-    return yield* hubApi.coordEvents(hubUrl, session, input.workspace, input.project, {
-      ...(input.task === undefined ? {} : { task: input.task }),
-      ...(input.path === undefined ? {} : { path: input.path }),
-      ...(input.limit === undefined ? {} : { limit: input.limit }),
-    });
-  });
 
   return PeerCoordination.of({
     paths,
@@ -516,10 +411,6 @@ const make = Effect.gen(function* () {
     broker: () => broker,
     handedOver: Deferred.await(handedOver),
     hubChanged: Effect.sync(() => broker?.hubChanged()),
-    noteOverlap,
-    resolveOverlap,
-    settleOverlap,
-    coordEvents,
   });
 });
 

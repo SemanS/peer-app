@@ -22,9 +22,7 @@ import { coordinationRepository } from "../localCoordination/localPlace.ts";
 import { PeerHubError } from "@t3tools/contracts";
 
 import { coordinationScripts } from "../adapters/scripts.ts";
-import { knownPolicies, policyOfDecision, policyWithoutHub } from "../coordination/edits.ts";
 import type { CoordinationView } from "../coordination/edits.ts";
-import { closerOf, settleAskedAt } from "../coordination/news.ts";
 import * as Overlaps from "../coordination/overlaps.ts";
 import type { HubCoordSession, HubCoordView, HubOverlap } from "../hub/coordApi.ts";
 import * as Board from "../index/board.ts";
@@ -221,7 +219,7 @@ export class CoordinationBroker {
     await this.host.runs?.recover(new Set(this.sessions.keys())).catch(() => undefined);
     this.stopRunEnds = this.host.runs?.onEnded((run) => this.runEnded(run.id)) ?? null;
     this.timer = setInterval(() => void this.tick(), 500);
-    this.record("broker.started", { socket: this.host.socketPath, policy: this.host.policy() });
+    this.record("broker.started", { socket: this.host.socketPath });
     void this.forgetOldMemories();
   }
 
@@ -292,51 +290,17 @@ export class CoordinationBroker {
     readonly sessions: ReadonlyArray<
       HubCoordSession & { readonly workspace: string; readonly local: boolean }
     >;
-    readonly overlaps: ReadonlyArray<
-      HubOverlap & {
-        readonly workspace: string;
-        /** The agent session that closes it once its agents agree. */
-        readonly closer: string | undefined;
-        /** When a person asked its agents to settle it, unless an agent wrote since. */
-        readonly askedAt: string | undefined;
-        /** What decided it: the policy the hub recorded for it, else the one that holds without the hub. */
-        readonly policy: ReturnType<typeof policyWithoutHub>;
-      }
-    >;
-    /**
-     * The policy each project sets itself, as each workspace's hub last said, by workspace and
-     * project: a workspace is there once its view was read, a project that sets none is not.
-     */
-    readonly policies: Readonly<
-      Record<string, Readonly<Record<string, ReturnType<typeof policyWithoutHub>>>>
-    >;
+    readonly overlaps: ReadonlyArray<HubOverlap & { readonly workspace: string }>;
   } {
     const sessions = [];
     const overlaps = [];
-    const policies: Record<
-      string,
-      Readonly<Record<string, ReturnType<typeof policyWithoutHub>>>
-    > = {};
     for (const [workspace, view] of this.views) {
-      const merged = this.merged(workspace, view);
-      for (const session of merged.sessions) {
+      for (const session of this.merged(workspace, view).sessions) {
         sessions.push({ ...session, workspace, local: this.sessions.has(session.id) });
       }
-      for (const overlap of view.overlaps) {
-        overlaps.push({
-          ...overlap,
-          workspace,
-          closer: closerOf(overlap, merged.sessions),
-          askedAt: settleAskedAt(overlap.notes),
-          policy: policyOfDecision(
-            overlap.decision,
-            policyWithoutHub(view.policies, overlap.project, this.host.policy()),
-          ),
-        });
-      }
-      policies[workspace] = knownPolicies(view.policies);
+      for (const overlap of view.overlaps) overlaps.push({ ...overlap, workspace });
     }
-    return { sessions, overlaps, policies };
+    return { sessions, overlaps };
   }
 
   /** Runtime labels require a live adapter handshake; the runtime alone reports after an action. */
@@ -380,25 +344,6 @@ export class CoordinationBroker {
   onViewChange(listener: (workspace: string) => void): () => void {
     this.viewListeners.add(listener);
     return () => void this.viewListeners.delete(listener);
-  }
-
-  /**
-   * A session's note on one of its overlaps, under `op`: the hub adds no second note for it. Having
-   * posted there, the session need not again before it edits the overlap's files.
-   */
-  async noteFor(sessionId: string, overlapId: string, text: string, op: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (session === undefined) return;
-    const updated = await this.host.note(
-      session.workspace,
-      session.project,
-      overlapId,
-      text,
-      session.id,
-      op,
-    );
-    this.applyOverlap(session.workspace, updated);
-    this.acknowledge(session, updated);
   }
 
   /** Reports and refreshes a workspace now, waiting at most `budgetMs`. */
@@ -497,7 +442,6 @@ export class CoordinationBroker {
   syncNow = Sync.syncNow;
   sync = Sync.sync;
   tick = Sync.tick;
-  applyOverlap = Sync.applyOverlap;
   afterViewChange = Sync.afterViewChange;
   notifyPeople = Sync.notifyPeople;
 
@@ -514,21 +458,12 @@ export class CoordinationBroker {
   help = Cli.help;
 
   // Overlaps and intent (../coordination/overlaps.ts).
-  personNote = Overlaps.personNote;
-  personResolve = Overlaps.personResolve;
-  personSettle = Overlaps.personSettle;
-  agentName = Overlaps.agentName;
   beforeTool = Overlaps.beforeTool;
   settlePluginAsks = Overlaps.settlePluginAsks;
   decideEdits = Overlaps.decideEdits;
-  viewAnswers = Overlaps.viewAnswers;
   askHub = Overlaps.askHub;
   mergeIntent = Overlaps.mergeIntent;
-  ackOverlap = Overlaps.ackOverlap;
   settle = Overlaps.settle;
-  decide = Overlaps.decide;
-  settleNews = Overlaps.settleNews;
-  acknowledge = Overlaps.acknowledge;
   announce = Overlaps.announce;
   markSeen = Overlaps.markSeen;
 

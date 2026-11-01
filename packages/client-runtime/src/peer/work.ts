@@ -403,7 +403,7 @@ function projectTree(input: {
       },
     });
   }
-  // A colleague's agent in an open overlap with one of yours concerns you.
+  // A colleague's agent in an overlap with one of yours concerns you.
   const yours = new Set(
     status.coordination.sessions
       .filter((session) => session.email === me)
@@ -411,13 +411,7 @@ function projectTree(input: {
   );
   const overlapping = new Map<string, string>();
   for (const overlap of status.coordination.overlaps) {
-    if (
-      overlap.state !== "open" ||
-      overlap.workspace !== workspace.slug ||
-      overlap.project !== state.project.id
-    ) {
-      continue;
-    }
+    if (overlap.workspace !== workspace.slug || overlap.project !== state.project.id) continue;
     const [a, b] = overlap.sessions;
     if (a === undefined || b === undefined || yours.has(a) === yours.has(b)) continue;
     overlapping.set(yours.has(a) ? b : a, overlap.files.join(", "));

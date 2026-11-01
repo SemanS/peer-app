@@ -16,7 +16,6 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 
 import {
-  PeerCoordinationPolicy,
   PeerHubError,
   PeerJoinableWorkspace,
   PeerDomainClaim,
@@ -142,7 +141,6 @@ export const PersistedState = Schema.Struct({
   coordination: Schema.optional(
     Schema.Struct({
       enabled: Schema.Boolean,
-      policy: PeerCoordinationPolicy,
       /** False once the person removed Peer's hooks from Claude Code: installed builds then leave them out. */
       claudeHooks: Schema.optional(Schema.Boolean),
     }),

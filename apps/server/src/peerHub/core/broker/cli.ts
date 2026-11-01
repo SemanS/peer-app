@@ -19,7 +19,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 
 import { clip, cutText, neutral } from "../../peerText.ts";
-import { generatedFile, shortId } from "../coordination/edits.ts";
+import { generatedFile } from "../coordination/edits.ts";
 import { statusText } from "../coordination/news.ts";
 import { BOARD_ALL } from "../index/board.ts";
 import { type CommandsOn, INDEX_ALL, indexText } from "../index/text.ts";
@@ -27,11 +27,10 @@ import type { PeerCommand } from "../plugin.ts";
 import { CORE_COMMANDS } from "../registry.ts";
 import type { CoordinationBroker } from "./Broker.ts";
 import type { PeerBrokerPlugins } from "./host.ts";
-import { CliError, hubRead, hubWrite, refused, uncertain, usage } from "./cliContract.ts";
+import { CliError, hubRead, refused, uncertain, usage } from "./cliContract.ts";
 import { PUBLIC_COMMANDS, publicCli } from "./publicCli.ts";
 import { headerOf } from "./server.ts";
 import { inRepository, type LocalSession, unsupportedCheckout } from "./sessions.ts";
-import { newOp } from "./sync.ts";
 import { sessionTaskName, TASK_FLAGS, TASK_SWITCHES, taskCommand } from "./tasks.ts";
 import { SHARE_FLAGS, shareCommand, UNSHARED } from "./share.ts";
 import { helpText } from "./help.ts";
@@ -103,7 +102,6 @@ export function commandArguments(args: ReadonlyArray<string>): CommandArguments 
 }
 
 const CORE_FLAGS: Readonly<Record<string, ReadonlyArray<string>>> = {
-  resolve: ["--overlap"],
   log: ["--task", "--path"],
   task: TASK_FLAGS,
   share: SHARE_FLAGS,
@@ -268,7 +266,7 @@ export async function runCli(
   owned = pluginCommand(plugins, command);
   // A CLI read never makes another agent active or cancels its wait for a note.
   const parsed = commandArguments(args);
-  const { flag, plain, text } = parsed;
+  const { flag, plain } = parsed;
   if (owned !== undefined && "refusal" in owned)
     throw refused(
       owned.refusal.replace(/^peer: /, ""),
@@ -298,13 +296,6 @@ export async function runCli(
     return answer.success;
   }
   const view = () => this.merged(session.workspace, this.views.get(session.workspace));
-  const mine = (state?: "open") =>
-    view().overlaps.filter(
-      (o) =>
-        o.sessions.includes(session.id) &&
-        (state === undefined || o.state === state) &&
-        (flag("--overlap") === undefined || o.id.startsWith(flag("--overlap") ?? "")),
-    );
   switch (command) {
     case "status": {
       await this.syncNow(session.workspace, 3000);
@@ -339,41 +330,6 @@ export async function runCli(
       this.markSeen(session);
       return out;
     }
-    case "resolve": {
-      if (text === "")
-        throw usage("say what was agreed", 'run peer resolve "they rename first, I rebase".');
-      await this.syncNow(session.workspace, 3000);
-      const targets = mine("open");
-      if (targets.length === 0)
-        throw refused("no open overlap to resolve", "run peer status to see the overlaps.");
-      const op = newOp();
-      let applied = false;
-      for (const overlap of targets) {
-        const updated = await hubWrite(
-          "resolve",
-          () =>
-            this.host.resolve(
-              session.workspace,
-              session.project,
-              overlap.id,
-              text,
-              session.id,
-              `${op}:${overlap.id}`.slice(0, 64),
-            ),
-          `run peer ${command} again when the requirement is met.`,
-          applied,
-        );
-        applied = true;
-        this.applyOverlap(session.workspace, updated);
-        this.acknowledge(session, overlap);
-      }
-      this.record("resolve.agent", {
-        session: session.id,
-        overlaps: targets.map((o) => o.id),
-        text,
-      });
-      return `Resolved overlap ${targets.map((o) => shortId(o.id)).join(", ")}.`;
-    }
     case "claim": {
       const cwd = headerOf(headers, "x-peer-cwd") ?? session.cwd;
       if (plain.length === 0)
@@ -383,7 +339,7 @@ export async function runCli(
       const intent = flag("--intent");
       if (intent !== undefined) session.intent = clip(intent, 300);
       this.markDirty();
-      const { answers, policy, verification } = await this.decideEdits(session, claimed);
+      const { answers, verified } = await this.decideEdits(session, claimed, { plugins });
       this.record("claim", {
         session: session.id,
         claimed,
@@ -393,27 +349,17 @@ export async function runCli(
       return claimed
         .map((path) => {
           if (generatedFile(path)) return `${neutral(path)}: not coordinated — generated file.`;
-          const resolved =
+          const answer = (
             answers.find(({ file }) => file === path) ??
-            (answers.length === 1 ? answers[0] : undefined);
-          const answer = resolved?.answer;
-          const verdict =
-            answer?.decision === "ask"
-              ? "ask your person"
-              : answer?.decision === "deny"
-                ? (resolved?.policy ?? policy) === "exclusive"
-                  ? "held"
-                  : "wait"
-                : answer?.context || verification === "unverified"
-                  ? "notify"
-                  : "clear";
+            (answers.length === 1 ? answers[0] : undefined)
+          )?.answer;
           const reason =
-            answer?.reason ??
             answer?.context ??
-            (verification === "unverified"
-              ? "The Hub could not verify this claim; notify fallback applies."
-              : "No other agent holds this path.");
-          return `${neutral(path)}: ${verdict} — ${neutral(clip(reason.replace(", so it did not run.", ". This advisory claim cannot stop an edit."), 600))}`;
+            (verified
+              ? "No other agent holds this path."
+              : "The Hub could not be reached, so nobody heard of this claim yet.");
+          const verdict = answer?.context !== undefined || !verified ? "notify" : "clear";
+          return `${neutral(path)}: ${verdict} — ${neutral(clip(reason, 600))}`;
         })
         .join("\n");
     }

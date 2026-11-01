@@ -5,9 +5,7 @@ import type { PeerHubStatus } from "@t3tools/contracts";
  * and the task launcher read, so a phone stays on it whatever churns on the computer.
  */
 export function needsYouView(status: PeerHubStatus): PeerHubStatus {
-  const ids = new Set(
-    status.coordination.overlaps.filter((o) => o.state === "open").flatMap((o) => o.sessions),
-  );
+  const ids = new Set(status.coordination.overlaps.flatMap((o) => o.sessions));
   return {
     ...status,
     pendingSignIn: null,

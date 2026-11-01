@@ -107,7 +107,6 @@ function overlapsOnTask(
     onTask,
     overlaps: status.coordination.overlaps.filter(
       (overlap) =>
-        overlap.state === "open" &&
         overlap.workspace === project.workspace &&
         overlap.project === project.projectId &&
         overlap.sessions.some((session) => onTask.has(session)),
@@ -116,7 +115,7 @@ function overlapsOnTask(
 }
 
 /**
- * Whether agents on the task overlap with another agent: an open overlap one of whose sessions
+ * Whether agents on the task overlap with another agent: an overlap one of whose sessions
  * works on it. The row marks it like the board and the overlap page do.
  */
 export function taskHasOverlap(

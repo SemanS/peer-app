@@ -282,7 +282,7 @@
   },
   "apps/server/src/peerHub/core/broker/hooks.test.ts": {
     "t3code/no-wall-clock-in-tests": {
-      "count": 2
+      "count": 1
     }
   },
   "apps/server/src/peerHub/core/broker/hooks.ts": {
@@ -375,11 +375,8 @@
     }
   },
   "apps/server/src/peerHub/core/coordination/edits.ts": {
-    "t3code/no-em-dash-copy": {
-      "count": 1
-    },
     "t3code/no-low-value-comments": {
-      "count": 4
+      "count": 1
     }
   },
   "apps/server/src/peerHub/core/coordination/jjEdits.test.ts": {
@@ -389,19 +386,6 @@
   },
   "apps/server/src/peerHub/core/coordination/news.ts": {
     "t3code/no-em-dash-copy": {
-      "count": 3
-    }
-  },
-  "apps/server/src/peerHub/core/coordination/overlaps.test.ts": {
-    "t3code/no-real-time-wait-in-tests": {
-      "count": 1
-    },
-    "t3code/no-wall-clock-in-tests": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/core/coordination/overlaps.ts": {
-    "t3code/no-low-value-comments": {
       "count": 1
     }
   },
@@ -647,11 +631,6 @@
   },
   "apps/server/src/peerHub/plugins/changes/text.ts": {
     "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/herdr/Herdr.test.ts": {
-    "t3code/no-wall-clock-in-tests": {
       "count": 1
     }
   },
@@ -1217,17 +1196,7 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/settings/coordinationAndPlugins.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/settings/hubStatus.logic.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/settings/pages/CoordinationAndPlugins.tsx": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -1397,11 +1366,6 @@
       "count": 2
     }
   },
-  "packages/client-runtime/src/peerSettings.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "packages/contracts/src/peer/base.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1429,7 +1393,7 @@
   },
   "packages/contracts/src/peerHub.ts": {
     "t3code/no-low-value-comments": {
-      "count": 3
+      "count": 2
     }
   },
   "scripts/build-npm-peer.ts": {

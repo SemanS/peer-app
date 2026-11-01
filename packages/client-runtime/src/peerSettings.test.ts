@@ -1,18 +1,7 @@
 // @effect-diagnostics globalDate:off - it times how long a pure function takes.
 import { describe, expect, it } from "@effect/vitest";
 
-import {
-  decisionParts,
-  decisionText,
-  effectivePolicy,
-  getAt,
-  harnessLabel,
-  jsonEqual,
-  policiesOf,
-  readDocument,
-  setAt,
-  setsFor,
-} from "./peerSettings.ts";
+import { getAt, harnessLabel, jsonEqual, readDocument, setAt, setsFor } from "./peerSettings.ts";
 
 describe("the draft", () => {
   const base = {
@@ -144,96 +133,6 @@ describe("the draft", () => {
 });
 
 const structuredCloneOf = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-
-describe("where a value comes from", () => {
-  const projects = {
-    booking: { coordination: { policy: "coordinate" } },
-    hub: { coordination: { policy: "notify" } },
-    camp: {},
-    city: { coordination: {} },
-  };
-
-  it("takes the project's policy where it sets one, else the computer's, and keeps what it beat", () => {
-    const policies = policiesOf(projects);
-    expect(policies).toEqual({
-      booking: "coordinate",
-      hub: "notify",
-      camp: undefined,
-      city: undefined,
-    });
-    expect(effectivePolicy(policies, "booking", "ask")).toEqual({
-      value: "coordinate",
-      source: "project",
-      overridden: { value: "ask" },
-    });
-    expect(effectivePolicy(policies, "hub", "ask")).toEqual({
-      value: "notify",
-      source: "project",
-      overridden: { value: "ask" },
-    });
-    expect(effectivePolicy(policies, "camp", "ask")).toEqual({ value: "ask", source: "computer" });
-    expect(effectivePolicy(policies, "city", "ask")).toEqual({ value: "ask", source: "computer" });
-    // A project that says the same as the computer still decides; nothing is struck through.
-    expect(effectivePolicy(policies, "booking", "coordinate")).toEqual({
-      value: "coordinate",
-      source: "project",
-    });
-    expect(effectivePolicy(policies, "unknown", "notify")).toEqual({
-      value: "notify",
-      source: "computer",
-    });
-    expect(effectivePolicy({ constructor: undefined }, "constructor", "ask").source).toBe(
-      "computer",
-    );
-  });
-
-  it("says a decision in the words of the design", () => {
-    expect(
-      decisionText({ policy: "coordinate", source: "project", pattern: "payments/**" }, "Booking"),
-    ).toBe("coordinate · payments/** in Booking");
-    expect(decisionText({ policy: "coordinate", source: "project" }, "Booking")).toBe(
-      "coordinate · Booking's policy",
-    );
-    expect(decisionText({ policy: "ask", source: "client" }, "Camp-bot")).toBe(
-      "ask · your computer, Camp-bot has no policy",
-    );
-    expect(
-      decisionText({ policy: "coordinate", source: "project", pathRulesOff: true }, "Booking"),
-    ).toBe("coordinate · Booking's policy · path rules were off");
-    expect(decisionText({ policy: "notify", source: "project", pattern: "docs/**" })).toBe(
-      "notify · docs/** in the project",
-    );
-    expect(decisionText({ policy: "ask", source: "client" })).toBe(
-      "ask · your computer, the project has no policy",
-    );
-    expect(decisionText(undefined)).toBeNull();
-    expect(decisionText(null, "Booking")).toBeNull();
-  });
-
-  it("keeps a computer's default apart from the project's, and says whose it was", () => {
-    // A `client` decision is the default of the computer that asked, which may not be this one.
-    expect(decisionText({ policy: "ask", source: "client" }, "Camp-bot", "another")).toBe(
-      "ask · another computer's default, Camp-bot has no policy",
-    );
-    expect(decisionParts({ policy: "ask", source: "client" }, "Camp-bot", "yours")).toEqual({
-      policy: "ask",
-      from: "your computer, Camp-bot has no policy",
-      pathRulesOff: false,
-    });
-    // The project decides for everyone: whose computer asked changes nothing.
-    expect(
-      decisionParts(
-        { policy: "notify", source: "project", pattern: "docs/**" },
-        "Booking",
-        "another",
-      ),
-    ).toEqual({ policy: "notify", from: "docs/** in Booking", pathRulesOff: false });
-    expect(
-      decisionParts({ policy: "coordinate", source: "project", pathRulesOff: true }, "Booking")
-        .pathRulesOff,
-    ).toBe(true);
-  });
-});
 
 describe("names", () => {
   it("says a harness by its product's name, and an unknown one as it is", () => {

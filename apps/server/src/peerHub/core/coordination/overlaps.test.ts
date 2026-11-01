@@ -21,7 +21,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("the hub decides an edit", () => {
+describe("the hub hears of an edit", () => {
   const at = "2026-10-06T10:00:00Z";
   const vir: HubCoordSession = {
     id: "claude:vir",
@@ -40,8 +40,6 @@ describe("the hub decides an edit", () => {
     project: "app",
     sessions: [session, "claude:vir"],
     files: ["src/pay.ts"],
-    state: "open",
-    notes: [],
     openedAt: at,
     updatedAt: at,
     ...extra,
@@ -49,18 +47,15 @@ describe("the hub decides an edit", () => {
   /** What the hub answers for one path: the verdict and the overlap it opened with Vir's agent. */
   const answerOf = (
     session: string,
-    verdict: HubIntentAnswer["verdicts"][number]["verdict"],
+    verdict: string,
     extra: Partial<HubIntentAnswer> = {},
   ): HubIntentAnswer => ({
-    policy: "coordinate",
-    policySource: "project",
     verdicts: [
       {
         path: "src/pay.ts",
         verdict,
         with: ["claude:vir"],
         overlaps: ["abc123def456"],
-        ...(verdict === "held" ? { holder: "claude:vir" } : {}),
       },
     ],
     overlaps: [overlapWith(session)],
@@ -102,11 +97,6 @@ describe("the hub decides an edit", () => {
       editBody(fixture.root, id, agent, file),
       agent === "codex" ? { "x-peer-agent": "codex" } : {},
     );
-  const after = (fixture: Fixture, id: string, file = "src/pay.ts") =>
-    fixture.broker["hook"](
-      { ...editBody(fixture.root, id, "claude", file), hook_event_name: "PostToolUse" },
-      {},
-    );
   const hookOutput = (out: Record<string, unknown> | null) =>
     (out?.hookSpecificOutput ?? {}) as {
       readonly permissionDecision?: string;
@@ -121,33 +111,28 @@ describe("the hub decides an edit", () => {
       .split("\n")
       .map((line) => JSON.parse(line) as { event: string; [field: string]: unknown });
   };
-  /** Lets the promises already in flight finish (a macrotask passes). */
-  const settled = () => new Promise<void>((resolve) => setImmediate(resolve));
-
-  it("stops the second agent as the hub says, and takes what the hub recorded into the view at once", async () => {
+  it("tells the agent who else is on the file, stops nothing, and takes what the hub recorded into the view at once", async () => {
     const asked: Array<{ readonly request: HubIntentRequest; readonly timeoutMs: number }> = [];
     const fixture = await brokerFixture(() => ({
       nameOf: people,
       report: async () => viewOf(),
       intent: async (_workspace, _project, request, timeoutMs) => {
         asked.push({ request, timeoutMs });
-        return answerOf(request.session, "deny");
+        return answerOf(request.session, "notify");
       },
     }));
     try {
       const out = hookOutput(await edit(fixture, "one"));
-      expect(out.permissionDecision).toBe("deny");
-      expect(out.permissionDecisionReason).toContain("Vir's agent");
-      expect(out.permissionDecisionReason).toContain("[overlap abc123]");
-      expect(out.permissionDecisionReason).toContain('peer note "<your plan for src/pay.ts>"');
-      // The hub's own word counts, not this computer's default: it asked with the Settings policy.
+      expect(out.permissionDecision).toBeUndefined();
+      expect(out.additionalContext).toContain("Vir's agent");
+      expect(out.additionalContext).toContain("also about to change src/pay.ts");
       expect(asked).toHaveLength(1);
       expect(asked[0]?.request).toMatchObject({
         environment: "test",
         session: "claude:one",
         paths: ["src/pay.ts"],
-        policy: "notify",
       });
+      expect(asked[0]?.request).not.toHaveProperty("policy");
       expect(asked[0]?.request.op).toEqual(expect.any(String));
       expect(asked[0]?.timeoutMs).toBeLessThanOrEqual(2000);
       expect(fixture.broker.snapshot().overlaps.map((overlap) => overlap.id)).toContain(
@@ -155,13 +140,11 @@ describe("the hub decides an edit", () => {
       );
       const log = await events(fixture);
       expect(log.find((entry) => entry.event === "intent")).toMatchObject({
-        policy: "coordinate",
-        policySource: "project",
-        verdicts: [{ path: "src/pay.ts", verdict: "deny", with: ["claude:vir"] }],
+        verdicts: [{ path: "src/pay.ts", verdict: "notify", with: ["claude:vir"] }],
       });
       expect(log.find((entry) => entry.event === "decision")).toMatchObject({
-        policy: "coordinate",
-        decision: "deny",
+        file: "src/pay.ts",
+        with: ["claude:vir"],
       });
     } finally {
       await fixture.dispose();
@@ -217,210 +200,63 @@ describe("the hub decides an edit", () => {
     }
   });
 
-  it("maps the verdicts to what Claude Code and Codex are told", async () => {
-    const verdict = { current: "ask" as HubIntentAnswer["verdicts"][number]["verdict"] };
-    const fixture = await brokerFixture(() => ({
-      nameOf: people,
-      report: async () => viewOf(),
-      intent: async (_workspace, _project, request) => answerOf(request.session, verdict.current),
-    }));
-    try {
-      // A question for the person: Claude Code's permission prompt; Codex's agent asks, and its next try passes.
-      const claudeAsks = hookOutput(await edit(fixture, "claude-one", "claude"));
-      expect(claudeAsks.permissionDecision).toBe("ask");
-      expect(claudeAsks.permissionDecisionReason).toContain("Vir's agent");
-      const codexAsks = hookOutput(await edit(fixture, "codex-one", "codex"));
-      expect(codexAsks.permissionDecision).toBe("deny");
-      expect(codexAsks.permissionDecisionReason).toContain("Ask your person in your reply");
-      expect(
-        hookOutput(await edit(fixture, "codex-one", "codex")).permissionDecision,
-      ).toBeUndefined();
-
-      // A denial and a held file stop both.
-      for (const kind of ["deny", "held"] as const) {
-        verdict.current = kind;
-        for (const agent of ["claude", "codex"] as const) {
-          const out = hookOutput(await edit(fixture, `${agent}-${kind}`, agent));
-          expect(out.permissionDecision).toBe("deny");
-          expect(out.permissionDecisionReason).toContain(
-            kind === "held" ? "holds src/pay.ts in this project" : "Peer coordinates the agents",
-          );
-        }
-      }
-
-      // A heads-up goes next to the result, once.
-      verdict.current = "notify";
-      const heads = hookOutput(await edit(fixture, "claude-notify", "claude"));
-      expect(heads.permissionDecision).toBeUndefined();
-      expect(heads.additionalContext).toContain("also about to change src/pay.ts");
-      const again = hookOutput(await edit(fixture, "claude-notify", "claude"));
-      expect(again.permissionDecision).toBeUndefined();
-      expect(again.additionalContext ?? "").not.toContain("also about to change");
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("goes by its own view for a hub without intent, and does not ask it again for ten minutes", async () => {
-    let asked = 0;
-    const fixture = await brokerFixture(() => ({
-      nameOf: people,
-      policy: () => "coordinate",
-      report: async () => viewOf({ sessions: [{ ...vir, files: ["src/pay.ts"] }] }),
-      intent: async () => {
-        asked += 1;
-        return { unsupported: true };
-      },
-    }));
-    try {
-      const first = hookOutput(await edit(fixture, "one"));
-      expect(first.permissionDecision).toBe("deny");
-      // Today's text and today's claim: it is the view that decided.
-      expect(first.permissionDecisionReason).toContain("also changed src/pay.ts");
-      expect(fixture.broker["sessions"].get("claude:one")?.claims).toContain("src/pay.ts");
-      expect(
-        hookOutput(await edit(fixture, "one", "claude", "src/other.ts")).permissionDecision,
-      ).toBeUndefined();
-      expect(asked).toBe(1);
-      expect(
-        (await events(fixture)).filter((entry) => entry.event === "intent.legacy"),
-      ).toHaveLength(1);
-
-      // Ten minutes on, it asks again: the hub may have been upgraded since.
-      vi.useFakeTimers({ toFake: ["Date"] });
+  it.each(["claude", "codex"] as const)(
+    "tells %s once for each file, and reads anything but clear as someone else on it",
+    async (agent) => {
+      const verdict = { current: "notify" };
+      const fixture = await brokerFixture(() => ({
+        nameOf: people,
+        report: async () => viewOf(),
+        intent: async (_workspace, _project, request) => answerOf(request.session, verdict.current),
+      }));
       try {
-        vi.setSystemTime(Date.now() + 11 * 60_000);
-        await edit(fixture, "one", "claude", "src/another.ts");
-        expect(asked).toBe(2);
+        const heads = hookOutput(await edit(fixture, "one", agent));
+        expect(heads.permissionDecision).toBeUndefined();
+        expect(heads.additionalContext).toContain("also about to change src/pay.ts");
+        expect(await edit(fixture, "one", agent)).toBeNull();
+        // What an older hub may still answer: another session, told as such, and nothing stops it.
+        for (const [id, kind] of [
+          ["two", "deny"],
+          ["three", "held"],
+          ["four", "ask"],
+        ] as const) {
+          verdict.current = kind;
+          const out = hookOutput(await edit(fixture, id, agent));
+          expect(out.permissionDecision).toBeUndefined();
+          expect(out.additionalContext).toContain("also about to change src/pay.ts");
+        }
       } finally {
-        vi.useRealTimers();
+        await fixture.dispose();
       }
-    } finally {
-      await fixture.dispose();
-    }
-  });
+    },
+  );
 
-  it("remembers a hub without intent for the project that found out, not for the workspace", async () => {
-    const asked: string[] = [];
+  it("lets an edit go on when the hub fails, and records that nobody heard of it", async () => {
     const fixture = await brokerFixture(() => ({
-      placeOf: async (cwd) => ({
-        workspace: "acme",
-        project: cwd.endsWith("/site") ? "site" : "app",
-        root: cwd,
-      }),
       report: async () => viewOf(),
-      // A hub that has intent answers 404 for a project it does not know: that is no hub without it.
-      intent: async (_workspace, project, request) => {
-        asked.push(project);
-        return project === "app"
-          ? { unsupported: true }
-          : answerOf(request.session, "clear", { verdicts: [], overlaps: [] });
-      },
-    }));
-    try {
-      const inProject = async (id: string, project: "app" | "site") => {
-        const cwd = NodePath.join(fixture.root, project);
-        await NodeFSP.mkdir(cwd, { recursive: true });
-        return fixture.broker["hook"](
-          {
-            hook_event_name: "PreToolUse",
-            session_id: id,
-            cwd,
-            tool_name: "Edit",
-            tool_input: {
-              file_path: NodePath.join(cwd, "src/a.ts"),
-              old_string: "a",
-              new_string: "b",
-            },
-          },
-          {},
-        );
-      };
-      await inProject("one", "app");
-      await inProject("one", "app");
-      await inProject("two", "site");
-      await inProject("two", "site");
-      expect(asked).toEqual(["app", "site", "site"]);
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("stops an edit under coordinate and exclusive when the hub fails, and lets notify through marked", async () => {
-    const policies = { current: "coordinate" as "notify" | "coordinate" | "ask" };
-    const hubPolicies = { current: undefined as Record<string, string> | undefined };
-    const fixture = await brokerFixture(() => ({
-      policy: () => policies.current,
-      report: async () =>
-        viewOf(hubPolicies.current === undefined ? {} : { policies: hubPolicies.current }),
       intent: async () => {
         throw new Error("connection refused");
       },
     }));
     try {
-      const denied = hookOutput(await edit(fixture, "one"));
-      expect(denied.permissionDecision).toBe("deny");
-      expect(denied.permissionDecisionReason).toContain(
-        "could not confirm this edit with your team's hub",
-      );
-      expect(denied.permissionDecisionReason).toContain("Try again in a moment");
-      expect(denied.permissionDecisionReason).toContain("switch this project to notify");
-
-      // The project's own policy, as the last view had it, outranks this person's.
-      policies.current = "notify";
-      hubPolicies.current = { app: "exclusive" };
-      await fixture.broker["sync"]("acme");
-      expect(hookOutput(await edit(fixture, "one")).permissionDecision).toBe("deny");
-
-      hubPolicies.current = undefined;
-      await fixture.broker["sync"]("acme");
-      expect(hookOutput(await edit(fixture, "one")).permissionDecision).toBeUndefined();
+      expect(await edit(fixture, "one")).toBeNull();
       const log = await events(fixture);
-      expect(log.filter((entry) => entry.event === "intent.failed")).toHaveLength(3);
       expect(log.find((entry) => entry.event === "intent.failed")).toMatchObject({
         reason: "connection refused",
         files: ["src/pay.ts"],
       });
       expect(log.filter((entry) => entry.event === "intent.unverified")).toMatchObject([
-        { files: ["src/pay.ts"], policy: "notify" },
+        { files: ["src/pay.ts"] },
       ]);
     } finally {
       await fixture.dispose();
     }
   });
 
-  it("leaves it to the person under ask when the hub fails: Claude Code asks, Codex's agent does", async () => {
-    const fixture = await brokerFixture(() => ({
-      policy: () => "ask",
-      report: async () => viewOf(),
-      intent: async () => {
-        throw new Error("connection refused");
-      },
-    }));
-    try {
-      const claude = hookOutput(await edit(fixture, "claude-one", "claude"));
-      expect(claude.permissionDecision).toBe("ask");
-      expect(claude.permissionDecisionReason).toContain("could not confirm this edit");
-      // Approved: the edit runs, and the file is not asked about again.
-      await after(fixture, "claude-one");
-      expect(await edit(fixture, "claude-one", "claude")).toBeNull();
-
-      const codex = hookOutput(await edit(fixture, "codex-one", "codex"));
-      expect(codex.permissionDecision).toBe("deny");
-      expect(codex.permissionDecisionReason).toContain("Ask your person in your reply");
-      expect(
-        hookOutput(await edit(fixture, "codex-one", "codex")).permissionDecision,
-      ).toBeUndefined();
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("falls back when the hub does not answer within its deadline, and says so", async () => {
+  it("goes on when the hub does not answer within its deadline", async () => {
     const called = Promise.withResolvers<void>();
     let timeoutMs = 0;
     const fixture = await brokerFixture(() => ({
-      policy: () => "coordinate",
       report: async () => viewOf(),
       intent: (_workspace, _project, _request, given) => {
         timeoutMs = given;
@@ -442,9 +278,7 @@ describe("the hub decides an edit", () => {
         // Its timer is set as the hub is asked; should the hub not be asked, the answer comes without it.
         await Promise.race([called.promise, pending]);
         await vi.advanceTimersByTimeAsync(2000);
-        const out = hookOutput(await pending);
-        expect(out.permissionDecision).toBe("deny");
-        expect(out.permissionDecisionReason).toContain("Try again in a moment");
+        expect(await pending).toBeNull();
       } finally {
         vi.useRealTimers();
       }
@@ -462,93 +296,7 @@ describe("the hub decides an edit", () => {
     }
   });
 
-  it("tells the hub of an agent's approval, and ignores a hub that cannot take it", async () => {
-    const acked: Array<readonly string[]> = [];
-    let answer: "ok" | "unsupported" | "fails" = "ok";
-    const fixture = await brokerFixture(() => ({
-      nameOf: people,
-      report: async () => viewOf(),
-      intent: async (_workspace, _project, request) => answerOf(request.session, "ask"),
-      ack: async (_workspace, _project, overlap, session, op) => {
-        acked.push([overlap, session, op]);
-        if (answer === "fails") throw new Error("hub unreachable");
-        if (answer === "unsupported") return { unsupported: true };
-        return overlapWith(session, { acks: { [session]: at } });
-      },
-    }));
-    try {
-      expect(hookOutput(await edit(fixture, "one")).permissionDecision).toBe("ask");
-      // The person has not approved yet: nothing to tell.
-      expect(acked).toEqual([]);
-      await after(fixture, "one");
-      expect(acked).toHaveLength(1);
-      expect(acked[0]?.slice(0, 2)).toEqual(["abc123def456", "claude:one"]);
-      expect(acked[0]?.[2]).toEqual(expect.any(String));
-      await settled();
-      expect(
-        fixture.broker.snapshot().overlaps.find((overlap) => overlap.id === "abc123def456")?.acks,
-      ).toEqual({ "claude:one": at });
-      expect((await events(fixture)).filter((entry) => entry.event === "ack")).toHaveLength(1);
-
-      // The same approval is not told twice, and it settles the question for the file.
-      await after(fixture, "one");
-      expect(acked).toHaveLength(1);
-      expect(await edit(fixture, "one")).toBeNull();
-
-      // A hub from before acknowledgements, or one that fails: the edit is not affected.
-      for (const [id, how] of [
-        ["two", "unsupported"],
-        ["three", "fails"],
-      ] as const) {
-        answer = how;
-        expect(hookOutput(await edit(fixture, id)).permissionDecision).toBe("ask");
-        await after(fixture, id);
-        await settled();
-        expect(acked.at(-1)?.[1]).toBe(`claude:${id}`);
-      }
-      const log = await events(fixture);
-      expect(log.filter((entry) => entry.event === "ack.failed")).toMatchObject([
-        { reason: "hub unreachable" },
-      ]);
-    } finally {
-      await fixture.dispose();
-    }
-  });
-
-  it("sends one op with each resolution, one for the command and told apart per overlap", async () => {
-    const posted: Array<{ overlap: string; op: string | undefined }> = [];
-    const other = (id: string): HubOverlap => ({
-      ...overlapWith("claude:me"),
-      id,
-      sessions: ["claude:me", `claude:peer-${id}`],
-    });
-    const fixture = await brokerFixture(() => ({
-      report: async () => viewOf({ overlaps: [other("aaaaaaaaaaaa"), other("bbbbbbbbbbbb")] }),
-      resolve: async (_workspace, _project, overlap, _text, _session, op) => {
-        posted.push({ overlap, op });
-        return { ...other(overlap), state: "resolved" };
-      },
-    }));
-    try {
-      await fixture.broker["sessionFor"](
-        "claude",
-        { session_id: "me", cwd: fixture.root },
-        undefined,
-      );
-      const headers = { "x-peer-session": "claude:me" };
-      await fixture.broker["runCli"]("resolve", ["Ana first"], headers);
-      expect(posted).toHaveLength(2);
-      const ops = posted.map(({ op }) => op ?? "");
-      for (const op of ops) expect(op.length).toBeGreaterThan(0);
-      for (const op of ops) expect(op.length).toBeLessThanOrEqual(64);
-      expect(new Set(ops).size).toBe(2);
-      expect(ops[0]?.split(":")[0]).toBe(ops[1]?.split(":")[0]);
-      expect(ops[0]?.endsWith(`:${posted[0]?.overlap}`)).toBe(true);
-    } finally {
-      await fixture.dispose();
-    }
-  });
-  it("lets exactly one of two computers' first edits of a file through, however close they come", async () => {
+  it("tells exactly one of two computers' first edits of a file of the other, however close they come", async () => {
     // A hub that decides in one step, as the real one does: whoever asks first holds the path.
     const holders = new Map<string, string>();
     const asked: string[] = [];
@@ -574,22 +322,19 @@ describe("the hub decides an edit", () => {
           });
           return {
             path,
-            verdict: "deny" as const,
+            verdict: "notify" as const,
             with: [holder],
             overlaps: overlaps.map((overlap) => overlap.id),
           };
         });
         response.writeHead(200, { "content-type": "application/json" });
-        response.end(
-          JSON.stringify({ policy: "coordinate", policySource: "client", verdicts, overlaps, at }),
-        );
+        response.end(JSON.stringify({ verdicts, overlaps, at }));
       });
     });
     await new Promise<void>((resolve) => hub.listen(0, "127.0.0.1", resolve));
     const url = `http://127.0.0.1:${(hub.address() as NodeNet.AddressInfo).port}`;
     const computer = () =>
       brokerFixture(() => ({
-        policy: () => "coordinate",
         report: async () => viewOf({ sessions: [] }),
         // Over the wire, as Peer's hub client does it (its own tests cover that client).
         intent: async (_workspace, _project, request) =>
@@ -607,11 +352,9 @@ describe("the hub decides an edit", () => {
           edit(ana, "ana", "claude", file),
           edit(bob, "bob", "claude", file),
         ]);
-        const stopped = outs.filter((out) => hookOutput(out).permissionDecision === "deny");
-        expect(stopped, `round ${round + 1}: ${JSON.stringify(outs)}`).toHaveLength(1);
-        expect(hookOutput(stopped[0] ?? null).permissionDecisionReason).toContain(
-          `peer note "<your plan for ${file}>"`,
-        );
+        const told = outs.filter((out) => hookOutput(out).additionalContext !== undefined);
+        expect(told, `round ${round + 1}: ${JSON.stringify(outs)}`).toHaveLength(1);
+        expect(outs.every((out) => hookOutput(out).permissionDecision === undefined)).toBe(true);
       }
       // Each edit asked the hub: neither computer decided on a view of its own.
       expect(asked).toHaveLength(40);
@@ -621,78 +364,6 @@ describe("the hub decides an edit", () => {
         hub.closeAllConnections();
         hub.close(() => resolve());
       });
-    }
-  });
-});
-
-describe("an overlap whose other agent ended", () => {
-  it("tells the agent at work at once that it closes it, at most twice", async () => {
-    const fixture = await brokerFixture(() => ({ policy: () => "coordinate" }));
-    try {
-      await fixture.register("one");
-      const session = fixture.broker["sessions"].get("claude:one")!;
-      const now = new Date().toISOString();
-      const note = (id: string) => ({
-        id,
-        session: "claude:vir",
-        email: "vir@acme.test",
-        text: "I keep the totals",
-        at: now,
-      });
-      const overlap = (notes: HubOverlap["notes"]): HubOverlap => ({
-        id: "abc123def456",
-        project: "app",
-        sessions: ["claude:one", "claude:vir"],
-        files: ["src/pay.ts"],
-        state: "open",
-        notes,
-        openedAt: now,
-        updatedAt: now,
-      });
-      const vir: HubCoordSession = {
-        id: "claude:vir",
-        project: "app",
-        email: "vir@acme.test",
-        environment: "vir-laptop",
-        label: "Frontend implementation",
-        agent: "claude",
-        status: "working",
-        files: [],
-        claims: [],
-        seenAt: now,
-      };
-      // While Vir's agent is at work, a note just written waits for the quiet.
-      fixture.broker.views.set("acme", {
-        sessions: [vir],
-        overlaps: [overlap([note("n1")])],
-        at: now,
-      });
-      expect(fixture.broker.settleNews(session)).toBeNull();
-      // Once it ended, no quiet is waited for.
-      fixture.broker.views.set("acme", {
-        sessions: [],
-        overlaps: [overlap([note("n1")])],
-        at: now,
-      });
-      const text = fixture.broker.settleNews(session);
-      expect(text).toContain("the other agent ended and will not answer");
-      expect(text).toContain(`resolve "<agreement>"`);
-      expect(fixture.broker.settleNews(session)).toBeNull();
-      // Another note is heard once more; the third is not.
-      fixture.broker.views.set("acme", {
-        sessions: [],
-        overlaps: [overlap([note("n1"), note("n2")])],
-        at: now,
-      });
-      expect(fixture.broker.settleNews(session)).toContain("ended");
-      fixture.broker.views.set("acme", {
-        sessions: [],
-        overlaps: [overlap([note("n1"), note("n2"), note("n3")])],
-        at: now,
-      });
-      expect(fixture.broker.settleNews(session)).toBeNull();
-    } finally {
-      await fixture.dispose();
     }
   });
 });

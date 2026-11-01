@@ -24,7 +24,6 @@ import type { PeerPluginEntry } from "./plugin.ts";
  */
 export const CORE_COMMANDS = [
   "status",
-  "resolve",
   "claim",
   "release",
   "index",

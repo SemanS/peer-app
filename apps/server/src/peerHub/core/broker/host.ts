@@ -6,12 +6,7 @@
  *
  * @module peerHub/core/broker/host
  */
-import type {
-  PeerCoordEvent,
-  PeerCoordinationPolicy,
-  PeerWorkStatus,
-  PeerWorkThread,
-} from "@t3tools/contracts";
+import type { PeerCoordEvent, PeerWorkStatus, PeerWorkThread } from "@t3tools/contracts";
 import type * as Effect from "effect/Effect";
 import type { ResumableNativeThread } from "../../workLifecycle.ts";
 
@@ -20,8 +15,6 @@ import type {
   HubCoordView,
   HubIntentAnswer,
   HubIntentRequest,
-  HubOverlap,
-  HubUnsupported,
   ReportedSession,
 } from "../hub/coordApi.ts";
 import type { PeerCommand, PeerContributions, PeerRuntimeProvider } from "../plugin.ts";
@@ -148,7 +141,6 @@ export interface PeerBrokerHost {
 
   readonly nameOf: (workspace: string, email: string) => string;
   readonly email: () => string | null;
-  readonly policy: () => PeerCoordinationPolicy;
   /** Workspaces whose overlaps people here should see. */
   readonly workspaces: () => ReadonlyArray<string>;
   /**
@@ -236,43 +228,17 @@ export interface PeerBrokerHost {
     sessions: ReadonlyArray<ReportedSession>,
   ) => Promise<HubCoordView>;
   readonly view: (workspace: string) => Promise<HubCoordView>;
-  /** `op` names the command: the hub adds no second note for the same one. */
-  readonly note: (
-    workspace: string,
-    project: string,
-    overlap: string,
-    text: string,
-    session: string | undefined,
-    op?: string,
-  ) => Promise<HubOverlap>;
-  readonly resolve: (
-    workspace: string,
-    project: string,
-    overlap: string,
-    resolution: string,
-    session: string | undefined,
-    op?: string,
-  ) => Promise<HubOverlap>;
   /**
-   * Asks the hub to decide an agent's intent to change files, and answers within `timeoutMs` or
-   * fails: its verdict on each path (it registered the session as their holder in the same step),
-   * or that this hub has no such thing. Absent: as a hub without it.
+   * Tells the hub of an agent's intent to change files, and answers within `timeoutMs` or fails: what
+   * it says of each path (it registered the session as their holder in the same step). Absent: a
+   * host with no hub to tell.
    */
   readonly intent?: (
     workspace: string,
     project: string,
     request: HubIntentRequest,
     timeoutMs: number,
-  ) => Promise<HubIntentAnswer | HubUnsupported>;
-  /** A session acknowledges an overlap; the overlap as the hub has it, or that this hub has no such thing. */
-  readonly ack?: (
-    workspace: string,
-    project: string,
-    overlap: string,
-    session: string,
-    op: string,
-    filesAt?: string,
-  ) => Promise<HubOverlap | HubUnsupported>;
+  ) => Promise<HubIntentAnswer>;
   readonly coordEvents?: (
     workspace: string,
     project: string,

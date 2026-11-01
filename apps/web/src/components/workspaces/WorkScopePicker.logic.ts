@@ -8,7 +8,6 @@ import type {
 } from "@t3tools/contracts";
 
 import { getLocalFileManagerName } from "../../lib/utils";
-import { projectPolicyLine } from "./DecisionChip.logic";
 import {
   isLocalScope,
   LOCAL_SCOPE_PREFIX,
@@ -179,18 +178,6 @@ export function projectButtonLines(
   };
 }
 
-/** The menu's coordination row: the policy that applies in the project, who set it, and where to change it. */
-export interface CoordinationRow {
-  /** "Coordination: notify". */
-  readonly title: string;
-  /** "Your default on this computer", "Set by the project". */
-  readonly detail: string;
-  readonly action: {
-    readonly label: "Change…" | "Settings";
-    readonly location: PeerSettingsLocation;
-  };
-}
-
 /** What the menu offers on the project in scope, under the list of projects. */
 export type ProjectMenuActions =
   | {
@@ -199,8 +186,6 @@ export type ProjectMenuActions =
       readonly workspace: string;
       readonly workspaceName: string;
       readonly projectId: string;
-      /** Absent while coordination is off on this computer or the Hub's policies are not known. */
-      readonly coordination: CoordinationRow | null;
       /** Project settings: the project's page in Settings → Peer. */
       readonly settings: PeerSettingsLocation;
       /** Open folder: where the project is checked out here; absent until a repository is. */
@@ -217,13 +202,9 @@ export type ProjectMenuActions =
       readonly project: { readonly id: ProjectId; readonly environmentId: EnvironmentId };
     };
 
-/**
- * The menu's actions on a workspace project. The coordination row names the policy that applies and
- * who set it, with a Settings button when the project decides and a Change… button when this
- * computer's default does; Remove from workspace… is for those who may take the project out.
- */
+/** The menu's actions on a workspace project. Remove from workspace… is for those who may take the project out. */
 export function workspaceProjectActions(input: {
-  readonly status: Pick<PeerHubStatus, "coordination" | "email">;
+  readonly status: Pick<PeerHubStatus, "email">;
   readonly workspace: {
     readonly slug: string;
     readonly name: string;
@@ -233,35 +214,12 @@ export function workspaceProjectActions(input: {
 }): ProjectMenuActions {
   const { status, workspace, state } = input;
   const { project } = state;
-  const line = projectPolicyLine(status, workspace.slug, { id: project.id, name: project.name });
-  const fromProject = line?.change.page === "project";
   return {
     kind: "workspace",
     name: project.name,
     workspace: workspace.slug,
     workspaceName: workspace.name,
     projectId: project.id,
-    coordination:
-      line === null
-        ? null
-        : {
-            title: `Coordination: ${line.chip.policy}`,
-            detail: fromProject ? "Set by the project" : "Your default on this computer",
-            action: fromProject
-              ? {
-                  label: "Settings",
-                  location: {
-                    kind: "project",
-                    workspace: workspace.slug,
-                    projectId: project.id,
-                    tab: "coordination",
-                  },
-                }
-              : {
-                  label: "Change…",
-                  location: { kind: "computer", section: "coordination" },
-                },
-          },
     settings: {
       kind: "project",
       workspace: workspace.slug,

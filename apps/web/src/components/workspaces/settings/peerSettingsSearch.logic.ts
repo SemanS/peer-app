@@ -186,12 +186,6 @@ const PROJECT_ENTRIES: ReadonlyArray<Entry> = [
     terms: "tools mcp add from catalog project",
   },
   {
-    id: "coordination-policy",
-    title: "Coordination policy",
-    place: p("coordination"),
-    terms: "policy notify coordinate ask exclusive coordination agents overlap",
-  },
-  {
     id: "project-history",
     title: "Project history",
     place: p("history"),

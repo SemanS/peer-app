@@ -1,11 +1,9 @@
-import { EnvironmentId, ThreadId, type PeerHubStatus } from "@t3tools/contracts";
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
   boardKinds,
   boardSearchPlaceholder,
-  computerKinds,
-  experimentStartStep,
   issueKeyHint,
   launchLine,
   launchNote,
@@ -66,20 +64,6 @@ const repo = (id: string, state: string, vcs?: "jj") => ({
   ...(vcs === undefined ? {} : { vcs }),
 });
 
-/** This computer with a project per entry, each with the given checkouts. */
-const computer = (projects: ReadonlyArray<ReadonlyArray<ReturnType<typeof repo>>>) =>
-  ({
-    workspaces: [
-      {
-        slug: "acme",
-        projects: projects.map((repositories, index) => ({
-          project: { id: `p${index}` },
-          repositories,
-        })),
-      },
-    ],
-  }) as unknown as PeerHubStatus;
-
 describe("a thread's rows", () => {
   it("say bookmark and workspace for a jj thread", () => {
     const words = vcsWords(thread({ key: "a", vcs: "jj" }).vcs);
@@ -128,19 +112,6 @@ describe("a mixed workspace", () => {
 });
 
 describe("settings without a thread", () => {
-  it("speak of this computer's ready checkouts", () => {
-    const jjOnly = computerKinds(computer([[repo("app", "ready", "jj")]]));
-    expect(jjOnly).toEqual(["jj"]);
-    expect(experimentStartStep(jjOnly)).toContain("each on a bookmark of its own");
-  });
-
-  it("keep Git's words while no checkout is ready, and name both when both are", () => {
-    expect(computerKinds(computer([]))).toEqual(["git"]);
-    expect(computerKinds(computer([[repo("app", "missing")]]))).toEqual(["git"]);
-    const both = computerKinds(computer([[repo("app", "ready", "jj")], [repo("site", "ready")]]));
-    expect(experimentStartStep(both)).toContain("each on a branch or bookmark of its own");
-  });
-
   it("take a project's kind from its checkouts here: jj when one of them is", () => {
     expect(projectVcs([repo("app", "ready", "jj"), repo("site", "ready")])).toBe("jj");
     expect(projectVcs([repo("site", "ready")])).toBe("git");

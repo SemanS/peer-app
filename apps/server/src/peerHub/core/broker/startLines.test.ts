@@ -32,7 +32,7 @@ it("adds bounded plugin instructions only to start text and counts the complete 
     const text = JSON.stringify(start);
     expect(text.split(line)).toHaveLength(2);
     expect(text.indexOf(line)).toBeLessThan(
-      text.indexOf("working context", text.indexOf(line) + line.length),
+      text.indexOf("Your private notes", text.indexOf(line) + line.length),
     );
     const prompt = await fixture.broker.hook(
       { ...body, hook_event_name: "UserPromptSubmit", prompt: "Continue" },

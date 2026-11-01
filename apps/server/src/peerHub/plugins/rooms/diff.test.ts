@@ -393,7 +393,7 @@ describe("the room's diff", () => {
         );
         assert.deepStrictEqual(diff, {
           state: "notHere",
-          reason: "Ana's work has not been pushed. Watch it, or ask their agent to push.",
+          reason: "Ana's work has not been pushed. Watch it, or ask the agent to push.",
           files: ["a.ts", "b.ts", "c.ts"],
         });
       }),

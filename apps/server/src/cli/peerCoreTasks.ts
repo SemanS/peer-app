@@ -81,7 +81,6 @@ export const projectTree = (input: {
   /** Task id → owner, by the task's own row. */
   readonly owners?: Readonly<Record<string, string>>;
   readonly areaOwners?: Readonly<Record<string, string>>;
-  readonly imported?: ReadonlySet<string>;
 }): ReadonlyArray<Tree.TreeNode> => {
   const node = (branch: TaskBranch): ReadonlyArray<Tree.TreeNode> => {
     const { task } = branch;
@@ -98,9 +97,6 @@ export const projectTree = (input: {
         ...(task.unsettled === true ? { unsettled: true } : {}),
         ...(task.progress === undefined ? {} : { progress: task.progress }),
         ...(owner === undefined ? {} : { owner }),
-        ...(input.imported?.has(task.id) === true || task.source?.system === "openspec"
-          ? { openspec: true }
-          : {}),
         children,
       },
     ];

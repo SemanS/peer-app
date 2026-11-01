@@ -164,8 +164,6 @@ export type Here =
       readonly state: "connected";
       readonly workspace: string;
       readonly project: string;
-      /** The checkout has an `openspec/changes` folder. */
-      readonly openspec?: boolean;
     };
 
 /** One thing the menu offers. */
@@ -177,7 +175,6 @@ export type MenuItem =
   | { readonly kind: "another" }
   | { readonly kind: "invite" }
   | { readonly kind: "task" }
-  | { readonly kind: "openspec" }
   | { readonly kind: "disconnect" }
   | { readonly kind: "open" }
   | { readonly kind: "create" }
@@ -333,21 +330,11 @@ export const menuItems = (
             value: { kind: "launch" as const, editor: e.id, folder: here.root },
           }))
       : [];
-  const openspec: Array<MenuChoice> =
-    here?.state === "connected" && here.openspec === true
-      ? [
-          {
-            title: "Sync OpenSpec changes",
-            description: "New changes become tasks; edits made in Peer stay.",
-            value: { kind: "openspec" },
-          },
-        ]
-      : [];
   const items: Array<MenuChoice> = inWorkspace
     ? [
         ...offers,
         ...(here?.state === "connected"
-          ? [...launch, ...invite, ...work, ...openspec, ...connectHere]
+          ? [...launch, ...invite, ...work, ...connectHere]
           : [...connectHere, ...invite, ...work]),
         {
           title: "Connect another local project",
@@ -499,12 +486,6 @@ export interface MenuSteps<R = never> {
     workspace: string,
     project: string,
   ) => Effect.Effect<string | null, never, R>;
-  /** Imports a connected checkout's OpenSpec changes, asking first; false without `openspec/`. */
-  readonly openspec: (target: {
-    readonly workspace: string;
-    readonly project: string;
-    readonly root: string;
-  }) => Effect.Effect<boolean, CliError.UserError, R>;
   /** Opens the Peer app (or where to get it); the menu ends, the app coordinates from then on. */
   readonly openPeer: Effect.Effect<void, CliError.UserError, R>;
   readonly connectEditor: (id: string) => Effect.Effect<void, CliError.UserError, R>;
@@ -597,7 +578,6 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
               "Your project is ready for collaboration.",
             ].join("\n"),
           );
-          yield* steps.openspec({ ...joined, root: folder });
           shown = "";
         });
       const step: Effect.Effect<void, CliError.UserError, R> = Effect.gen(function* () {
@@ -683,14 +663,6 @@ export const menu = <R>(ask: MenuAsk<R>, steps: MenuSteps<R>, io: OneShotIo) =>
               yield* steps.unshare(here.workspace, here.project);
               shown = "";
             }
-            return;
-          case "openspec":
-            if (here?.state === "connected")
-              yield* steps.openspec({
-                workspace: here.workspace,
-                project: here.project,
-                root: here.root,
-              });
             return;
           case "task": {
             const projects = status.workspaces.flatMap((w) =>

@@ -1111,7 +1111,6 @@ describe("peer core create, invite and the menu", () => {
               Tree.areaNode("Checkout", [leaf("t1", "Cart")], "bob@acme.test"),
               Tree.areaNode(null, [leaf("t9", "Loose")]),
             ]),
-          openspec: () => Effect.succeed(false),
           takeTask: () => Effect.die(new Error("took a task")),
           settleTask: () => Effect.die(new Error("settled")),
           unshare: () => Effect.die(new Error("unshared")),
@@ -1156,7 +1155,7 @@ describe("peer core create, invite and the menu", () => {
   /** A project's tree as the Hub shows it; `settled` once its unsettled item was decided. */
   const payTree = (settled: boolean | null): ReadonlyArray<Tree.TreeNode> => [
     Tree.areaNode("Checkout", [
-      leaf("t1", "Cart", { openspec: true }),
+      leaf("t1", "Cart"),
       {
         id: "g2",
         title: "2. Hub feature",
@@ -1253,7 +1252,6 @@ describe("peer core create, invite and the menu", () => {
               settled.push(`${task} ${executable ? "one" : "parts"}`);
               decided = executable;
             }),
-          openspec: () => Effect.succeed(false),
           takeTask: (_w, _p, task) => Effect.sync(() => void took.push(task)),
           unshare: () => Effect.die(new Error("unshared")),
           startTask: () => Effect.die(new Error("created a task")),
@@ -1734,7 +1732,6 @@ describe("peer core create, invite and the menu", () => {
           invite: () => Effect.void,
           scope: () => Effect.succeed(payTree(null)),
           settleTask: () => Effect.die(new Error("settled")),
-          openspec: () => Effect.succeed(false),
           takeTask: () => Effect.die(new Error("took a task")),
           unshare: () => Effect.die(new Error("unshared")),
           startTask: (input) =>
@@ -1816,12 +1813,11 @@ describe("peer core create, invite and the menu", () => {
             Effect.succeed([
               Tree.areaNode(null, [
                 project === "peer"
-                  ? leaf("p1", "Peer's own change", { openspec: true })
-                  : leaf("f1", "Survey editor concurrency", { openspec: true }),
+                  ? leaf("p1", "Peer's own change")
+                  : leaf("f1", "Survey editor concurrency"),
               ]),
             ]),
           settleTask: () => Effect.die(new Error("settled")),
-          openspec: () => Effect.succeed(false),
           unshare: () => Effect.die(new Error("unshared")),
           takeTask: (_w, project, task) => Effect.sync(() => void took.push(`${project}/${task}`)),
           startTask: () => Effect.die(new Error("created a task")),

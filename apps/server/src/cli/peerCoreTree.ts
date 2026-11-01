@@ -23,8 +23,6 @@ export interface TreeNode {
   readonly kind: TreeNodeKind;
   /** Who owns it by its own row (an area: the area's owner), when somebody does. */
   readonly owner?: string;
-  /** Imported from an OpenSpec change. */
-  readonly openspec?: boolean;
   /** A person has to decide whether it runs as one task or by its parts. */
   readonly unsettled?: boolean;
   /** It may be given to an agent and run as one (default: not a group). */
@@ -128,7 +126,7 @@ const box = (state: Mark) => (state === "on" ? "[x]" : state === "some" ? "[-]" 
 const clip = (text: string, width: number) =>
   text.length <= width ? text : `${text.slice(0, Math.max(width - 1, 1))}…`;
 
-/** A node's row: `▸ [ ] 2. Hub feature (3/8) ? · OpenSpec · bob's`, the box left out when picking. */
+/** A node's row: `▸ [ ] 2. Hub feature (3/8) ? · bob's`, the box left out when picking. */
 const nodeLabel = (row: NodeRow, opened: boolean, mark: Mark | null) => {
   const { node } = row;
   const arrow = node.children.length === 0 ? " " : opened ? "▾" : "▸";
@@ -139,11 +137,8 @@ const nodeLabel = (row: NodeRow, opened: boolean, mark: Mark | null) => {
       : node.progress === undefined
         ? ""
         : ` (${node.progress.done}/${node.progress.total})`;
-  const tags = [
-    ...(node.openspec === true ? ["OpenSpec"] : []),
-    ...(node.owner === undefined ? [] : [`${node.owner}'s`]),
-  ];
-  return `${indent}${arrow} ${mark === null ? "" : `${box(mark)} `}${node.title}${count}${node.unsettled === true ? " ?" : ""}${tags.length === 0 ? "" : ` · ${tags.join(" · ")}`}`;
+  const owner = node.owner === undefined ? "" : ` · ${node.owner}'s`;
+  return `${indent}${arrow} ${mark === null ? "" : `${box(mark)} `}${node.title}${count}${node.unsettled === true ? " ?" : ""}${owner}`;
 };
 
 const VISIBLE = 16;

@@ -85,10 +85,8 @@
         "src/peerHub/**": ["exports"],
         // The same baseline for Peer files outside those directories.
         "src/cli/joinLink.ts": ["exports"],
-        "src/cli/openspecItems.ts": ["exports"],
         "src/cli/peerCoreEditor.ts": ["exports"],
         "src/cli/peerCoreJoin.ts": ["exports"],
-        "src/cli/peerCoreOpenSpec.ts": ["exports"],
         "src/cli/peerCoreRuns.ts": ["exports"],
         "src/cli/peerCoreTasks.ts": ["exports"],
         "src/cli/peerCoreTree.ts": ["exports"],

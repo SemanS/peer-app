@@ -53,7 +53,6 @@ if (
       "take",
       "create",
       "invite",
-      "openspec",
       "unshare",
     ]);
     const args =

@@ -56,7 +56,6 @@ import * as PeerCoreEditor from "./peerCoreEditor.ts";
 import { type OneShotIo, outcome } from "./peerCoreIo.ts";
 import * as PeerCoreJoin from "./peerCoreJoin.ts";
 import * as PeerCoreMenu from "./peerCoreMenu.ts";
-import * as PeerCoreOpenSpec from "./peerCoreOpenSpec.ts";
 import * as PeerCoreRuns from "./peerCoreRuns.ts";
 import * as PeerCoreTree from "./peerCoreTree.ts";
 import * as PeerCoreShare from "./peerCoreShare.ts";
@@ -482,12 +481,11 @@ type MenuServices =
   | PeerStatus.PeerStatus
   | Effect.Services<ReturnType<typeof PeerCoreEditor.connectEditor>>;
 
-/** Takes a project out of its workspace, and forgets what was imported into it here. */
-const unshareProject = (stateDir: string, workspace: string, project: string) =>
+/** Takes a project out of its workspace. */
+const unshareProject = (workspace: string, project: string) =>
   Effect.gen(function* () {
     const workspaces = yield* PeerWorkspaces.PeerWorkspaces;
     yield* workspaces.unshareProject({ workspace, projectId: project });
-    yield* Effect.promise(() => PeerCoreOpenSpec.forgetProject(stateDir, workspace, project));
     yield* Console.log(
       `Disconnected ${workspace}/${project}: it left the workspace; the clone here stays as it is.`,
     );
@@ -534,7 +532,6 @@ const besideApp = (
     share: () => refuse,
     invite: () => refuse,
     unshare: () => refuse,
-    openspec: () => refuse,
     connectEditor: () => refuse,
     disconnectEditor: () => refuse,
     startTask: (input) =>
@@ -584,7 +581,6 @@ const menuSteps = (
             state: "connected" as const,
             workspace: place.workspace,
             project: place.project,
-            openspec: NodeFS.existsSync(NodePath.join(checkout.root, "openspec", "changes")),
           };
         const remote = yield* Effect.promise(() => PeerState.remoteOf(checkout.remoteRoot));
         const { persisted } = yield* state.read;
@@ -700,7 +696,7 @@ const menuSteps = (
             unsettled: false,
           });
         }).pipe(hubFailure),
-      unshare: (workspace, project) => unshareProject(stateDir, workspace, project),
+      unshare: unshareProject,
       takeTask: (workspace, project, task) =>
         PeerCoreTasks.takeTask(
           {
@@ -721,13 +717,6 @@ const menuSteps = (
           const work = (yield* client.api.work(hubUrl, session, workspace)).projects[project];
           const view = yield* client.api.taskOwners(hubUrl, session, workspace).pipe(Effect.option);
           const owners = Option.isSome(view) ? view.value.projects[project] : undefined;
-          const imported = new Set(
-            Object.values(
-              (yield* Effect.promise(() => PeerCoreOpenSpec.readRecord(stateDir)))[
-                `${workspace}/${project}`
-              ] ?? {},
-            ).map((entry) => entry.task),
-          );
           return PeerCoreTasks.projectTree({
             areas: work?.areas ?? [],
             tasks: work?.tasks ?? [],
@@ -739,15 +728,8 @@ const menuSteps = (
                   ),
                   areaOwners: owners.map.areas,
                 }),
-            imported,
           });
         }).pipe(hubFailure),
-      openspec: (target) =>
-        PeerCoreOpenSpec.sync(
-          { ...target, stateDir },
-          (message) => shareAsk.confirm(message, true),
-          terminalIo,
-        ).pipe(hubFailure),
       openPeer: Effect.gen(function* () {
         const app = [
           "/Applications/Peer.app",
@@ -1398,56 +1380,7 @@ const unshareCommand = Command.make("unshare", {
           return yield* isTerminal()
             ? Console.log("Nothing changed.")
             : outcome("refused", "nothing confirms it without a terminal", "add --yes.");
-        yield* unshareProject(config.stateDir, target.workspace, target.project);
-      }).pipe(hubFailure, Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
-    }),
-  ),
-);
-
-const openspecCommand = Command.make("openspec", {
-  ...authLocationFlags,
-  yes: Flag.Boolean("yes").pipe(
-    Flag.withAlias("y"),
-    Flag.withDescription(
-      "Import without asking (without a terminal, nothing is imported without it).",
-    ),
-    Flag.withDefault(false),
-  ),
-}).pipe(
-  Command.withDescription(
-    "Import the OpenSpec changes of the connected project you are in as its tasks, or update them.",
-  ),
-  Command.withHandler((flags) =>
-    Effect.gen(function* () {
-      const config = yield* resolveConfig(flags);
-      yield* pauseCore(config, flags, { restart: true });
-      yield* Effect.gen(function* () {
-        const state = yield* PeerState.PeerState;
-        const checkout = yield* PeerCoreBind.repositoryRoot(process.cwd());
-        const place =
-          checkout === null ? null : yield* state.placeOf(checkout.root, { bindByRemote: false });
-        if (checkout === null || place === null || place.workspace === PEER_LOCAL_WORKSPACE)
-          return yield* outcome(
-            "refused",
-            "this folder is no connected project",
-            "connect it with peer core share, then repeat the command.",
-          );
-        const found = yield* PeerCoreOpenSpec.sync(
-          {
-            workspace: place.workspace,
-            project: place.project,
-            root: checkout.root,
-            stateDir: config.stateDir,
-          },
-          (message) =>
-            flags.yes
-              ? Effect.succeed(true)
-              : isTerminal()
-                ? shareAsk.confirm(message, true)
-                : Console.log(`${message} Add --yes to import.`).pipe(Effect.as(false)),
-          terminalIo,
-        );
-        if (!found) yield* Console.log(`${checkout.root} has no openspec/changes folder.`);
+        yield* unshareProject(target.workspace, target.project);
       }).pipe(hubFailure, Effect.provide(PeerCoreRuntime.oneShotLayer(config)));
     }),
   ),
@@ -1766,7 +1699,6 @@ const makePeerCommand = (name: "peer" | "peer-core" | "core") =>
       joinCommand,
       createCommand,
       inviteCommand,
-      openspecCommand,
       unshareCommand,
       logoutCommand,
       shareCommand,

@@ -12,7 +12,7 @@ const task = (id: string, title: string, more: Partial<Tree.TreeNode> = {}): Tre
 
 const nodes: ReadonlyArray<Tree.TreeNode> = [
   Tree.areaNode("Inference", [
-    task("i1", "Add inference scheduling", { openspec: true }),
+    task("i1", "Add inference scheduling"),
     task("i2", "Add GPU inference node"),
   ]),
   Tree.areaNode("Audio", [task("a1", "Split speakers")], "bob@acme.test"),
@@ -20,7 +20,7 @@ const nodes: ReadonlyArray<Tree.TreeNode> = [
   Tree.areaNode(null, [task("n1", "Loose task")]),
 ];
 
-/** An OpenSpec change: a group with a section, whose unsettled item has items of its own. */
+/** A group with a section, whose unsettled item has items of its own. */
 const change: ReadonlyArray<Tree.TreeNode> = [
   Tree.areaNode("Hub", [
     {
@@ -28,7 +28,6 @@ const change: ReadonlyArray<Tree.TreeNode> = [
       title: "add-x",
       kind: "group",
       executable: false,
-      openspec: true,
       progress: { done: 1, total: 3 },
       children: [
         {
@@ -126,7 +125,7 @@ describe("the invite tree", () => {
       "  [ ] All areas and tasks",
       "  ▾ [ ] Hub (6)",
       "      [ ] All tasks in Hub",
-      "    ▾ [ ] add-x (1/3) · OpenSpec",
+      "    ▾ [ ] add-x (1/3)",
       "      ▾ [ ] 2. Hub feature (1/3)",
       "          [ ] Routes",
       "❯       ▾ [ ] Server ?",
@@ -208,7 +207,7 @@ describe("the start tree", () => {
     assert("nodes" in state);
     assert.deepStrictEqual(Tree.frame(state, "Which task?").slice(1, -1), [
       "  ▾ [-] Hub (6)",
-      "    ▾ [-] add-x (1/3) · OpenSpec",
+      "    ▾ [-] add-x (1/3)",
       "      ▸ [x] 2. Hub feature (1/3)",
       "❯ ▸ [x] No area (1)",
       "    New task…",

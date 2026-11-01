@@ -935,6 +935,7 @@ function replayQueryRunnerService(
     allocateSessionId: Effect.succeed(nativeSessionIdFor(transcript)),
     open: (input) => replay(() => queryRunner.open(input)),
     forkSession: (input) => replay(() => queryRunner.forkSession(input)),
+    sessionMessageIds: () => Effect.succeed([]),
     subagentLaunchToolUseId: (input) => replay(() => queryRunner.subagentLaunchToolUseId(input)),
     assertComplete: replay(() => queryRunner.assertComplete()),
   });

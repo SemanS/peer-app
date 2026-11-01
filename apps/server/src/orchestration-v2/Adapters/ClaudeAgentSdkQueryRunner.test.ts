@@ -66,6 +66,73 @@ const writeClaudeSession = Effect.fnUntraced(function* (configDir: string) {
   return projectDir;
 });
 
+// The shape Claude Code 2.1.316 writes for `/compact`: the file keeps every line, and the boundary
+// restarts the chain at the summary with only the messages the compaction kept spliced back in.
+const COMPACTED_SESSION = {
+  dropped: "bbbbbbbb-0000-4000-8000-000000000002",
+  kept: "bbbbbbbb-0000-4000-8000-000000000004",
+  summary: "bbbbbbbb-0000-4000-8000-000000000006",
+  after: "bbbbbbbb-0000-4000-8000-000000000008",
+};
+
+const writeCompactedClaudeSession = Effect.fnUntraced(function* (configDir: string) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const projectDir = path.join(configDir, "projects", "-repo");
+  const { dropped, kept, summary, after } = COMPACTED_SESSION;
+  const entry = (
+    type: "user" | "assistant",
+    uuid: string,
+    parentUuid: string | null,
+    text: string,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    type,
+    uuid,
+    parentUuid,
+    sessionId: FORK_SESSION_ID,
+    cwd: "/repo",
+    isSidechain: false,
+    timestamp: "2026-10-01T00:00:00.000Z",
+    message: { role: type, content: [{ type: "text", text }] },
+    ...extra,
+  });
+  const boundary = "bbbbbbbb-0000-4000-8000-000000000005";
+  yield* fileSystem.makeDirectory(projectDir, { recursive: true });
+  yield* fileSystem.writeFileString(
+    path.join(projectDir, `${FORK_SESSION_ID}.jsonl`),
+    [
+      entry("user", "bbbbbbbb-0000-4000-8000-000000000001", null, "first"),
+      entry("assistant", dropped, "bbbbbbbb-0000-4000-8000-000000000001", "first reply"),
+      entry("user", "bbbbbbbb-0000-4000-8000-000000000003", dropped, "second"),
+      entry("assistant", kept, "bbbbbbbb-0000-4000-8000-000000000003", "second reply"),
+      {
+        type: "system",
+        subtype: "compact_boundary",
+        uuid: boundary,
+        parentUuid: null,
+        logicalParentUuid: kept,
+        sessionId: FORK_SESSION_ID,
+        cwd: "/repo",
+        isSidechain: false,
+        timestamp: "2026-10-01T00:00:00.000Z",
+        content: "Conversation compacted",
+        compactMetadata: {
+          trigger: "manual",
+          preTokens: 42_000,
+          preservedSegment: { headUuid: kept, anchorUuid: summary, tailUuid: kept },
+          preservedMessages: { anchorUuid: summary, uuids: [kept] },
+        },
+      },
+      entry("user", summary, boundary, "Summary.", { isCompactSummary: true }),
+      entry("user", "bbbbbbbb-0000-4000-8000-000000000007", summary, "third"),
+      entry("assistant", after, "bbbbbbbb-0000-4000-8000-000000000007", "third reply"),
+    ]
+      .map((line) => JSON.stringify(line))
+      .join("\n"),
+  );
+});
+
 const forkRunnerLayer = layerQueryRunner.pipe(
   Layer.provide(PortScanner.layerTest),
   Layer.provide(Layer.succeed(ProviderEventLoggers, { native: undefined, canonical: undefined })),
@@ -111,6 +178,47 @@ it.effect("forks a session stored under the instance's own CLAUDE_CONFIG_DIR", (
     }).pipe(Effect.provide(forkRunnerLayer)),
   ).pipe(Effect.provide(NodeServices.layer)),
 );
+
+it.effect("reads the messages a resume can reach, not every line of the transcript", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const configDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-claude-chain-config-",
+      });
+      yield* writeCompactedClaudeSession(configDir);
+
+      const runner = yield* ClaudeAgentSdkQueryRunner;
+      const ids = yield* runner.sessionMessageIds({
+        sessionId: FORK_SESSION_ID,
+        dir: "/repo",
+        environment: { ...process.env, CLAUDE_CONFIG_DIR: configDir },
+      });
+
+      assert.includeMembers([...ids], [COMPACTED_SESSION.kept, COMPACTED_SESSION.after]);
+      assert.notInclude([...ids], COMPACTED_SESSION.dropped);
+    }).pipe(Effect.provide(forkRunnerLayer)),
+  ).pipe(Effect.provide(NodeServices.layer)),
+);
+
+it.effect("reads no messages for a session it cannot find", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const configDir = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3-claude-chain-missing-",
+      });
+      const runner = yield* ClaudeAgentSdkQueryRunner;
+      const ids = yield* runner.sessionMessageIds({
+        sessionId: FORK_SESSION_ID,
+        dir: "/repo",
+        environment: { ...process.env, CLAUDE_CONFIG_DIR: configDir },
+      });
+      assert.deepEqual(ids, []);
+    }).pipe(Effect.provide(forkRunnerLayer)),
+  ).pipe(Effect.provide(NodeServices.layer)),
+);
+
 const realQueryRunner = layerQueryRunner.pipe(
   Layer.provide(PortScanner.layerTest),
   Layer.provide(

@@ -18,6 +18,7 @@ import {
   type PeerLifecycleEvent,
   type PeerTaskLauncher,
 } from "../../core/plugin.ts";
+import { cardData } from "../../core/state/card.ts";
 import { TEST_ENVIRONMENT, type HubCall } from "../../core/testkit.ts";
 import { harnessOf } from "./client/start.ts";
 import {
@@ -161,6 +162,76 @@ describe("what a person does in a room", () => {
         yield* rpc(peer, "peer.rooms.seen", { ...place, seq: 12 });
         assert.lengthOf(callsTo(peer, "DELETE", `${ROOM}/12`), 1);
         assert.deepStrictEqual(bodyOf(callsTo(peer, "POST", `${ROOM}/seen`)[0]), { seq: 12 });
+      }),
+    ),
+  );
+});
+
+describe("a colleague's words to a run on this computer", () => {
+  const FIRST = { app: { "vl-7": 1 } };
+  const SECOND = { app: { "vl-7": 2 } };
+  const heard = messageOf({
+    seq: 12,
+    author: { email: EVA },
+    to: [
+      { kind: "agent", email: BOB, state: "waiting", run: "run_1", environment: TEST_ENVIRONMENT },
+    ],
+  });
+  const hub = () =>
+    roomHubOf({
+      inbox: {
+        waiting: [{ project: "app", task: "vl-7", message: heard }],
+        mentions: [],
+        work: [],
+        seqs: {},
+        revs: FIRST,
+      },
+      route: (method, url) =>
+        method === "GET" && url.startsWith(ROOM)
+          ? [200, { seq: 12, seen: 0, messages: [heard], reaches: [] }]
+          : undefined,
+    });
+  const step = (peer: Peer, waking: boolean) =>
+    Effect.gen(function* () {
+      const { hooks } = yield* contributionsOf(peer);
+      const session = sessionOf();
+      return yield* hooks!.notices![0]!.read({
+        session,
+        event: "stop",
+        remainingMs: 1000,
+        waking,
+      });
+    });
+  const inboxRead = (peer: Peer, revs: Record<string, Record<string, number>>) =>
+    roomsWhen(
+      peer.status,
+      (rooms) => (rooms?.revs["acme"]?.["app"]?.["vl-7"] ?? 0) === revs["app"]?.["vl-7"],
+    );
+
+  it.effect("reach it at its next step, not while it is idle", () =>
+    run(
+      Effect.gen(function* () {
+        const peer = yield* roomPeer(hub());
+        yield* inboxRead(peer, FIRST);
+        assert.strictEqual(yield* step(peer, true), null);
+        const said = JSON.stringify(yield* step(peer, false));
+        assert.include(said, "Eva wrote to you in the room of");
+        assert.include(said, "has not asked you to act on it");
+      }),
+    ),
+  );
+
+  it.effect("wake it only with its person's yes on their card", () =>
+    run(
+      Effect.gen(function* () {
+        const current = hub();
+        const peer = yield* roomPeer(current);
+        yield* inboxRead(peer, FIRST);
+        yield* cardData(peer.state).update(() => ({ text: "", teammatesMayWake: true }));
+        current.inbox = { ...current.inbox, revs: SECOND };
+        yield* rpc(peer, "peer.rooms.seen", { ...place, seq: 12 });
+        yield* inboxRead(peer, SECOND);
+        assert.include(JSON.stringify(yield* step(peer, true)), "Eva wrote to you in the room of");
       }),
     ),
   );

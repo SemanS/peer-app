@@ -220,6 +220,23 @@ export class ProviderAdapterResumeThreadError extends Schema.TaggedError<Provide
   }
 }
 
+/**
+ * Another client holds the native session. A fresh session would silently leave behind the work
+ * that session holds, so nothing may fall back from this.
+ */
+export class ProviderAdapterSessionInUseError extends Schema.TaggedError<ProviderAdapterSessionInUseError>()(
+  "ProviderAdapterSessionInUseError",
+  {
+    driver: ProviderDriverKind,
+    providerThreadId: ProviderThreadId,
+    reason: Schema.String,
+  },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
 export class ProviderAdapterEnsureThreadError extends Schema.TaggedError<ProviderAdapterEnsureThreadError>()(
   "ProviderAdapterEnsureThreadError",
   {
@@ -252,6 +269,8 @@ export class ProviderAdapterRollbackThreadError extends Schema.TaggedError<Provi
     driver: ProviderDriverKind,
     providerThreadId: ProviderThreadId,
     checkpointId: Schema.optional(CheckpointId),
+    /** Worded for the person who asked. Set only when retrying cannot help; everything else stays in `cause`. */
+    refusal: Schema.optional(Schema.String),
     cause: Schema.optional(Schema.Defect()),
   },
 ) {
@@ -373,6 +392,7 @@ export const ProviderAdapterV2Error = Schema.Union([
   ProviderAdapterOpenSessionError,
   ProviderAdapterCloseSessionError,
   ProviderAdapterResumeThreadError,
+  ProviderAdapterSessionInUseError,
   ProviderAdapterEnsureThreadError,
   ProviderAdapterReadThreadSnapshotError,
   ProviderAdapterRollbackThreadError,

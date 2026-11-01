@@ -1,6 +1,7 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it, vi } from "@effect/vitest";
 import {
+  CheckpointRef,
   CheckpointScopeId,
   NodeId,
   ProviderThreadId,
@@ -103,3 +104,52 @@ it.effect.each([false, true, "interrupt"] as const)(
     }).pipe(Effect.provide(layerTest));
   },
 );
+
+it.effect("a capture with a baseline ref measures the turn from that ref", () => {
+  const scope: OrchestrationV2CheckpointScope = {
+    id: CheckpointScopeId.make("checkpoint-scope:baseline-ref"),
+    threadId: ThreadId.make("thread:baseline-ref"),
+    runId: RunId.make("run:baseline-ref:3"),
+    nodeId: NodeId.make("node:baseline-ref:3"),
+    parentScopeId: null,
+    providerThreadId: ProviderThreadId.make("provider-thread:baseline-ref"),
+    kind: "root_run",
+    ordinalWithinParent: 0,
+    advancesAppRunCount: true,
+    cwd: "/repo",
+    createdAt: DateTime.makeUnsafe("2026-11-01T00:00:00.000Z"),
+  };
+  const baselineRef = CheckpointRef.make("refs/peer/checkpoints/loan-start");
+  const diffCheckpoints = vi.fn((_input: CheckpointStore.DiffCheckpointsInput) =>
+    Effect.succeed(""),
+  );
+  const layerTest = CheckpointService.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        IdAllocator.layer,
+        Layer.mock(CheckpointStore.CheckpointStore)({
+          supportsCheckpoints: () => Effect.succeed(true),
+          hasCheckpointRef: () => Effect.succeed(true),
+          captureCheckpoint: () => Effect.void,
+          listAuthoredPaths: () => Effect.succeed(null),
+          diffCheckpoints,
+        }),
+      ),
+    ),
+    Layer.provideMerge(NodeCrypto.layer),
+  );
+
+  return Effect.gen(function* () {
+    const checkpoints = yield* CheckpointService.CheckpointServiceV2;
+    yield* checkpoints.capture({
+      scope,
+      ordinalWithinScope: 3,
+      runId: scope.runId!,
+      nodeId: scope.nodeId!,
+      appRunOrdinal: 3,
+      capturedAt: scope.createdAt,
+      baselineRef,
+    });
+    assert.equal(diffCheckpoints.mock.calls[0]?.[0].fromCheckpointRef, baselineRef);
+  }).pipe(Effect.provide(layerTest));
+});

@@ -319,6 +319,7 @@ interface TimelineRowSharedState {
   vcsTerminology: VcsTerminology;
   skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
   runs: ReadonlyArray<HandoffTimelineRun>;
+  nativeCliRunIds: ReadonlySet<RunId>;
   activeThreadEnvironmentId: EnvironmentId;
   onRevertToTurnCount: (targetTurnCount: number, messageId: MessageId) => void;
   onUseArtifactTemplate: (template: CodexArtifactTemplate) => void;
@@ -1213,6 +1214,9 @@ const ConversationTimeline = memo(function ConversationTimeline({
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Rows and chat width resize the content without resizing the viewport.
   }, [timelineViewportElement, rows.length, reportContentOverflow, chatWidth]);
 
+  const nativeCliRunIds = new Set(
+    runs.flatMap((run) => (run.origin === "native_cli" ? [run.id] : [])),
+  );
   const sharedState: TimelineRowSharedState = {
     citationRequest: readyCitationRequest,
     listRef,
@@ -1225,6 +1229,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     vcsTerminology,
     skills,
     runs,
+    nativeCliRunIds,
     activeThreadEnvironmentId,
     onRevertToTurnCount,
     onRunShellCommand,
@@ -2240,6 +2245,9 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
       ) : null}
       {row.message.inputIntent && row.message.inputIntent !== "turn_start" ? (
         <UserMessageIntentMarker intent={row.message.inputIntent} />
+      ) : null}
+      {row.message.runId != null && ctx.nativeCliRunIds.has(row.message.runId) ? (
+        <p className="me-1 text-xs leading-none text-muted-foreground">Ran in the CLI</p>
       ) : null}
       <div className="relative max-w-[80%] rounded-2xl bg-message p-3 text-message-foreground">
         <MessageAuthorHeading>You</MessageAuthorHeading>
@@ -4660,7 +4668,7 @@ function handoffRunsSignature(runs: ReadonlyArray<HandoffTimelineRun>): string {
   return runs
     .map(
       (run) =>
-        `${run.id}\0${run.providerInstanceId}\0${run.ordinal}\0${run.modelSelection.instanceId}\0${run.modelSelection.model}`,
+        `${run.id}\0${run.providerInstanceId}\0${run.ordinal}\0${run.modelSelection.instanceId}\0${run.modelSelection.model}\0${run.origin ?? ""}`,
     )
     .join("\n");
 }
@@ -4683,6 +4691,7 @@ function useStableHandoffRuns(
           ordinal: run.ordinal,
           providerInstanceId: run.providerInstanceId,
           modelSelection: run.modelSelection,
+          ...(run.origin === undefined ? {} : { origin: run.origin }),
         }));
   setState({ source: runs, signature, value });
   return value;

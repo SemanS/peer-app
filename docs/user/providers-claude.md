@@ -41,6 +41,33 @@ Claude Code's verbose mode can stay enabled when you use Claude for text generat
 thread titles, branch names, commit messages, and pull request descriptions. On a remote connection,
 T3 Code uses the Claude configuration on the connected server.
 
+## Continue a thread in Claude Code
+
+Open the thread's menu in the chat header and choose **Continue in Claude Code**. Peer closes its
+own Claude process and opens a terminal in the thread's folder, running `claude --resume` on the
+same session with the thread's model and effort. The thread stays parked until you bring it back:
+Peer runs nothing on it meanwhile. Messages from a schedule, Slack or a recipe wait for its return;
+a message you type is refused until then.
+
+Quit Claude Code or close its terminal, and what you did appears in the thread as finished turns,
+marked **Ran in the CLI**. The next message in Peer continues from there. Changes made in the
+terminal show in the diff panel. **Return to Peer** does the same when the terminal has already gone.
+If Peer restarts, Claude Code stops with it and the thread comes back by itself.
+
+The first use installs a small adapter through npm, so the machine running Peer needs npm and the
+step can take a few minutes. It reads the session when the thread comes back. If that read fails, or
+you compact or branch the conversation in Claude Code, the thread still comes back with a note
+saying what is not shown. Rolling back to an imported Claude turn that is not the last one is
+refused; rolling back past it to a Peer turn works. After such a note you can roll back to or fork
+from turns after that session but not earlier ones, because Claude may no longer hold them.
+
+Peer only follows a Claude Code it opened this way. Don't run `claude --resume` on a thread's
+session by hand while Peer is using it.
+
+**Fork into Claude Code** opens a separate copy of the session in a terminal. The thread is not
+parked, and nothing from the fork comes back to it. Neither item is available during a run. On a
+Windows host only the fork works.
+
 ## Compact long conversations
 
 Set **Auto-compact after** in the Claude provider settings to an integer between

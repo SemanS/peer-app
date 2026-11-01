@@ -349,6 +349,7 @@ import {
   ScheduledTaskUpsertInput,
   ScheduledTaskMutationResult,
 } from "./scheduledTask.ts";
+import { NativeCliInput, NativeCliOperationError, NativeCliTerminalLaunch } from "./nativeCli.ts";
 import { PEER_WS_METHODS, PeerRpcGroup } from "./peer/rpcRegistry.ts";
 import { SecretRequestAnswerInput, SecretRequestError } from "./secretRequest.ts";
 import {
@@ -442,6 +443,11 @@ export const WS_METHODS = {
   terminalClear: "terminal.clear",
   terminalRestart: "terminal.restart",
   terminalClose: "terminal.close",
+
+  // Lending a thread's session to its agent's own CLI
+  nativeCliStart: "nativeCli.start",
+  nativeCliFinish: "nativeCli.finish",
+  nativeCliFork: "nativeCli.fork",
 
   previewOpen: "preview.open",
   previewNavigate: "preview.navigate",
@@ -1427,6 +1433,23 @@ const WsReviewGetDiffFileContentsRpc = Rpc.make(WS_METHODS.reviewGetDiffFileCont
   error: Schema.Union([ReviewDiffPreviewError, EnvironmentAuthorizationError]),
 });
 
+const WsNativeCliStartRpc = Rpc.make(WS_METHODS.nativeCliStart, {
+  payload: NativeCliInput,
+  success: NativeCliTerminalLaunch,
+  error: Schema.Union([NativeCliOperationError, EnvironmentAuthorizationError]),
+});
+
+const WsNativeCliFinishRpc = Rpc.make(WS_METHODS.nativeCliFinish, {
+  payload: NativeCliInput,
+  error: Schema.Union([NativeCliOperationError, EnvironmentAuthorizationError]),
+});
+
+const WsNativeCliForkRpc = Rpc.make(WS_METHODS.nativeCliFork, {
+  payload: NativeCliInput,
+  success: NativeCliTerminalLaunch,
+  error: Schema.Union([NativeCliOperationError, EnvironmentAuthorizationError]),
+});
+
 const WsTerminalOpenRpc = Rpc.make(WS_METHODS.terminalOpen, {
   payload: TerminalOpenInput,
   success: TerminalSessionSnapshot,
@@ -2001,6 +2024,9 @@ export const WsT3RpcGroup = RpcGroup.make(
   WsVcsInitRpc,
   WsReviewGetDiffPreviewRpc,
   WsReviewGetDiffFileContentsRpc,
+  WsNativeCliStartRpc,
+  WsNativeCliFinishRpc,
+  WsNativeCliForkRpc,
   WsTerminalOpenRpc,
   WsTerminalAttachRpc,
   WsTerminalObserveRpc,

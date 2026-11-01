@@ -44,6 +44,8 @@ import * as FileSystem from "effect/FileSystem";
 import { MCP_APP_OUTPUT_KEY, readMcpAppReference } from "@t3tools/shared/mcpApp";
 import { resolveAttachmentPathById } from "../../attachmentStore.ts";
 import * as Fiber from "effect/Fiber";
+import * as Clock from "effect/Clock";
+import * as Duration from "effect/Duration";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
@@ -1402,6 +1404,52 @@ describe("CodexAdapterV2 fork boundary", () => {
 
       assert.deepEqual(boundary, {
         lastTurnId: "native-turn-first",
+        rollbackTurnCount: 0,
+      });
+    }),
+  );
+
+  it.effect("refuses a fork by count at or before a CLI gap, and not one by native id", () =>
+    Effect.gen(function* () {
+      const now = yield* DateTime.now;
+      const peerTurn = makeProviderTurn("provider-turn-peer", 1, "native-turn-peer", now);
+      const importedTurn = {
+        ...makeProviderTurn("provider-turn-imported", 2, "unused", now),
+        nativeTurnRef: {
+          driver: CodexAdapterV2.CODEX_DRIVER_KIND,
+          nativeId: null,
+          strength: "none",
+        },
+      } satisfies typeof peerTurn;
+      const afterImport = {
+        ...importedTurn,
+        id: ProviderTurnId.make("provider-turn-after"),
+        ordinal: 3,
+      };
+      const laterTurn = makeProviderTurn("provider-turn-later", 4, "native-turn-later", now);
+      const fork = (providerTurnId: ProviderTurnId) =>
+        CodexAdapterV2.resolveCodexForkBoundary({
+          sourceProviderThread: { ...makeProviderThread(now), cliGapAfterTurnOrdinal: 2 },
+          sourceProviderTurns: [peerTurn, importedTurn, afterImport, laterTurn],
+          providerTurnId,
+          targetThreadId: ThreadId.make("thread-codex-fork-target"),
+        });
+
+      assert.deepEqual(yield* fork(peerTurn.id), {
+        lastTurnId: "native-turn-peer",
+        rollbackTurnCount: 0,
+      });
+
+      const refused = yield* Effect.flip(fork(importedTurn.id));
+      assert.instanceOf(refused, ProviderAdapter.ProviderAdapterForkThreadError);
+      assert.include(String(refused.cause), "Codex cannot fork from before a CLI session");
+
+      assert.deepEqual(yield* fork(afterImport.id), {
+        lastTurnId: undefined,
+        rollbackTurnCount: 1,
+      });
+      assert.deepEqual(yield* fork(laterTurn.id), {
+        lastTurnId: "native-turn-later",
         rollbackTurnCount: 0,
       });
     }),
@@ -3265,6 +3313,187 @@ describe("CodexAdapterV2 post-settle continuation", () => {
         ),
       ),
     ),
+  );
+
+  // The hold's own sleeps pass at once, so a scripted transcript needs no clock driving.
+  const skippingHoldSleeps = Effect.gen(function* () {
+    const clock = yield* Effect.clockWith(Effect.succeed);
+    let elapsed = 0;
+    return Clock.Clock.of({
+      ...clock,
+      currentTimeMillisUnsafe: () => elapsed,
+      currentTimeMillis: Effect.sync(() => elapsed),
+      sleep: (duration) =>
+        Duration.equals(duration, Duration.seconds(5))
+          ? Effect.sync(() => {
+              elapsed += 5_000;
+            })
+          : clock.sleep(duration),
+    });
+  });
+  const heldResume = (scenario: string, refusals: number, succeeds: boolean) =>
+    Effect.gen(function* () {
+      const nativeThreadId = "held-thread";
+      const params = {
+        threadId: nativeThreadId,
+        excludeTurns: true,
+        cwd: CODEX_TEST_RUNTIME_POLICY.cwd,
+        model: CODEX_TEST_MODEL_SELECTION.model,
+        config: CodexAdapterV2.CODEX_THREAD_CONFIG,
+      };
+      const attempt = (id: number, frame: object): Array<CodexReplay.CodexAppServerReplayEntry> => [
+        {
+          type: "expect_outbound",
+          label: `resume ${id}`,
+          frame: { id, method: "thread/resume", params },
+        },
+        { type: "emit_inbound", label: `answer ${id}`, frame: { id, ...frame } },
+      ];
+      const refusal = {
+        error: {
+          code: -32600,
+          message: "This Codex session is in use by another Codex client.",
+          data: { reason: "thread_active_writer" },
+        },
+      };
+      const entries = [
+        ...codexReplayPreamble({
+          nativeThreadId,
+          nativeTurnId: "unused-turn",
+          prompt: "unused-prompt",
+        }).slice(0, 5),
+        ...Array.from({ length: refusals }, (_, index) => attempt(3 + index, refusal)).flat(),
+        ...(succeeds
+          ? attempt(3 + refusals, {
+              result: { thread: { id: nativeThreadId, updatedAt: 1782622450 } },
+            })
+          : []),
+      ];
+      const harness = yield* makeCodexReplayHarness(
+        makeCodexReplayTranscript({ scenario, entries }),
+      );
+      return yield* harness.runtime
+        .resumeThread({
+          providerThread: harness.providerThread,
+          modelSelection: CODEX_TEST_MODEL_SELECTION,
+          runtimePolicy: CODEX_TEST_RUNTIME_POLICY,
+        })
+        .pipe(Effect.provideService(Clock.Clock, yield* skippingHoldSleeps), Effect.result);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    );
+
+  it.effect("waits out a session Codex still holds, then resumes it", () =>
+    Effect.gen(function* () {
+      const result = yield* heldResume("resume waits out a held session", 2, true);
+      assert.equal(result._tag, "Success");
+    }),
+  );
+
+  it.effect("waits out a held session before a rollback's resume", () =>
+    Effect.gen(function* () {
+      const nativeThreadId = "held-rollback-thread";
+      const resumeParams = {
+        threadId: nativeThreadId,
+        excludeTurns: true,
+        cwd: CODEX_TEST_RUNTIME_POLICY.cwd,
+        model: CODEX_TEST_MODEL_SELECTION.model,
+        config: CodexAdapterV2.CODEX_THREAD_CONFIG,
+      };
+      const resume = (id: number, frame: object): Array<CodexReplay.CodexAppServerReplayEntry> => [
+        {
+          type: "expect_outbound",
+          label: `resume ${id}`,
+          frame: { id, method: "thread/resume", params: resumeParams },
+        },
+        { type: "emit_inbound", label: `answer ${id}`, frame: { id, ...frame } },
+      ];
+      const harness = yield* makeCodexReplayHarness(
+        makeCodexReplayTranscript({
+          scenario: "rollback waits out a held session",
+          entries: [
+            ...codexReplayPreamble({
+              nativeThreadId,
+              nativeTurnId: "unused-turn",
+              prompt: "unused-prompt",
+            }).slice(0, 5),
+            {
+              type: "expect_outbound",
+              label: "thread/read",
+              frame: {
+                id: 3,
+                method: "thread/read",
+                params: { threadId: nativeThreadId, includeTurns: false },
+              },
+            },
+            {
+              type: "emit_inbound",
+              label: "thread/read",
+              frame: {
+                id: 3,
+                result: {
+                  thread: {
+                    id: nativeThreadId,
+                    historyMode: "paginated",
+                    status: { type: "notLoaded" },
+                  },
+                },
+              },
+            },
+            ...resume(4, {
+              error: {
+                code: -32600,
+                message: "This Codex session is in use by another Codex client.",
+                data: { reason: "thread_active_writer" },
+              },
+            }),
+            // An answer that is no hold ends the rollback here, and reaching it proves the retry.
+            ...resume(5, { error: { code: -32603, message: "not a hold" } }),
+          ],
+        }),
+      );
+      const now = yield* DateTime.now;
+      const turn = (ordinal: number) =>
+        codexReplaySourceTurn({
+          id: `provider-turn-${ordinal}`,
+          ordinal,
+          nativeId: `native-turn-${ordinal}`,
+          providerThreadId: harness.providerThread.id,
+          now,
+        });
+      const [firstTurn, secondTurn] = [turn(1), turn(2)];
+      const failed = yield* harness.runtime
+        .rollbackThread({
+          providerThread: harness.providerThread,
+          target: {
+            type: "provider_turn",
+            checkpointId: CheckpointId.make("checkpoint-held-rollback"),
+            appRunOrdinal: 1,
+            providerTurn: firstTurn,
+          },
+          providerThreadTurns: [firstTurn, secondTurn],
+        })
+        .pipe(Effect.provideService(Clock.Clock, yield* skippingHoldSleeps), Effect.flip);
+      assert.include(errorCauseChainText(failed), "not a hold");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  it.effect("fails with Codex's reason when the session stays held to the bound", () =>
+    Effect.gen(function* () {
+      const result = yield* heldResume("resume gives up on a held session", 16, false);
+      assert.equal(result._tag, "Failure");
+      if (result._tag !== "Failure") return;
+      assert.equal(result.failure._tag, "ProviderAdapterSessionInUseError");
+      assert.include(result.failure.message, "in use by another Codex client");
+    }),
   );
 
   it.effect.each(
@@ -8624,6 +8853,88 @@ describe("CodexAdapterV2 post-settle continuation", () => {
     startedAt: input.now,
     completedAt: input.now,
   });
+
+  it.effect("keeps its wording for a person through the rollback's error mapping", () =>
+    Effect.gen(function* () {
+      const nativeThreadId = "gap-rollback-thread";
+      const harness = yield* makeCodexReplayHarness(
+        makeCodexReplayTranscript({
+          scenario: "codex-gap-rollback",
+          entries: codexReplayPreamble({
+            nativeThreadId,
+            nativeTurnId: "gap-rollback-turn",
+            prompt: "unused",
+          }).slice(0, 5),
+        }),
+      );
+      const now = yield* DateTime.now;
+      const firstTurn = codexReplaySourceTurn({
+        id: "provider-turn-first",
+        ordinal: 1,
+        nativeId: "native-turn-first",
+        providerThreadId: harness.providerThread.id,
+        now,
+      });
+      const error = yield* Effect.flip(
+        harness.runtime.rollbackThread({
+          providerThread: { ...harness.providerThread, cliGapAfterTurnOrdinal: 1 },
+          target: {
+            type: "provider_turn",
+            checkpointId: CheckpointId.make("checkpoint-gap-rollback"),
+            appRunOrdinal: 1,
+            providerTurn: firstTurn,
+          },
+          providerThreadTurns: [firstTurn],
+        }),
+      );
+      assert.instanceOf(error, ProviderAdapter.ProviderAdapterRollbackThreadError);
+      assert.include(error.refusal ?? "", "Codex cannot go back past a CLI session");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
+
+  it.effect("keeps a fork refusal's wording through the adapter's error mapping", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeCodexReplayHarness(
+        makeCodexReplayTranscript({
+          scenario: "codex-gap-fork",
+          entries: codexReplayPreamble({
+            nativeThreadId: "gap-fork-thread",
+            nativeTurnId: "gap-fork-turn",
+            prompt: "unused",
+          }).slice(0, 5),
+        }),
+      );
+      const now = yield* DateTime.now;
+      const imported = codexReplaySourceTurn({
+        id: "provider-turn-imported",
+        ordinal: 1,
+        nativeId: null,
+        providerThreadId: harness.providerThread.id,
+        now,
+      });
+      const error = yield* Effect.flip(
+        harness.runtime.forkThread({
+          sourceProviderThread: { ...harness.providerThread, cliGapAfterTurnOrdinal: 1 },
+          sourceProviderTurns: [imported],
+          providerTurnId: imported.id,
+          targetThreadId: ThreadId.make("thread-codex-gap-fork-target"),
+        }),
+      );
+      assert.instanceOf(error, ProviderAdapter.ProviderAdapterForkThreadError);
+      assert.isString(error.cause);
+      assert.include(String(error.cause), "Codex cannot fork from before a CLI session");
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+      ),
+    ),
+  );
 
   it.effect("fails honestly when rolling back a legacy Codex thread", () =>
     Effect.gen(function* () {

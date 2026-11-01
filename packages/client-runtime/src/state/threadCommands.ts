@@ -398,6 +398,26 @@ export function createThreadEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => JSON.stringify([environmentId, input.threadId]),
       },
     }),
+    // Serial per thread with every other thread command, so a click cannot overtake a send. The
+    // first start installs the agent's adapter and can take minutes: nothing here times it out.
+    continueInCli: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:commands:thread:continue-in-cli",
+      tag: WS_METHODS.nativeCliStart,
+      scheduler,
+      concurrency,
+    }),
+    returnFromCli: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:commands:thread:return-from-cli",
+      tag: WS_METHODS.nativeCliFinish,
+      scheduler,
+      concurrency,
+    }),
+    forkInCli: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:commands:thread:fork-in-cli",
+      tag: WS_METHODS.nativeCliFork,
+      scheduler,
+      concurrency,
+    }),
     uploadFeedback: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:commands:thread:upload-feedback",
       tag: WS_METHODS.providerUploadFeedback,

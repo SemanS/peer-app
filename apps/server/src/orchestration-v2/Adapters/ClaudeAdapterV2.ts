@@ -487,6 +487,7 @@ const isProviderAdapterRuntimeRequestResponseError = Schema.is(
 const isProviderAdapterRollbackThreadError = Schema.is(
   ProviderAdapter.ProviderAdapterRollbackThreadError,
 );
+const isProviderAdapterForkThreadError = Schema.is(ProviderAdapter.ProviderAdapterForkThreadError);
 
 function queryRunnerError(cause: unknown, method: string): ClaudeAgentSdkQueryRunnerError {
   return isClaudeAgentSdkQueryRunnerError(cause)
@@ -1463,7 +1464,24 @@ const getNativeConversationHeadId = Effect.fnUntraced(function* (
   return nativeHeadRef.nativeId;
 });
 
-const resolveClaudeForkUpToMessageId = Effect.fn("ClaudeAdapterV2.resolveForkUpToMessageId")(
+const CLAUDE_ROLLBACK_PAST_GAP_REFUSAL =
+  "Claude cannot go back past a CLI session Peer could not read in full. Roll back to a turn after that session instead.";
+const CLAUDE_FORK_PAST_GAP_REFUSAL =
+  "Claude cannot fork from before a CLI session Peer could not read in full. Fork from a turn after that session instead.";
+
+/**
+ * Claude rewinds to a message id, and a compaction in that session can have removed the message.
+ * An id that is gone fails every later turn, and nothing here can tell it from one still there.
+ */
+const isBeforeCliGap = (
+  providerThread: OrchestrationV2ProviderThread,
+  turn: OrchestrationV2ProviderTurn,
+): boolean => {
+  const gapOrdinal = providerThread.cliGapAfterTurnOrdinal ?? null;
+  return gapOrdinal !== null && turn.ordinal <= gapOrdinal;
+};
+
+export const resolveClaudeForkUpToMessageId = Effect.fn("ClaudeAdapterV2.resolveForkUpToMessageId")(
   function* (input: ProviderAdapter.ProviderAdapterV2ForkThreadInput) {
     if (input.providerTurnId === undefined || input.sourceProviderTurns === undefined) {
       return undefined;
@@ -1481,7 +1499,16 @@ const resolveClaudeForkUpToMessageId = Effect.fn("ClaudeAdapterV2.resolveForkUpT
       });
     }
 
-    const boundaryNativeId = sourceTurns[boundaryIndex]?.nativeTurnRef?.nativeId;
+    const boundaryTurn = sourceTurns[boundaryIndex];
+    if (boundaryTurn !== undefined && isBeforeCliGap(input.sourceProviderThread, boundaryTurn)) {
+      return yield* new ProviderAdapter.ProviderAdapterForkThreadError({
+        driver: CLAUDE_PROVIDER,
+        providerThreadId: input.sourceProviderThread.id,
+        cause: CLAUDE_FORK_PAST_GAP_REFUSAL,
+      });
+    }
+
+    const boundaryNativeId = boundaryTurn?.nativeTurnRef?.nativeId;
     if (
       boundaryNativeId !== undefined &&
       boundaryNativeId !== null &&
@@ -1500,12 +1527,16 @@ const resolveClaudeForkUpToMessageId = Effect.fn("ClaudeAdapterV2.resolveForkUpT
     return yield* new ProviderAdapter.ProviderAdapterForkThreadError({
       driver: CLAUDE_PROVIDER,
       providerThreadId: input.sourceProviderThread.id,
-      cause: `Cannot fork Claude thread from prior provider turn ${input.providerTurnId}: no SDK assistant message cursor was recorded for that turn.`,
+      cause:
+        boundaryNativeId === null
+          ? // The session replay carries no chain UUID for an imported CLI turn.
+            "Claude cannot fork from a turn that ran in the CLI once other turns follow it. Fork from a turn before the CLI turns instead."
+          : `Cannot fork Claude thread from prior provider turn ${input.providerTurnId}: no SDK assistant message cursor was recorded for that turn.`,
     });
   },
 );
 
-const resolveClaudeRollbackResumeSessionAt = Effect.fn(
+export const resolveClaudeRollbackResumeSessionAt = Effect.fn(
   "ClaudeAdapterV2.resolveRollbackResumeSessionAt",
 )(function* (input: ProviderAdapter.ProviderAdapterV2RollbackThreadInput) {
   switch (input.target.type) {
@@ -1518,6 +1549,15 @@ const resolveClaudeRollbackResumeSessionAt = Effect.fn(
           driver: CLAUDE_PROVIDER,
           providerThreadId: input.providerThread.id,
           cause: `Cannot roll back Claude thread ${input.providerThread.id} to provider turn ${target.providerTurn.id}: target turn belongs to provider thread ${target.providerTurn.providerThreadId}.`,
+        });
+      }
+
+      if (isBeforeCliGap(input.providerThread, target.providerTurn)) {
+        return yield* new ProviderAdapter.ProviderAdapterRollbackThreadError({
+          driver: CLAUDE_PROVIDER,
+          providerThreadId: input.providerThread.id,
+          refusal: CLAUDE_ROLLBACK_PAST_GAP_REFUSAL,
+          cause: CLAUDE_ROLLBACK_PAST_GAP_REFUSAL,
         });
       }
 
@@ -1536,6 +1576,19 @@ const resolveClaudeRollbackResumeSessionAt = Effect.fn(
       );
       if (providerTurnsAfterTarget.length === 0) {
         return null;
+      }
+
+      // An imported CLI turn is the only one with a ref and no native id: the session replay
+      // carries no chain UUID for it, so Claude cannot be rewound to that point.
+      if (nativeTurnRef !== null && nativeTurnRef.nativeId === null) {
+        const refusal =
+          "Claude cannot go back to a turn that ran in the CLI once other turns follow it. Roll back to a turn before the CLI turns instead.";
+        return yield* new ProviderAdapter.ProviderAdapterRollbackThreadError({
+          driver: CLAUDE_PROVIDER,
+          providerThreadId: input.providerThread.id,
+          refusal,
+          cause: refusal,
+        });
       }
 
       return yield* new ProviderAdapter.ProviderAdapterRollbackThreadError({
@@ -9130,13 +9183,15 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             },
             (effect, forkInput) =>
               effect.pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new ProviderAdapter.ProviderAdapterForkThreadError({
-                      driver: CLAUDE_PROVIDER,
-                      providerThreadId: forkInput.sourceProviderThread.id,
-                      cause,
-                    }),
+                // `settleStartFailure` shows a string cause and an Error's generic message.
+                Effect.mapError((cause) =>
+                  isProviderAdapterForkThreadError(cause)
+                    ? cause
+                    : new ProviderAdapter.ProviderAdapterForkThreadError({
+                        driver: CLAUDE_PROVIDER,
+                        providerThreadId: forkInput.sourceProviderThread.id,
+                        cause,
+                      }),
                 ),
               ),
           ),

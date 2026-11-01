@@ -204,6 +204,7 @@ export type ProjectionSettlementCandidate = Pick<
 > &
   Pick<OrchestrationV2AppThread, "lastSnoozeWakeAt"> & {
     readonly latestUserAuthoredMessageAt: DateTime.Utc | null;
+    readonly hasOpenCliLoan: boolean;
   };
 
 const ProjectionCheckpointContext = Schema.Struct({
@@ -419,6 +420,10 @@ export interface ProjectionStoreV2Shape {
   readonly getSettlementCandidates: (
     threadId?: ThreadId,
   ) => Effect.Effect<ReadonlyArray<ProjectionSettlementCandidate>, ProjectionStoreV2Error>;
+  readonly getThreadIdsWithOpenCliLoan: () => Effect.Effect<
+    ReadonlyArray<ThreadId>,
+    ProjectionStoreV2Error
+  >;
   readonly getThreadsWithPullRequests: (
     threadId?: ThreadId,
   ) => Effect.Effect<ReadonlyArray<ProjectionThreadPullRequests>, ProjectionStoreV2Error>;
@@ -5678,6 +5683,9 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                     row.latest_user_authored_message_at === null
                       ? null
                       : DateTime.makeUnsafe(row.latest_user_authored_message_at),
+                  hasOpenCliLoan: (providerThreadsByThreadId.get(thread.id) ?? []).some(
+                    (providerThread) => providerThread.cliLoan != null,
+                  ),
                   activityRunStatus: null,
                   activityRunStartedAt: null,
                   pendingRuntimeRequest: null,
@@ -5698,6 +5706,18 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           }),
         )
         .pipe(Effect.mapError((cause) => new ProjectionStoreSetupError({ cause })));
+
+    const getThreadIdsWithOpenCliLoan: ProjectionStoreV2Shape["getThreadIdsWithOpenCliLoan"] = () =>
+      sql<{ readonly thread_id: string }>`
+        SELECT DISTINCT p.thread_id
+        FROM orchestration_v2_projection_provider_threads p
+        JOIN orchestration_v2_projection_threads t ON t.thread_id = p.thread_id
+        WHERE t.deleted_at IS NULL
+          AND json_extract(p.payload_json, '$.cliLoan') IS NOT NULL
+      `.pipe(
+        Effect.map((rows) => rows.map((row) => ThreadId.make(row.thread_id))),
+        Effect.mapError((cause) => new ProjectionStoreSetupError({ cause })),
+      );
 
     const getThreadsWithPullRequests: ProjectionStoreV2Shape["getThreadsWithPullRequests"] = (
       threadId,
@@ -6074,6 +6094,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       getThreadShell,
       getThread,
       getSettlementCandidates,
+      getThreadIdsWithOpenCliLoan,
       getThreadsWithPullRequests,
       getThreadWorktreePaths,
       getThreadProjection,
@@ -6218,6 +6239,9 @@ export const layerMemory: Layer.Layer<ProjectionStoreV2> = Layer.effect(
                 ...shell,
                 lastSnoozeWakeAt: projection.thread.lastSnoozeWakeAt ?? null,
                 latestUserAuthoredMessageAt: shell.latestUserAuthoredMessageAt ?? null,
+                hasOpenCliLoan: projection.providerThreads.some(
+                  (providerThread) => providerThread.cliLoan != null,
+                ),
               };
             })
             .toSorted(
@@ -6226,6 +6250,17 @@ export const layerMemory: Layer.Layer<ProjectionStoreV2> = Layer.effect(
                 left.id.localeCompare(right.id),
             );
         }),
+      getThreadIdsWithOpenCliLoan: () =>
+        Ref.get(replayState).pipe(
+          Effect.map((state) =>
+            [...state.projections.values()].flatMap(({ thread, providerThreads }) =>
+              thread.deletedAt === null &&
+              providerThreads.some((providerThread) => providerThread.cliLoan != null)
+                ? [thread.id]
+                : [],
+            ),
+          ),
+        ),
       getThreadWorktreePaths: () =>
         Ref.get(replayState).pipe(
           Effect.map((state) =>

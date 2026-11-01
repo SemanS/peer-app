@@ -4,6 +4,7 @@ import { JJ_VCS_TERMINOLOGY } from "@t3tools/shared/vcs";
 import {
   buildDraftActionMenuItems,
   buildThreadActionMenuItems,
+  type ThreadActionMenuId,
   type ThreadActionMenuState,
 } from "./threadActionMenu.logic";
 
@@ -284,5 +285,41 @@ describe("buildDraftActionMenuItems", () => {
     const items = buildDraftActionMenuItems({ hasPath: true, hasBranch: false, hasProject: false });
     expect(items.map((item) => item.id)).toEqual(["copy", "discard"]);
     expect(items.at(-1)).toMatchObject({ label: "Discard draft", destructive: true });
+  });
+});
+
+describe("the CLI items", () => {
+  const nativeCli = { agent: "Claude Code", isOutInCli: false, isBusy: false } as const;
+  const item = (state: ThreadActionMenuState, id: ThreadActionMenuId) =>
+    buildThreadActionMenuItems(state).find((entry) => entry.id === id);
+
+  it("appear only for a thread that has a CLI", () => {
+    expect(item(baseState, "continue-in-cli")).toBeUndefined();
+    expect(item({ ...baseState, nativeCli: null }, "fork-in-cli")).toBeUndefined();
+    expect(item({ ...baseState, nativeCli }, "continue-in-cli")).toMatchObject({
+      label: "Continue in Claude Code",
+      disabled: false,
+    });
+    expect(item({ ...baseState, nativeCli }, "fork-in-cli")).toMatchObject({
+      label: "Fork into Claude Code",
+      disabled: false,
+    });
+  });
+
+  it("wait for a running turn, and for a start already under way", () => {
+    for (const state of [
+      { ...baseState, nativeCli, isRunning: true },
+      { ...baseState, nativeCli: { ...nativeCli, isBusy: true } },
+    ]) {
+      expect(item(state, "continue-in-cli")?.disabled).toBe(true);
+      expect(item(state, "fork-in-cli")?.disabled).toBe(true);
+    }
+  });
+
+  it("offer the way back while the thread is out, and no fork", () => {
+    const state = { ...baseState, nativeCli: { ...nativeCli, isOutInCli: true } };
+    expect(item(state, "continue-in-cli")).toBeUndefined();
+    expect(item(state, "return-from-cli")?.disabled).toBe(false);
+    expect(item(state, "fork-in-cli")?.disabled).toBe(true);
   });
 });

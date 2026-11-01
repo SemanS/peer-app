@@ -10,6 +10,7 @@ import {
   AuthOrchestrationOperateScope,
   AuthSettingsWriteScope,
   AuthSourceControlWriteScope,
+  AuthTerminalOperateScope,
   ThreadId,
   EnvironmentId,
   ScheduledTaskId,
@@ -349,6 +350,37 @@ it.effect(
         yield* prepare.authorize(registry, env, input);
       }),
     ),
+);
+
+it.effect("needs both orchestration and terminal grants to lend a thread to a CLI", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const registry = yield* setup;
+      const lend = createCommandPermissions(runtime, WS_METHODS.nativeCliStart);
+      registry.set(
+        sessions(env),
+        AsyncResult.success({
+          ...grant(false),
+          scopes: [AuthOrchestrationOperateScope],
+          permissions: [AuthOrchestrationOperateScope],
+        }),
+      );
+      expect(registry.get(lend.permissionAtom(env))).toBe(false);
+      expect((yield* lend.authorize(registry, env).pipe(Effect.flip)).requiredScope).toBe(
+        AuthTerminalOperateScope,
+      );
+      registry.set(
+        sessions(env),
+        AsyncResult.success({
+          ...grant(false),
+          scopes: [AuthOrchestrationOperateScope, AuthTerminalOperateScope],
+          permissions: [AuthOrchestrationOperateScope, AuthTerminalOperateScope],
+        }),
+      );
+      expect(registry.get(lend.permissionAtom(env))).toBe(true);
+      yield* lend.authorize(registry, env);
+    }),
+  ),
 );
 
 it.effect("honors exact empty permissions and preserves legacy parent grants", () =>

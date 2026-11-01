@@ -2,6 +2,8 @@ import type { ContextMenuItem } from "@t3tools/contracts";
 import { DEFAULT_VCS_TERMINOLOGY, type VcsTerminology } from "@t3tools/shared/vcs";
 import type { SnoozePreset } from "@t3tools/client-runtime/state/thread-settled";
 
+import type { NativeCliAgent } from "./chat/nativeCli.logic";
+
 export type ThreadActionMenuId =
   | "new-thread-on-branch"
   | "filter-by-project"
@@ -23,6 +25,9 @@ export type ThreadActionMenuId =
   | "copy-path"
   | "copy-branch"
   | "copy-thread-id"
+  | "continue-in-cli"
+  | "return-from-cli"
+  | "fork-in-cli"
   | "archive"
   | "delete";
 
@@ -87,6 +92,12 @@ export interface ThreadActionMenuState {
   readonly isRegeneratingTitle: boolean;
   /** Archive rejects a thread with an attached provider, so disable it here rather than let the action fail. */
   readonly isRunning: boolean;
+  /** Set only where the terminal drawer that would host the CLI is on screen. */
+  readonly nativeCli?: {
+    readonly agent: NativeCliAgent;
+    readonly isOutInCli: boolean;
+    readonly isBusy: boolean;
+  } | null;
   readonly supports: {
     readonly settlement: boolean;
     readonly autoSettleOptOut: boolean;
@@ -108,6 +119,29 @@ export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean
     "copy-branch",
     "copy-thread-id",
   ].includes(action);
+}
+
+function nativeCliMenuItems(
+  state: ThreadActionMenuState,
+  { agent, isOutInCli, isBusy }: NonNullable<ThreadActionMenuState["nativeCli"]>,
+): ReadonlyArray<ContextMenuItem<ThreadActionMenuId>> {
+  return [
+    isOutInCli
+      ? { id: "return-from-cli", label: "Return to Peer", icon: "terminal", disabled: isBusy }
+      : {
+          id: "continue-in-cli",
+          label: `Continue in ${agent}`,
+          icon: "terminal",
+          disabled: state.isRunning || isBusy,
+        },
+    {
+      id: "fork-in-cli",
+      label: `Fork into ${agent}`,
+      icon: "git-branch",
+      // The server allows both; a fork would copy a turn still being written or a session in use.
+      disabled: state.isRunning || isBusy || isOutInCli,
+    },
+  ];
 }
 
 export function buildThreadActionMenuItems(
@@ -220,6 +254,7 @@ export function buildThreadActionMenuItems(
         { id: "copy-thread-id", label: "Thread ID", icon: "hash" },
       ],
     },
+    ...(state.nativeCli ? nativeCliMenuItems(state, state.nativeCli) : []),
     { id: "project-settings", label: "Project settings", icon: "settings" },
     {
       id: "archive",

@@ -38,6 +38,7 @@ import * as Logger from "effect/Logger";
 import * as Path from "effect/Path";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
+import * as FileSystem from "effect/FileSystem";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -76,6 +77,7 @@ import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as ThreadManagementService from "./ThreadManagementService.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import { ProviderAdapterRollbackThreadError } from "@t3tools/provider-core/server/ProviderAdapter";
 
 const layerPlatformTest = Layer.merge(
   NodeServices.layer,
@@ -112,12 +114,42 @@ const layerProjectServiceTest = Layer.mock(ProjectService.ProjectService)({
 });
 
 const driver = ProviderDriverKind.make("codex");
+const REFUSED_ROLLBACK_THREAD = "runtime-rollback-refused";
+const ROLLBACK_REFUSAL = "Codex cannot go back past a CLI session Peer could not read in full.";
 const orchestrationAdapter = {
   instanceId: modelSelection.instanceId,
   driver,
   getCapabilities: () => Effect.succeed(CodexProviderCapabilitiesV2),
   planSelectionTransition: () => Effect.succeed({ type: "apply_on_next_turn" }),
-  openSession: () => Effect.die("sessions are not used by lifecycle tests"),
+  openSession: (input) =>
+    input.threadId === REFUSED_ROLLBACK_THREAD
+      ? Effect.succeed({
+          driver,
+          instanceId: modelSelection.instanceId,
+          providerSessionId: input.providerSessionId,
+          providerSession: {
+            id: input.providerSessionId,
+            driver,
+            providerInstanceId: modelSelection.instanceId,
+            status: "ready",
+            cwd: `/tmp/t3-${REFUSED_ROLLBACK_THREAD}`,
+            model: modelSelection.model,
+            capabilities: CodexProviderCapabilitiesV2,
+            createdAt: DateTime.makeUnsafe(0),
+            updatedAt: DateTime.makeUnsafe(0),
+            lastError: null,
+          },
+          events: Stream.never,
+          rollbackThread: (rollback: ProviderAdapter.ProviderAdapterV2RollbackThreadInput) =>
+            Effect.fail(
+              new ProviderAdapterRollbackThreadError({
+                driver,
+                providerThreadId: rollback.providerThread.id,
+                refusal: ROLLBACK_REFUSAL,
+              }),
+            ),
+        } as never)
+      : Effect.die("sessions are not used by lifecycle tests"),
 } as ProviderAdapter.ProviderAdapterV2["Service"];
 const providerInstance = {
   instanceId: modelSelection.instanceId,
@@ -631,6 +663,52 @@ it.layer(layerTest)("OrchestrationV2LayerLive", (it) => {
       const retried = yield* orchestrator.getThreadProjection(threadId);
       assert.isNull(retried.thread.rollbackFailure);
     }),
+  );
+
+  it.effect("shows a refusal the adapter worded for a person, not the advice to try again", () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const outbox = yield* EffectOutbox.EffectOutboxV2;
+      const worker = yield* EffectWorker.OrchestrationEffectWorkerV2;
+      const eventSink = yield* EventSink.EventSinkV2;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const worktreePath = `/tmp/t3-${REFUSED_ROLLBACK_THREAD}`;
+      yield* Effect.acquireRelease(
+        fileSystem.makeDirectory(worktreePath, { recursive: true }),
+        () => fileSystem.remove(worktreePath, { recursive: true }).pipe(Effect.ignore),
+      );
+      const { threadId, rollback } = yield* seedFailingRollbackThread(REFUSED_ROLLBACK_THREAD);
+      // Without a finished run after the target there is nothing for the provider to refuse.
+      const run = (yield* orchestrator.getThreadProjection(threadId)).runs[0]!;
+      yield* eventSink.write({
+        commandId: CommandId.make("runtime-rollback-refused-run"),
+        events: [
+          {
+            id: EventId.make("runtime-rollback-refused-run-event"),
+            type: "run.updated",
+            threadId,
+            runId: run.id,
+            occurredAt: yield* DateTime.now,
+            payload: { ...run, status: "completed" },
+          },
+        ],
+      });
+
+      const rollbackCommandId = CommandId.make("runtime-rollback-refused-rollback");
+      yield* rollback(rollbackCommandId);
+      for (let attempt = 0; attempt < 5; attempt++) {
+        yield* worker.drain();
+        yield* TestClock.adjust("30 seconds");
+      }
+
+      const [rollbackEffect] = yield* outbox.listByCommandId(rollbackCommandId);
+      assert.equal(rollbackEffect?.status, "failed");
+      const failed = yield* orchestrator.getThreadProjection(threadId);
+      assert.deepEqual(failed.thread.rollbackFailure, {
+        requestId: rollbackCommandId,
+        message: ROLLBACK_REFUSAL,
+      });
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
   it.effect("ignores a late failure from a rollback that a newer one superseded", () =>

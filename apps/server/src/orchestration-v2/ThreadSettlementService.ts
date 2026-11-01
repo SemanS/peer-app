@@ -134,6 +134,8 @@ export function isAutoSettlementCandidate(
   nowMs: number,
 ): boolean {
   if (thread.archivedAt !== null || thread.settledOverride !== null) return false;
+  // Nothing in Peer moves while a thread is out in the CLI, which reads as inactivity.
+  if (thread.hasOpenCliLoan) return false;
   if (thread.pinnedAt != null || thread.autoSettleDisabledAt != null) return false;
   if (thread.pendingRuntimeRequest !== null) return false;
   if (thread.activityRunStatus != null) return false;
@@ -555,6 +557,12 @@ export const make = Effect.gen(function* () {
     function* (threadId: ThreadId) {
       const settled = yield* projections.getThread(threadId);
       if (settled.settledOverride !== "settled") return;
+      // A loan's terminal process is the CLI itself, so it has no subprocess and reads as idle. The
+      // settle dispatch refuses a loan, so only one that began after it gets here.
+      const { providerThreads } = yield* projections.getThreadRecords(threadId, [
+        "providerThreads",
+      ]);
+      if (providerThreads.some((providerThread) => providerThread.cliLoan != null)) return;
       yield* terminals.closeIdle({ threadId });
       const worktreePath = settled.worktreePath;
       if (worktreePath === null || !(yield* fileSystem.exists(worktreePath))) return;

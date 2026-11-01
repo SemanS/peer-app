@@ -25,6 +25,23 @@ T3 Code can use your installed Codex and its existing login. Run `codex login`
 on the environment's machine to sign in. [Provider setup](./install.md#providers)
 covers installation and custom configuration.
 
+## Continue a thread in Codex
+
+Choose **Continue in Codex** or **Fork into Codex** in the thread's menu in the chat header. They
+work like [the Claude Code items](./providers-claude.md#continue-a-thread-in-claude-code), with
+`codex resume` and `codex fork`. They need an existing Codex login: a ChatGPT account connected
+through Peer signs in through Peer and cannot run in a terminal, so these items are hidden for it.
+
+Codex holds a session for about a minute after its last client closes it, and Peer waits that out:
+leaving Peer and coming back can each take a minute. If a Codex client really still has the session
+open, the thread stays where it is or the turn fails, with Codex's reason. Close the session there
+and try again. This also applies to a session you opened by hand: Peer no longer starts a new
+session over it.
+
+When Peer could not bring all of a CLI session back, you can roll back to turns after it but not past
+it, because Codex rewinds by a number of turns and Peer does not know how many ran there. Forking from
+an earlier turn that ran in Peer still works.
+
 ## Use multiple accounts
 
 Add another ChatGPT account in **Settings → Providers**, then select the account

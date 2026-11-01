@@ -179,6 +179,21 @@ export class TerminalManager extends Context.Service<
       readonly terminalId?: string;
     }) => Effect.Effect<void>;
 
+    /** Asks the session itself, so an answer never lags the subprocess poll. */
+    readonly isProcessRunning: (input: {
+      readonly threadId: string;
+      readonly terminalId: string;
+    }) => Effect.Effect<boolean>;
+
+    /**
+     * `close` and `restart` answer before a stopped process has exited, so this is for a caller that
+     * must not touch what that process owns. Bounded by the kill grace, after which it is SIGKILLed.
+     */
+    readonly awaitStoppedProcess: (input: {
+      readonly threadId: string;
+      readonly terminalId: string;
+    }) => Effect.Effect<void>;
+
     readonly subscribe: (
       listener: (event: TerminalEvent) => Effect.Effect<void>,
     ) => Effect.Effect<() => void>;
@@ -1645,11 +1660,14 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     }).pipe(Effect.ensuring(Effect.sync(unsubscribeExit)));
   });
 
+  const stoppingProcessSessions = new WeakMap<PtyAdapter.PtyProcess, string>();
+
   const startKillEscalation = Effect.fn("terminal.startKillEscalation")(function* (
     process: PtyAdapter.PtyProcess,
     threadId: string,
     terminalId: string,
   ) {
+    stoppingProcessSessions.set(process, toSessionKey(threadId, terminalId));
     const fiber = yield* runKillEscalation(process, threadId, terminalId).pipe(
       Effect.ensuring(
         modifyManagerState((state) => {
@@ -2616,6 +2634,8 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       runtimeEnvChanged ||
       liveSession.worktreePath !== nextWorktreePath;
 
+    // A process stopped for a new context ended, and `started` would tell a listener it never did.
+    const replacesProcess = launchContextChanged && liveSession.process !== null;
     if (launchContextChanged) {
       yield* stopProcess(liveSession);
       liveSession.cwd = input.cwd;
@@ -2650,7 +2670,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           rows: targetRows,
           ...(input.env ? { env: input.env } : {}),
         },
-        "started",
+        replacesProcess ? "restarted" : "started",
       );
       return snapshot(liveSession);
     }
@@ -3134,6 +3154,29 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       ),
     );
 
+  const isProcessRunning: TerminalManager["Service"]["isProcessRunning"] = (input) =>
+    getSession(input.threadId, input.terminalId).pipe(
+      // A session still starting is about to have a process, so it counts.
+      Effect.map(
+        (session) =>
+          Option.isSome(session) &&
+          (session.value.status === "running" || session.value.status === "starting"),
+      ),
+    );
+
+  const awaitStoppedProcess: TerminalManager["Service"]["awaitStoppedProcess"] = (input) =>
+    readManagerState.pipe(
+      Effect.flatMap((state) => {
+        const sessionKey = toSessionKey(input.threadId, input.terminalId);
+        return Fiber.awaitAll(
+          [...state.killFibers].flatMap(([process, fiber]) =>
+            stoppingProcessSessions.get(process) === sessionKey ? [fiber] : [],
+          ),
+        );
+      }),
+      Effect.asVoid,
+    );
+
   return TerminalManager.of({
     open,
     attachStream,
@@ -3144,6 +3187,8 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     restart,
     close,
     closeIdle,
+    isProcessRunning,
+    awaitStoppedProcess,
     subscribe,
     subscribeMetadata,
   });

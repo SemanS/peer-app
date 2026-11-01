@@ -1554,7 +1554,7 @@ function runReplaySession({
         // so it is resumed before thread/revert, and the next turn resumes it again.
         yield* client.request("thread/read", { threadId, includeTurns: false });
         yield* client.request("thread/resume", resumeParams);
-        yield* revertCodexThread(client, threadId, rollback.numTurns);
+        yield* revertCodexThread(client, threadId, rollback.numTurns, new Set());
         yield* client.request("thread/resume", resumeParams);
         yield* runTurnStep(client, threadId, after);
       }).pipe(Effect.provide(layerCodex({ recorder })));
@@ -1573,7 +1573,7 @@ function runReplaySession({
       for (const [stepIndex, step] of run.steps.entries()) {
         if (step.type === "rollback") {
           yield* client.request("thread/read", { threadId: activeThreadId, includeTurns: false });
-          yield* revertCodexThread(client, activeThreadId, step.numTurns);
+          yield* revertCodexThread(client, activeThreadId, step.numTurns, new Set());
           continue;
         }
         if (step.type === "fork") {

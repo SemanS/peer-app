@@ -422,7 +422,7 @@ export const layerExecutor: Layer.Layer<
                           commandId: CommandId.make(`${effect.commandId}:rollback-failed`),
                           threadId: effect.threadId,
                           requestId: effect.commandId,
-                          message: CheckpointRollbackService.ROLLBACK_FAILED_MESSAGE,
+                          message: CheckpointRollbackService.rollbackFailureMessage(cause),
                         })
                         .pipe(
                           Effect.catchCause((recordCause) =>
@@ -448,6 +448,9 @@ export const layerExecutor: Layer.Layer<
                 threadId: effect.threadId,
                 runId: effect.request.runId,
                 scopeId: effect.request.scopeId,
+                ...(effect.request.baselineRef === undefined
+                  ? {}
+                  : { baselineRef: effect.request.baselineRef }),
               })
               .pipe(
                 Effect.mapError(

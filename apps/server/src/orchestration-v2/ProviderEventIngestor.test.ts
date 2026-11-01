@@ -373,6 +373,72 @@ layer("ProviderEventIngestorV2", (it) => {
     }),
   );
 
+  it.effect("keeps a loan and a gap that an adapter's stale copy never saw", () =>
+    Effect.gen(function* () {
+      const now = yield* DateTime.now;
+      const eventSink = yield* EventSink.EventSinkV2;
+      const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+      const ingestor = yield* ProviderEventIngestor.ProviderEventIngestorV2;
+      const idAllocator = yield* IdAllocator.IdAllocatorV2;
+      const threadEvent = yield* threadCreatedEvent(now);
+      const threadId = threadEvent.threadId;
+      const providerSessionId = yield* idAllocator.allocate.providerSession({
+        providerInstanceId: modelSelection.instanceId,
+        threadId,
+      });
+      const stale: OrchestrationV2ProviderThread = {
+        id: idAllocator.derive.providerThread({
+          driver: CODEX_DRIVER,
+          nativeThreadId: "loaned-thread",
+        }),
+        driver: CODEX_DRIVER,
+        providerInstanceId: modelSelection.instanceId,
+        providerSessionId,
+        appThreadId: threadId,
+        ownerNodeId: null,
+        nativeThreadRef: { driver: CODEX_DRIVER, nativeId: "loaned-thread", strength: "strong" },
+        nativeConversationHeadRef: null,
+        status: "idle",
+        firstRunOrdinal: null,
+        lastRunOrdinal: null,
+        handoffIds: [],
+        forkedFrom: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      const cliLoan = { terminalId: "cli-loan-1", afterNativeMessageId: "u1", startedAt: now };
+      yield* eventSink.write({ events: [threadEvent] });
+      yield* eventSink.write({
+        events: [
+          {
+            id: yield* idAllocator.allocate.event({ threadId }),
+            type: "provider-thread.updated",
+            threadId,
+            occurredAt: now,
+            providerInstanceId: modelSelection.instanceId,
+            payload: { ...stale, cliLoan, cliGapAfterTurnOrdinal: 4 },
+          },
+        ],
+      });
+
+      yield* ingestor.ingestNormalized({
+        providerSessionId,
+        providerInstanceId: modelSelection.instanceId,
+        threadId,
+        event: {
+          type: "provider_thread.updated",
+          driver: CODEX_DRIVER,
+          providerThread: { ...stale, status: "active" },
+        },
+      });
+
+      const projection = yield* projectionStore.getThreadProjection(threadId);
+      assert.equal(projection.providerThreads[0]?.status, "active");
+      assert.deepEqual(projection.providerThreads[0]?.cliLoan, cliLoan);
+      assert.equal(projection.providerThreads[0]?.cliGapAfterTurnOrdinal, 4);
+    }),
+  );
+
   it.effect("skips a node update only when it matches the stored node", () =>
     Effect.gen(function* () {
       const now = yield* DateTime.now;

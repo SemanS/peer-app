@@ -3,6 +3,7 @@ import { assert, it, vi } from "@effect/vitest";
 import {
   CheckpointId,
   CheckpointScopeId,
+  type OrchestrationV2Checkpoint,
   type OrchestrationV2ThreadProjection,
   ProjectId,
   ProviderInstanceId,
@@ -10,6 +11,8 @@ import {
   ProviderThreadId,
   ThreadId,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
 import * as Fiber from "effect/Fiber";
@@ -591,6 +594,11 @@ it.effect.each([
     const checkpointId = CheckpointId.make("rewind-start");
     const scopeId = CheckpointScopeId.make("rewind-scope");
     const calls: string[] = [];
+    const loanOpenedDuringRollback = {
+      terminalId: "cli-loan-1",
+      afterNativeMessageId: null,
+      startedAt: DateTime.makeUnsafe(0),
+    };
     let lockedThreads = Effect.succeed<ReadonlyArray<ThreadId>>([]);
     const layerThreadCommands = Layer.effect(
       ThreadCommandExecutor.ThreadCommandExecutor,
@@ -667,13 +675,33 @@ it.effect.each([
                       event.type === "run.updated" && event.payload.status === "rolled_back",
                   ),
                 );
+                const written = events.find((event) => event.type === "provider-thread.updated");
+                assert.deepEqual(
+                  written?.type === "provider-thread.updated"
+                    ? [written.payload.cliLoan, written.payload.cliGapAfterTurnOrdinal]
+                    : [],
+                  [loanOpenedDuringRollback, 7],
+                );
                 calls.push("projection");
                 return [];
               }),
           }),
           IdAllocator.layer,
           Layer.mock(ProjectionStore.ProjectionStoreV2)({
-            getThreadRecords: () => Effect.succeed(projection),
+            // The rollback read its row before the provider ran, and the loan opened after that.
+            getThreadRecords: () =>
+              Effect.sync(() =>
+                calls.includes("provider") || calls.includes("files")
+                  ? {
+                      ...projection,
+                      providerThreads: projection.providerThreads.map((candidate) => ({
+                        ...candidate,
+                        cliLoan: loanOpenedDuringRollback,
+                        cliGapAfterTurnOrdinal: 7,
+                      })),
+                    }
+                  : projection,
+              ),
             getThreadProviderContext: () => Effect.succeed({ providerSessions: [] } as never),
             getCheckpointContext: () =>
               Effect.succeed({
@@ -771,3 +799,49 @@ it.effect.skipIf(!symlinksSupported)(
       assert.isFalse(isolated);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
+
+it("keeps a person's wording only for a refusal the adapter worded for one", () => {
+  const failure = (fields: {
+    readonly reason: "provider-refused" | "unexpected-failure";
+    readonly refusal?: string;
+  }) =>
+    new CheckpointRollbackService.CheckpointRollbackExecutionError({
+      ...fields,
+      threadId: ThreadId.make("thread"),
+      providerThreadId: ProviderThreadId.make("provider-thread"),
+      checkpointId: CheckpointId.make("checkpoint"),
+    });
+  const refusal = "Codex cannot go back past a CLI session.";
+  assert.equal(
+    CheckpointRollbackService.rollbackFailureMessage(
+      Cause.fail(failure({ reason: "provider-refused", refusal })),
+    ),
+    refusal,
+  );
+  assert.equal(
+    CheckpointRollbackService.rollbackFailureMessage(
+      Cause.fail(failure({ reason: "unexpected-failure" })),
+    ),
+    CheckpointRollbackService.ROLLBACK_FAILED_MESSAGE,
+  );
+  assert.equal(
+    CheckpointRollbackService.rollbackFailureMessage(Cause.die("adapter crashed")),
+    CheckpointRollbackService.ROLLBACK_FAILED_MESSAGE,
+  );
+});
+
+it("keeps a ref a surviving checkpoint still points at", () => {
+  const checkpoint = (id: string, ref: string) =>
+    ({ id, ref }) as unknown as OrchestrationV2Checkpoint;
+  const survivor = checkpoint("imported-1", "refs/shared");
+  const staleShared = checkpoint("imported-2", "refs/shared");
+  const staleOwn = checkpoint("imported-3", "refs/own");
+
+  assert.deepEqual(
+    CheckpointRollbackService.checkpointsWithUnusedRefs(
+      [staleShared, staleOwn],
+      [survivor, staleShared, staleOwn],
+    ),
+    [staleOwn],
+  );
+});

@@ -2,10 +2,12 @@ import {
   CheckpointId,
   CheckpointScopeId,
   latestProviderTurnForAttempt,
+  type OrchestrationV2Checkpoint,
   type OrchestrationV2DomainEvent,
   ProviderThreadId,
   ThreadId,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -29,13 +31,28 @@ import { EventSinkV2 } from "./EventSink.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import { ProjectionStoreV2 } from "./ProjectionStore.ts";
 import * as ProjectStore from "./ProjectStore.ts";
-import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
+import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import { ProviderSessionManagerV2 } from "./ProviderSessionManager.ts";
 import { RuntimePolicyV2 } from "./RuntimePolicy.ts";
 import * as ThreadCommandExecutor from "./ThreadCommandExecutor.ts";
 
 export const ROLLBACK_FAILED_MESSAGE =
   "The provider could not roll back this conversation. Try again; if it keeps failing, check the provider and server logs.";
+
+/**
+ * Turns of one CLI loan point at the tree the loan started from, so a ref can outlive some of the
+ * checkpoints that name it.
+ */
+export const checkpointsWithUnusedRefs = (
+  stale: ReadonlyArray<OrchestrationV2Checkpoint>,
+  all: ReadonlyArray<OrchestrationV2Checkpoint>,
+): ReadonlyArray<OrchestrationV2Checkpoint> => {
+  const staleIds = new Set(stale.map((checkpoint) => checkpoint.id));
+  const survivingRefs = new Set(
+    all.filter((checkpoint) => !staleIds.has(checkpoint.id)).map((checkpoint) => checkpoint.ref),
+  );
+  return stale.filter((checkpoint) => !survivingRefs.has(checkpoint.ref));
+};
 
 export class CheckpointRollbackExecutionError extends Schema.TaggedError<CheckpointRollbackExecutionError>()(
   "CheckpointRollbackExecutionError",
@@ -46,10 +63,12 @@ export class CheckpointRollbackExecutionError extends Schema.TaggedError<Checkpo
       "provider-turn-unavailable",
       "unexpected-failure",
       "shared-workspace",
+      "provider-refused",
     ]),
     threadId: ThreadId,
     providerThreadId: ProviderThreadId,
     checkpointId: CheckpointId,
+    refusal: Schema.optional(Schema.String),
     cause: Schema.optional(Schema.Defect()),
   },
 ) {
@@ -63,6 +82,8 @@ export class CheckpointRollbackExecutionError extends Schema.TaggedError<Checkpo
         return `Provider turn for rollback target ${this.checkpointId} is unavailable on provider thread ${this.providerThreadId}.`;
       case "shared-workspace":
         return SHARED_WORKSPACE_RESTORE_MESSAGE;
+      case "provider-refused":
+        return this.refusal ?? ROLLBACK_FAILED_MESSAGE;
       case "unexpected-failure":
         return ROLLBACK_FAILED_MESSAGE;
     }
@@ -70,6 +91,19 @@ export class CheckpointRollbackExecutionError extends Schema.TaggedError<Checkpo
 }
 
 const isCheckpointRollbackExecutionError = Schema.is(CheckpointRollbackExecutionError);
+const isProviderAdapterRollbackThreadError = Schema.is(
+  ProviderAdapter.ProviderAdapterRollbackThreadError,
+);
+
+/** Only a refusal the adapter worded for a person is shown; anything else may carry internals. */
+export const rollbackFailureMessage = (
+  cause: Cause.Cause<CheckpointRollbackExecutionError>,
+): string =>
+  Option.match(Cause.findErrorOption(cause), {
+    onNone: () => ROLLBACK_FAILED_MESSAGE,
+    onSome: (error) =>
+      error.reason === "provider-refused" ? error.message : ROLLBACK_FAILED_MESSAGE,
+  });
 
 export interface CheckpointRollbackServiceV2Shape {
   readonly execute: (input: {
@@ -301,8 +335,12 @@ export const layer: Layer.Layer<
           candidate.appRunOrdinal > targetOrdinal &&
           candidate.status === "ready",
       );
-      if (staleCheckpoints.length > 0) {
-        yield* checkpoints.deleteStaleRefs({ scope, checkpoints: staleCheckpoints });
+      const deletableCheckpoints = checkpointsWithUnusedRefs(
+        staleCheckpoints,
+        projection.checkpoints,
+      );
+      if (deletableCheckpoints.length > 0) {
+        yield* checkpoints.deleteStaleRefs({ scope, checkpoints: deletableCheckpoints });
       }
 
       // Thread commands write full provider thread rows under this lock. Without
@@ -311,6 +349,14 @@ export const layer: Layer.Layer<
       yield* threadCommands.withLock(
         input.threadId,
         Effect.gen(function* () {
+          // Only commands write these two, and a loan can have opened since the row above was read.
+          const { providerThreads: currentProviderThreads } = yield* projections.getThreadRecords(
+            input.threadId,
+            ["providerThreads"],
+          );
+          const current = currentProviderThreads.find(
+            (candidate) => candidate.id === providerThread.id,
+          );
           const now = yield* DateTime.now;
           const makeEvent = <Event extends OrchestrationV2DomainEvent>(event: Omit<Event, "id">) =>
             Effect.map(
@@ -331,6 +377,8 @@ export const layer: Layer.Layer<
               occurredAt: now,
               payload: {
                 ...snapshot.providerThread,
+                cliLoan: current?.cliLoan ?? null,
+                cliGapAfterTurnOrdinal: current?.cliGapAfterTurnOrdinal ?? null,
                 lastRunOrdinal: targetOrdinal === 0 ? null : targetOrdinal,
                 updatedAt: now,
               },
@@ -394,7 +442,9 @@ export const layer: Layer.Layer<
             isCheckpointRollbackExecutionError(cause)
               ? cause
               : new CheckpointRollbackExecutionError({
-                  reason: "unexpected-failure",
+                  ...(isProviderAdapterRollbackThreadError(cause) && cause.refusal !== undefined
+                    ? { reason: "provider-refused", refusal: cause.refusal }
+                    : { reason: "unexpected-failure" }),
                   threadId: input.threadId,
                   providerThreadId: input.providerThreadId,
                   checkpointId: input.checkpointId,

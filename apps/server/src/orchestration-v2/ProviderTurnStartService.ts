@@ -676,6 +676,15 @@ export const layer: Layer.Layer<
         if (resumed._tag === "Success") {
           return resumed.success;
         }
+        // The adapter already waited, so a retry would only hold a worker for another minute.
+        if (resumed.failure._tag === "ProviderAdapterSessionInUseError") {
+          yield* settleStartFailure({
+            signal: "provider-thread-session-in-use",
+            title: "Provider turn failed to start",
+            error: resumed.failure,
+          });
+          return undefined;
+        }
 
         yield* Effect.logWarning("Provider resume failed; attempting a fresh native session", {
           driver: session.driver,

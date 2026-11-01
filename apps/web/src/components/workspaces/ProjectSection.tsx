@@ -35,7 +35,7 @@ const PLACED_SIGNALS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The open project in the Tasks tab: what holds now (its announcement, what it has in place), then
+ * The open project in the Work tab: what holds now (its announcement, what it has in place), then
  * its areas with what each has done and each task's name and state. Done tasks fold inside their
  * area. What the rows do not say is on the task's page.
  */

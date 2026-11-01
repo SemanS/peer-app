@@ -2652,7 +2652,7 @@ export default function Sidebar() {
 
   // Project scope: the one choice of the project button above the view switch, for Tasks and
   // Chats alike (`peer:work-scope`, kept across routes that unmount the sidebar and restarts). A
-  // project filters this list by the projects whose chats belong to it; the Tasks view lists that
+  // project filters this list by the projects whose chats belong to it; the Work tab lists that
   // project's tasks instead.
   const projectScope = useProjectScope(projectGroups);
   const scopedProjectKeys = projectScope.keys;
@@ -4341,9 +4341,9 @@ export default function Sidebar() {
   const [sidebarTab, setSidebarTab] = useSidebarTab();
   const scopeLine = sidebarScopeLine(sidebarView, projectScope.scope, projectScope.name);
   useRememberSidebarRoute();
-  // Switching views also switches the main area to the view's last screen: Tasks to the Work
+  // Switching views also switches the main area to the view's last screen: Work to the Work
   // screen it showed (the Overview at first), Chats to the chat it showed (the newest at first).
-  // A screen that already belongs to the view stays. A search belongs to the Chats list; Tasks has
+  // A screen that already belongs to the view stays. A search belongs to the Chats list; Work has
   // no field to clear it from.
   const switchSidebarView = (next: SidebarView) => {
     clearThreadSearch();

@@ -2,7 +2,7 @@ import type { WorkProjectNode, WorkTaskNode } from "./workTree.logic";
 import { taskIsDone } from "./workGroups.logic";
 import { ancestorIds, nestProjectTasks, treeIndexOf, type NestedRow } from "./taskTree.logic";
 
-/** One area of the Tasks tab: its open tasks, and its done ones behind one row. */
+/** One area of the Work tab: its open tasks, and its done ones behind one row. */
 export interface SidebarArea {
   /** `group:<task id>`, `area:<name>`, or `area:` for tasks in no area. */
   readonly id: string;
@@ -22,7 +22,7 @@ export interface SidebarTasks {
 }
 
 /**
- * The project as the Tasks tab shows it, Area → Task, in the tree's order. A root group with groups
+ * The project as the Work tab shows it, Area → Task, in the tree's order. A root group with groups
  * under it is a change (an OpenSpec change imports as one) and those groups are its areas; any
  * other root group is an area itself; tasks in no group keep the area the project gave them.
  */

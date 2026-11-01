@@ -16,12 +16,14 @@ export function sidebarViewForLocation(
   return viewOfPath(pathname) ?? routes.lastView ?? preferred;
 }
 
-/** The first path segments of the screens that belong to Tasks: the Work screens and what opens from them. */
+/** The first path segments of the screens that belong to the Work tab: the Work screens and what opens from them. */
 const TASK_SCREENS: ReadonlySet<string> = new Set([
   "work",
   "task",
   "review",
   "room",
+  "together",
+  "workspace",
   "context",
   "knowledge",
   "memory",
@@ -49,7 +51,7 @@ const OTHER_SCREENS: ReadonlySet<string> = new Set([
 const pathnameOf = (href: string): string => href.split(/[?#]/u)[0] ?? "/";
 
 /**
- * The view a screen belongs to: Tasks for the Work screens, Chats for a chat, a draft and the
+ * The view a screen belongs to: Work for the Work screens, Chats for a chat, a draft and the
  * landing page, none for settings and the other utility pages, which no view remembers.
  */
 export function viewOfPath(pathname: string): SidebarView | null {
@@ -82,7 +84,7 @@ export function rememberRoute(routes: SidebarRoutes, href: string): SidebarRoute
 export type ViewSwitchTarget =
   | { readonly kind: "stay" }
   | { readonly kind: "remembered"; readonly href: string }
-  /** Tasks: the Overview. Chats: the newest chat. */
+  /** Work: the Overview. Chats: the newest chat. */
   | { readonly kind: "default" };
 
 /**

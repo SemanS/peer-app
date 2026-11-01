@@ -37,7 +37,7 @@ by **Open herdr**) with `server stop` added at the end, for example
 `'/path/to/herdr' --session peer-1a2b3c4d server stop`; this needs the herdr program that command
 names, which is part of the app. Installing Peer again picks a running herdr up.
 
-Open a task in **Tasks** to read its current OpenSpec proposal and expand its checklist or design.
+Open a task in **Work** to read its current OpenSpec proposal and expand its checklist or design.
 For a task with no chats yet, the first prompt is ready to edit on that page. Nothing starts until
 you choose **Start agent**. The play button opens the same brief and prompt in a dialog. Expand
 **Run configuration** to change the repository, Claude Code or Codex, or the starting branch.
@@ -130,7 +130,7 @@ with each group's progress; `peer task add "<title>" --under <task>` puts a new 
 (`--kind group` for a heading-like item, `--not-executable` for one whose items are the work), and
 `peer task set <task> --under <task>|none`, `--executable yes|no` or `--position <n>` moves, settles
 or reorders one. It acts with your rights in the
-workspace, so it can change only what you could change in **Tasks**. In a project that is only on
+workspace, so it can change only what you could change in **Work**. In a project that is only on
 this computer, Peer leaves the agent out: there are no team tasks there yet. Ask the agent to share
 the project with your workspace (`peer share`, or the `peer_share` tool), or choose **Share with <workspace>…** in the project button's menu.
 
@@ -399,9 +399,9 @@ New teammate requests use this device's notification and sound settings while T3
 notices include the sender and title. Mobile lists sent requests with Withdraw in **Peer
 workspaces**; phone alerts come from Needs-you alerts when those are enabled.
 
-## The sidebar: Tasks and Chats
+## The sidebar: Work and Chats
 
-The sidebar has two views. **Tasks** lists the team's tasks; **Chats** lists your own chats on this
+The sidebar has two views. **Work** lists the team's chats, rooms and tasks; **Chats** lists your own chats on this
 computer. The line under the switch says which project they show: "Team tasks in Receipt printer",
 "Your chats in all projects". Switching views also switches the main area to the screen that view
 showed last: the Overview or the task you were on, and the chat you were reading.
@@ -417,13 +417,13 @@ workspace…**, which whoever shared the project from Peer and the workspace's o
 For a project only on this computer it offers **Share with <workspace>…** instead: after you confirm,
 the project moves under that workspace in the menu, its members see it and it gets team tasks.
 
-To work on several projects together, choose a project and then **Add to a workspace with…** in the project button's menu. The new workspace lists its projects behind a chevron under the button and opens them side by side: their files, what changed in their checkouts, and their agents. Under **Tasks** each project's chats, tasks and OpenSpec work stack one under another, and each project starts its own. A project only on this computer shows its chats there, until you share it to give it tasks and rooms. With a workspace in scope, **+**, **New chat** and its shortcut open the workspace's room rather than a chat in one project: **In** above **To** marks every project its agent works in, and stays there for the whole room. Unmark a project to leave it out of this room; once the first message is sent, the room's projects are settled. One agent then works across all of them, in a checkout of its own in each, Git or Jujutsu, and each project lands on its own. It reads each project's AGENTS.md or CLAUDE.md first. Beside the conversation, **All** shows every project's diff and files side by side, and one project's name shows only that one. A project only on this computer, or shared with another team, joins marked **local**: its agent works there, but coordination does not see that work. A room lives on the Hub, so a workspace with no shared project starts a new chat in one of its projects. Each shared project sees the work as its own: overlaps there, and `peer review` run from its folder. Rename it, take a project out or ungroup it from the same menu. Your workspaces stay on this computer; your team does not see them.
+To work on several projects together, choose a project and then **Add to a workspace with…** in the project button's menu. The new workspace lists its projects behind a chevron under the button and opens them side by side: their files, what changed in their checkouts, and their agents. Under **Work** each project's chats, tasks and OpenSpec work stack one under another, and each project starts its own. A project only on this computer shows its chats there, until you share it to give it tasks and rooms. With a workspace in scope, **+**, **New chat** and its shortcut open the workspace's room rather than a chat in one project: **In** above **To** marks every project its agent works in, and stays there for the whole room. Unmark a project to leave it out of this room; once the first message is sent, the room's projects are settled. One agent then works across all of them, in a checkout of its own in each, Git or Jujutsu, and each project lands on its own. It reads each project's AGENTS.md or CLAUDE.md first. Beside the conversation, **All** shows every project's diff and files side by side, and one project's name shows only that one. A project only on this computer, or shared with another team, joins marked **local**: its agent works there, but coordination does not see that work. A room lives on the Hub, so a workspace with no shared project starts a new chat in one of its projects. Each shared project sees the work as its own: overlaps there, and `peer review` run from its folder. Rename it, take a project out or ungroup it from the same menu. Your workspaces stay on this computer; your team does not see them.
 
 **Search** (the command palette) and **Overview** (the Work board) sit beside the project button. The
-sidebar's tabs each have one purpose: **Tasks**, **Knowledge** and **Activity**, with Chats by the
+sidebar's tabs each have one purpose: **Work**, **Knowledge** and **Activity**, with Chats by the
 icon next to them.
 
-**Tasks** shows the project's areas, each with how much of it is done. With one OpenSpec change open,
+**Work** shows the project's chats and rooms, then its areas, each with how much of it is done. With one OpenSpec change open,
 its name stands under the project's and its sections are the areas. A task shows its key, a short name
 and its state; hover it for the full text, which stays as written on the task's page. Finished tasks
 fold inside their area. **+** at the head of the areas adds a task, and **More** holds **Request a
@@ -683,7 +683,7 @@ and commit. Flows change nothing about the entries they link.
 
 ## Agent commands
 
-Agents run `peer` from their session's shell. People manage work in the Peer app: open **Tasks**,
+Agents run `peer` from their session's shell. People manage work in the Peer app: open **Work**,
 then the task. From a terminal in a workspace project, `peer status`, `index`, `context`,
 `knowledge` and `log` also provide a public view; those reads do not acknowledge an agent's
 notes or record its input versions. `peer help` works from any terminal.

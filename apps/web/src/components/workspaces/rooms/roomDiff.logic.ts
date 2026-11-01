@@ -114,11 +114,13 @@ export function placeAnchors(
 /** Where the diff came from, in a line over it. */
 export function diffSourceText(diff: Extract<PeerRoomDiff, { state: "here" }>) {
   const from =
-    diff.source === "run"
-      ? "Your run's checkout"
-      : diff.source === "snapshot"
-        ? "Kept snapshot"
-        : "The pushed branch";
+    diff.source === "worktree"
+      ? "Selected worktree"
+      : diff.source === "run"
+        ? "Your run's checkout"
+        : diff.source === "snapshot"
+          ? "Kept snapshot"
+          : "The pushed branch";
   return `${from} · ${diff.head.slice(0, 8)}`;
 }
 

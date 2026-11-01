@@ -19,7 +19,7 @@ import type {
 
 import { harnessName } from "@t3tools/client-runtime/peer/work";
 import { Navigate, useNavigate } from "@tanstack/react-router";
-import { type DragEvent, type ReactNode, useEffect, useEffectEvent, useRef, useState } from "react";
+import { type DragEvent, useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { cn } from "../../../lib/utils";
 import { serverEnvironment } from "../../../state/server";
@@ -31,7 +31,10 @@ import { AgentTrustQuestion } from "../herdr/AgentTrustQuestion";
 import { FILE_TREE_PATHS_DRAG_TYPE, fileTreePathsOf } from "../../files/fileTreeDragMention";
 import { PeerPageHeader } from "../PeerPageHeader";
 import type { ProjectSet } from "../projectSets.logic";
-import { ProjectMark } from "../signals";
+import * as Schema from "effect/Schema";
+import { useLocalStorage } from "../../../hooks/useLocalStorage";
+import { RoomSidePanel, RoomProjectColumn as ProjectColumn } from "./RoomPanels";
+import { RoomWorktreePicker } from "./RoomWorktreePicker";
 import { findTask } from "../task/task.logic";
 import { runThreadWorking, runsRevision } from "../task/runs.logic";
 import { useTaskRuns } from "../task/TaskRuns";
@@ -247,6 +250,11 @@ export function RoomBody({
     for (const other of otherReads) other.refresh();
   });
   // Below `lg` one pane shows at a time; both stay mounted so neither loses its place.
+  const [sideCollapsed, setSideCollapsed] = useLocalStorage(
+    `peer.room.side-collapsed.${environmentId}`,
+    false,
+    Schema.Boolean,
+  );
   const [pane, setPane] = useState<"conversation" | "side">("conversation");
   const [side, setSide] = useState<RoomSide>("diff");
   // The tree lists folders from the disk and Jujutsu subscribes to the project's changes, so a room
@@ -295,6 +303,7 @@ export function RoomBody({
   });
 
   const showSide = (next: RoomSide) => {
+    setSideCollapsed(false);
     setSide(next);
     setPane("side");
     setOpened((current) => new Set([...current, next]));
@@ -459,7 +468,7 @@ export function RoomBody({
         <section
           aria-label="Conversation"
           className={cn(
-            "min-h-0 min-w-0 flex-1 flex-col lg:flex lg:max-w-[42rem] lg:border-e lg:border-border",
+            "min-h-0 min-w-0 flex-1 flex-col lg:flex",
             pane === "conversation" ? "flex" : "hidden",
             dropping && "ring-2 ring-ring ring-inset",
           )}
@@ -575,16 +584,16 @@ export function RoomBody({
             </div>
           )}
         </section>
-        <section
-          aria-label={side === "agent" ? (agentLabel ?? SIDE_LABEL.agent) : SIDE_LABEL[side]}
-          className={cn(
-            "min-h-0 min-w-0 flex-1 flex-col lg:flex",
-            pane === "side" ? "flex" : "hidden",
-          )}
+        <RoomSidePanel
+          storageKey={`peer.room.side-width.${environmentId}`}
+          label={side === "agent" ? (agentLabel ?? SIDE_LABEL.agent) : SIDE_LABEL[side]}
+          mobileShown={pane === "side"}
+          collapsed={sideCollapsed}
+          onCollapse={setSideCollapsed}
         >
           <div
             className={cn(
-              "shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 px-4 py-2 lg:flex",
+              "shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border/60 px-4 py-2 lg:flex lg:pe-10",
               projectChoice === null ? "hidden" : "flex",
             )}
           >
@@ -610,7 +619,7 @@ export function RoomBody({
             className={cn(
               "min-h-0 min-w-0 flex-1",
               isProjectSide(side) ? "flex" : "hidden",
-              across !== undefined && "divide-x divide-border overflow-x-auto",
+              across !== undefined && "overflow-x-auto",
             )}
           >
             {across === undefined ? (
@@ -620,6 +629,7 @@ export function RoomBody({
                 <ProjectColumn
                   name={projectState.project.name}
                   colorKey={scopeOfPlace(place)}
+                  storageKey={`peer.room.column.${environmentId}:${scopeOfPlace(place)}`}
                   shown={shown === null || shown === place.project}
                   onDrag={() => {
                     draggedFrom.current = null;
@@ -705,7 +715,7 @@ export function RoomBody({
                 : { across: others.map((other) => scopeOfPlace(other.place)) })}
             />
           </div>
-        </section>
+        </RoomSidePanel>
       </div>
     </div>
   );
@@ -723,39 +733,6 @@ const otherActions = (
     onAddPaths: canPost ? add : undefined,
   };
 };
-
-/** A project of a room across projects, beside the others. */
-function ProjectColumn({
-  name,
-  colorKey,
-  shown,
-  onDrag,
-  children,
-}: {
-  readonly name: string;
-  readonly colorKey: string;
-  /** Left out by the person's choice of one project; it stays mounted, and keeps reading. */
-  readonly shown: boolean;
-  readonly onDrag: () => void;
-  readonly children: ReactNode;
-}) {
-  return (
-    <section
-      aria-label={name}
-      className={cn(
-        "min-h-0 min-w-[min(24rem,100%)] flex-1 basis-0 flex-col",
-        shown ? "flex" : "hidden",
-      )}
-      onDragStartCapture={onDrag}
-    >
-      <h2 className="flex shrink-0 items-center gap-2 border-b border-border/60 px-4 py-2 text-sm font-medium text-foreground">
-        <ProjectMark name={name} colorKey={colorKey} className="size-4" />
-        <span className="min-w-0 truncate">{name}</span>
-      </h2>
-      {children}
-    </section>
-  );
-}
 
 /** A closed chat of the room: nothing runs there, so its words are all there is to read. */
 function ClosedChatRead({
@@ -848,7 +825,13 @@ function OtherChat({
     });
   }, [read.error, read.messages, read.now, read.refresh, reviewRuns, runs.runs, seq]);
   return (
-    <ProjectColumn name={project} colorKey={scopeOfPlace(place)} shown={shown} onDrag={onDrag}>
+    <ProjectColumn
+      name={project}
+      colorKey={scopeOfPlace(place)}
+      storageKey={`peer.room.column.${environmentId}:${scopeOfPlace(place)}`}
+      shown={shown}
+      onDrag={onDrag}
+    >
       <RoomProjectPanes
         environmentId={environmentId}
         status={status}
@@ -920,13 +903,36 @@ function RoomProjectPanes({
   readonly changes: Omit<RoomAgentChangesProps, "environmentId" | "place" | "run" | "jujutsu">;
 }) {
   const { onAddPaths } = changes;
+  const [worktree, setWorktree] = useState<string | undefined>(undefined);
+  const [seenFocus, setSeenFocus] = useState(focus?.ask);
+  if (focus?.ask !== seenFocus) {
+    setSeenFocus(focus?.ask);
+    setWorktree(undefined);
+  }
+  const selected = useRoomDiff({
+    environmentId,
+    place,
+    revision: changes.revision,
+    worktree,
+    enabled: worktree !== undefined,
+  });
+  const inspected = worktree === undefined ? diff : selected;
   return (
     <>
+      {side === "diff" || side === "files" ? (
+        <RoomWorktreePicker
+          projectName={projectState.project.name}
+          diff={inspected.diff ?? diff.diff}
+          selected={worktree}
+          onSelect={setWorktree}
+          onRefresh={inspected.refresh}
+        />
+      ) : null}
       <div className={cn("min-h-0 min-w-0 flex-1 flex-col", side === "diff" ? "flex" : "hidden")}>
         <RoomDiff
-          diff={diff.diff}
-          error={diff.error}
-          onRefresh={diff.refresh}
+          diff={inspected.diff}
+          error={inspected.error}
+          onRefresh={inspected.refresh}
           messages={changes.messages}
           drafting={changes.drafting}
           focus={focus}
@@ -943,12 +949,12 @@ function RoomProjectPanes({
         {opened.has("files") ? (
           <RoomFiles
             environmentId={environmentId}
-            diff={diff.diff}
-            error={diff.error}
+            diff={inspected.diff}
+            error={inspected.error}
             projectName={projectState.project.name}
             canPost={onAddPaths !== undefined}
             revision={changes.revision}
-            onRefresh={diff.refresh}
+            onRefresh={inspected.refresh}
             onAdd={(path) => onAddPaths?.([path])}
           />
         ) : null}

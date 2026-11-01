@@ -80,7 +80,7 @@ export const DIFF = ["diff", "--no-color", "--no-ext-diff", "--find-renames"] as
  * The checkout against the merge base, uncommitted changes included. On the base branch itself that
  * merge base is `origin/<base>`, so an agent working directly on it shows what is not pushed yet.
  */
-async function runDiff(root: string, base: string): Promise<PeerRoomDiff | null> {
+export async function runDiff(root: string, base: string): Promise<PeerRoomDiff | null> {
   const ref = await baseRef(root, base);
   if (ref === null) return null;
   const from = await quiet(root, ["merge-base", ref, "HEAD"]);

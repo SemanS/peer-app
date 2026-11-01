@@ -233,6 +233,7 @@ export const PeerRoomsDiffInput = Schema.Struct({
   ...RoomPlace,
   run: Schema.optional(TrimmedNonEmptyString),
   step: Schema.optional(TrimmedNonEmptyString),
+  worktree: Schema.optional(TrimmedNonEmptyString),
 });
 export type PeerRoomsDiffInput = typeof PeerRoomsDiffInput.Type;
 
@@ -351,12 +352,24 @@ export const PEER_ROOM_DIFF_MAX_BYTES = 512 * 1024;
 /** Where this computer holds the task's work, or else the project; absent without a checkout. */
 const PeerRoomFolder = Schema.optional(Schema.String);
 
+export const PeerRoomWorktree = Schema.Struct({
+  path: Schema.String,
+  name: Schema.String,
+});
+export type PeerRoomWorktree = typeof PeerRoomWorktree.Type;
+
+const WorktreeListing = {
+  worktrees: Schema.optional(Schema.Array(PeerRoomWorktree)),
+  worktreesError: Schema.optional(Schema.String),
+};
+
 export const PeerRoomDiff = Schema.Union([
   Schema.Struct({
     state: Schema.Literal("here"),
     folder: PeerRoomFolder,
+    ...WorktreeListing,
     /** This computer's run on the task, a ref fetched from the remote, or a pinned moment. */
-    source: Schema.Literals(["run", "pushed", "snapshot"]),
+    source: Schema.Literals(["run", "pushed", "snapshot", "worktree"]),
     base: Schema.String,
     head: Schema.String,
     patch: Schema.String,
@@ -365,6 +378,7 @@ export const PeerRoomDiff = Schema.Union([
   Schema.Struct({
     state: Schema.Literal("notHere"),
     folder: PeerRoomFolder,
+    ...WorktreeListing,
     reason: Schema.String,
     /** The paths the Hub knows; they still take comments on a path. */
     files: Schema.Array(Schema.String),

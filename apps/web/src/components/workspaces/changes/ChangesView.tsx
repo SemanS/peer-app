@@ -11,7 +11,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { HistoryIcon } from "lucide-react";
 import { useState } from "react";
 
-import { PullRequestGlyph } from "../../pullRequest/pullRequestIcons";
 import { useClientSettings } from "../../../hooks/useSettings";
 import { formatShortTimestamp } from "../../../timestampFormat";
 import { useRelativeTimeTick } from "../../settings/settingsLayout";
@@ -123,7 +122,6 @@ export function ChangesView({
       : changeInspector(selectedRow, ready.view.changes, context);
   const selectedTask = selectedRow === undefined ? undefined : taskOfChange(node, selectedRow);
   const startAgent = () => void navigate({ to: "/work" });
-  const hasForecast = plugins.some((plugin) => plugin.id === "forecast");
   const hasJujutsu = plugins.some((plugin) => plugin.id === "jujutsu");
 
   return (
@@ -136,29 +134,15 @@ export function ChangesView({
           }}
           page="Changes"
           actions={
-            hasForecast || hasJujutsu ? (
-              <>
-                {hasJujutsu ? (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={() => void navigate({ href: `/operations/${workspace}/${project}` })}
-                  >
-                    <HistoryIcon aria-hidden />
-                    Operations
-                  </Button>
-                ) : null}
-                {hasForecast ? (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={() => void navigate({ href: `/integration/${workspace}/${project}` })}
-                  >
-                    <PullRequestGlyph.merged aria-hidden />
-                    Integration preview
-                  </Button>
-                ) : null}
-              </>
+            hasJujutsu ? (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => void navigate({ href: `/operations/${workspace}/${project}` })}
+              >
+                <HistoryIcon aria-hidden />
+                Operations
+              </Button>
             ) : undefined
           }
         />
@@ -246,9 +230,6 @@ export function ChangesView({
                       me !== null &&
                       selectedRow.author.email.toLowerCase() === me.toLowerCase()
                     }
-                    taskId={selectedTask?.id}
-                    plugins={plugins}
-                    slot={{ environmentId, status, workspace, project: state }}
                     clock={clock}
                     canReview={selectedTask !== undefined}
                     onReview={() => {

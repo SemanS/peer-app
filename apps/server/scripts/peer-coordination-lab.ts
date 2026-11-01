@@ -66,14 +66,13 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //      person marks KRK-1 done while no agent is on KRK-2: Bob's status lists the agreement as due for him,
 //      and Handled closes it. The coordination logs hold sizes and counts, never the words. It needs a Hub
 //      that serves `agreements`.
-//  23. Jujutsu (LAB_VCS=jj only; peer-lab/jujutsu.ts): seven simulated steps, each in task checkouts of its own and
+//  23. Jujutsu (LAB_VCS=jj only; peer-lab/jujutsu.ts): six simulated steps, each in task checkouts of its own and
 //      read from the logs and the repositories. follow-local: an amend of the change an agent builds on moves its
 //      change, and it hears so once. overtaken: an edit not yet snapshotted when a rewrite arrives ends in one
 //      version, with the agent told once. follow-remote: a force-push is fetched at the next step after 30 s.
 //      protect: jj refuses a squash into another agent's change, the agent hears whose it is, and
 //      `--ignore-immutable` is stopped. undo: a person's undo of a restore leaves one version with the file.
-//      check: two teammates' branches merge clean and the forecast's check fails with "1250 points". push: a push
-//      that carries an unlanded change stops once with the push notice and the repeat runs.
+//      push: a push that carries an unlanded change stops once with the push notice and the repeat runs.
 //
 // It prints what each agent was told and leaves both computers' coordination logs.
 //
@@ -235,7 +234,6 @@ import {
   ORCHESTRATION_PROTOCOL_VERSION,
   PEER_ACCEPTANCE_METHODS,
   PEER_TEST_REPORTS_METHODS,
-  PEER_FORECAST_METHODS,
   PEER_JUJUTSU_METHODS,
   PEER_ROOM_SESSION_ENDED,
   PEER_ROOMS_METHODS,
@@ -3041,27 +3039,6 @@ function jujutsuKit(ana: Computer, bob: Computer): JujutsuKit {
           const work = synced.workspaces[0]?.projects.find((p) => p.project.id === "lab")?.work;
           return work?.threads.some((one) => one.branch === branch) === true;
         });
-    },
-    forecast: {
-      configure: (computer, input) =>
-        rpc(full(computer).client[PEER_FORECAST_METHODS.peerForecastConfigure](input)),
-      until: async (computer, ready, milliseconds) => {
-        const stop = new AbortController();
-        const timer = setTimeout(() => stop.abort(), milliseconds);
-        try {
-          const found = await Effect.runPromise(
-            full(computer)
-              .client[PEER_FORECAST_METHODS.peerForecastSubscribe]({})
-              .pipe(Stream.filter(ready), Stream.runHead),
-            { signal: stop.signal },
-          );
-          return found._tag === "None" ? undefined : found.value;
-        } catch {
-          return undefined;
-        } finally {
-          clearTimeout(timer);
-        }
-      },
     },
     operations: {
       preview: (computer, operation) =>
@@ -8643,7 +8620,7 @@ const roomsRealProgram = Effect.gen(function* () {
       JSON.stringify(
         events(ana)
           .slice(ended)
-          .filter((entry) => !["sync", "forecast.round", "forecast.git"].includes(entry.event))
+          .filter((entry) => entry.event !== "sync")
           .map((entry) => [entry.t, entry.event, entry.hookEvent ?? ""]),
       ),
     );

@@ -7,7 +7,6 @@ import { recipesMobilePlugin } from "./recipes";
 
 import { metricsMobilePlugin } from "./metrics";
 import { needsYouMobilePlugin } from "./needs-you";
-import { forecastMobilePlugin } from "./forecast";
 import { handoffMobilePlugin } from "./handoff";
 import { resourcesMobilePlugin } from "./resources";
 import { dependenciesMobilePlugin } from "./dependencies";
@@ -63,7 +62,6 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   needsYouMobilePlugin,
   resourcesMobilePlugin,
   recipesMobilePlugin,
-  forecastMobilePlugin,
 
   metricsMobilePlugin,
   digestMobilePlugin,

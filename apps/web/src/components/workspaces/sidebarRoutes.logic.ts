@@ -34,7 +34,6 @@ const TASK_SCREENS: ReadonlySet<string> = new Set([
   "agent",
   "changes",
   "operations",
-  "integration",
 ]);
 
 /** The first path segments of screens that belong to neither view: settings, usage, pull requests… */
@@ -102,9 +101,15 @@ export function routeForView(input: {
   return remembered === undefined ? { kind: "default" } : { kind: "remembered", href: remembered };
 }
 
+/** Screens this app no longer has: a person's last Work screen may still name one. */
+const GONE_SCREENS: ReadonlySet<string> = new Set(["integration"]);
+
 /** A remembered address worth going back to: a path on this app, nothing that leaves it. */
 function sanitizeRoute(value: unknown): string | undefined {
-  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//")
+  return typeof value === "string" &&
+    value.startsWith("/") &&
+    !value.startsWith("//") &&
+    !GONE_SCREENS.has(value.split("/")[1] ?? "")
     ? value
     : undefined;
 }

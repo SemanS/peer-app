@@ -40,7 +40,6 @@ describe("the web plugin registry", () => {
       "settle",
       "resources",
       "recipes",
-      "forecast",
       "metrics",
       "usage",
       "digest",

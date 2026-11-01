@@ -6,7 +6,6 @@ import {
   boardSearchPlaceholder,
   computerKinds,
   experimentStartStep,
-  forecastTeammatesWords,
   impactIndexWords,
   issueKeyHint,
   launchLine,
@@ -137,7 +136,6 @@ describe("settings without a thread", () => {
     const jjOnly = computerKinds(computer([[repo("app", "ready", "jj")]]));
     expect(jjOnly).toEqual(["jj"]);
     expect(impactIndexWords(jjOnly).title).toBe("Index new Peer task workspaces");
-    expect(forecastTeammatesWords(jjOnly).title).toBe("Forecast teammates’ bookmarks");
     expect(experimentStartStep(jjOnly)).toContain("each on a bookmark of its own");
   });
 
@@ -146,11 +144,7 @@ describe("settings without a thread", () => {
     expect(computerKinds(computer([[repo("app", "missing")]]))).toEqual(["git"]);
     const both = computerKinds(computer([[repo("app", "ready", "jj")], [repo("site", "ready")]]));
     expect(impactIndexWords(both).title).toBe("Index new Peer task worktrees and jj workspaces");
-    expect(forecastTeammatesWords(both).title).toBe("Forecast teammates’ branches and bookmarks");
     expect(experimentStartStep(both)).toContain("each on a branch or bookmark of its own");
-    expect(forecastTeammatesWords(["git"]).description).toBe(
-      "Fetch only the named branches from origin. Forecasts use committed tips and stay on this computer.",
-    );
   });
 
   it("take a project's kind from its checkouts here: jj when one of them is", () => {

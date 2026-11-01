@@ -249,7 +249,7 @@ describe("what plugins add to hook answers", () => {
 describe("a step that ended in an error", () => {
   it("reaches the plugins' postTool with what git sees it changed, in an answer to its own event", async () => {
     const heard: Array<PeerToolContext> = [];
-    const listening = plugin("forecast", {
+    const listening = plugin("changes", {
       hooks: {
         postTool: (ctx) =>
           Effect.sync(() => {

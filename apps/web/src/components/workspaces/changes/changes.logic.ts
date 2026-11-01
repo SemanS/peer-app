@@ -24,7 +24,7 @@ export const changesRouteKey = (workspace: string, project: string): string =>
 
 /**
  * Changes that hold a conflict or two versions: the navigation row's count, as the Hub-facing
- * status counts them. Forecast results never count here (they live on the preview).
+ * status counts them.
  */
 export function needAttentionOf(
   status: { readonly changes?: PeerChangesStatus | undefined },

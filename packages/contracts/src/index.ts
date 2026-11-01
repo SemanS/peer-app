@@ -75,7 +75,6 @@ export * from "./clientRpcPermissions.ts";
 export * from "./peerHub.ts";
 export * from "./peer/plugin.ts";
 export * from "./peer/registry.ts";
-export * from "./peer/forecast.ts";
 export * from "./peer/impact.ts";
 export * from "./peer/plans.ts";
 export * from "./peer/plans.rpc.ts";

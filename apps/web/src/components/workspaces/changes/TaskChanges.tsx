@@ -1,7 +1,5 @@
 import { taskStack, type TaskStackEntry } from "@t3tools/client-runtime/peer/changes";
 import { jujutsuProblem } from "@t3tools/client-runtime/peer/jujutsu";
-import { inactivePluginReason } from "@t3tools/client-runtime/peer/plugins";
-import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { PullRequestGlyph } from "../../pullRequest/pullRequestIcons";
@@ -119,7 +117,6 @@ export function TaskChanges({
       ) : (
         <StackBody
           environmentId={environmentId}
-          status={status}
           workspace={workspace}
           project={projectId}
           task={task}
@@ -133,22 +130,19 @@ export function TaskChanges({
 
 function StackBody({
   environmentId,
-  status,
   workspace,
   project,
   task,
   name,
   stack,
-}: Pick<TaskSlotProps, "environmentId" | "status" | "workspace" | "task"> & {
+}: Pick<TaskSlotProps, "environmentId" | "workspace" | "task"> & {
   readonly project: string;
   readonly name: string;
   readonly stack: ReturnType<typeof taskStack>;
 }) {
-  const navigate = useNavigate();
   const ids = stack.entries.map((entry) => entry.change.changeId);
   const target = stopTarget(stack);
   const landed = stack.landed;
-  const forecast = inactivePluginReason(status, "forecast") === null;
   const lines = stack.entries.map((entry) => stackLine(entry, ids));
   return (
     <div className="flex flex-col gap-4">
@@ -222,34 +216,6 @@ function StackBody({
                 </span>
               </div>
             </div>
-          )}
-          {forecast ? (
-            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <PullRequestGlyph.merged
-                aria-hidden
-                className="size-4.5 shrink-0 text-muted-foreground"
-              />
-              <div className="flex min-w-0 flex-[1_1_16rem] flex-col gap-0.5">
-                <span className="text-sm font-semibold text-foreground">
-                  Whether it still works with the other changes
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  Merge checks run on the integration preview, as advice. They never stop a push.
-                </span>
-              </div>
-              <Button
-                size="xs"
-                variant="outline"
-                onClick={() => void navigate({ href: `/integration/${workspace}/${project}` })}
-              >
-                Integration preview
-              </Button>
-            </div>
-          ) : (
-            <p className="px-4 py-3 text-sm text-muted-foreground">
-              Turn on Merge conflict forecast to check whether it still works with the other
-              changes.
-            </p>
           )}
         </div>
       </div>

@@ -8,8 +8,7 @@ import { TaskChanges } from "./TaskChanges";
 /**
  * Changes: everyone's Jujutsu changes in flight as one graph. The project's navigation row opens
  * the page and counts the changes that hold a conflict or two versions; the task page lists the
- * task's stack and its review shows the versions. Merge-check results are forecast's, in the
- * inspector's own slot, and never count here.
+ * task's stack and its review shows the versions.
  */
 export const changesWebPlugin: PeerWebPlugin = {
   id: "changes",

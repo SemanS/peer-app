@@ -1,16 +1,6 @@
-// @effect-diagnostics nodeBuiltinImport:off - the check script runs on trees in a temporary directory.
-import * as NodeFS from "node:fs";
-import * as NodeOS from "node:os";
-import * as NodePath from "node:path";
-
-import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
-  POINTS_CHECK,
-  SHOP_BASE,
-  SHOP_CENTS,
-  SHOP_POINTS,
-  checkCommand,
   chosenSteps,
   convergedProblems,
   jjHomeEnv,
@@ -21,7 +11,6 @@ import {
   parseRows,
   protectedProblems,
   pushNoticeProblems,
-  runPointsCheck,
   saying,
   stopGeneralProblems,
   stopNamedProblems,
@@ -30,10 +19,10 @@ import {
 } from "./jujutsu.ts";
 
 describe("which steps run", () => {
-  it("runs all seven unless some are named", () => {
-    expect(chosenSteps(undefined)).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(chosenSteps("")).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    expect(chosenSteps("all")).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  it("runs all six unless some are named", () => {
+    expect(chosenSteps(undefined)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(chosenSteps("")).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(chosenSteps("all")).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it("keeps the named steps once, in order", () => {
@@ -41,9 +30,9 @@ describe("which steps run", () => {
   });
 
   it("refuses a step that does not exist", () => {
-    expect(() => chosenSteps("0")).toThrow(/steps 1 to 7/);
-    expect(() => chosenSteps("2,8")).toThrow(/steps 1 to 7/);
-    expect(() => chosenSteps("two")).toThrow(/steps 1 to 7/);
+    expect(() => chosenSteps("0")).toThrow(/steps 1 to 6/);
+    expect(() => chosenSteps("2,8")).toThrow(/steps 1 to 6/);
+    expect(() => chosenSteps("two")).toThrow(/steps 1 to 6/);
   });
 });
 
@@ -194,53 +183,5 @@ describe("the texts of the design", () => {
     expect(
       undoneProblems(undone, { person: "Ana", step: "restore into commit ac8515ad" }),
     ).toHaveLength(1);
-  });
-});
-
-describe("the hidden-dependency check", () => {
-  let directory = "";
-  beforeAll(() => {
-    directory = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "peer-lab-jj-test-"));
-    NodeFS.writeFileSync(NodePath.join(directory, "check.mjs"), POINTS_CHECK);
-  });
-  afterAll(() => NodeFS.rmSync(directory, { recursive: true, force: true }));
-
-  const tree = (name: string, ...layers: ReadonlyArray<Readonly<Record<string, string>>>) => {
-    const root = NodePath.join(directory, name);
-    for (const layer of layers)
-      for (const [path, text] of Object.entries(layer)) {
-        NodeFS.mkdirSync(NodePath.dirname(NodePath.join(root, path)), { recursive: true });
-        NodeFS.writeFileSync(NodePath.join(root, path), text);
-      }
-    NodeFS.mkdirSync(root, { recursive: true });
-    return root;
-  };
-  const script = () => NodePath.join(directory, "check.mjs");
-
-  it("passes on Bob's points against euros", () => {
-    expect(runPointsCheck(script(), tree("euros", SHOP_BASE, SHOP_POINTS))).toEqual({
-      ok: true,
-      output: "✔ loyalty points: 12.50 € gives 12 points",
-    });
-  });
-
-  it("fails on the merge of both, with 1250 points", () => {
-    expect(runPointsCheck(script(), tree("merged", SHOP_BASE, SHOP_CENTS, SHOP_POINTS))).toEqual({
-      ok: false,
-      output: "✖ loyalty points: 12.50 € gives 1250 points, expected 12",
-    });
-  });
-
-  it("fails closed when there is nothing to check", () => {
-    const empty = runPointsCheck(script(), tree("empty"));
-    expect(empty.ok).toBe(false);
-    expect(empty.output).toMatch(/^✖ /);
-  });
-
-  it("is a command a computer can keep, within the forecast's 200 characters", () => {
-    expect(checkCommand("/tmp/lab/points-check.mjs")).toBe("node /tmp/lab/points-check.mjs");
-    expect(
-      checkCommand(`/var/folders/xl/${"x".repeat(60)}/T/peer-lab-AbCdEf/points-check.mjs`).length,
-    ).toBeLessThan(200);
   });
 });

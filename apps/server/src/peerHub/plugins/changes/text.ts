@@ -4,7 +4,7 @@
  * an index (at most 1,500 characters), and the session's start line (at most 200). What teammates
  * wrote (subjects, task keys, names) is cleaned of what a reader cannot see and of tags that could
  * pose as Peer's or the harness's (`peerText.ts`). The index is columns of facts with the commands
- * to read more; it carries no forecast result.
+ * to read more.
  *
  * @module peerHub/plugins/changes/text
  */

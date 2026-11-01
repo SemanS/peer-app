@@ -84,20 +84,20 @@ describe("workspace sections", () => {
       id: "impact",
       alwaysWorkspaceSections: [{ key: "settings", place: "end", Component: Nothing }],
     };
-    const forecast: PeerMobilePlugin = {
-      id: "forecast",
-      alwaysWorkspaceSections: [{ key: "forecast", place: "tasks", Component: Nothing }],
+    const changes: PeerMobilePlugin = {
+      id: "changes",
+      alwaysWorkspaceSections: [{ key: "changes", place: "tasks", Component: Nothing }],
     };
-    const registry = [forecast, impact];
-    const listed = status([plugin("impact", false), plugin("forecast", false)]);
+    const registry = [changes, impact];
+    const listed = status([plugin("impact", false), plugin("changes", false)]);
     expect(workspaceSectionsAt(selectPeerPlugins(registry, listed), "end")).toEqual([]);
     expect(alwaysWorkspaceSectionsAt(registry, listed, "end").map((s) => s.key)).toEqual([
       "always:impact:settings",
     ]);
     expect(alwaysWorkspaceSectionsAt(registry, listed, "tasks").map((s) => s.key)).toEqual([
-      "always:forecast:forecast",
+      "always:changes:changes",
     ]);
-    expect(alwaysWorkspaceSectionsAt(registry, status([plugin("forecast")]), "end")).toEqual([]);
+    expect(alwaysWorkspaceSectionsAt(registry, status([plugin("changes")]), "end")).toEqual([]);
     expect(alwaysWorkspaceSectionsAt(registry, status(), "end")).toEqual([]);
     expect(alwaysWorkspaceSectionsAt(registry, null, "end")).toEqual([]);
   });

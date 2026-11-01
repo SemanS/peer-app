@@ -11,8 +11,7 @@
  *   4. protect        jj refuses B's squash into A's change, B hears whose it is, and
  *                     `--ignore-immutable` is stopped.
  *   5. undo           B's restore, then A's rewrite; a person's undo leaves one version with B's file.
- *   6. check          The hidden-dependency pair merges clean and the forecast's check fails.
- *   7. push           B's `jj git push` of work on an unlanded change stops once, then runs.
+ *   6. push           B's `jj git push` of work on an unlanded change stops once, then runs.
  *
  * `LAB_JJ_STEPS=2,4,6` runs only those (and, with LAB_JJ_ONLY=1, without the rest of the lab).
  * Everything the steps need from the lab script arrives in a `JujutsuKit`, so this module imports
@@ -23,7 +22,7 @@ import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
-import type { PeerForecast, UndoPreview, UndoResult } from "@t3tools/contracts";
+import type { UndoPreview, UndoResult } from "@t3tools/contracts";
 
 import { plainSession, toldTexts, type HookOut, type LabEvent } from "./told.ts";
 
@@ -33,7 +32,6 @@ export const STEP_NAMES = [
   "follow-remote",
   "protect",
   "undo",
-  "check",
   "push",
 ] as const;
 
@@ -72,72 +70,6 @@ export const ORDER_V2 = `${ORDER_V1}${TO_EUROS}\n`;
 export const LOYALTY_V1 =
   'import { orderTotal } from "./order.js";\nexport const points = orderTotal;\n';
 export const LOYALTY_V2 = `${LOYALTY_V1}export const bonus = 2;\n`;
-
-/** The shop of step 6 as its base finds it: `orderTotal` returns euros. */
-export const SHOP_BASE: Readonly<Record<string, string>> = {
-  "shop/orders.js": [
-    "/** An order's total in euros, rounded to cents: 12.50 is twelve euros fifty. */",
-    "export const orderTotal = (order) =>",
-    "  Math.round(order.lines.reduce((sum, line) => sum + line.price * line.qty, 0) * 100) / 100;",
-    "",
-  ].join("\n"),
-};
-/** Ana's change: the same name, integer cents. */
-export const SHOP_CENTS: Readonly<Record<string, string>> = {
-  "shop/orders.js": [
-    "/** An order's total in integer cents: 12.50 is 1250. */",
-    "export const orderTotal = (order) =>",
-    "  order.lines.reduce((sum, line) => sum + Math.round(line.price * 100) * line.qty, 0);",
-    "",
-  ].join("\n"),
-};
-/** Bob's change: a point for every whole euro, written against euros in a new file. */
-export const SHOP_POINTS: Readonly<Record<string, string>> = {
-  "shop/loyalty.js": [
-    'import { orderTotal } from "./orders.js";',
-    "",
-    "/** One loyalty point for every whole euro of an order's total. */",
-    "export const loyaltyPoints = (order) => Math.floor(orderTotal(order));",
-    "",
-  ].join("\n"),
-};
-
-/**
- * The check command's script, run in the throwaway change of a pair (its working directory is that
- * change's tree): 12.50 euros earn 12 points. It prints what the forecast then carries.
- */
-export const POINTS_CHECK = [
-  'import { pathToFileURL } from "node:url";',
-  'import { join } from "node:path";',
-  "const load = (file) => import(pathToFileURL(join(process.cwd(), file)).href);",
-  "try {",
-  '  const { loyaltyPoints } = await load("shop/loyalty.js");',
-  "  const order = { lines: [{ price: 12.5, qty: 1 }] };",
-  "  const points = loyaltyPoints(order);",
-  "  if (points !== 12) {",
-  "    console.log(`✖ loyalty points: 12.50 € gives ${points} points, expected 12`);",
-  "    process.exit(1);",
-  "  }",
-  '  console.log("✔ loyalty points: 12.50 € gives 12 points");',
-  "} catch (error) {",
-  '  console.log(`✖ ${error instanceof Error ? error.message.split("\\n")[0] : error}`);',
-  "  process.exit(1);",
-  "}",
-  "",
-].join("\n");
-
-/** The command a computer's forecast runs; the script is outside every tree. */
-export const checkCommand = (script: string) => `node ${script}`;
-
-/** Runs the check script on a tree: whether it passed and what it printed. */
-export function runPointsCheck(script: string, tree: string) {
-  const ran = NodeChildProcess.spawnSync(process.execPath, [script], {
-    cwd: tree,
-    encoding: "utf8",
-    timeout: 20_000,
-  });
-  return { ok: ran.status === 0, output: ran.stdout.trim() };
-}
 
 // What the repositories hold
 
@@ -370,7 +302,7 @@ export interface JujutsuKit {
   /** jj as the lab's own identity, in `cwd`. */
   jj(cwd: string, ...args: string[]): string;
   git(cwd: string, ...args: string[]): string;
-  /** The Hub's view of other people's threads, for the forecast of step 6. */
+  /** The Hub's view of other people's threads. */
   reportThread(input: {
     readonly person: "ana" | "bob";
     readonly environment: string;
@@ -379,18 +311,6 @@ export interface JujutsuKit {
     /** The Hub task's id or key the thread works on. */
     readonly task?: string;
   }): Promise<void>;
-  forecast: {
-    configure(
-      computer: LabComputer,
-      input: { readonly teammates: boolean; readonly check: string },
-    ): Promise<PeerForecast>;
-    /** The first forecast the computer's Peer publishes that satisfies `ready`. */
-    until(
-      computer: LabComputer,
-      ready: (forecast: PeerForecast) => boolean,
-      milliseconds: number,
-    ): Promise<PeerForecast | undefined>;
-  };
   operations: {
     preview(computer: LabComputer, operation: string): Promise<UndoPreview>;
     undo(computer: LabComputer, operation: string): Promise<UndoResult>;
@@ -923,151 +843,6 @@ async function undo(kit: JujutsuKit) {
 
 // 6. check
 
-/** Two branches of the shop on origin, from a base that has `orderTotal` in euros. */
-function pushShop(kit: JujutsuKit, keys: { a: string; b: string }) {
-  const scratch = NodePath.join(kit.directory, `shop-${keys.a}`);
-  kit.git(kit.directory, "clone", "--quiet", kit.origin, scratch);
-  const put = (files: Readonly<Record<string, string>>) => {
-    for (const [path, text] of Object.entries(files)) {
-      NodeFS.mkdirSync(NodePath.dirname(NodePath.join(scratch, path)), { recursive: true });
-      NodeFS.writeFileSync(NodePath.join(scratch, path), text);
-    }
-  };
-  const base = `peer-lab/${keys.a}-base`;
-  kit.git(scratch, "checkout", "--quiet", "-b", base);
-  put(SHOP_BASE);
-  kit.git(scratch, "add", ".");
-  kit.git(scratch, "commit", "--quiet", "-m", "shop: totals in euros");
-  const names = { a: `feature/${keys.a}-cents`, b: `feature/${keys.b}-points` };
-  for (const [side, files, message] of [
-    ["a", SHOP_CENTS, `${keys.a}: orderTotal returns integer cents`],
-    ["b", SHOP_POINTS, `${keys.b}: loyalty points`],
-  ] as const) {
-    kit.git(scratch, "checkout", "--quiet", "-b", names[side], base);
-    put(files);
-    kit.git(scratch, "add", ".");
-    kit.git(scratch, "commit", "--quiet", "-m", message);
-    kit.git(scratch, "push", "--quiet", "origin", names[side]);
-  }
-  return names;
-}
-
-/** What nobody's work may change while a check runs: the working copies and the bookmarks. */
-const standing = (kit: JujutsuKit, cwd: string) =>
-  kit
-    .jj(
-      cwd,
-      "log",
-      ...READ,
-      "-r",
-      "working_copies() | bookmarks()",
-      "-T",
-      'commit_id ++ " " ++ local_bookmarks ++ "\\n"',
-    )
-    .split("\n")
-    .filter((line) => line !== "")
-    .toSorted()
-    .join("\n");
-
-async function checkPair(kit: JujutsuKit) {
-  const { ana } = kit;
-  const keys = taskKeys(6);
-  const names = pushShop(kit, keys);
-  const script = NodePath.join(kit.directory, "points-check.mjs");
-  NodeFS.writeFileSync(script, POINTS_CHECK);
-  kit.check(
-    !runPointsCheck(script, kit.directory).ok,
-    "the check script fails where there is no shop at all (it fails closed)",
-  );
-  await kit.reportThread({
-    person: "ana",
-    environment: "lab-env-ana",
-    branch: names.a,
-    title: "orderTotal returns integer cents",
-  });
-  await kit.reportThread({
-    person: "bob",
-    environment: "lab-env-bob",
-    branch: names.b,
-    title: "Loyalty points",
-  });
-  const before = standing(kit, ana.checkout);
-  const configured = await kit.forecast.configure(ana, {
-    teammates: true,
-    check: checkCommand(script),
-  });
-  kit.check(
-    configured.check === checkCommand(script),
-    "Ana sets the check command on her computer",
-  );
-
-  const isPair = (forecast: PeerForecast) =>
-    forecast.pairs.some(
-      (pair) =>
-        [pair.a.branch, pair.b.branch].toSorted().join() === [names.a, names.b].toSorted().join() &&
-        pair.check !== undefined,
-    );
-  const forecast = await kit.forecast.until(ana, isPair, 180_000);
-  kit.check(
-    forecast !== undefined,
-    "the forecast pairs the two teammates' branches and runs the check",
-  );
-  const pair = forecast.pairs.find(
-    (one) =>
-      [one.a.branch, one.b.branch].toSorted().join() === [names.a, names.b].toSorted().join(),
-  )!;
-  kit.say("the pair", JSON.stringify({ files: pair.files, check: pair.check }));
-  kit.check(
-    pair.files.length === 0 && pair.lines === undefined,
-    "the merge is clean: no file conflicts",
-  );
-  kit.check(pair.check?.state === "fails", `and the check fails (${pair.check?.state})`);
-  kit.check(
-    pair.check?.output?.includes("1250 points") === true &&
-      pair.check.output.includes("expected 12"),
-    `with the failing output: ${pair.check?.output}`,
-  );
-  kit.check(
-    pair.a.source === "pushed" && pair.b.source === "pushed",
-    "both sides were read from their pushed bookmarks",
-  );
-
-  const steps = operationsBy(operationsIn(kit, ana.checkout), "peer·check");
-  kit.check(
-    steps.length >= 2,
-    `the operation log shows the check's steps under peer·check (${steps.map((step) => step.description).join("; ")})`,
-  );
-  kit.check(
-    rows(kit, ana.checkout, 'description(substring:"peer check")').length === 0,
-    "and the throwaway change was abandoned",
-  );
-  kit.check(standing(kit, ana.checkout) === before, "no working copy and no bookmark changed");
-
-  // The same tree with Ana's change alone passes nothing it should not: the script is the judge.
-  const tree = NodePath.join(kit.directory, "merged-tree");
-  NodeFS.rmSync(tree, { recursive: true, force: true });
-  kit.git(kit.directory, "clone", "--quiet", kit.origin, tree);
-  kit.git(tree, "checkout", "--quiet", names.a);
-  kit.git(
-    tree,
-    "-c",
-    "user.name=lab",
-    "-c",
-    "user.email=lab@acme.test",
-    "merge",
-    "--quiet",
-    "--no-edit",
-    `origin/${names.b}`,
-  );
-  const direct = runPointsCheck(script, tree);
-  kit.check(
-    !direct.ok && direct.output.includes("1250 points"),
-    "run by hand on the merged tree, the script says the same",
-  );
-}
-
-// 7. push
-
 async function push(kit: JujutsuKit) {
   const keys = taskKeys(7);
   const a = await pushedChange(kit, keys.a, "orderTotal returns integer cents");
@@ -1127,7 +902,6 @@ const RUNNERS: ReadonlyArray<(kit: JujutsuKit) => Promise<void>> = [
   followRemote,
   protect,
   undo,
-  checkPair,
   push,
 ];
 

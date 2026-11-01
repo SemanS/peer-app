@@ -171,6 +171,12 @@ describe("sanitizeRoutes", () => {
     expect(sanitizeRoutes(null)).toEqual({});
     expect(sanitizeRoutes("/work")).toEqual({});
   });
+
+  it("drops an address of a screen this app no longer has", () => {
+    expect(sanitizeRoutes({ work: "/integration/acme/app", lastView: "work" })).toEqual({
+      lastView: "work",
+    });
+  });
 });
 
 describe("activeRouteKey", () => {
@@ -211,7 +217,7 @@ describe("activeRouteKey", () => {
 
   it("keeps the Changes row lit on Changes and on the pages that open from it", () => {
     const project = { workspace: "acme", project: "app" };
-    for (const page of ["changes", "operations", "integration"]) {
+    for (const page of ["changes", "operations"]) {
       expect(activeRouteKey(`/${page}/acme/app`, project)).toBe("changes:acme:app");
       expect(viewOfPath(`/${page}/acme/app`)).toBe("work");
     }

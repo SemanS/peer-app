@@ -146,7 +146,6 @@
         // Baseline for Peer's own web code, taken when this check first ran on it. Named
         // file by file so a new unused export in any other Peer file still fails.
         "src/components/workspaces/WorkScopePicker.tsx": ["exports"],
-        "src/components/workspaces/forecast/integration.logic.ts": ["exports"],
         "src/components/workspaces/handoff/Handoff.tsx": ["exports"],
         "src/components/workspaces/handoff/handoffPresentation.ts": ["exports"],
         "src/components/workspaces/herdr/HerdrRuntimeSettings.logic.ts": ["exports"],

@@ -26,7 +26,7 @@ describe("the index agents read", () => {
     assert.isTrue(text.endsWith('peer ask <task> "…"'));
   });
 
-  it("makes a teammate's text harmless and shows no forecast result", () => {
+  it("makes a teammate's text harmless", () => {
     const text = indexText({
       project: "Ordering demo",
       rows: [

@@ -139,22 +139,22 @@ describe("what plugins add to the Team page", () => {
     ],
   };
   const other: PeerWebPlugin = {
-    id: "forecast",
-    teamTaskFacts: () => ({ id: "plans", text: "Forecast: clean", tone: "neutral" }),
+    id: "changes",
+    teamTaskFacts: () => ({ id: "stack", text: "Changes: clean", tone: "neutral" }),
   };
 
   it("carries one fact of a plugin on the task's row, and lets two plugins use one id", () => {
     const facts = teamTaskFactsOf([plans, other], row);
     expect(facts.map(({ key, fact }) => [key, fact.text])).toEqual([
       ["dependencies/plans", "Plans: meets VL11"],
-      ["forecast/plans", "Forecast: clean"],
+      ["changes/stack", "Changes: clean"],
     ]);
     // A task the plugin has nothing to say of gets no fact of it.
     expect(
       teamTaskFactsOf([plans, other], { ...row, task: { ...row.task, id: "vl7" } }).map(
         ({ key }) => key,
       ),
-    ).toEqual(["forecast/plans"]);
+    ).toEqual(["changes/stack"]);
   });
 
   it("lists the signals of the active plugins after one another, in the registry's order", () => {
@@ -167,9 +167,9 @@ describe("what plugins add to the Team page", () => {
     const registry = [plans, other];
     const active = selectPeerPlugins(
       registry,
-      status([plugin("forecast"), plugin("dependencies", false)]),
+      status([plugin("changes"), plugin("dependencies", false)]),
     );
-    expect(teamTaskFactsOf(active, row).map(({ key }) => key)).toEqual(["forecast/plans"]);
+    expect(teamTaskFactsOf(active, row).map(({ key }) => key)).toEqual(["changes/stack"]);
     expect(teamPluginSignalsOf(active, input)).toEqual([]);
   });
 });

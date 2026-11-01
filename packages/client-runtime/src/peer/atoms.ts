@@ -9,7 +9,6 @@ import { createPeerAgreementsAtoms } from "./agreements.ts";
 import { createPeerChangesAtoms } from "./changes.ts";
 import { createPeerJujutsuAtoms } from "./jujutsu.ts";
 import { createPeerHandoffAtoms } from "./handoff.ts";
-import { createPeerForecastAtoms } from "../peerForecast.ts";
 import { createPeerDependencyAtoms } from "./dependencies.ts";
 import type { Atom } from "effect/reactivity";
 
@@ -46,7 +45,6 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerMetricsAtoms(runtime),
     ...createPeerUsageAtoms(runtime),
     peerResources: createResourcesEnvironmentAtoms(runtime),
-    ...createPeerForecastAtoms(runtime),
     peerAnnouncements: createAnnouncementsEnvironmentAtoms(runtime),
     ...createPeerHerdrAtoms(runtime),
     ...createPeerJujutsuAtoms(runtime),

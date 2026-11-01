@@ -7,7 +7,6 @@ import type {
   ContextMenuItem,
   EnvironmentId,
   PeerAgentRequest,
-  PeerForecastPair,
   PeerHubStatus,
   PeerPluginId,
   PeerProjectState,
@@ -70,35 +69,6 @@ export interface TaskSlotProps extends PeerSlotProps {
   readonly task: WorkTaskNode;
   /** The checkout is on jj, so a section speaks before any of the task's threads does. */
   readonly onJujutsu?: boolean;
-}
-
-/** The change selected in the Changes inspector, as much of it as a plugin's section needs. */
-export interface SelectedChange {
-  readonly changeId: string;
-  /** The task the change is on; undefined for a change on none. */
-  readonly taskId: string | undefined;
-  readonly bookmarks: ReadonlyArray<string>;
-  /** Whether it is this person's own change, not a teammate's. */
-  readonly mine: boolean;
-}
-
-/** What a section of the Changes inspector gets: the project, and the change selected in it. */
-export interface ChangeSlotProps extends PeerSlotProps {
-  readonly workspace: string;
-  /** Undefined while the workspace does not list the project. */
-  readonly project: PeerProjectState | undefined;
-  readonly change: SelectedChange;
-}
-
-/**
- * What an action on forecast's pair card gets: the whole pair, so a field forecast adds to it
- * reaches the plugin that fills the slot without this type changing.
- */
-export interface PairActionProps extends PeerSlotProps {
-  readonly workspace: string;
-  /** Undefined while the workspace does not list the project. */
-  readonly project: PeerProjectState | undefined;
-  readonly pair: PeerForecastPair;
 }
 
 export interface ThreadSlotProps {
@@ -362,10 +332,6 @@ export interface PeerWebPlugin {
   readonly taskSections?: ComponentType<TaskSlotProps>;
   /** Live source material and the initial prompt for preparing a task. */
   readonly taskPreparation?: ComponentType<TaskPreparationProps>;
-  /** Sections of the Changes inspector, under the selected change. */
-  readonly changeSections?: ComponentType<ChangeSlotProps>;
-  /** Actions on forecast's pair cards. */
-  readonly pairActions?: ComponentType<PairActionProps>;
   /** Items in the menu of a thread of the person's on this computer. */
   readonly threadMenu?: (
     thread: WorkThreadNode,

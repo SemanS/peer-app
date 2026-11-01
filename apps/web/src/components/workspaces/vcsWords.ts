@@ -94,11 +94,3 @@ export function impactIndexWords(kinds: ReadonlyArray<PeerVcsKind>) {
     description: `Opt in to initialize only newly created Peer task ${workspaces} on this environment. Existing checkouts are never initialized automatically.`,
   };
 }
-
-export function forecastTeammatesWords(kinds: ReadonlyArray<PeerVcsKind>) {
-  const refs = nounOf(kinds, "refNounPlural", " and ");
-  return {
-    title: `Forecast teammates’ ${refs}`,
-    description: `Fetch only the named ${refs} from origin. Forecasts use ${kinds.includes("jj") ? "their pushed tips" : "committed tips"} and stay on this computer.`,
-  };
-}

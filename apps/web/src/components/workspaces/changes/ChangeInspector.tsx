@@ -5,7 +5,6 @@ import { LockIcon } from "lucide-react";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
 import { PeerSectionLabel } from "../PeerPageHeader";
-import type { ChangeSlotProps, PeerWebPlugin, SelectedChange } from "../slots.types";
 import { ChangeId, type LandedRowModel } from "./ChangeGraph";
 import { buildsOnLine, olderBaseLine, rewriteLine, versionsLine, whereLine } from "./changes.logic";
 
@@ -27,8 +26,7 @@ function Section({
 }
 
 /**
- * The selected change: its state and where it lives, what other plugins say about it (the
- * `changeSections` slot, rendered as each plugin likes), its versions, who may rewrite it and its
+ * The selected change: its state and where it lives, its versions, who may rewrite it and its
  * files. A landed change has none of the first, only what trunk keeps of it.
  */
 export function ChangeInspector({
@@ -37,9 +35,6 @@ export function ChangeInspector({
   row,
   landed,
   mine,
-  taskId,
-  plugins,
-  slot,
   clock,
   canReview,
   onReview,
@@ -49,10 +44,6 @@ export function ChangeInspector({
   readonly row: ChangeRow | undefined;
   readonly landed: { readonly row: LandedRowModel; readonly change: LandedChange } | undefined;
   readonly mine: boolean;
-  /** The task the change is on, as the work tree knows it; undefined for a change on none. */
-  readonly taskId: string | undefined;
-  readonly plugins: ReadonlyArray<PeerWebPlugin>;
-  readonly slot: Omit<ChangeSlotProps, "change">;
   readonly clock: (at: string) => string;
   readonly canReview: boolean;
   readonly onReview: () => void;
@@ -95,12 +86,6 @@ export function ChangeInspector({
       </aside>
     );
   }
-  const change: SelectedChange = {
-    changeId: row.changeId,
-    taskId,
-    bookmarks: row.bookmarks,
-    mine,
-  };
   return (
     <aside aria-label="Selected change" className="flex flex-col gap-4">
       <header className="flex flex-col gap-1.5">
@@ -121,10 +106,6 @@ export function ChangeInspector({
           {model.bookmark === undefined ? null : ` · ${model.bookmark}`}
         </p>
       </header>
-
-      {plugins.map(({ id, changeSections: Extra }) =>
-        Extra === undefined ? null : <Extra key={id} {...slot} change={change} />,
-      )}
 
       {model.buildsOn.length === 0 ? null : (
         <Section label="Builds on">

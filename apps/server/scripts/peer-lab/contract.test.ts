@@ -6,12 +6,9 @@ import * as NodePath from "node:path";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
-import { isPlainCliCall } from "../../src/peerHub/core/coordination/edits.ts";
 import {
   ANA_FILES,
-  ANA_PLAN,
   ANA_TASK,
-  BOB_PLAN,
   BOB_TASK,
   SEED,
   HARD_TASKS,
@@ -23,28 +20,16 @@ import {
   agreementsOn,
   armEnv,
   armOf,
-  asksForPlan,
   commitWork,
-  contractFor,
   currentBranch,
   formatResult,
-  heardNewContract,
-  impactLines,
-  impactOn,
-  plansOn,
-  indexCheckout,
   integrate,
-  plansChars,
   runCheck,
   runStub,
-  suggestedContract,
-  syncCheckout,
-  type Arm,
   type ContractResult,
   type StubAgent,
   writeSeed,
 } from "./contract.ts";
-import { START_WORDS } from "./plans.ts";
 import type { LabEvent } from "./told.ts";
 
 const made: string[] = [];
@@ -87,92 +72,58 @@ const tree = (files: Readonly<Record<string, string>> = {}) => {
 };
 
 describe("the arms", () => {
-  it("is the plans arm unless the environment names another", () => {
-    expect(armOf({})).toBe("plans");
-    expect(armOf({ LAB_PLANS: "on" })).toBe("plans");
-    expect(armOf({ LAB_PLANS: "off" })).toBe("off");
-    expect(armOf({ LAB_IMPACT_ONLY: "1" })).toBe("impact");
-    expect(armOf({ LAB_IMPACT_ONLY: "0" })).toBe("plans");
+  it("is Peer as it is unless the environment names another", () => {
+    expect(armOf({})).toBe("peer");
     expect(armOf({ LAB_PEER: "off" })).toBe("none");
     expect(armOf({ LAB_KERNEL: "1" })).toBe("kernel");
-    expect(armOf({ LAB_KERNEL: "0" })).toBe("plans");
+    expect(armOf({ LAB_KERNEL: "0" })).toBe("peer");
   });
 
   it("names the arm that turns agreements off, and takes agreements on to be what Peer does anyway", () => {
     expect(armOf({ LAB_AGREEMENTS: "off" })).toBe("no-agreements");
-    expect(armOf({ LAB_AGREEMENTS: "on" })).toBe("plans");
+    expect(armOf({ LAB_AGREEMENTS: "on" })).toBe("peer");
     // `on` names no arm of its own: it is the default, so it goes with another arm.
-    expect(armOf({ LAB_AGREEMENTS: "on", LAB_PLANS: "off" })).toBe("off");
     expect(armOf({ LAB_AGREEMENTS: "on", LAB_PEER: "off" })).toBe("none");
     expect(ARM_LABELS["no-agreements"]).toMatch(/agreements off/);
     expect(ARM_LABELS["no-agreements"]).toMatch(/LAB_AGREEMENTS=off/);
   });
 
   it("refuses two arms at once and a word it does not know", () => {
-    expect(() => armOf({ LAB_PLANS: "off", LAB_IMPACT_ONLY: "1" })).toThrow(/2 arms/);
-    expect(() => armOf({ LAB_PLANS: "on", LAB_IMPACT_ONLY: "1" })).toThrow(/2 arms/);
-    expect(() => armOf({ LAB_PLANS: "maybe" })).toThrow(/off or on/);
-    expect(() => armOf({ LAB_PEER: "off", LAB_PLANS: "off" })).toThrow(/2 arms/);
     expect(() => armOf({ LAB_PEER: "on" })).toThrow(/LAB_PEER is off/);
     expect(() => armOf({ LAB_AGREEMENTS: "maybe" })).toThrow(/LAB_AGREEMENTS is off or on/);
     expect(() => armOf({ LAB_AGREEMENTS: "off", LAB_PEER: "off" })).toThrow(/2 arms/);
-    expect(() => armOf({ LAB_AGREEMENTS: "off", LAB_PLANS: "off" })).toThrow(/2 arms/);
-    expect(() => armOf({ LAB_AGREEMENTS: "off", LAB_IMPACT_ONLY: "1" })).toThrow(/2 arms/);
+    expect(() => armOf({ LAB_KERNEL: "1", LAB_PEER: "off" })).toThrow(/2 arms/);
   });
 
   it("turns the plugins off by the operator's switches, and takes away one the lab inherited", () => {
-    expect(armEnv("none")).toEqual({
-      PEER_PLANS: "off",
-      PEER_IMPACT: "off",
-      PEER_AGREEMENTS: undefined,
-    });
-    expect(armEnv("off")).toEqual({
-      PEER_PLANS: "off",
-      PEER_IMPACT: "off",
-      PEER_AGREEMENTS: undefined,
-    });
-    expect(armEnv("impact")).toEqual({
-      PEER_PLANS: "off",
-      PEER_IMPACT: undefined,
-      PEER_AGREEMENTS: undefined,
-    });
-    expect(armEnv("plans")).toEqual({
-      PEER_PLANS: undefined,
-      PEER_IMPACT: undefined,
-      PEER_AGREEMENTS: undefined,
-    });
-    // Only agreements are off in their arm: what it is compared with has everything else, plans and Impact included.
-    expect(armEnv("no-agreements")).toEqual({
-      PEER_PLANS: undefined,
-      PEER_IMPACT: undefined,
+    expect(armEnv("none")).toEqual({ PEER_AGREEMENTS: undefined });
+    expect(armEnv("peer")).toEqual({ PEER_AGREEMENTS: undefined });
+    expect(armEnv("no-agreements")).toEqual({ PEER_AGREEMENTS: "off" });
+    expect(armEnv("kernel")).toEqual({
       PEER_AGREEMENTS: "off",
+      PEER_OWNERSHIP: "off",
+      PEER_JUJUTSU: "off",
     });
     // `undefined` drops the variable from a child's environment, even one the operator set.
     const env = {
-      PEER_PLANS: "off",
       PEER_AGREEMENTS: "off",
       PATH: process.env.PATH,
-      ...armEnv("plans"),
+      ...armEnv("peer"),
     };
     const child = NodeChildProcess.spawnSync(
       process.execPath,
-      ["-p", "[process.env.PEER_PLANS, process.env.PEER_AGREEMENTS].join()"],
+      ["-p", "[process.env.PEER_AGREEMENTS].join()"],
       { env, encoding: "utf8" },
     );
-    expect(child.stdout.trim()).toBe(",");
+    expect(child.stdout.trim()).toBe("");
   });
 
-  it("says which plugins an arm has on, as the lab checks each computer's Peer against it", () => {
-    const arms = ["none", "off", "impact", "plans", "no-agreements"] as const;
-    expect(arms.map(plansOn)).toEqual([false, false, false, true, true]);
-    expect(arms.map(impactOn)).toEqual([false, false, true, true, true]);
-    expect(arms.map(agreementsOn)).toEqual([true, true, true, true, false]);
-    // Every plugin an arm has on is one its environment leaves alone, and every one off is switched off.
+  it("says when agreements are on, as the lab checks each computer's Peer against it", () => {
+    const arms = ["none", "peer", "no-agreements", "kernel"] as const;
+    expect(arms.map(agreementsOn)).toEqual([true, true, false, false]);
+    // A plugin an arm has on is one its environment leaves alone, and one off is switched off.
     for (const arm of arms) {
-      const env = armEnv(arm);
-      expect(env.PEER_PLANS === undefined).toBe(plansOn(arm));
-      expect(env.PEER_IMPACT === undefined).toBe(impactOn(arm));
-      expect(env.PEER_AGREEMENTS === undefined).toBe(agreementsOn(arm));
+      expect(armEnv(arm).PEER_AGREEMENTS === undefined).toBe(agreementsOn(arm));
     }
   });
 });
@@ -375,46 +326,34 @@ describe("merging what the agents did", () => {
 
 describe("what the report says", () => {
   const events: LabEvent[] = [
-    { event: "cli", session: "a", command: "plan", outcome: "done", out: "x".repeat(300) },
+    { event: "cli", session: "a", command: "status", outcome: "done", out: "x".repeat(300) },
     {
       event: "cli",
       session: "a",
-      command: "plan",
+      command: "note",
       outcome: "refused",
-      reason: "no plan to withdraw",
+      reason: "no one to note to",
     },
-    { event: "cli", session: "a", command: "status", outcome: "done", out: "y".repeat(100) },
     { event: "hook", session: "claude:a", chars: 5000, answer: {} },
     { event: "hook", session: "claude:a", chars: 160, answer: {} },
-    { event: "plans.declared", session: "claude:a", chars: 300 },
-    { event: "plans.told", session: "claude:a", chars: 213 },
-    { event: "plans.nudged", session: "claude:a", where: "start" },
-    { event: "impact.told", session: "claude:a", chars: 90 },
     { event: "session.started", session: "claude:a" },
   ];
 
-  it("counts the plan commands by how they ended, and what Peer added to the context", () => {
+  it("counts what Peer added to the context, and the sessions", () => {
     const report = agentReport(events);
-    expect(report.ran).toBe(2);
-    expect(report.outcomes).toEqual({ done: 1, refused: 1 });
-    expect(report.answers).toEqual({ count: 1, chars: 300 });
-    expect(report.notices).toEqual({ count: 1, chars: 213 });
-    expect(report.nudges).toBe(1);
-    expect(report.impact).toEqual({ count: 1, chars: 90 });
     expect(report.added).toEqual({
       hooks: 5160,
-      commands: 300 + "no plan to withdraw".length + 100,
-      chars: 5160 + 419,
+      commands: 300 + "no one to note to".length,
+      chars: 5160 + 300 + "no one to note to".length,
     });
     expect(report.sessions).toBe(1);
-    expect(plansChars(report)).toBe(START_WORDS.length + 300 + 213);
   });
 
   it("prints each fact of the design's report on a line of its own", () => {
     const report = agentReport(events);
     const none = agentReport([]);
     const result: ContractResult = {
-      arm: "plans",
+      arm: "peer",
       dry: true,
       integration: {
         ana: { ok: true, kind: "pass", detail: "passes" },
@@ -430,16 +369,13 @@ describe("what the report says", () => {
       bob: none,
     };
     const lines = formatResult(result);
-    expect(lines).toHaveLength(9);
-    expect(lines[0]).toContain("arm: plans");
+    expect(lines[0]).toContain("arm: peer");
     expect(lines[0]).toContain("dry run");
     expect(lines[1]).toBe("clean integration: yes (merge clean; merged tree: passes)");
     expect(lines[4]).toBe("Bob's code uses amountCents: yes");
-    expect(lines[5]).toBe("Ana's agent ran peer plan: yes, 2 times (done 1, refused 1)");
-    expect(lines[6]).toBe("Bob's agent ran peer plan: no");
-    expect(lines[7]).toContain("Peer added to Ana's agent: 5579 characters");
-    expect(lines[7]).toContain(`Of them plans: ${START_WORDS.length + 300 + 213}`);
-    expect(lines[8]).toContain("Peer added to Bob's agent: 0 characters");
+    expect(lines[5]).toContain(`Peer added to Ana's agent: ${report.added.chars} characters`);
+    expect(lines[6]).toContain("Peer added to Bob's agent: 0 characters");
+    expect(lines).toHaveLength(7);
     const failed = formatResult({
       ...result,
       integration: {
@@ -459,227 +395,37 @@ describe("what the report says", () => {
   });
 });
 
-describe("what Impact holds at the Hub", () => {
-  it("says there is no pair when the Hub holds none, or Impact is not served", () => {
-    expect(impactLines({ records: [], provided: [] })).toEqual([
-      "Impact at the Hub: no pair of works",
-    ]);
-    expect(impactLines(undefined)).toEqual(["Impact at the Hub: no pair of works"]);
-  });
-
-  it("names each pair, what changed in it and who uses it", () => {
-    const view = {
-      records: [
-        {
-          sides: [{ task: "krk-1" }, { task: "krk-2" }],
-          items: [
-            {
-              name: "amount",
-              path: "src/invoice.js",
-              change: "removed",
-              from: [{ name: "invoiceTotalLine" }],
-            },
-            { name: "amountCents", path: "src/invoice.js", change: "signature", from: [] },
-          ],
-        },
-      ],
-      provided: [],
-    };
-    expect(impactLines(view)).toEqual([
-      "Impact at the Hub: 1 pair of works",
-      "  krk-1 and krk-2: removed amount (src/invoice.js), used by invoiceTotalLine; signature amountCents (src/invoice.js), used by nobody listed",
-    ]);
-  });
-});
-
 describe("the scripted agents", () => {
-  const notice =
-    '[Peer] KRK-2 · Bob’s agent plans to use Invoice.amount (src/invoice.js), which your plan changes. If its contract changes, update your contract line: peer plan --amend --provides "Invoice.amount (src/invoice.js): <contract>".';
-
-  it("read Peer's words: the line that asks for a plan, the suggested contract line, the new contract", () => {
-    expect(
-      asksForPlan([
-        "You are Ana's agent here.",
-        'Before your first edit run peer plan --change <path[#symbol]> --uses <path#symbol> --provides "<symbol> (<path>): <contract>"; it shows whose work meets yours.',
-      ]),
-    ).toBe(true);
-    expect(asksForPlan(["You are Ana's agent here."])).toBe(false);
-    expect(suggestedContract(["nothing", notice])).toEqual({
-      symbol: "Invoice.amount",
-      path: "src/invoice.js",
-    });
-    expect(suggestedContract(["nothing"])).toBeUndefined();
-    expect(
-      heardNewContract([`- Invoice.amount (src/invoice.js): ${contractFor("Invoice.amount")}`]),
-    ).toBe(true);
-    expect(heardNewContract(["uses-their-change  Invoice.amount (src/invoice.js)"])).toBe(false);
-  });
-
-  it("run only commands Peer lets through without asking: no $, backtick or backslash inside quotes", () => {
-    const amend = [
-      "plan",
-      "--amend",
-      "--provides",
-      `Invoice.amount (src/invoice.js): ${contractFor("Invoice.amount")}`,
-    ];
-    for (const args of [ANA_PLAN, BOB_PLAN, amend]) {
-      const command = `peer ${args.map((arg) => `"${arg}"`).join(" ")}`;
-      expect(isPlainCliCall(command, "peer")).toBe(true);
-    }
-  });
-
-  /** A simulated agent whose steps answer from a script, and which records the commands it ran. */
-  const fake = (
-    name: string,
-    root: string,
-    start: string,
-    steps: ReadonlyArray<string | undefined>,
-  ) => {
-    const peers: string[][] = [];
+  const fake = (name: string, root: string) => {
     const hooks: string[] = [];
     const edits: string[] = [];
-    let step = 0;
     const agent: StubAgent = {
       name,
       file: (path) => NodePath.join(root, path),
-      start: () => ({ told: start }),
+      start: () => ({ told: "" }),
       hook: (event) => {
         hooks.push(event);
-        if (event !== "UserPromptSubmit") return null;
-        const said = steps[step];
-        step += 1;
-        return said === undefined ? null : { hookSpecificOutput: { additionalContext: said } };
+        return null;
       },
       edit: (event, path) => {
         edits.push(`${event} ${path}`);
         return null;
       },
-      peer: (...args) => {
-        peers.push(args);
-        return `answer ${peers.length}`;
-      },
+      peer: () => "",
     };
-    return { agent, peers, hooks, edits };
-  };
-  const nudge = "Before your first edit run peer plan --change <path[#symbol]> ...";
-  const told = () => {};
-  const pause = async () => {};
-  const arrange = async (arm: Arm, asked: boolean) => {
-    const root = temp();
-    const ana = fake("Ana's agent", root, asked ? nudge : "hello", [undefined, undefined, notice]);
-    const bob = fake("Bob's agent", root, asked ? nudge : "hello", [
-      undefined,
-      undefined,
-      `[Peer] KRK-1 · Ana’s agent plans to change Invoice.amount (src/invoice.js). Their contract (teammate text):\n- Invoice.amount (src/invoice.js): ${contractFor("Invoice.amount")}`,
-    ]);
-    const heard = await runStub({ ana: ana.agent, bob: bob.agent, arm, pause, told });
-    return {
-      root,
-      ana,
-      bob,
-      heard,
-      total: () => NodeFS.readFileSync(NodePath.join(root, "src/total.js"), "utf8"),
-    };
+    return { agent, hooks, edits };
   };
 
-  it("with plans on, declare when asked, amend as the notice says, and write against the contract they heard", async () => {
-    const run = await arrange("plans", true);
-    expect(run.ana.peers).toEqual([
-      [...ANA_PLAN],
-      [
-        "plan",
-        "--amend",
-        "--provides",
-        `Invoice.amount (src/invoice.js): ${contractFor("Invoice.amount")}`,
-      ],
-    ]);
-    expect(run.bob.peers).toEqual([[...BOB_PLAN]]);
-    expect(run.total()).toBe(TOTAL_IN_CENTS);
-    expect(NodeFS.readFileSync(NodePath.join(run.root, "src/receipt.js"), "utf8")).toBe(
-      ANA_FILES["src/receipt.js"],
-    );
-    // The new method goes in first and the old one comes out last, once the callers use the new.
-    expect(run.ana.edits.filter((edit) => edit.startsWith("PostToolUse"))).toEqual([
-      "PostToolUse src/invoice.js",
-      "PostToolUse src/receipt.js",
-      "PostToolUse src/summary.js",
-      "PostToolUse src/invoice.js",
-    ]);
-    expect(NodeFS.readFileSync(NodePath.join(run.root, "src/invoice.js"), "utf8")).toBe(
-      ANA_FILES["src/invoice.js"],
-    );
-    expect(run.ana.hooks.at(-1)).toBe("SessionEnd");
-    expect(run.bob.hooks.at(-1)).toBe("SessionEnd");
-    expect(run.heard.bob.some((text) => text.includes("answer 1"))).toBe(true);
-  });
-
-  it("in the arm that only turns agreements off, plans are on: they declare and write against the contract they heard", async () => {
-    const run = await arrange("no-agreements", true);
-    expect(run.ana.peers).toHaveLength(2);
-    expect(run.bob.peers).toEqual([[...BOB_PLAN]]);
-    expect(run.total()).toBe(TOTAL_IN_CENTS);
-  });
-
-  it("where nothing asks for a plan, run no plan command and write against the contract they had", async () => {
-    for (const arm of ["off", "impact"] as const) {
-      const run = await arrange(arm, false);
-      expect(run.ana.peers).toEqual([]);
-      expect(run.bob.peers).toEqual([]);
-      expect(run.total()).toBe(TOTAL_IN_DOLLARS);
-    }
-  });
-});
-
-describe("the code index for the Impact arm", () => {
-  /** A stand-in `codegraph` that records how it was called and fails the call named in `FAIL`. */
-  const stand = (root: string) => {
-    const calls = NodePath.join(root, "calls.txt");
-    const binary = NodePath.join(root, "codegraph");
-    NodeFS.writeFileSync(
-      binary,
-      `#!/bin/sh\necho "$1 $2" >> "${calls}"\n[ "$1" = "$FAIL" ] && { echo "$1 failed" >&2; exit 3; }\nmkdir -p "$2/.codegraph" && echo index > "$2/.codegraph/codegraph.db"\nexit 0\n`,
-      { mode: 0o755 },
-    );
-    return { binary, calls: () => NodeFS.readFileSync(calls, "utf8").trim().split("\n") };
-  };
-
-  it("makes the index of a checkout: init, then index, keeping the index out of what git shows", () => {
+  it("write against the contract they had, and end their sessions", async () => {
     const root = temp();
-    git(root, "init", "--quiet");
-    const codegraph = stand(root);
-    // What the stand-in leaves is its own script and calls file: only the index is the tool's state.
-    NodeFS.writeFileSync(NodePath.join(root, ".gitignore"), "calls.txt\ncodegraph\n");
-    expect(indexCheckout(codegraph.binary, root)).toEqual({ ok: true, detail: "indexed" });
-    expect(codegraph.calls()).toEqual([`init ${root}`, `index ${root}`]);
-    expect(NodeFS.existsSync(NodePath.join(root, ".codegraph", "codegraph.db"))).toBe(true);
-    expect(git(root, "status", "--short").trim()).toBe("?? .gitignore");
-  });
-
-  it("brings an index up to date, and says when it could not", () => {
-    const root = temp();
-    const codegraph = stand(root);
-    expect(syncCheckout(codegraph.binary, root)).toBe(true);
-    expect(codegraph.calls()).toEqual([`sync ${root}`]);
-    process.env.FAIL = "sync";
-    try {
-      expect(syncCheckout(codegraph.binary, root)).toBe(false);
-    } finally {
-      delete process.env.FAIL;
-    }
-  });
-
-  it("says which step failed and why, and goes no further", () => {
-    const root = temp();
-    const codegraph = stand(root);
-    process.env.FAIL = "init";
-    try {
-      const failed = indexCheckout(codegraph.binary, root);
-      expect(failed.ok).toBe(false);
-      expect(failed.detail).toContain("codegraph init ended 3");
-      expect(failed.detail).toContain("init failed");
-      expect(codegraph.calls()).toEqual([`init ${root}`]);
-    } finally {
-      delete process.env.FAIL;
-    }
+    writeSeed(root);
+    const ana = fake("Ana's agent", root);
+    const bob = fake("Bob's agent", root);
+    await runStub({ ana: ana.agent, bob: bob.agent, pause: async () => {} });
+    expect(NodeFS.readFileSync(NodePath.join(root, "src/total.js"), "utf8")).toBe(TOTAL_IN_DOLLARS);
+    expect(ana.edits).toContain("PreToolUse src/invoice.js");
+    expect(bob.edits).toEqual(["PreToolUse src/total.js", "PostToolUse src/total.js"]);
+    expect(ana.hooks.at(-1)).toBe("SessionEnd");
+    expect(bob.hooks.at(-1)).toBe("SessionEnd");
   });
 });

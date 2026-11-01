@@ -173,7 +173,7 @@ describe("merging what the agents did", () => {
       bobCallsOrderTotal: true,
     });
     const lines = formatHidden({
-      arm: "plans",
+      arm: "peer",
       dry: false,
       integration: result,
       ana: emptyReport,
@@ -192,7 +192,7 @@ describe("merging what the agents did", () => {
     expect(result).toMatchObject({ merge: "clean", clean: true, written: "both" });
     expect(result.bobCallsOrderTotal).toBe(false);
     const lines = formatHidden({
-      arm: "off",
+      arm: "peer",
       dry: false,
       integration: result,
       ana: emptyReport,
@@ -542,7 +542,7 @@ describe("the integrator's report", () => {
       kept: 1,
     });
     const result = {
-      arm: "plans",
+      arm: "peer",
       dry: true,
       integration: world({ "src/loyalty.js": LOYALTY_IN_EUROS }),
       ana: emptyReport,
@@ -550,9 +550,9 @@ describe("the integrator's report", () => {
     } as const;
     const without = formatHidden(result);
     const withIt = formatHidden({ ...result, integrator: report });
-    expect(without).toHaveLength(10);
-    expect(withIt.slice(0, 10)).toEqual(without);
-    expect(withIt.slice(10)).toEqual(lines(report));
+    expect(without).toHaveLength(8);
+    expect(withIt.slice(0, 8)).toEqual(without);
+    expect(withIt.slice(8)).toEqual(lines(report));
   });
 });
 

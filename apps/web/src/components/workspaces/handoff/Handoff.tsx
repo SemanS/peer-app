@@ -11,7 +11,6 @@ import type {
   PeerHandoffPlace,
   PeerHandoffSignalsRead,
   PeerHubStatus,
-  PeerPlansView,
   PeerProjectState,
   PeerTestReport,
   PeerTask,
@@ -58,7 +57,6 @@ import { HandoffReport } from "./HandoffReport";
 import { reviewFactsFrom } from "./handoffPresentation";
 import { acceptanceFacts } from "../acceptance/acceptance.logic";
 import { openAcceptanceDialog } from "../acceptance/acceptanceDialog";
-import { usePlansView } from "../plans/usePlansView";
 import { failureMessage } from "../WorkspaceAccess";
 import { usePeerPluginControl } from "../usePeerPluginControl";
 import type {
@@ -301,10 +299,9 @@ function ContextMovedBanner({
   );
 }
 
-/** What only the review page reads for a package: the task's test reports and its plans. */
+/** What only the review page reads for a package: the task's test reports. */
 interface ReviewReads {
   readonly reports: ReadonlyArray<PeerTestReport> | undefined;
-  readonly plans: PeerPlansView | undefined;
   /** The Hub's current signals; none while they cannot be read, and the package stands. */
   readonly live: PeerHandoffSignalsRead | null | undefined;
 }
@@ -423,7 +420,6 @@ function HandoffPackageView({
     state,
     nameOf,
     reports: reads?.reports,
-    plans: reads?.plans,
     live: reads?.live,
   });
   const openContext = (scope: string) =>
@@ -544,13 +540,6 @@ export function HandoffReview(props: TaskContextSlotProps) {
         })
       : null,
   );
-  const plans = usePlansView({
-    environmentId,
-    status,
-    workspace: place.workspace,
-    project: place.projectId,
-    task: task?.id,
-  });
   if (!task || !value) return null;
   return (
     <section aria-label="Review" className="flex flex-col gap-3">
@@ -562,7 +551,6 @@ export function HandoffReview(props: TaskContextSlotProps) {
             reports.data === null || reports.data === undefined
               ? undefined
               : orderedReports(reports.data),
-          plans: plans.view,
           live: live.data,
         }}
         data={data}

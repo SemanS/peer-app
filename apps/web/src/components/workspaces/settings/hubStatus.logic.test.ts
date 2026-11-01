@@ -30,7 +30,6 @@ const everything = [
   "dependencies",
   "ownership",
   "agreements",
-  "plans",
 ].map((id) => plugin(id));
 
 const flags = { pathRules: true, github: true };
@@ -49,10 +48,8 @@ const ALL = [
   "handoff",
   "dependencies",
   "announcements",
-  "impact",
   "ownership",
   "agreements",
-  "plans",
 ];
 
 /** What a Hub with the catalog says: it serves `serves`, and its operator turned `off` off. */
@@ -91,10 +88,8 @@ describe("the features of a Hub that serves them all", () => {
       "handoff",
       "dependencies",
       "announcements",
-      "impact",
       "ownership",
       "agreements",
-      "plans",
     ]);
     expect(list.every((row) => row.state === "on" && row.label === "Connected")).toBe(true);
   });
@@ -203,11 +198,10 @@ describe("the features of the plugins this version of Peer has", () => {
       effect:
         "What the agents of two tasks agree is kept for those tasks and told to whoever works on either one later.",
     });
-    expect(byId(list, "plans")).toMatchObject({
-      name: "Plans",
+    expect(byId(list, "handoff")).toMatchObject({
+      name: "Handoff for review",
       state: "on",
-      effect:
-        "Before editing, agents say what they will change, use and provide; Peer says whose work meets theirs.",
+      effect: "Agents can store a review package for a task.",
     });
     expect(list.some((row) => row.effect.includes("has no words for"))).toBe(false);
   });
@@ -215,7 +209,7 @@ describe("the features of the plugins this version of Peer has", () => {
   it("says what each means for the workspace when the Hub does not run it", () => {
     const list = rows({
       hub: catalog(
-        ALL.filter((id) => id !== "agreements" && id !== "plans"),
+        ALL.filter((id) => id !== "agreements" && id !== "handoff"),
         ["agreements"],
       ),
     });
@@ -224,10 +218,7 @@ describe("the features of the plugins this version of Peer has", () => {
       label: "Not available",
       effect: "Agreements can’t be kept: this Hub doesn’t run them.",
     });
-    expect(byId(list, "plans")).toMatchObject({
-      state: "newer",
-      effect: "Plans can’t be shared until the Hub is updated.",
-    });
+    expect(byId(list, "handoff")).toMatchObject({ state: "newer" });
   });
 });
 
@@ -268,7 +259,6 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
       "dependencies",
       "ownership",
       "agreements",
-      "plans",
     ]);
     expect(list.every((row) => row.state === "on" && row.label === "Connected")).toBe(true);
   });

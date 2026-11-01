@@ -86,11 +86,3 @@ export const issueKeyHint = (kind: PeerVcsKind) =>
 
 export const experimentStartStep = (kinds: ReadonlyArray<PeerVcsKind>) =>
   `On both, start that agent in herdr in that checkout, each on a ${nounOf(kinds, "refNoun", " or ")} of its own.`;
-
-export function impactIndexWords(kinds: ReadonlyArray<PeerVcsKind>) {
-  const workspaces = nounOf(kinds, "workspaceNounPlural", " and ");
-  return {
-    title: `Index new Peer task ${workspaces}`,
-    description: `Opt in to initialize only newly created Peer task ${workspaces} on this environment. Existing checkouts are never initialized automatically.`,
-  };
-}

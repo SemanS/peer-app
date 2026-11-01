@@ -1,7 +1,5 @@
 import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
 import { SettlePlugin } from "../plugins/settle/index.ts";
-import { ImpactPlugin } from "../plugins/impact/index.ts";
-import { PlansPlugin } from "../plugins/plans/index.ts";
 import { AgreementsPlugin } from "../plugins/agreements/index.ts";
 import { ChangesPlugin } from "../plugins/changes/index.ts";
 import { HandoffPlugin } from "../plugins/handoff/index.ts";
@@ -87,9 +85,7 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   NeedsYouPlugin,
   SettlePlugin,
   ResourcesPlugin,
-  ImpactPlugin,
   OwnershipPlugin,
-  PlansPlugin,
   AgreementsPlugin,
   ChangesPlugin,
   TestReportsPlugin,

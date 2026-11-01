@@ -17,7 +17,6 @@ import {
 } from "@t3tools/client-runtime/peer/handoff";
 import { taskAcceptance } from "@t3tools/client-runtime/peer/acceptance";
 import { projectDependencyIndex } from "@t3tools/client-runtime/peer/dependencies";
-import { planProvidesLine } from "@t3tools/client-runtime/peer/plans";
 import {
   dependentsReadiness,
   readinessFacts,
@@ -28,7 +27,6 @@ import { taskBrief } from "../task/taskBrief.logic";
 import {
   contextBlockerText,
   type PeerHubStatus,
-  type PeerPlansView,
   type PeerProjectState,
   type PeerHandoffPackage,
   type PeerHandoffSignalsRead,
@@ -85,9 +83,7 @@ export interface ReviewFacts {
   readonly status?: "open" | "review" | "done" | undefined;
   /** The task's newest test report with its items, when the page read it. */
   readonly report?: PeerTestReport | undefined;
-  /** The `provides` contract lines of the author's plan on the task. */
-  readonly planLines?: ReadonlyArray<string>;
-  /** The brief's outcome, when the plan provides nothing. */
+  /** The brief's outcome. */
   readonly briefOutcome?: string | undefined;
   /** Who waits for the task and what else each waits for (`dependentsReadiness`). */
   readonly dependents?: ReadonlyArray<DependentsGroup>;
@@ -236,7 +232,7 @@ export function reviewPresentation(
       steps.agent_action.length > 0,
     verified,
     delivered: deliveredChip(pkg.delivery, { computer: facts.computer }),
-    provides: providesChip(facts.planLines ?? [], facts.briefOutcome, facts.dependents ?? []),
+    provides: providesChip(facts.briefOutcome, facts.dependents ?? []),
     evidence:
       facts.report === undefined ? null : evidenceItems(facts.report, facts.nameOf, taskName),
     notes,
@@ -254,7 +250,7 @@ export type ReviewPresentation = ReturnType<typeof reviewPresentation>;
  * What the status and the page's reads add to a package, each part only where its plugin speaks:
  * the task's acceptance as the status says it now (a withdrawn one, or one given before the task
  * was reopened, is none), the newest test report the page read, the `provides` lines of the
- * author's newest plan on the task, the brief's outcome, and who waits for the task.
+ * brief's outcome, and who waits for the task.
  */
 export function reviewFactsFrom(input: {
   readonly pkg: Pick<PeerHandoffPackage, "task" | "author">;
@@ -267,7 +263,6 @@ export function reviewFactsFrom(input: {
   readonly nameOf: (email: string) => string;
   /** The task's reports, newest first, when the page read them. */
   readonly reports?: ReadonlyArray<PeerTestReport> | undefined;
-  readonly plans?: PeerPlansView | undefined;
   readonly live?: PeerHandoffSignalsRead | null | undefined;
 }): ReviewFacts {
   const { pkg, status, workspace, state, nameOf } = input;
@@ -275,14 +270,6 @@ export function reviewFactsFrom(input: {
   const task = state.work.tasks.find((candidate) => candidate.id === pkg.task);
   const place = { workspace, project, task: pkg.task };
   const row = status.acceptance === undefined ? undefined : taskAcceptance(status, place);
-  const plan = (input.plans?.plans ?? [])
-    .filter(
-      (candidate) =>
-        candidate.project === project &&
-        candidate.task === pkg.task &&
-        candidate.email.toLowerCase() === pkg.author.toLowerCase(),
-    )
-    .toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
   const outcome = taskBrief(task?.description).outcome;
   const snapshot = status.dependencies?.find((candidate) => candidate.workspace === workspace);
   const mine = status.email !== null && status.email.toLowerCase() === pkg.author.toLowerCase();
@@ -295,7 +282,6 @@ export function reviewFactsFrom(input: {
           : { by: row.by, via: row.via },
     status: task?.status ?? "open",
     report: input.reports?.[0],
-    planLines: plan?.provides.map(planProvidesLine) ?? [],
     briefOutcome: outcome.length === 0 ? undefined : outcome.join("; "),
     dependents:
       snapshot?.available === true

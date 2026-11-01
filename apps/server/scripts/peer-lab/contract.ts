@@ -1,22 +1,17 @@
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalTimers:off globalConsole:off preferSchemaOverJson:off - host-side lab harness: git and node on throwaway checkouts.
 /**
- * REAL_SCENARIO=contract (design D15), the lab's measure of plan preflight. Ana's task renames the
+ * REAL_SCENARIO=contract (design D15). Ana's task renames the
  * method `Invoice.amount()` (dollars, a decimal number) to `amountCents()` (an integer number of
  * cents) and updates its uses; Bob's task adds an invoice total in a new file. Bob's checkout has
  * the contract as it was, so his code is right in his checkout and wrong once both branches are
- * merged, unless he knows what Ana changes before he writes it. A method, not a field: CodeGraph
- * indexes methods and the calls to them, so the code index has something to say about the change
- * (a field is no symbol of its own to it) and Impact can pair Ana's change with Bob's use. Three
- * arms run on the same seeds:
+ * merged, unless he knows what Ana changes before he writes it. The arms run on the same seeds:
  *
- *   LAB_PLANS=off      Peer without plans and without Impact: only the file protocol.
- *   LAB_IMPACT_ONLY=1  Impact on, plans off: a changed interface is told after the change.
- *   LAB_AGREEMENTS=off Peer as by default (plans and Impact on) with agreements turned off, so that a
- *                      settled overlap is kept by the Hub and told to nobody (`deferred` measures it).
+ *   LAB_AGREEMENTS=off Peer with agreements turned off, so that a settled overlap is kept by the Hub
+ *                      and told to nobody (`deferred` measures it).
  *   LAB_PEER=off       No Peer: coordination is off for the agents.
  *   LAB_KERNEL=1       Only the kernel: every Hub feature and plugin outside presence, messages,
  *                      rooms and the agents' adapters is off (KERNEL_FEATURES_OFF, KERNEL_PLUGINS_OFF).
- *   (none of them)     plans on: before the work, with Impact on as it is by default.
+ *   (none of them)     Peer as it is.
  *
  * LAB_CONTRACT=hard removes what the default run gives away (see HARD_TASKS): the task titles and
  * branches say nothing of cents, and both agents start together.
@@ -25,30 +20,25 @@
  * clone and runs checks the agents never saw: Ana's branch alone (the rename was made), Bob's
  * branch alone (his total works against the old contract, or against the new one if he was told of
  * it), and the merged tree (the total works against the new contract). It reports clean
- * integration, whether Bob's code uses `amountCents`, whether either agent ran `peer plan`, and
- * the characters Peer added to each agent's context.
+ * integration, whether Bob's code uses `amountCents`, and the characters Peer added to each agent's
+ * context.
  *
- * Without REAL_AGENTS=1 it is a dry run: scripted stand-ins for the agents' model do what Peer's
- * words say (declare a plan when asked, amend it as a notice suggests, write against the contract
- * they heard). That checks the machinery (arms, what Peer says, merge, checks, report) and spends
- * nothing; only a run with real agents measures whether they do.
+ * Without REAL_AGENTS=1 it is a dry run: scripted stand-ins for the agents' model write against the
+ * contract they have. That checks the machinery (arms, merge, checks, report) and spends nothing;
+ * only a run with real agents measures what they do.
  */
 import * as NodeChildProcess from "node:child_process";
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
-import { START_WORDS } from "./plans.ts";
 import { peerAdded, type HookOut, type LabEvent } from "./told.ts";
 
-export type Arm = "none" | "off" | "impact" | "plans" | "no-agreements" | "kernel";
+export type Arm = "none" | "peer" | "no-agreements" | "kernel";
 
 export const ARM_LABELS: Readonly<Record<Arm, string>> = {
   none: "no Peer: coordination turned off for both agents (LAB_PEER=off)",
-  off: "plugins off: Peer without plans and without Impact",
-  impact: "Impact only: a changed interface is told after the change",
-  plans: "plans on: what will change is declared before the work (Impact on as by default)",
-  "no-agreements":
-    "agreements off: Peer as by default, with plans and Impact on and agreements turned off (LAB_AGREEMENTS=off)",
+  peer: "Peer as it is",
+  "no-agreements": "agreements off: Peer as it is, with agreements turned off (LAB_AGREEMENTS=off)",
   kernel: "kernel only: presence, messages, rooms and the agents' adapters (LAB_KERNEL=1)",
 };
 
@@ -57,25 +47,15 @@ export const KERNEL_FEATURES_OFF = [
   "acceptance",
   "agreements",
   "announcements",
-  "briefs",
   "changes",
   "dependencies",
-  "digest",
   "github",
   "handoff",
-  "impact",
-  "intercom",
-  "knowledge",
-  "metrics",
   "ownership",
-  "plans",
   "requests",
   "resources",
   "roles",
-  "slack",
   "test-reports",
-  "usage",
-  "webhooks",
 ] as const;
 
 /** The plugins outside the kernel that need no Hub feature and have no operator's switch: turned off at each computer. */
@@ -84,27 +64,18 @@ export const KERNEL_PLUGINS_OFF = [
   "announcements",
   "capacity",
   "changes",
-  "digest",
-  "find",
-  "forecast",
   "github",
-  "metrics",
   "needs-you",
-  "openspec",
-  "recipes",
   "resources",
   "roles",
   "settle",
   "test-reports",
-  "usage",
 ] as const;
 
-/** The arm the environment names: `LAB_PEER=off`, `LAB_PLANS=off`, `LAB_IMPACT_ONLY=1`, `LAB_AGREEMENTS=off`, `LAB_KERNEL=1`, or none of them. */
+/** The arm the environment names: `LAB_PEER=off`, `LAB_AGREEMENTS=off`, `LAB_KERNEL=1`, or none. */
 export function armOf(env: Readonly<Record<string, string | undefined>>): Arm {
   if (env.LAB_PEER !== undefined && env.LAB_PEER !== "off")
     throw new Error(`LAB_PEER is off, not ${env.LAB_PEER}`);
-  if (env.LAB_PLANS !== undefined && env.LAB_PLANS !== "off" && env.LAB_PLANS !== "on")
-    throw new Error(`LAB_PLANS is off or on, not ${env.LAB_PLANS}`);
   // `LAB_AGREEMENTS=on` is what Peer does by default: it names no arm of its own.
   if (
     env.LAB_AGREEMENTS !== undefined &&
@@ -114,34 +85,23 @@ export function armOf(env: Readonly<Record<string, string | undefined>>): Arm {
     throw new Error(`LAB_AGREEMENTS is off or on, not ${env.LAB_AGREEMENTS}`);
   const named: Arm[] = [
     ...(env.LAB_PEER === "off" ? (["none"] as const) : []),
-    ...(env.LAB_PLANS === "off" ? (["off"] as const) : []),
-    ...(env.LAB_IMPACT_ONLY === "1" ? (["impact"] as const) : []),
     ...(env.LAB_AGREEMENTS === "off" ? (["no-agreements"] as const) : []),
-    ...(env.LAB_PLANS === "on" ? (["plans"] as const) : []),
     ...(env.LAB_KERNEL === "1" ? (["kernel"] as const) : []),
   ];
   if (named.length > 1)
     throw new Error(`${named.length} arms are named (${named.join(", ")}): set one of them`);
-  return named[0] ?? "plans";
+  return named[0] ?? "peer";
 }
-
-/** Whether the arm has plans on: the default arm, and the one that only turns agreements off. */
-export const plansOn = (arm: Arm) => arm === "plans" || arm === "no-agreements";
-
-/** Whether the arm has Impact on: every arm but those that turn plugins off for the whole of Peer. */
-export const impactOn = (arm: Arm) => arm !== "off" && arm !== "none" && arm !== "kernel";
 
 /** Whether the agreements plugin is on at the computers: every arm but those that turn it off. */
 export const agreementsOn = (arm: Arm) => arm !== "no-agreements" && arm !== "kernel";
 
 /**
  * What an arm adds to each computer's environment. The plugin switches are the operator's
- * (`PEER_PLANS=off`, `PEER_IMPACT=off`, `PEER_AGREEMENTS=off`); an arm that keeps a plugin on removes
- * the switch the lab inherited, if any. The kernel arm also takes the two others an operator can turn off.
+ * (`PEER_AGREEMENTS=off`); an arm that keeps a plugin on removes the switch the lab inherited, if
+ * any. The kernel arm also takes the two others an operator can turn off.
  */
 export const armEnv = (arm: Arm): Record<string, string | undefined> => ({
-  PEER_PLANS: plansOn(arm) ? undefined : "off",
-  PEER_IMPACT: impactOn(arm) ? undefined : "off",
   PEER_AGREEMENTS: agreementsOn(arm) ? undefined : "off",
   ...(arm === "kernel" ? { PEER_OWNERSHIP: "off", PEER_JUJUTSU: "off" } : {}),
 });
@@ -203,7 +163,7 @@ export const TASKS = [
  * LAB_CONTRACT=hard: the same work, with nothing that gives Ana's change away. Peer shows the other
  * agents a task's title and its branch, so neither says anything of cents; and Bob's agent starts
  * with Ana's instead of once hers has begun to change things, so at its start nothing of hers is
- * there to see. What tells Bob of the new contract, if anything does, is then plans or Impact.
+ * there to see. What tells Bob of the new contract, if anything does, is then Peer's own word.
  */
 export const HARD_TASKS = [
   { key: "KRK-1", title: "Invoice model tidy-up", branch: "krk-1-invoice-tidy" },
@@ -450,18 +410,8 @@ export function integrate(input: {
   };
 }
 
-/** What one computer's agent ran of `peer plan`, and what Peer added to its context, from the debug log. */
+/** What Peer added to one computer's agent's context, from the debug log. */
 export interface AgentReport {
-  /** `peer plan` commands run, by how they ended. */
-  readonly ran: number;
-  readonly outcomes: Readonly<Record<string, number>>;
-  /** The plan answers and the notices Peer gave, with their sizes in characters. */
-  readonly answers: { readonly count: number; readonly chars: number };
-  readonly notices: { readonly count: number; readonly chars: number };
-  /** How often a session start (or a compaction) carried the line that asks for a plan. */
-  readonly nudges: number;
-  /** What Impact told the agent. */
-  readonly impact: { readonly count: number; readonly chars: number };
   /** What Peer put into the agent's context: its hooks' answers and the commands' output. */
   readonly added: { readonly hooks: number; readonly commands: number; readonly chars: number };
   /** The sessions its computer's Peer met. */
@@ -469,24 +419,7 @@ export interface AgentReport {
 }
 
 export function agentReport(events: ReadonlyArray<LabEvent>): AgentReport {
-  const plan = events.filter((entry) => entry.event === "cli" && entry.command === "plan");
-  const outcomes: Record<string, number> = {};
-  for (const entry of plan) {
-    const how = String(entry.outcome);
-    outcomes[how] = (outcomes[how] ?? 0) + 1;
-  }
-  const sum = (list: ReadonlyArray<LabEvent>) =>
-    list.reduce((chars, entry) => chars + (typeof entry.chars === "number" ? entry.chars : 0), 0);
-  const declared = events.filter((entry) => entry.event === "plans.declared");
-  const told = events.filter((entry) => entry.event === "plans.told");
-  const impact = events.filter((entry) => entry.event === "impact.told");
   return {
-    ran: plan.length,
-    outcomes,
-    answers: { count: declared.length, chars: sum(declared) },
-    notices: { count: told.length, chars: sum(told) },
-    nudges: events.filter((entry) => entry.event === "plans.nudged").length,
-    impact: { count: impact.length, chars: sum(impact) },
     added: peerAdded(events),
     sessions: new Set(
       events
@@ -494,37 +427,6 @@ export function agentReport(events: ReadonlyArray<LabEvent>): AgentReport {
         .map((entry) => String(entry.session)),
     ).size,
   };
-}
-
-/** What the Hub's Impact view says of the project, one line a pair: what changed, by whom, and who uses it. */
-export function impactLines(view: unknown): ReadonlyArray<string> {
-  const records =
-    typeof view === "object" && view !== null && "records" in view && Array.isArray(view.records)
-      ? (view.records as ReadonlyArray<{
-          readonly sides?: ReadonlyArray<{ readonly task?: string; readonly label?: string }>;
-          readonly items?: ReadonlyArray<{
-            readonly name: string;
-            readonly path: string;
-            readonly change: string;
-            readonly from?: ReadonlyArray<{ readonly name: string }>;
-          }>;
-        }>)
-      : [];
-  if (records.length === 0) return ["Impact at the Hub: no pair of works"];
-  return [
-    `Impact at the Hub: ${records.length} pair${records.length === 1 ? "" : "s"} of works`,
-    ...records.map(
-      (record) =>
-        `  ${(record.sides ?? []).map((side) => side.task ?? side.label ?? "?").join(" and ")}: ${(
-          record.items ?? []
-        )
-          .map(
-            (item) =>
-              `${item.change} ${item.name} (${item.path}), used by ${(item.from ?? []).map((use) => use.name).join(", ") || "nobody listed"}`,
-          )
-          .join("; ")}`,
-    ),
-  ];
 }
 
 export interface ContractResult {
@@ -537,29 +439,17 @@ export interface ContractResult {
 
 const yes = (flag: boolean) => (flag ? "yes" : "no");
 
-/** What plans cost an agent's context: the start line, the answers it read and the notices it heard. */
-export const plansChars = (report: AgentReport) =>
-  report.nudges * START_WORDS.length + report.answers.chars + report.notices.chars;
-
 /** The result as the lab prints it, one fact to a line. */
 export function formatResult(result: ContractResult): ReadonlyArray<string> {
   const { arm, integration: one, ana, bob } = result;
-  const ran = (report: AgentReport) =>
-    report.ran === 0
-      ? "no"
-      : `yes, ${report.ran} time${report.ran === 1 ? "" : "s"} (${Object.entries(report.outcomes)
-          .map(([how, count]) => `${how} ${count}`)
-          .join(", ")})`;
   const added = (report: AgentReport) =>
-    `${report.added.chars} characters (hooks ${report.added.hooks}, commands ${report.added.commands}). Of them plans: ${plansChars(report)} (start line ${report.nudges * START_WORDS.length}, answers ${report.answers.chars} in ${report.answers.count}, notices ${report.notices.chars} in ${report.notices.count}); Impact: ${report.impact.chars} in ${report.impact.count} notices`;
+    `${report.added.chars} characters (hooks ${report.added.hooks}, commands ${report.added.commands}).`;
   return [
     `arm: ${arm} (${ARM_LABELS[arm]})${result.dry ? " · dry run: scripted stand-ins for the model" : ""}`,
     `clean integration: ${yes(one.clean)} (merge ${one.merge}${one.conflicts.length > 0 ? `: ${one.conflicts.join(", ")}` : ""}; merged tree: ${one.merged === undefined ? "not run" : one.merged.ok ? "passes" : one.merged.detail})`,
     `Ana's branch alone: ${one.ana.ok ? "renamed as asked" : `NOT as asked: ${one.ana.detail}`}`,
     `Bob's branch alone: ${one.bob.ok ? `written against the ${one.written} contract (${one.written === "old" ? "amount(), dollars" : "amountCents()"})` : `works against NEITHER contract: ${one.bob.detail}`}`,
     `Bob's code uses amountCents: ${yes(one.bobUsesCents)}`,
-    `Ana's agent ran peer plan: ${ran(ana)}`,
-    `Bob's agent ran peer plan: ${ran(bob)}`,
     `Peer added to Ana's agent: ${added(ana)}`,
     `Peer added to Bob's agent: ${added(bob)}`,
   ];
@@ -581,52 +471,6 @@ export const textsOf = (out: HookOut): ReadonlyArray<string> =>
     out?.hookSpecificOutput?.additionalContext,
     out?.hookSpecificOutput?.permissionDecisionReason,
   ].filter((text): text is string => typeof text === "string");
-
-/** Whether Peer asked for a plan: the line every session start carries while plans are on. */
-export const asksForPlan = (heard: ReadonlyArray<string>) =>
-  heard.some((text) => text.includes("peer plan --change"));
-
-/** The command a plan notice suggests for the contract of what the other work uses, when one does. */
-export function suggestedContract(heard: ReadonlyArray<string>) {
-  for (const text of heard) {
-    const found = /peer plan --amend --provides "([^"\s]+) \(([^)]+)\): <contract>"/.exec(text);
-    if (found?.[1] !== undefined && found[2] !== undefined)
-      return { symbol: found[1], path: found[2] };
-  }
-  return undefined;
-}
-
-/** Whether what an agent heard names the new contract. */
-export const heardNewContract = (heard: ReadonlyArray<string>) =>
-  heard.some((text) => text.includes("amountCents"));
-
-/** The plans the scripted agents declare when Peer asks: what each changes, uses and provides. */
-export const ANA_PLAN = [
-  "plan",
-  "--change",
-  "src/invoice.js#Invoice.amount",
-  "--change",
-  "src/receipt.js",
-  "--change",
-  "src/summary.js",
-  "--provides",
-  "Invoice.amountCents (src/invoice.js): an integer number of cents, replaces Invoice.amount",
-] as const;
-export const BOB_PLAN = [
-  "plan",
-  "--change",
-  "src/total.js",
-  "--uses",
-  "src/invoice.js#Invoice.amount",
-] as const;
-
-/**
- * The contract line for what Bob's plan uses, as Ana writes it when a notice says to. It has no `$`:
- * a command with one inside double quotes is not plain (the shell would expand it), so Peer does not
- * let it through without asking.
- */
-export const contractFor = (symbol: string) =>
-  `${symbol} is now amountCents(), an integer number of cents (1250 is twelve dollars fifty); it was dollars`;
 
 /** The code Ana's scripted agent writes: the replacement of the method, and its uses. */
 export const ANA_FILES: Readonly<Record<string, string>> = {
@@ -676,9 +520,7 @@ export const ANA_FILES: Readonly<Record<string, string>> = {
 };
 /**
  * Ana's first edit of the class: the new method beside the old one, which goes in her last edit, once its
- * callers use the new. Impact sees a removal only when it checked the file before the edit that makes it
- * (a rewrite in one edit shows it the new method and no removal), so a careful migration like this is
- * the one it can pair with a use of the old method.
+ * callers use the new.
  */
 export const ANA_INVOICE_BEFORE_REMOVAL = [
   "/** An invoice: what a customer owes. */",
@@ -722,159 +564,37 @@ export const TOTAL_IN_CENTS = [
 export interface StubInput {
   readonly ana: StubAgent;
   readonly bob: StubAgent;
-  readonly arm: Arm;
   readonly pause: (milliseconds: number) => Promise<void>;
-  readonly told: (who: string, text: string | null | undefined) => void;
-  /** Run after each file an agent writes: where a code index is kept, it is brought up to date. */
-  readonly afterEdit?: () => void;
-  /** Run when the agents are done and have not ended their sessions: Impact clears a session's footprint when it ends. */
-  readonly beforeEnd?: () => Promise<void>;
-  /**
-   * Gives Impact the time it needs, and listens: it checks a session five seconds after an edit and a session
-   * at most every twenty, and sees a removal only when it checked the file before the edit that makes it. So
-   * Ana waits for its first check before she removes the old method, and each agent then takes steps for up
-   * to thirty seconds to hear what Impact says of it. They only listen: what Impact told them is in the
-   * log, and the agents change nothing for it. The steps they take add to what Peer is counted to have said,
-   * so a dry run's sizes are those of the run without this.
-   */
-  readonly watchImpact?: boolean;
 }
 
 /**
  * Ana's and Bob's scripted agents, in the order real ones would act: Ana starts and changes the
- * contract; Bob starts a moment later and writes his total; each takes a step now and then, where
- * Peer may speak. They do what Peer's words say and nothing Peer did not say: declare a plan when
- * asked, amend it as the notice that Bob uses what Ana changes suggests, and write against the
- * contract they have heard (the one they have, otherwise).
+ * contract; Bob starts a moment later and writes his total against the contract he has.
  */
 export async function runStub(input: StubInput) {
-  const { ana, bob, pause, told } = input;
-  const heard = { ana: [] as string[], bob: [] as string[] };
-  const hear = (who: "ana" | "bob", texts: ReadonlyArray<string> | string | undefined) => {
-    heard[who].push(...(typeof texts === "string" ? [texts] : (texts ?? [])));
-  };
+  const { ana, bob, pause } = input;
   const write = (agent: StubAgent, path: string, text: string) => {
     const before = agent.edit("PreToolUse", path);
     if (before?.hookSpecificOutput?.permissionDecision === "deny")
       throw new Error(`${agent.name} was stopped before it edited ${path}`);
     NodeFS.mkdirSync(NodePath.dirname(agent.file(path)), { recursive: true });
     NodeFS.writeFileSync(agent.file(path), text);
-    input.afterEdit?.();
-    return agent.edit("PostToolUse", path);
-  };
-  /** Steps (a prompt each) until `done`, for up to `tries` quarter seconds: where the news of the Hub reaches an agent. */
-  const stepsUntil = async (
-    agent: StubAgent,
-    who: "ana" | "bob",
-    done: () => boolean,
-    tries = 80,
-  ) => {
-    for (let step = 0; step < tries && !done(); step += 1) {
-      hear(who, textsOf(agent.hook("UserPromptSubmit", { prompt: "continue" })));
-      if (!done()) await pause(250);
-    }
-    return done();
+    agent.edit("PostToolUse", path);
   };
 
-  hear("ana", ana.start().told);
-  hear("ana", textsOf(ana.hook("UserPromptSubmit", { prompt: ANA_TASK })));
-  if (asksForPlan(heard.ana)) {
-    const answer = ana.peer(...ANA_PLAN);
-    told(`${ana.name} (peer plan)`, answer);
-    hear("ana", answer);
-  }
-  hear("ana", textsOf(write(ana, "src/invoice.js", ANA_INVOICE_BEFORE_REMOVAL)));
+  ana.start();
+  ana.hook("UserPromptSubmit", { prompt: ANA_TASK });
+  write(ana, "src/invoice.js", ANA_INVOICE_BEFORE_REMOVAL);
   // Bob's person asks a moment later.
   await pause(1500);
-  hear("bob", bob.start().told);
-  hear("bob", textsOf(bob.hook("UserPromptSubmit", { prompt: BOB_TASK })));
-  if (asksForPlan(heard.bob)) {
-    const answer = bob.peer(...BOB_PLAN);
-    told(`${bob.name} (peer plan)`, answer);
-    hear("bob", answer);
-  }
-  // Each agent takes a step. Where plans are on, Ana waits for the news that Bob uses what she changes
-  // and does what it suggests; Bob waits for the contract that follows.
-  if (plansOn(input.arm)) {
-    await stepsUntil(ana, "ana", () => suggestedContract(heard.ana) !== undefined);
-    const suggestion = suggestedContract(heard.ana);
-    if (suggestion !== undefined) {
-      const answer = ana.peer(
-        "plan",
-        "--amend",
-        "--provides",
-        `${suggestion.symbol} (${suggestion.path}): ${contractFor(suggestion.symbol)}`,
-      );
-      told(`${ana.name} (peer plan --amend)`, answer);
-      hear("ana", answer);
-      await stepsUntil(bob, "bob", () => heardNewContract(heard.bob));
-    }
-  } else {
-    hear("ana", textsOf(ana.hook("UserPromptSubmit", { prompt: "continue" })));
-    hear("bob", textsOf(bob.hook("UserPromptSubmit", { prompt: "continue" })));
-  }
-  hear(
-    "bob",
-    textsOf(
-      write(bob, "src/total.js", heardNewContract(heard.bob) ? TOTAL_IN_CENTS : TOTAL_IN_DOLLARS),
-    ),
-  );
+  bob.start();
+  bob.hook("UserPromptSubmit", { prompt: BOB_TASK });
+  ana.hook("UserPromptSubmit", { prompt: "continue" });
+  bob.hook("UserPromptSubmit", { prompt: "continue" });
+  write(bob, "src/total.js", TOTAL_IN_DOLLARS);
   // Her callers move to the new method, and the old one goes last.
-  if (input.watchImpact === true) await pause(8000);
   for (const [path, text] of Object.entries(ANA_FILES))
-    if (path !== "src/invoice.js") hear("ana", textsOf(write(ana, path, text)));
-  hear("ana", textsOf(write(ana, "src/invoice.js", ANA_FILES["src/invoice.js"]!)));
-  if (input.watchImpact === true)
-    for (const [agent, who] of [
-      [ana, "ana"],
-      [bob, "bob"],
-    ] as const)
-      await stepsUntil(
-        agent,
-        who,
-        () => heard[who].some((text) => text.includes("impact (advice)")),
-        120,
-      );
-  await input.beforeEnd?.();
+    if (path !== "src/invoice.js") write(ana, path, text);
+  write(ana, "src/invoice.js", ANA_FILES["src/invoice.js"]!);
   for (const agent of [ana, bob]) agent.hook("SessionEnd", { reason: "exit" });
-  return heard;
-}
-
-/**
- * Indexes a checkout with CodeGraph, which Impact reads and the lab does not otherwise make: `init`
- * then `index`, the lab's own checkout being a throwaway. Says why when it could not. An index that
- * is behind the agents' edits is one Impact will not read, so `syncCheckout` brings it up to date.
- */
-export function indexCheckout(
-  binary: string,
-  root: string,
-): { readonly ok: boolean; readonly detail: string } {
-  excludeToolState(root);
-  for (const args of [
-    ["init", root],
-    ["index", root],
-  ]) {
-    const ran = NodeChildProcess.spawnSync(binary, args, {
-      encoding: "utf8",
-      timeout: 120_000,
-      cwd: root,
-    });
-    if (ran.status !== 0)
-      return {
-        ok: false,
-        detail: `codegraph ${args[0]} ended ${ran.status ?? ran.error?.message ?? "without a status"}: ${`${ran.stderr}${ran.stdout}`.trim().split("\n").at(-1) ?? ""}`,
-      };
-  }
-  return { ok: true, detail: "indexed" };
-}
-
-/** Brings a checkout's index up to date with the files its agent changed; false when it could not. */
-export function syncCheckout(binary: string, root: string): boolean {
-  return (
-    NodeChildProcess.spawnSync(binary, ["sync", root], {
-      encoding: "utf8",
-      timeout: 30_000,
-      cwd: root,
-    }).status === 0
-  );
 }

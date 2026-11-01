@@ -80,19 +80,19 @@ describe("workspace sections", () => {
   });
 
   it("keeps registered inactive settings available at the end without showing unknown features", () => {
-    const impact: PeerMobilePlugin = {
-      id: "impact",
+    const audit: PeerMobilePlugin = {
+      id: "audit",
       alwaysWorkspaceSections: [{ key: "settings", place: "end", Component: Nothing }],
     };
     const changes: PeerMobilePlugin = {
       id: "changes",
       alwaysWorkspaceSections: [{ key: "changes", place: "tasks", Component: Nothing }],
     };
-    const registry = [changes, impact];
-    const listed = status([plugin("impact", false), plugin("changes", false)]);
+    const registry = [changes, audit];
+    const listed = status([plugin("audit", false), plugin("changes", false)]);
     expect(workspaceSectionsAt(selectPeerPlugins(registry, listed), "end")).toEqual([]);
     expect(alwaysWorkspaceSectionsAt(registry, listed, "end").map((s) => s.key)).toEqual([
-      "always:impact:settings",
+      "always:audit:settings",
     ]);
     expect(alwaysWorkspaceSectionsAt(registry, listed, "tasks").map((s) => s.key)).toEqual([
       "always:changes:changes",
@@ -110,20 +110,20 @@ it("shows a plugin only when active and keeps older environments quiet", () => {
   expect(ids(selectPeerPlugins(registry, status()))).not.toContain("audit");
 });
 
-it("keeps impact task views out of older, disabled and forced-off environments", () => {
-  const registry = [...REGISTRY, { id: "impact" }];
-  expect(ids(selectPeerPlugins(registry, status([plugin("impact")])))).toEqual(["impact"]);
-  for (const reason of ["off", "hub", "PEER_IMPACT=off"]) {
+it("keeps a plugin's task views out of older, disabled and forced-off environments", () => {
+  const registry = [...REGISTRY, { id: "audit" }];
+  expect(ids(selectPeerPlugins(registry, status([plugin("audit")])))).toEqual(["audit"]);
+  for (const reason of ["off", "hub", "FORCED=off"]) {
     expect(
       ids(
         selectPeerPlugins(
           registry,
-          status([{ ...plugin("impact", false), enabled: reason !== "off", reason }]),
+          status([{ ...plugin("audit", false), enabled: reason !== "off", reason }]),
         ),
       ),
-    ).not.toContain("impact");
+    ).not.toContain("audit");
   }
-  expect(ids(selectPeerPlugins(registry, status()))).not.toContain("impact");
+  expect(ids(selectPeerPlugins(registry, status()))).not.toContain("audit");
 });
 
 it("keeps plans task views out of older, disabled and forced-off environments", () => {

@@ -305,10 +305,10 @@ describe("the status field", () => {
 });
 
 describe("the agreements plugin in Peer's registries", () => {
-  it("is listed right after plans, then changes, with settings last", () => {
+  it("is listed right after ownership, then changes, with settings last", () => {
     const listed = PEER_PLUGIN_IDS.indexOf("agreements");
     expect(listed).toBeGreaterThan(0);
-    expect(listed).toBe(PEER_PLUGIN_IDS.indexOf("plans") + 1);
+    expect(listed).toBe(PEER_PLUGIN_IDS.indexOf("ownership") + 1);
     expect(PEER_PLUGIN_IDS[listed + 1]).toBe("changes");
     expect(PEER_PLUGIN_IDS.at(-1)).toBe("settings");
   });

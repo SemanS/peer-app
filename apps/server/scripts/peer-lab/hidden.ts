@@ -32,7 +32,6 @@ import {
 import {
   ARM_LABELS,
   currentBranch,
-  plansChars,
   textsOf,
   type AgentReport,
   type Arm,
@@ -496,14 +495,8 @@ const WRITTEN: Readonly<Record<HiddenWritten, string>> = {
 /** The result as the lab prints it, one fact to a line. */
 export function formatHidden(result: HiddenResult): ReadonlyArray<string> {
   const { arm, integration: one, ana, bob } = result;
-  const ran = (report: AgentReport) =>
-    report.ran === 0
-      ? "no"
-      : `yes, ${report.ran} time${report.ran === 1 ? "" : "s"} (${Object.entries(report.outcomes)
-          .map(([how, count]) => `${how} ${count}`)
-          .join(", ")})`;
   const added = (report: AgentReport) =>
-    `${report.added.chars} characters (hooks ${report.added.hooks}, commands ${report.added.commands}). Of them plans: ${plansChars(report)} (answers ${report.answers.chars} in ${report.answers.count}, notices ${report.notices.chars} in ${report.notices.count}); Impact: ${report.impact.chars} in ${report.impact.count} notices`;
+    `${report.added.chars} characters (hooks ${report.added.hooks}, commands ${report.added.commands}).`;
   return [
     `arm: ${arm} (${ARM_LABELS[arm]})${result.dry ? " · dry run: scripted stand-ins for the model" : ""}`,
     `clean integration: ${yes(one.clean)} (merge ${one.merge}${one.conflicts.length > 0 ? `: ${one.conflicts.join(", ")}` : ""}; merged tree: ${one.merged === undefined ? "not run" : one.merged.ok ? "passes" : one.merged.detail})`,
@@ -511,8 +504,6 @@ export function formatHidden(result: HiddenResult): ReadonlyArray<string> {
     `Bob's branch alone: ${one.bob.ok ? WRITTEN[one.written] : `${WRITTEN.neither}: ${one.bob.detail}`}`,
     `Bob's code allows for cents: ${yes(one.bobUsesCents)}`,
     `Bob's code calls orderTotal(): ${yes(one.bobCallsOrderTotal)}`,
-    `Ana's agent ran peer plan: ${ran(ana)}`,
-    `Bob's agent ran peer plan: ${ran(bob)}`,
     `Peer added to Ana's agent: ${added(ana)}`,
     `Peer added to Bob's agent: ${added(bob)}`,
     ...(result.integrator === undefined ? [] : integratorLines(result.integrator)),

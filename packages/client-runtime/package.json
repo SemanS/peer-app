@@ -594,9 +594,6 @@
     },
     "./peer/announcements": "./src/peer/announcements.ts",
     "./peer-announcements": "./src/peer/announcements.ts",
-    "./peer/impact": "./src/peer/impact.ts",
-    "./peer/plans": "./src/peer/plans.ts",
-    "./peer/plans-view": "./src/peer/plansView.ts",
     "./peer/agreements": "./src/peer/agreements.ts",
     "./peer/jujutsu": "./src/peer/jujutsu.ts",
     "./peer/changes": "./src/peer/changes.ts",
@@ -610,8 +607,7 @@
     "./peer/roles": "./src/peer/roles.ts",
     "./peer/rooms": "./src/peer/rooms.ts",
     "./peer/acceptance": "./src/peer/acceptance.ts",
-    "./peer/runs": "./src/peer/runs.ts",
-    "./testing/peer-plans": "./src/testing/peerPlans.ts"
+    "./peer/runs": "./src/peer/runs.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

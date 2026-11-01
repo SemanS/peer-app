@@ -1,8 +1,6 @@
 import { PeerHandoffStatus } from "./handoff.ts";
 import { PeerResourcesState } from "./resources.ts";
-import { PeerImpactStatus } from "./impact.ts";
 import { PeerOwnershipStatus } from "./ownership.ts";
-import { PeerPlansStatus } from "./plans.ts";
 import { PeerAgreementsStatus } from "./agreements.ts";
 import { PeerChangesStatus } from "./changes.ts";
 import { JujutsuState } from "./jujutsu.ts";
@@ -34,8 +32,6 @@ export * from "./roles.ts";
 export * from "./rooms.ts";
 
 export const peerPluginStatusFields = {
-  impact: SchemaValues.optional(PeerImpactStatus),
-  plans: SchemaValues.optional(PeerPlansStatus),
   agreements: SchemaValues.optional(PeerAgreementsStatus),
   changes: SchemaValues.optional(PeerChangesStatus),
   resources: SchemaValues.optional(PeerResourcesState),

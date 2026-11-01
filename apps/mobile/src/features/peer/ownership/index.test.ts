@@ -60,13 +60,13 @@ describe("the ownership plugin on the phone", () => {
     // A status without a plugin list counts only the features that existed before plugins.
     expect(sectionsOf(status())).toEqual([]);
     expect(sectionsOf(status([]))).toEqual([]);
-    expect(sectionsOf(status([{ ...plugin(), id: "impact" }]))).toEqual([]);
+    expect(sectionsOf(status([{ ...plugin(), id: "resources" }]))).toEqual([]);
     expect(sectionsOf(null)).toEqual([]);
   });
 });
 
 describe("the registry", () => {
-  it("lists the plugin where the server lists it, after Impact and before Settings", () => {
+  it("lists the plugin where the server lists it, after Resources and before Settings", () => {
     // The registry file imports every plugin's screens, which only React Native can load, so its
     // order is read from the source: a plugin missing from it, or out of place, fails here.
     const source = NodeFS.readFileSync(new URL("../slots.ts", import.meta.url), "utf8");
@@ -75,9 +75,9 @@ describe("the registry", () => {
         /(\w+)MobilePlugin/g,
       ),
     ].map((match) => match[1]);
-    expect(listed.indexOf("impact")).toBeGreaterThanOrEqual(0);
-    expect(listed.indexOf("ownership")).toBe(listed.indexOf("impact") + 1);
-    expect(PEER_PLUGIN_IDS.indexOf("ownership")).toBe(PEER_PLUGIN_IDS.indexOf("impact") + 1);
+    expect(listed.indexOf("resources")).toBeGreaterThanOrEqual(0);
+    expect(listed.indexOf("ownership")).toBe(listed.indexOf("resources") + 1);
+    expect(PEER_PLUGIN_IDS.indexOf("ownership")).toBe(PEER_PLUGIN_IDS.indexOf("resources") + 1);
     expect(PEER_PLUGIN_IDS.indexOf("ownership")).toBeLessThan(PEER_PLUGIN_IDS.indexOf("settings"));
   });
 });

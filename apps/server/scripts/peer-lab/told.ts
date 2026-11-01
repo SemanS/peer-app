@@ -1,8 +1,10 @@
+// @effect-diagnostics nodeBuiltinImport:off - host-side tool that reads local log files.
 /**
  * What a computer's coordination log says Peer told an agent, shared by the lab steps that count
  * it: a line of the debug log (`coordination.debug.jsonl`), what a hook printed for Claude Code,
  * and the texts Peer put into a session's context, whichever hook or command carried them.
  */
+import * as NodeFS from "node:fs";
 
 /** A line of a computer's debug log. */
 export interface LabEvent {
@@ -58,3 +60,15 @@ export function peerAdded(events: ReadonlyArray<LabEvent>, session?: string) {
   }
   return { hooks, commands, chars: hooks + commands };
 }
+
+/** Reads a coordination log's JSON lines. */
+export function readLines(path: string): ReadonlyArray<string> {
+  return NodeFS.existsSync(path)
+    ? NodeFS.readFileSync(path, "utf8")
+        .split("\n")
+        .filter((line) => line !== "")
+    : [];
+}
+
+/** The content-free log next to a debug log: `coordination.debug.jsonl` is kept beside `coordination.jsonl`. */
+export const metricsPathOf = (debugPath: string) => debugPath.replace(/\.debug\.jsonl$/, ".jsonl");

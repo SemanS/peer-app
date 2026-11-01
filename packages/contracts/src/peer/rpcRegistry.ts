@@ -4,8 +4,6 @@ import {
   PeerContextArchive,
   PeerContextArchiveInput,
 } from "./contextView.ts";
-import { PEER_IMPACT_METHODS, PeerImpactRpcs, ImpactRpcScopes } from "./impact.ts";
-import { PEER_PLANS_METHODS, PlansRpcGroup, PlansRpcScopes } from "./plans.rpc.ts";
 import {
   AgreementsRpcGroup,
   AgreementsRpcScopes,
@@ -579,8 +577,6 @@ const PeerCoreRpcScopes = {
 /** Every Peer method, as `WS_METHODS` spreads them. */
 export const PEER_WS_METHODS = {
   ...PEER_RESOURCES_METHODS,
-  ...PEER_IMPACT_METHODS,
-  ...PEER_PLANS_METHODS,
   ...PEER_AGREEMENTS_METHODS,
   ...PEER_CHANGES_METHODS,
   ...PEER_CORE_METHODS,
@@ -612,8 +608,6 @@ export const PEER_WS_METHODS = {
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   ResourcesRpcGroup,
-  PeerImpactRpcs,
-  PlansRpcGroup,
   AgreementsRpcGroup,
   ChangesRpcGroup,
   DependenciesRpcGroup,
@@ -645,8 +639,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
 export const PEER_RPC_SCOPES = {
   ...ResourcesRpcScopes,
-  ...ImpactRpcScopes,
-  ...PlansRpcScopes,
   ...AgreementsRpcScopes,
   ...ChangesRpcScopes,
   ...PeerCoreRpcScopes,

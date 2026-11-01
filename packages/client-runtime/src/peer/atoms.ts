@@ -1,5 +1,3 @@
-import { createPeerImpactAtoms } from "./impact.ts";
-import { createPeerPlansAtoms } from "./plans.ts";
 import { createPeerAgreementsAtoms } from "./agreements.ts";
 import { createPeerChangesAtoms } from "./changes.ts";
 import { createPeerJujutsuAtoms } from "./jujutsu.ts";
@@ -41,8 +39,6 @@ export function createPeerPluginAtoms<R, ER>(
     ...createPeerJujutsuAtoms(runtime),
     ...createPeerDependencyAtoms(runtime),
     ...createPeerHandoffAtoms(runtime),
-    ...createPeerImpactAtoms(runtime),
-    ...createPeerPlansAtoms(runtime),
     ...createPeerAgreementsAtoms(runtime),
     ...createPeerChangesAtoms(runtime),
     ...createPeerGitHubAtoms(runtime),

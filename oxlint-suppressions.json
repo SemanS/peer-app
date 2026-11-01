@@ -35,11 +35,6 @@
       "count": 2
     }
   },
-  "apps/mobile/src/features/peer/impact/PeerImpactSettings.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
   "apps/mobile/src/features/peer/knowledge/SavedKnowledge.tsx": {
     "t3code/no-unreasoned-state-sync": {
       "count": 1
@@ -85,16 +80,6 @@
   },
   "apps/mobile/src/features/peer/ownership/useMinuteClock.ts": {
     "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/plans/PeerPlansSection.tsx": {
-    "t3code/no-unreasoned-state-sync": {
-      "count": 1
-    }
-  },
-  "apps/mobile/src/features/peer/plans/PlanCards.tsx": {
-    "t3code/no-low-value-comments": {
       "count": 1
     }
   },
@@ -158,7 +143,7 @@
   },
   "apps/server/scripts/peer-lab/contract.ts": {
     "t3code/no-low-value-comments": {
-      "count": 4
+      "count": 2
     }
   },
   "apps/server/scripts/peer-lab/follow.ts": {
@@ -1167,16 +1152,6 @@
       "count": 1
     }
   },
-  "apps/server/src/peerHub/plugins/impact/Impact.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 7
-    }
-  },
-  "apps/server/src/peerHub/plugins/impact/index.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
   "apps/server/src/peerHub/plugins/jujutsu/Jujutsu.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1506,26 +1481,6 @@
   },
   "apps/server/src/peerHub/plugins/ownership/verdicts.ts": {
     "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/plans/Plans.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 13
-    }
-  },
-  "apps/server/src/peerHub/plugins/plans/cli.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/plans/client/codegraph.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/plans/client/hub.ts": {
-    "t3code/prefer-effect-fn": {
       "count": 1
     }
   },
@@ -2049,11 +2004,6 @@
       "count": 3
     }
   },
-  "apps/web/src/components/workspaces/impact/ImpactList.test.tsx": {
-    "t3code/require-disposable-render": {
-      "count": 2
-    }
-  },
   "apps/web/src/components/workspaces/knowledge/Flows.test.tsx": {
     "t3code/require-disposable-render": {
       "count": 3
@@ -2203,19 +2153,6 @@
   "apps/web/src/components/workspaces/ownership/teamTimeline.logic.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/plans/PlansSection.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/plans/plans.test.tsx": {
-    "t3code/no-dom-test-environment": {
-      "count": 1
-    },
-    "t3code/require-disposable-render": {
-      "count": 3
     }
   },
   "apps/web/src/components/workspaces/projectScope.integration.test.tsx": {
@@ -2649,11 +2586,6 @@
       "count": 1
     }
   },
-  "packages/client-runtime/src/peer/plansView.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "packages/client-runtime/src/peer/plugins.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -2730,11 +2662,6 @@
   "packages/contracts/src/peer/handoff.ts": {
     "t3code/no-low-value-comments": {
       "count": 2
-    }
-  },
-  "packages/contracts/src/peer/impact.test.ts": {
-    "t3code/no-inline-schema-compile": {
-      "count": 4
     }
   },
   "packages/contracts/src/peer/knowledge.ts": {

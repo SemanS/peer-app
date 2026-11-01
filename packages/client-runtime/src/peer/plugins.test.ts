@@ -138,7 +138,7 @@ describe("hubFeatureState", () => {
   });
 
   it("is newer where the Hub does neither, which an update fixes", () => {
-    expect(hubFeatureState(told, "impact")).toBe("newer");
+    expect(hubFeatureState(told, "handoff")).toBe("newer");
   });
 
   it("needs the revision the plugin needs, or a later one", () => {

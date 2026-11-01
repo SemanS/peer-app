@@ -1020,23 +1020,21 @@ export function deliveredChip(
 }
 
 /**
- * The Provides chip: the session's plan `provides` lines, else the brief's outcome, and who waits
- * for the task with what else each waits for (`dependentsReadiness`).
+ * The Provides chip: the brief's outcome, and who waits for the task with what else each waits for
+ * (`dependentsReadiness`).
  */
 export function providesChip(
-  planLines: ReadonlyArray<string>,
   briefOutcome: string | null | undefined,
   readiness: ReadonlyArray<Pick<DependentsGroup, "line">>,
 ): {
-  readonly source: "plan" | "brief" | "none";
+  readonly source: "brief" | "none";
   readonly lines: ReadonlyArray<string>;
   readonly waiting: ReadonlyArray<string>;
 } {
-  const plan = planLines.map((line) => line.trim()).filter((line) => line !== "");
   const outcome = briefOutcome?.trim() ?? "";
   return {
-    source: plan.length > 0 ? "plan" : outcome !== "" ? "brief" : "none",
-    lines: plan.length > 0 ? plan : outcome !== "" ? [outcome] : [],
+    source: outcome !== "" ? "brief" : "none",
+    lines: outcome !== "" ? [outcome] : [],
     waiting: readiness.map((group) => group.line),
   };
 }

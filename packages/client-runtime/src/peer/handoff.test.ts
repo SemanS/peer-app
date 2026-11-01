@@ -317,15 +317,15 @@ describe("the review page's chips", () => {
     expect(pullRequestName("https://example.test/mr/4")).toBe("https://example.test/mr/4");
   });
 
-  it("says Provides from the plan, else the brief, with who waits", () => {
+  it("says Provides from the brief, with who waits", () => {
     const waiting = [{ line: "3.1, 3.2 · ready when 1.2 also lands" }, { line: "5.1 · ready" }];
-    expect(providesChip(["SurveyLock type", " "], "Locks surveys", waiting)).toEqual({
-      source: "plan",
-      lines: ["SurveyLock type"],
+    expect(providesChip(" Locks surveys ", waiting)).toEqual({
+      source: "brief",
+      lines: ["Locks surveys"],
       waiting: ["3.1, 3.2 · ready when 1.2 also lands", "5.1 · ready"],
     });
-    expect(providesChip([], "Locks surveys", []).lines).toEqual(["Locks surveys"]);
-    expect(providesChip([], null, []).source).toBe("none");
+    expect(providesChip("Locks surveys", []).lines).toEqual(["Locks surveys"]);
+    expect(providesChip(null, []).source).toBe("none");
   });
 });
 

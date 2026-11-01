@@ -356,9 +356,9 @@ describe("the messages waiting at a landing step", () => {
         ],
       },
     });
-    const advice = plugin("impact", {
+    const advice = plugin("settle", {
       hooks: {
-        notices: [{ wakes: false, read: () => Effect.succeed("Impact: a contract moved.") }],
+        notices: [{ wakes: false, read: () => Effect.succeed("Advice: a contract moved.") }],
       },
     });
     const { fixture, view, waiting } = await landingFixture(only(decision, advice));
@@ -377,11 +377,11 @@ describe("the messages waiting at a landing step", () => {
   });
 
   it("finds nothing while only advice waits", async () => {
-    const advice = plugin("impact", {
+    const advice = plugin("settle", {
       hooks: {
         notices: [
           { wakes: true, read: () => Effect.succeed("Peer · announcement: main CI is red.") },
-          { wakes: false, landing: false, read: () => Effect.succeed("Impact: a contract moved.") },
+          { wakes: false, landing: false, read: () => Effect.succeed("Advice: a contract moved.") },
         ],
       },
     });

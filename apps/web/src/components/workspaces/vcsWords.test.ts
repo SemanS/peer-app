@@ -6,7 +6,6 @@ import {
   boardSearchPlaceholder,
   computerKinds,
   experimentStartStep,
-  impactIndexWords,
   issueKeyHint,
   launchLine,
   launchNote,
@@ -135,7 +134,6 @@ describe("settings without a thread", () => {
   it("speak of this computer's ready checkouts", () => {
     const jjOnly = computerKinds(computer([[repo("app", "ready", "jj")]]));
     expect(jjOnly).toEqual(["jj"]);
-    expect(impactIndexWords(jjOnly).title).toBe("Index new Peer task workspaces");
     expect(experimentStartStep(jjOnly)).toContain("each on a bookmark of its own");
   });
 
@@ -143,7 +141,6 @@ describe("settings without a thread", () => {
     expect(computerKinds(computer([]))).toEqual(["git"]);
     expect(computerKinds(computer([[repo("app", "missing")]]))).toEqual(["git"]);
     const both = computerKinds(computer([[repo("app", "ready", "jj")], [repo("site", "ready")]]));
-    expect(impactIndexWords(both).title).toBe("Index new Peer task worktrees and jj workspaces");
     expect(experimentStartStep(both)).toContain("each on a branch or bookmark of its own");
   });
 

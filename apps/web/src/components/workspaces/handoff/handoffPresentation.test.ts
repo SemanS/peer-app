@@ -1,7 +1,6 @@
 import type {
   PeerHandoffPackage,
   PeerHubStatus,
-  PeerPlansView,
   PeerProjectState,
   PeerTask,
   PeerTestReport,
@@ -432,23 +431,21 @@ describe("what the review page adds to a package", () => {
         },
       ],
     }) as unknown as PeerHubStatus;
-  const input = (hub: PeerHubStatus, plans?: PeerPlansView) => ({
+  const input = (hub: PeerHubStatus) => ({
     pkg: PACKAGE,
     status: hub,
     workspace: "acme",
     state,
     nameOf,
-    plans,
   });
 
-  it("names who waits, the brief's outcome without a plan, and the acceptance as the status says it", () => {
+  it("names who waits, the brief's outcome, and the acceptance as the status says it", () => {
     const facts = reviewFactsFrom(input(status({ via: "policy" })));
     expect(facts.dependents?.map((group) => group.line)).toEqual([
       "3.1 · ready when 1.2 also lands",
       "5.1 · ready",
     ]);
     expect(facts.briefOutcome).toBe("text PDFs import as receipts");
-    expect(facts.planLines).toEqual([]);
     expect(facts.acceptance).toEqual({ by: "slavo@example.test", via: "policy" });
     expect(facts.status).toBe("review");
     expect(facts.computer("env-here")).toBe("this computer");
@@ -461,35 +458,5 @@ describe("what the review page adds to a package", () => {
     expect(
       reviewFactsFrom(input(withoutAcceptance as unknown as PeerHubStatus)).acceptance,
     ).toBeUndefined();
-  });
-
-  it("takes the provides lines of the author's newest plan on the task", () => {
-    const plan = (email: string, updatedAt: string, contract: string) => ({
-      project: "app",
-      session: "s",
-      email,
-      environment: "env",
-      task: "intake",
-      label: "",
-      seq: 1,
-      version: 1,
-      changes: [],
-      maybes: [],
-      uses: [],
-      provides: [{ name: "importPdf", path: "src/import.ts", contract }],
-      declaredAt: updatedAt,
-      updatedAt,
-      live: false,
-    });
-    const plans = {
-      plans: [
-        plan("ana@example.test", "2026-10-22T07:00:00Z", "old"),
-        plan("ana@example.test", "2026-10-22T07:30:00Z", "returns a receipt"),
-        plan("bob@example.test", "2026-10-22T07:40:00Z", "not Ana's"),
-      ],
-    } as unknown as PeerPlansView;
-    expect(reviewFactsFrom(input(status(), plans)).planLines).toEqual([
-      "importPdf (src/import.ts): returns a receipt",
-    ]);
   });
 });

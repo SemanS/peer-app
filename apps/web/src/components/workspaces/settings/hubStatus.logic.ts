@@ -210,16 +210,6 @@ const FEATURES: ReadonlyArray<Feature> = [
     },
   },
   {
-    id: "impact",
-    name: "Impact overlaps",
-    without: "nothing",
-    words: {
-      on: "Agents hear when work changes code another task calls.",
-      off: "Impact overlaps can’t be found: this Hub doesn’t run them.",
-      newer: "Impact overlaps can’t be found until the Hub is updated.",
-    },
-  },
-  {
     id: "ownership",
     name: "Ownership",
     without: "plugin",
@@ -237,16 +227,6 @@ const FEATURES: ReadonlyArray<Feature> = [
       on: "What the agents of two tasks agree is kept for those tasks and told to whoever works on either one later.",
       off: "Agreements can’t be kept: this Hub doesn’t run them.",
       newer: "Agreements can’t be kept until the Hub is updated.",
-    },
-  },
-  {
-    id: "plans",
-    name: "Plans",
-    without: "plugin",
-    words: {
-      on: "Before editing, agents say what they will change, use and provide; Peer says whose work meets theirs.",
-      off: "Plans can’t be shared: this Hub doesn’t run them.",
-      newer: "Plans can’t be shared until the Hub is updated.",
     },
   },
 ];

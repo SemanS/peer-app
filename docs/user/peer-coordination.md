@@ -823,7 +823,9 @@ In a colocated jj repository, agents can build on each other's work before it la
 
 - **Start on a teammate's work.** When you start an agent on a task, **Start from** offers main first,
   then the other tasks' work in flight that has a bookmark. Peer fetches only that bookmark and starts
-  the agent on top of it. When the agent pushes, Peer tells it the base its pull request needs.
+  the agent on top of it. On main that is what the team pushed, unless your main has commits of its
+  own, and your working copy stays where it is. When the agent pushes, Peer tells it the base its pull
+  request needs.
 - **Stay on the newest version.** An agent that builds on a teammate's change follows it: jj moves the
   agent's change when the teammate amends on the same computer, and Peer fetches the teammate's
   bookmark at the agent's tool steps when the change comes from another computer. The agent hears once

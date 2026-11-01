@@ -59,18 +59,6 @@ vi.mock(import("../../onboarding/firstRun"), async (original) => ({
   ...(await original()),
   useCompleteOnboarding: () => state.completeOnboarding,
 }));
-vi.mock("./WorkspaceStep", async () => {
-  const { useEffect } = await import("react");
-  return {
-    // The first-run workspace step is Peer's and has its own tests; these go on to the next step.
-    WorkspaceStep: ({ onContinue }: { readonly onContinue: () => void }) => {
-      useEffect(() => {
-        onContinue();
-      }, [onContinue]);
-      return null;
-    },
-  };
-});
 vi.mock(import("../../state/environments"), async (original) => {
   const environment = (environmentId: string) => ({
     environmentId,
@@ -223,8 +211,16 @@ async function click(label: string) {
   await act(async () => target.click());
 }
 
-function projectCheckboxes() {
+function checkboxes() {
   return [...document.querySelectorAll<HTMLElement>('[role="checkbox"]')];
+}
+
+function projectCheckboxes() {
+  return checkboxes().slice(0, -1);
+}
+
+function historyCheckbox() {
+  return checkboxes().at(-1)!;
 }
 
 async function mountImport(remote = false) {
@@ -240,9 +236,16 @@ async function mountImport(remote = false) {
       </RegistryContext.Provider>,
     ),
   );
+  // Without a local server the wizard opens on Connect; with one, on how Peer will be used.
+  await click(remote ? "Continue" : "Work on this computer");
   await click("Continue");
-  await click("Continue");
-  expect(pageText()).toContain("Import your projects");
+  expect(pageText()).toContain("Choose your first project");
+}
+
+// The most recent project starts selected and its conversations stay out until asked for.
+async function chooseBothWithHistory() {
+  await click("Select all");
+  await act(async () => historyCheckbox().click());
 }
 
 beforeEach(() => {
@@ -283,28 +286,52 @@ it("keeps scanning, choosing and skipping available to a paired read-only enviro
   await mountImport(true);
   expect(state.scan).toHaveBeenCalledWith(expect.objectContaining({ environmentId: remoteId }));
   expect(pageText()).toContain("/projects/first");
-  expect(button("Import 2 projects").disabled).toBe(true);
+  expect(button("Open 1 project").disabled).toBe(true);
   expect(pageText()).toContain(permissionMessage);
-  await click("Do not import projects");
+  await click("Choose a project later");
   expect(state.createProject).not.toHaveBeenCalled();
   expect(state.importThreads).not.toHaveBeenCalled();
   expect(state.completeOnboarding).toHaveBeenCalledOnce();
   expect(state.onDone).toHaveBeenCalledOnce();
 });
 
+it("opens the most recent project without copying its conversations", async () => {
+  await mountImport();
+  expect(projectCheckboxes().map((box) => box.getAttribute("aria-checked"))).toEqual([
+    "true",
+    "false",
+  ]);
+  await click("Open 1 project");
+  expect(state.createProject).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      input: expect.objectContaining({ workspaceRoot: "/projects/first" }),
+    }),
+  );
+  expect(state.importThreads).not.toHaveBeenCalled();
+  expect(state.onDone).toHaveBeenCalledWith(
+    expect.objectContaining({ environmentId: primaryId }),
+    undefined,
+  );
+});
+
 it("waits for the selected grant and enables import when it arrives", async () => {
   appAtomRegistry.set(sessionAtom(primaryId), AsyncResult.initial());
   await mountImport();
+  await chooseBothWithHistory();
   expect(button("Import 2 projects").disabled).toBe(true);
   await act(async () => setGrant(primaryId, true));
   await click("Import 2 projects");
   expect(state.createProject).toHaveBeenCalledTimes(2);
   expect(state.importThreads).toHaveBeenCalledTimes(2);
-  expect(state.onDone).toHaveBeenCalledWith(expect.objectContaining({ environmentId: primaryId }));
+  expect(state.onDone).toHaveBeenCalledWith(
+    expect.objectContaining({ environmentId: primaryId }),
+    undefined,
+  );
 });
 
 it("preserves selections and denies a click that lands as the paired environment's grant is revoked", async () => {
   await mountImport(true);
+  await chooseBothWithHistory();
   await act(async () => projectCheckboxes()[1]!.click());
   expect(projectCheckboxes()[1]!.getAttribute("aria-checked")).toBe("false");
   const importButton = button("Import 1 project");
@@ -338,6 +365,7 @@ it("rechecks after project creation and can retry its history without recreating
     return recordProject(input);
   });
   await mountImport();
+  await chooseBothWithHistory();
   await click("Import 2 projects");
   expect(state.createProject).toHaveBeenCalledOnce();
   await act(async () => {
@@ -372,6 +400,7 @@ it.each([false, true])(
       AsyncResult.success(await imported.promise),
     );
     await mountImport();
+    await chooseBothWithHistory();
     await click("Import 2 projects");
     expect(state.createProject).toHaveBeenCalledOnce();
     expect(state.importThreads).toHaveBeenCalledOnce();
@@ -400,6 +429,7 @@ it("completes accepted imports when permission is revoked after the final server
     AsyncResult.success(await imported.promise),
   );
   await mountImport();
+  await act(async () => historyCheckbox().click());
   await click("Import 1 project");
   await act(async () => {
     setGrant(primaryId, false);

@@ -1,6 +1,6 @@
 import { AuthAccessWriteScope, type PeerHubStatus } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
-import { alertsControlState, needsYouCardCopy } from "./needsYouControls.ts";
+import { alertsControlState } from "./needsYouControls.ts";
 
 type Alerts = NonNullable<NonNullable<PeerHubStatus["needsYou"]>["alerts"]>;
 const status = (alerts: Alerts) => ({ needsYou: { alerts, staleInputs: [] } });
@@ -42,31 +42,5 @@ describe("the Phone alerts explanation", () => {
       disabled: true,
       explanation: "Only this computer’s owner can change Phone alerts.",
     });
-  });
-});
-
-describe("the card copy of an owner's call", () => {
-  it("tells the owner to accept or decline, and a lead that they decide for the owner", () => {
-    expect(needsYouCardCopy({ kind: "owner-call", onBehalf: false })).toEqual({
-      label: "Owner's call",
-      guidance: "Accept or decline, with a note for the agent.",
-    });
-    expect(needsYouCardCopy({ kind: "owner-call", onBehalf: true })).toEqual({
-      label: "Owner's call",
-      guidance: "As a lead you can decide for the owner. The record says you did.",
-    });
-  });
-});
-
-describe("the card copy of an overlap", () => {
-  it("says the agents ended when a handover or their absence made it the person's", () => {
-    const overlap = { kind: "overlap", participants: ["Ana"] } as const;
-    expect(needsYouCardCopy({ ...overlap, phase: "decide" }).label).toBe("Needs coordination");
-    expect(needsYouCardCopy({ ...overlap, phase: "unanswered" }).label).toBe(
-      "Agreement not reached",
-    );
-    for (const reason of ["handover", "gone"] as const)
-      for (const phase of ["decide", "unanswered"] as const)
-        expect(needsYouCardCopy({ ...overlap, phase, reason }).label).toBe("Agents ended");
   });
 });

@@ -18,9 +18,7 @@ import { PeerHerdrStatus } from "./herdr.ts";
 import * as SchemaValues from "effect/Schema";
 import { PeerNeedsYouStatus } from "./needs-you.ts";
 import { PeerSettleStatus } from "./settle.ts";
-import { PeerDependencySnapshot } from "./dependencies.ts";
 import { PeerSettingsStatus } from "./settings.ts";
-import { PeerTestReportsStatus } from "./test-reports.ts";
 import { PeerRolesStatus } from "./roles.ts";
 import { PeerRoomsStatus } from "./rooms.ts";
 /** The schemas of these plugins reach the package index through here. */
@@ -35,7 +33,6 @@ export const peerPluginStatusFields = {
   resources: SchemaValues.optional(PeerResourcesState),
   needsYou: SchemaValues.optional(PeerNeedsYouStatus),
   settle: SchemaValues.optional(PeerSettleStatus),
-  dependencies: SchemaValues.optional(SchemaValues.Array(PeerDependencySnapshot)),
   toolTrust: SchemaValues.optional(PeerToolTrustStatus),
   announcements: SchemaValues.optional(PeerAnnouncementsStatus),
   mcp: SchemaValues.optional(PeerMcpStatus),
@@ -43,7 +40,6 @@ export const peerPluginStatusFields = {
   jujutsu: SchemaValues.optional(JujutsuState),
   ownership: SchemaValues.optional(PeerOwnershipStatus),
   settings: SchemaValues.optional(PeerSettingsStatus),
-  testReports: SchemaValues.optional(PeerTestReportsStatus),
   roles: SchemaValues.optional(PeerRolesStatus),
   rooms: SchemaValues.optional(PeerRoomsStatus),
 } satisfies Schema.Struct.Fields;

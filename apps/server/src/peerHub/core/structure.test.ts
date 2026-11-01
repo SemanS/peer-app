@@ -38,7 +38,6 @@ const ENTRY_BUDGET = 150;
  * the seams to split along.
  */
 const CEILINGS: Readonly<Record<string, number>> = {
-  handoff: 1728,
   jujutsu: 2354,
   rooms: 2261,
 };

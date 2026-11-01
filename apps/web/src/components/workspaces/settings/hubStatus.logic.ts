@@ -143,16 +143,6 @@ const FEATURES: ReadonlyArray<Feature> = [
     },
   },
   {
-    id: "dependencies",
-    name: "Task dependencies",
-    without: "plugin",
-    words: {
-      on: "Tasks can record what they depend on, and agents hear when it changes.",
-      off: "Task dependencies can’t be recorded: this Hub doesn’t run them.",
-      newer: "Task dependencies can’t be recorded until the Hub is updated.",
-    },
-  },
-  {
     id: "announcements",
     name: "Announcements",
     without: "nothing",

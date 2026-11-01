@@ -13,11 +13,6 @@ import { PEER_RESOURCES_METHODS, ResourcesRpcGroup, ResourcesRpcScopes } from ".
 import { PeerHubSubscribeInput } from "./needs-you.ts";
 import { PEER_NEEDS_YOU_METHODS, NeedsYouRpcGroup, NeedsYouRpcScopes } from "./needs-you.rpc.ts";
 import { PEER_SETTLE_METHODS, SettleRpcGroup, SettleRpcScopes } from "./settle.rpc.ts";
-import {
-  DependenciesRpcGroup,
-  DependenciesRpcScopes,
-  PEER_DEPENDENCY_METHODS,
-} from "./dependencies.rpc.ts";
 import { PEER_TOOL_TRUST_METHODS, PeerToolTrustRpcs, ToolTrustRpcScopes } from "./toolTrust.rpc.ts";
 import {
   PEER_ANNOUNCEMENTS_METHODS,
@@ -106,11 +101,6 @@ import { PeerHubSetPluginInput } from "./plugin.ts";
 import { PEER_REQUESTS_METHODS, RequestsRpcGroup, RequestsRpcScopes } from "./requests.rpc.ts";
 import { OwnershipRpcGroup, OwnershipRpcScopes, PEER_OWNERSHIP_METHODS } from "./ownership.rpc.ts";
 import { PEER_SETTINGS_METHODS, SettingsRpcGroup, SettingsRpcScopes } from "./settings.rpc.ts";
-import {
-  PEER_TEST_REPORTS_METHODS,
-  TestReportsRpcGroup,
-  TestReportsRpcScopes,
-} from "./test-reports.rpc.ts";
 import { PEER_ROLES_METHODS, RolesRpcGroup, RolesRpcScopes } from "./roles.rpc.ts";
 import { PEER_ROOMS_METHODS, RoomsRpcGroup, RoomsRpcScopes } from "./rooms.rpc.ts";
 import { CardRpcGroup, CardRpcScopes, PEER_CARD_METHODS } from "./card.rpc.ts";
@@ -573,7 +563,6 @@ export const PEER_WS_METHODS = {
   ...PEER_AGREEMENTS_METHODS,
   ...PEER_CHANGES_METHODS,
   ...PEER_CORE_METHODS,
-  ...PEER_DEPENDENCY_METHODS,
   ...PEER_HERDR_METHODS,
   ...PEER_JUJUTSU_METHODS,
   ...PEER_GITHUB_METHODS,
@@ -589,7 +578,6 @@ export const PEER_WS_METHODS = {
   ...PEER_SETTLE_METHODS,
   ...PEER_OWNERSHIP_METHODS,
   ...PEER_SETTINGS_METHODS,
-  ...PEER_TEST_REPORTS_METHODS,
   ...PEER_ROLES_METHODS,
   ...PEER_ROOMS_METHODS,
   ...PEER_CARD_METHODS,
@@ -600,7 +588,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   ResourcesRpcGroup,
   AgreementsRpcGroup,
   ChangesRpcGroup,
-  DependenciesRpcGroup,
   HerdrRpcGroup,
   JujutsuRpcGroup,
   GitHubRpcGroup,
@@ -616,7 +603,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   SettleRpcGroup,
   OwnershipRpcGroup,
   SettingsRpcGroup,
-  TestReportsRpcGroup,
   RolesRpcGroup,
   RoomsRpcGroup,
   CardRpcGroup,
@@ -629,7 +615,6 @@ export const PEER_RPC_SCOPES = {
   ...AgreementsRpcScopes,
   ...ChangesRpcScopes,
   ...PeerCoreRpcScopes,
-  ...DependenciesRpcScopes,
   ...HerdrRpcScopes,
   ...JujutsuRpcScopes,
   ...GitHubRpcScopes,
@@ -645,7 +630,6 @@ export const PEER_RPC_SCOPES = {
   ...SettleRpcScopes,
   ...OwnershipRpcScopes,
   ...SettingsRpcScopes,
-  ...TestReportsRpcScopes,
   ...RolesRpcScopes,
   ...RoomsRpcScopes,
   ...CardRpcScopes,

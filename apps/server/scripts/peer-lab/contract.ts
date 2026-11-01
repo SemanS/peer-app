@@ -44,23 +44,18 @@ export const ARM_LABELS: Readonly<Record<Arm, string>> = {
 
 /** The Hub features outside the kernel: `LAB_KERNEL=1` starts the lab's Hub without them. */
 export const KERNEL_FEATURES_OFF = [
-  "acceptance",
   "agreements",
   "announcements",
   "changes",
-  "dependencies",
   "github",
-  "handoff",
   "ownership",
   "requests",
   "resources",
   "roles",
-  "test-reports",
 ] as const;
 
 /** The plugins outside the kernel that need no Hub feature and have no operator's switch: turned off at each computer. */
 export const KERNEL_PLUGINS_OFF = [
-  "acceptance",
   "announcements",
   "capacity",
   "changes",
@@ -69,7 +64,6 @@ export const KERNEL_PLUGINS_OFF = [
   "resources",
   "roles",
   "settle",
-  "test-reports",
 ] as const;
 
 /** The arm the environment names: `LAB_PEER=off`, `LAB_AGREEMENTS=off`, `LAB_KERNEL=1`, or none. */

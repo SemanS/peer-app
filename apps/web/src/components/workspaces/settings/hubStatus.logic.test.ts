@@ -20,14 +20,9 @@ const plugin = (id: string, overrides: Partial<PeerPluginState> = {}): PeerPlugi
 });
 
 /** A Hub that serves everything: every plugin that needs a feature is active. */
-const everything = [
-  "settings",
-  "requests",
-  "observe",
-  "dependencies",
-  "ownership",
-  "agreements",
-].map((id) => plugin(id));
+const everything = ["settings", "requests", "observe", "ownership", "agreements"].map((id) =>
+  plugin(id),
+);
 
 const flags = { pathRules: true, github: true };
 
@@ -39,7 +34,6 @@ const ALL = [
   "audit",
   "requests",
   "observe",
-  "dependencies",
   "announcements",
   "ownership",
   "agreements",
@@ -75,7 +69,6 @@ describe("the features of a Hub that serves them all", () => {
       "audit",
       "requests",
       "observe",
-      "dependencies",
       "announcements",
       "ownership",
       "agreements",
@@ -232,7 +225,6 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
       "github",
       "requests",
       "observe",
-      "dependencies",
       "ownership",
       "agreements",
     ]);
@@ -241,7 +233,7 @@ describe("a feature the Hub does not serve, for a Hub that sends no catalog", ()
 
   it("needs a newer Hub when the Hub does not even serve settings", () => {
     const old = everything.map((entry) =>
-      ["settings", "observe", "dependencies"].includes(entry.id)
+      ["settings", "observe"].includes(entry.id)
         ? { ...entry, active: false, reason: "hub" }
         : entry,
     );

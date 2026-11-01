@@ -4,10 +4,8 @@ import { changesWebPlugin } from "./changes";
 import { needsYouWebPlugin } from "./needs-you";
 import { settleWebPlugin } from "./settle";
 import { resourcesWebPlugin } from "./resources";
-import { dependenciesWebPlugin } from "./dependencies";
 import { rolesWebPlugin } from "./roles";
 import { roomsWebPlugin } from "./rooms";
-import { testReportsWebPlugin } from "./test-reports";
 /**
  * Slots for Peer plugins in the web UI. Core views (Work, Needs you, the context pages, Settings →
  * Peer and the command palette) render the slots of the plugins that are active on the
@@ -41,7 +39,6 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
   herdrWebPlugin,
   jujutsuWebPlugin,
   githubWebPlugin,
-  dependenciesWebPlugin,
   capacityWebPlugin,
   requestsWebPlugin,
   observeWebPlugin,
@@ -56,7 +53,6 @@ export const PEER_WEB_PLUGINS: ReadonlyArray<PeerWebPlugin> = [
 
   agreementsWebPlugin,
   changesWebPlugin,
-  testReportsWebPlugin,
   rolesWebPlugin,
   roomsWebPlugin,
   settingsWebPlugin,

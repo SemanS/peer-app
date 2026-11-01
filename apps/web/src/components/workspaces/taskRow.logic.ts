@@ -39,14 +39,9 @@ export function taskStateLook(kind: TaskStateKind): TaskStateLook {
   return LOOK[kind];
 }
 
-/**
- * The state's words on a row: "Blocked" for work its dependencies hold back, and nothing for a task
- * that has simply not begun or finished, whose dot already says so.
- */
-export function rowStateLabel(state: TaskState, blocked: boolean): string | undefined {
-  if (state.kind === "done") return undefined;
-  if (blocked && (state.kind === "new" || state.kind === "paused")) return "Blocked";
-  return state.kind === "new" ? undefined : state.label;
+/** The state's words on a row: nothing for a task that has not begun or finished, as its dot says. */
+export function rowStateLabel(state: TaskState): string | undefined {
+  return state.kind === "done" || state.kind === "new" ? undefined : state.label;
 }
 
 /** What a task row says: its state in words, and how its dot looks. */

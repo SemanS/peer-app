@@ -33,12 +33,6 @@ type TreeFields = Pick<
   PeerHubCreateTaskInput,
   "parent" | "kind" | "executable" | "unsettled" | "position" | "description"
 >;
-/** What `PATCH …/tasks/{task}/dependencies` answers. */
-const DependenciesChanged = Schema.Struct({
-  task: Schema.String,
-  dependsOn: Schema.Array(Schema.String),
-  changed: Schema.Boolean,
-});
 
 export const workApi = (
   request: HubCall,
@@ -92,30 +86,6 @@ export const workApi = (
       path: projectPath(slug, projectId, `/tasks/${segment(taskId)}`),
       method: "DELETE",
       session,
-    }),
-
-  /**
-   * Adds to what a task depends on (the dependencies feature); null when this Hub does not serve
-   * it, so an importer says so and goes on.
-   */
-  dependencies: (
-    hubUrl: string,
-    session: string,
-    slug: string,
-    projectId: string,
-    taskId: string,
-    body: { readonly add: ReadonlyArray<string> },
-  ) =>
-    request(DependenciesChanged, {
-      hubUrl,
-      path: projectPath(slug, projectId, `/tasks/${segment(taskId)}/dependencies`),
-      method: "PATCH",
-      session,
-      body: { add: body.add, remove: [] },
-      unsupported: {
-        value: null,
-        when: (_status: number, message: string) => message === "no such route",
-      },
     }),
 
   /** The owner of each task of the caller's projects (the ownership feature's view). */

@@ -35,13 +35,7 @@ import { headerOf } from "./server.ts";
 import { inRepository, type LocalSession, unsupportedCheckout } from "./sessions.ts";
 import { newOp, within, TIMED_OUT } from "./sync.ts";
 import { claimSchemes, claimTargets, runClaimSchemes } from "./claimSchemes.ts";
-import {
-  pluginTaskFacts,
-  sessionTaskName,
-  TASK_FLAGS,
-  TASK_SWITCHES,
-  taskCommand,
-} from "./tasks.ts";
+import { sessionTaskName, TASK_FLAGS, TASK_SWITCHES, taskCommand } from "./tasks.ts";
 import { SHARE_FLAGS, shareCommand, UNSHARED } from "./share.ts";
 import { helpText } from "./help.ts";
 import { checkpointInputs, inputCommand } from "./inputCheckpoints.ts";
@@ -579,7 +573,7 @@ export async function runCli(
     case "run":
       return this.runCommand(session);
     case "task":
-      return taskCommand(this.host, session, parsed, pluginTaskFacts(this.host, plugins, session));
+      return taskCommand(this.host, session, parsed);
     case "index": {
       // The project's other work, as at a start but all of it.
       await this.syncNow(session.workspace, 3000);

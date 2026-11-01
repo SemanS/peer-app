@@ -65,7 +65,6 @@ export const CATALOG = defineEvents({
   "ask.unopened": ev({}),
   ask: ev({}),
   "ask.dropped": ev({ ms: "ms" }),
-  "dependencies.told": ev({ chars: "count" }),
   "context.updated": ev({ bytes: "bytes" }),
   "context.nudged": ev({}),
   "context.checkpoint": ev({}),

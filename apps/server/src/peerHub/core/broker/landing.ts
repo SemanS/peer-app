@@ -7,7 +7,7 @@
  * it made, an agreement kept for its task). Work lands when a `git commit`, `git push`,
  * `gh pr create`, `gh pr merge`, `jj commit`, `jj squash`, `jj new` or `jj git push` runs in the
  * agent's shell (`isLanding`). Peer stops the step once to give the messages; the same step again
- * runs, unless something new came meanwhile. Advice (dependencies, announcements) never stops a step:
+ * runs, unless something new came meanwhile. Advice (an announcement) never stops a step:
  * it reaches the agent as at any other, and a plugin's notice that is not flagged is advice.
  *
  * What is a landing step goes by the words of the command only, never by its output or a model: a

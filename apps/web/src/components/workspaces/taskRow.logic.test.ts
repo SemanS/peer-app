@@ -131,17 +131,12 @@ describe("rowStateLabel", () => {
     waitingOn: undefined,
   });
 
-  it("says Blocked for work its dependencies hold back", () => {
-    expect(rowStateLabel(state("new"), true)).toBe("Blocked");
-    expect(rowStateLabel(state("paused"), true)).toBe("Blocked");
-  });
-
-  it("keeps a state that says more than Blocked", () => {
-    expect(rowStateLabel(state("review", "Ready for review"), true)).toBe("Ready for review");
+  it("says a state that says something", () => {
+    expect(rowStateLabel(state("review", "Ready for review"))).toBe("Ready for review");
   });
 
   it("leaves words out where the dot says it", () => {
-    expect(rowStateLabel(state("new"), false)).toBeUndefined();
-    expect(rowStateLabel(state("done"), true)).toBeUndefined();
+    expect(rowStateLabel(state("new"))).toBeUndefined();
+    expect(rowStateLabel(state("done"))).toBeUndefined();
   });
 });

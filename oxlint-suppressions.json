@@ -784,11 +784,6 @@
       "count": 1
     }
   },
-  "apps/server/src/peerHub/plugins/dependencies/service.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 4
-    }
-  },
   "apps/server/src/peerHub/plugins/github/GitHub.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1302,32 +1297,6 @@
     },
     "t3code/prefer-effect-fn": {
       "count": 7
-    }
-  },
-  "apps/server/src/peerHub/plugins/test-reports/TestReports.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 6
-    }
-  },
-  "apps/server/src/peerHub/plugins/test-reports/cli.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/test-reports/hub.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/test-reports/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
     }
   },
   "apps/server/src/peerHub/plugins/tool-trust/trustStore.ts": {
@@ -1903,16 +1872,6 @@
       "count": 1
     }
   },
-  "apps/web/src/components/workspaces/test-reports/ReportSection.tsx": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "apps/web/src/components/workspaces/test-reports/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/web/src/components/workspaces/useOpenWorkspaceProject.ts": {
     "t3code/no-unreasoned-state-sync": {
       "count": 1
@@ -1962,11 +1921,6 @@
     }
   },
   "packages/client-runtime/src/peer/settings.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
-  "packages/client-runtime/src/peer/testReports.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
     }
@@ -2032,11 +1986,6 @@
   "packages/contracts/src/peer/settings.ts": {
     "t3code/no-low-value-comments": {
       "count": 2
-    }
-  },
-  "packages/contracts/src/peer/test-reports.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
     }
   },
   "packages/contracts/src/peerHub.ts": {

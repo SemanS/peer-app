@@ -101,16 +101,12 @@ export * from "./peer/settle.rpc.ts";
 export * from "./peer/ownership.ts";
 export * from "./peer/ownership.rpc.ts";
 
-export * from "./peer/dependencies.ts";
-export * from "./peer/dependencies.rpc.ts";
 export * from "./peer/mcp.ts";
 export * from "./peer/mcp.rpc.ts";
 
 export * from "./peer/resources.ts";
 export * from "./peer/resources.rpc.ts";
 
-export * from "./peer/test-reports.ts";
-export * from "./peer/test-reports.rpc.ts";
 export * from "./peer/runs.ts";
 export * from "./peer/runs.rpc.ts";
 

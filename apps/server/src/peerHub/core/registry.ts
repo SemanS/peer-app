@@ -3,8 +3,6 @@ import { SettlePlugin } from "../plugins/settle/index.ts";
 import { AgreementsPlugin } from "../plugins/agreements/index.ts";
 import { ChangesPlugin } from "../plugins/changes/index.ts";
 import { ResourcesPlugin } from "../plugins/resources/index.ts";
-import { DependenciesPlugin } from "../plugins/dependencies/index.ts";
-import { TestReportsPlugin } from "../plugins/test-reports/index.ts";
 /**
  * The registry of Peer's plugins: every plugin of this build, in the order that fixes the order of
  * their text for agents and of their UI. Adding a plugin is one line in `peerPlugins`.
@@ -62,7 +60,6 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   HerdrPlugin,
   JujutsuPlugin,
   GitHubPlugin,
-  DependenciesPlugin,
   CapacityPlugin,
   RequestsPlugin,
   ObservePlugin,
@@ -78,7 +75,6 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   OwnershipPlugin,
   AgreementsPlugin,
   ChangesPlugin,
-  TestReportsPlugin,
   RolesPlugin,
   RoomsPlugin,
   SettingsPlugin,

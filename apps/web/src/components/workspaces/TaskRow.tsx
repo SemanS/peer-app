@@ -29,7 +29,6 @@ import {
   type WorkActions,
 } from "./useWorkActions";
 import { StateDot } from "./workStatus";
-import { taskBlocked } from "./dependencies/dependencies.logic";
 import { chosenArea, taskMenuItems } from "./workMenus.logic";
 import {
   taskLabel,
@@ -90,8 +89,7 @@ export function TaskRow({
     needOf,
     review: taskOwnership(project, task, taskArea ?? null).review,
   });
-  const blocked = taskBlocked(status, scope.workspace, projectState, task.id);
-  const stateLabel = rowStateLabel(model.state, blocked);
+  const stateLabel = rowStateLabel(model.state);
   const active = activeThread === taskRouteKey(scope, task.id);
   const RequestDialog = plugins.find(
     (plugin) => plugin.requestTeammate !== undefined,

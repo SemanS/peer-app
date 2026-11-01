@@ -27,7 +27,6 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //      changes. Nothing is ranked.
 //  15. A slow hub at a session's start: Peer's hook answers before its script gives up, and what
 //      was not ready reaches the agent at its next step instead of being lost.
-//  18. Task dependencies travel once at starts and next steps, never waking idle agents.
 //  19. Settings are files an agent edits: Bob's agent reads the project's settings with `peer config
 //      show`, makes schema/ exclusive in its copy and proposes it; nothing changes until Ana, an
 //      admin, saves it as hers (the commit names the agent), the rule then holds schema/ for the
@@ -137,10 +136,6 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 // exclusive in the project's Peer settings. It has to find `peer config` itself, and may only propose;
 // Ana saves the proposal as in step 19.
 //
-// REAL_SCENARIO=tasks REAL_DEPENDS=1 adds task dependencies: whether Bob's agent records KRK-1 with
-// `peer depends`, and a new session on KRK-2 that starts with the dependency block and hears once
-// that KRK-1 went to review, with what those paragraphs cost.
-//
 // REAL_SCENARIO=tasks REAL_RESTART=1: once both agents idle after Bob's turn, Peer quits on Bob's
 // computer and starts again, as an update does. Neither agent is woken, and at Bob's next prompt his
 // agent is told nothing again that it was told before (the plugins' notices and that it keeps its
@@ -206,11 +201,6 @@ import {
   type RoomsRun,
 } from "./peer-lab/rooms.ts";
 import { metricsPathOf, peerAdded, readLines, toldTexts, type LabEvent } from "./peer-lab/told.ts";
-import {
-  dependencyBlocks,
-  withDependencyEvidence,
-  observeDependencyIdle,
-} from "./peer-lab/dependencies.ts";
 import {
   headOf,
   makesExclusive,
@@ -2999,139 +2989,6 @@ const program = Effect.gen(function* () {
     }),
   );
 
-  // 18. Relationships are facts at an agent's next step, never work gates or wake reasons.
-  const vl1 = yield* Effect.promise(() => createTask("Dependency prerequisite", "VL1"));
-  const vl2 = yield* Effect.promise(() => createTask("Dependency consumer", "VL2"));
-  branchOff(ana.checkout, "vl1-dependency-prerequisite");
-  branchOff(bob.checkout, "vl2-dependency-consumer");
-  for (const computer of [ana, bob]) yield* computer.client[WS_METHODS.peerHubSync]({});
-  const dependencyAna = agent(ana, "lab-ana-dependency", "w8:p1");
-  dependencyAna.start();
-  dependencyAna.peer("status");
-  const dependencyBob = agent(bob, "lab-bob-dependency", "w8:p2");
-  dependencyBob.start();
-  dependencyBob.peer("status");
-  check(
-    dependencyBob.peer("depends", "VL1").includes("now depends on VL1"),
-    "peer depends records the prerequisite",
-  );
-  const dependencyNewBob = agent(bob, "lab-bob-dependency-new", "w8:p3");
-  const dependencyStart = dependencyNewBob.start().told;
-  check(
-    dependencyStart?.includes("you depend on VL1") === true,
-    "new session receives the dependency facts",
-  );
-  told("dependency start characters", String(dependencyStart?.length ?? 0));
-  const dependencyIdle = agent(bob, "lab-bob-dependency-idle", "w8:p4");
-  dependencyIdle.start();
-  const dependencyWait = dependencyIdle.idle();
-  const idleObserver = yield* Effect.promise(() =>
-    observeDependencyIdle({
-      session: "claude:lab-bob-dependency-idle",
-      wait: dependencyWait,
-      events: () => events(bob),
-      pause: sleep,
-    }),
-  );
-  check(true, "dependency observer has a registered idle wait before the changes");
-  const checkDependencyState = Effect.fn("lab.checkDependencyState")(function* (word: string) {
-    // A sync returns before Peer's read of the work, which it starts in the background, is done: what a
-    // person just changed may reach the agent's next step a moment later, so the step is taken again
-    // (for up to five seconds) until Peer has it. It is still said once, and not again.
-    let notice: string | undefined;
-    for (
-      let attempt = 0;
-      attempt < 20 && notice?.includes(`VL1 is ${word}`) !== true;
-      attempt += 1
-    ) {
-      if (attempt > 0) yield* Effect.promise(() => sleep(250));
-      yield* bob.client[WS_METHODS.peerHubSync]({});
-      notice = context(dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }));
-    }
-    check(notice?.includes(`VL1 is ${word}`) === true, `dependency ${word} is said once`);
-    const repeated = context(dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }));
-    check(repeated?.includes(`VL1 is ${word}`) !== true, `dependency ${word} is not repeated`);
-    told(`dependency ${word} characters`, String(notice?.length ?? 0));
-    yield* Effect.promise(idleObserver.check);
-  });
-  try {
-    yield* Effect.promise(() =>
-      withDependencyEvidence(
-        (path, input) => hubCall(path, { ...input, session: hubSession }),
-        (evidence) =>
-          Effect.runPromise(
-            Effect.gen(function* () {
-              dependencyAna.peer("ready");
-              yield* checkDependencyState("in review");
-              yield* Effect.promise(() => evidence.report(String(vl1.id), "open"));
-              yield* Effect.promise(() => evidence.report(String(vl1.id), "merged"));
-              yield* checkDependencyState("merged");
-              yield* Effect.promise(() =>
-                hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {
-                  method: "PATCH",
-                  session: hubSession,
-                  body: { status: "done" },
-                }),
-              );
-              yield* checkDependencyState("closed");
-              yield* Effect.promise(evidence.clear);
-              yield* Effect.promise(() =>
-                hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {
-                  method: "PATCH",
-                  session: hubSession,
-                  body: { status: "open" },
-                }),
-              );
-              yield* Effect.promise(() => evidence.followup(String(vl1.id)));
-              yield* checkDependencyState("open again");
-              yield* Effect.promise(() =>
-                hubCall(`/v1/workspaces/acme/projects/lab/tasks/${String(vl1.id)}`, {
-                  method: "DELETE",
-                  session: hubSession,
-                }),
-              );
-              yield* bob.client[WS_METHODS.peerHubSync]({});
-              const dependencyRemoved = context(
-                dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }),
-              );
-              check(
-                dependencyRemoved?.includes("no longer a dependency") === true,
-                "removal is said once",
-              );
-              check(
-                context(
-                  dependencyNewBob.hook("UserPromptSubmit", { prompt: "continue" }),
-                )?.includes("no longer a dependency") !== true,
-                "removal is not repeated",
-              );
-              check(
-                dependencyBob.peer("depends").includes("None."),
-                "consumer task and its agent remain usable after removal",
-              );
-              check(String(vl2.id) !== String(vl1.id), "dependency tasks are distinct");
-              yield* Effect.promise(idleObserver.check);
-              check(
-                true,
-                "review, merge, close, reopen and removal never wake the registered idle observer",
-              );
-            }),
-          ),
-      ),
-    );
-  } finally {
-    dependencyIdle.hook("SessionEnd", { reason: "exit" });
-    yield* Effect.promise(() =>
-      Promise.race([
-        dependencyWait,
-        sleep(5000).then(() => {
-          throw new Error("dependency observer wait did not end with its session");
-        }),
-      ]),
-    );
-    for (const current of [dependencyAna, dependencyBob, dependencyNewBob])
-      current.hook("SessionEnd", { reason: "exit" });
-  }
-
   // 19. Settings are files an agent edits (after arXiv:2609.37725): Bob's agent proposes making
   // schema/ exclusive (step 17 made migrations/ so); Ana, an admin, saves it as hers, and the rule
   // decides the next edits.
@@ -3954,94 +3811,6 @@ const realProgram = Effect.gen(function* () {
 }).pipe(Effect.scoped);
 
 /**
- * REAL_DEPENDS=1 (with REAL_SCENARIO=tasks): did Bob's agent record that KRK-2 builds on KRK-1, does a
- * new session start with it and hear KRK-1's close once? Prints every dependency paragraph and its cost.
- */
-async function realDependencies(bob: Computer, bobHerdr: HerdrServer) {
-  const byAgent = events(bob).filter((e) => e.event === "cli" && e.command === "depends");
-  for (const e of byAgent) say("Bob's agent ran", `peer depends ${JSON.stringify(e.args)}`);
-  const recorded = byAgent.some((e) => /krk-1/i.test(JSON.stringify(e.args)));
-  observe(recorded, "Bob's agent recorded on its own that KRK-2 depends on KRK-1 (peer depends)");
-  if (!recorded) {
-    // From an agent session on KRK-2 (Bob's checkout): a command needs a session's credential.
-    const recorder = agent(bob, "lab-bob-depends", "w9:p2");
-    recorder.start();
-    const out = recorder.peer("depends", "KRK-1");
-    recorder.hook("SessionEnd", { reason: "exit" });
-    told("peer depends KRK-1, run by the lab from a session on KRK-2", out);
-    check(out.includes("now depends on KRK-1"), "the lab recorded KRK-2's dependency on KRK-1");
-  }
-  const earlier = sessionsOf(bob);
-  const pane = await startClaude(bobHerdr, bob, "bob-next");
-  const idle = async () => {
-    let still = 0;
-    for (let waited = 0; waited < 4 * 60_000 && still < 2; waited += 3000) {
-      await sleep(3000);
-      const status = statusOf(bobHerdr, pane);
-      if (status === "blocked") herdrText(bobHerdr, "pane", "send-keys", pane, "enter");
-      still = (status === "idle" || status === "done") && waited >= 6000 ? still + 1 : 0;
-    }
-  };
-  const ask = async (question: string) => {
-    herdrJson(bobHerdr, "agent", "prompt", pane, question);
-    say("Bob's new session asked", question);
-    await idle();
-    const screen = herdrText(
-      bobHerdr,
-      "pane",
-      "read",
-      pane,
-      "--source",
-      "recent-unwrapped",
-      "--lines",
-      "120",
-    );
-    console.log(`\n===== Bob's new session after "${question}" =====\n${screen}`);
-    return screen.split(question).at(-1) ?? screen;
-  };
-  const first = await ask(
-    "Where does this task stand against the work it needs? Two lines; change nothing.",
-  );
-  await hubCall(`/v1/workspaces/acme/projects/lab/tasks/${krk1Id}`, {
-    method: "PATCH",
-    session: hubSession,
-    body: { status: "done" },
-  });
-  say("a person closed KRK-1");
-  await sleep(5000);
-  const second = await ask(
-    "Has anything changed for this task since you answered? One line; change nothing.",
-  );
-  const next = new Set([...sessionsOf(bob)].filter((session) => !earlier.has(session)));
-  const found = dependencyBlocks(events(bob));
-  for (const block of found.blocks)
-    told(`${block.session} ${block.hookEvent} (${block.kind})`, block.text);
-  const mine = found.blocks.filter((b) => next.has(b.session));
-  check(
-    mine.some((b) => b.kind === "start" && b.text.includes("you depend on KRK-1")),
-    "Bob's new session started with the dependency block naming KRK-1",
-  );
-  check(
-    mine.filter((b) => b.kind === "notice" && b.text.includes("KRK-1 is closed")).length === 1,
-    "and heard once that KRK-1 is closed",
-  );
-  const used = events(bob).filter(
-    (e) =>
-      e.event === "cli" &&
-      next.has(`claude:${String(e.session)}`) &&
-      ["depends", "context"].includes(String(e.command)),
-  );
-  for (const e of used) say("Bob's new session ran", `peer ${e.command} ${JSON.stringify(e.args)}`);
-  observe(used.length > 0, "the new session ran peer depends or peer context");
-  observe(/KRK-1/.test(first), "its first answer names KRK-1 (from the start block)");
-  observe(/closed|done/i.test(second), "its second answer says KRK-1 is closed");
-  say(
-    "dependency paragraphs Peer added",
-    `${found.blocks.filter((b) => b.kind === "start").length} start blocks, ${found.startChars} chars (about ${Math.round(found.startChars / 4)} tokens); ${found.blocks.filter((b) => b.kind === "notice").length} notices, ${found.noticeChars} chars (about ${Math.round(found.noticeChars / 4)} tokens)`,
-  );
-}
-
-/**
  * REAL_RESTART=1 (with REAL_SCENARIO=tasks): Peer restarts on Bob's computer while both agents idle.
  * Neither is woken, and Bob's next prompt repeats nothing told before. Prints what Peer said after it.
  */
@@ -4410,8 +4179,6 @@ const realTasksProgram = Effect.gen(function* () {
       !NodeFS.existsSync(NodePath.join(bob.checkout, "src/discounts.ts")),
       "Bob's agent wrote no discount logic of its own",
     );
-    if (process.env.REAL_DEPENDS === "1")
-      yield* Effect.promise(() => realDependencies(bob, bobHerdr));
   } finally {
     report();
   }

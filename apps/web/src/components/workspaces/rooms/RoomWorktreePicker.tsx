@@ -30,7 +30,12 @@ export function RoomWorktreePicker({
               if (value !== null) onSelect(value === TASK_CHECKOUT ? undefined : value);
             }}
           >
-            <SelectTrigger size="compact" variant="ghost" aria-label={`${projectName} worktree`}>
+            <SelectTrigger
+              className="w-full min-w-0"
+              size="compact"
+              variant="ghost"
+              aria-label={`${projectName} worktree`}
+            >
               <SelectValue>
                 {selected === undefined
                   ? "Task checkout"

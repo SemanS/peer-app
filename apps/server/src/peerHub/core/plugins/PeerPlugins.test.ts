@@ -121,15 +121,15 @@ describe("Peer plugins", () => {
         ["audit"],
       );
       assert.isTrue(yield* core.plugins.isActive("audit"));
-      assert.isFalse(yield* core.plugins.isActive("ask"));
+      assert.isFalse(yield* core.plugins.isActive("herdr"));
       assert.isNull(yield* refusal(core.plugins.requireActive("audit")));
       assert.strictEqual(
         yield* refusal(core.plugins.requireActive("observe")),
         "Observe is turned off on this environment.",
       );
       assert.strictEqual(
-        yield* refusal(core.plugins.requireActive("ask")),
-        'There is no Peer plugin "ask" on this environment.',
+        yield* refusal(core.plugins.requireActive("observe")),
+        'There is no Peer plugin "observe" on this environment.',
       );
       // Only the active plugin's work runs.
       assert.strictEqual(yield* Queue.take(seen), "started");

@@ -13,6 +13,7 @@ import {
   type PeerHubStatus,
   type PeerProject,
   type PeerRoomAnchor,
+  type PeerRoomAuthor,
   type PeerRoomMessage,
   type PeerRoomNeed,
   type PeerRoomReach,
@@ -153,7 +154,9 @@ export function deliveryWords(
   const reason = delivery.reason?.trim() ?? "";
   switch (delivery.state) {
     case "waiting":
-      return `Waiting for ${owner}`;
+      return delivery.run === undefined
+        ? `Waiting for ${owner}`
+        : `${Agent} hears it at its next step`;
     case "passed":
       return `Passed on to ${agent}`;
     case "taken":
@@ -355,6 +358,51 @@ export const roomRev = (rooms: PeerRoomsStatus | undefined, place: RoomPlace) =>
 export const roomBadgeCount = (rooms: PeerRoomsStatus | undefined, place: RoomPlace) =>
   (rooms?.waiting.filter((need) => inPlace(need, place)).length ?? 0) +
   (rooms?.mentions.filter((need) => inPlace(need, place)).length ?? 0);
+
+/** Where a room stands for this person: it waits on them, its work is ready, or it just moves. */
+export type RoomFeedState = "yours" | "ready" | "moving";
+
+/** One room of the Feed: never its words, only who wrote last, when, and where it stands. */
+export interface RoomFeedRow extends RoomPlace {
+  readonly key: string;
+  readonly state: RoomFeedState;
+  readonly unread: number;
+  readonly needs: number;
+  readonly updated: string | undefined;
+  readonly author: PeerRoomAuthor | undefined;
+}
+
+const FEED_ORDER: Readonly<Record<RoomFeedState, number>> = { yours: 0, ready: 1, moving: 2 };
+
+/** Every room this person can see, across workspaces: what waits on them first, newest first. */
+export function roomFeed(rooms: PeerRoomsStatus | undefined): ReadonlyArray<RoomFeedRow> {
+  const rows = Object.entries(rooms?.rooms ?? {}).flatMap(([workspace, listed]) =>
+    listed.map((room): RoomFeedRow => {
+      const place = { workspace, project: room.project, task: room.task };
+      const needs = roomBadgeCount(rooms, place);
+      return {
+        ...place,
+        key: `${workspace}/${room.project}/${room.task}`,
+        state:
+          needs > 0 || room.mark === "blocked"
+            ? "yours"
+            : room.mark === "ready"
+              ? "ready"
+              : "moving",
+        unread: Math.max(0, room.seq - room.seen),
+        needs,
+        updated: room.updated,
+        author: room.author,
+      };
+    }),
+  );
+  return [...rows].sort(
+    (a, b) =>
+      FEED_ORDER[a.state] - FEED_ORDER[b.state] ||
+      (b.updated ?? "").localeCompare(a.updated ?? "") ||
+      a.key.localeCompare(b.key),
+  );
+}
 
 /** One thing in Needs you. A waiting message has Pass on, Decline and Open room; a mention opens it. */
 export interface RoomNeedsYouItem extends RoomPlace {

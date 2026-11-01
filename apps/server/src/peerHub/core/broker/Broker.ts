@@ -549,6 +549,7 @@ export class CoordinationBroker {
   contextPathFor = Runs.contextPathFor;
   enterRun = Runs.enterRun;
   adoptRun = Runs.adoptRun;
+  openRoom = Runs.openRoom;
   attachRun = Runs.attachRun;
   runTask = Runs.runTask;
   leaveRun = Runs.leaveRun;

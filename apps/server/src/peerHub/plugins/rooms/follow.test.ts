@@ -29,6 +29,43 @@ const passed = (target: PeerRoomTarget) => messageOf({ to: [target] });
 const live: HereRun = { id: "run_1", live: true };
 const detached: HereRun = { id: "run_2", live: false };
 
+describe("decide, for a person's agent writing to their other agent", () => {
+  const byAgent = (target: PeerRoomTarget) =>
+    messageOf({ author: { email: BOB, run: "run_9" }, to: [target] });
+
+  it("reaches a live session of theirs", () => {
+    const target = delivery("passed");
+    assert.deepStrictEqual(decide(byAgent(target), target, [detached, live], BOB), {
+      do: "take-offer",
+      run: "run_1",
+    });
+  });
+
+  it("starts nothing when none runs", () => {
+    const target = delivery("passed");
+    assert.deepStrictEqual(decide(byAgent(target), target, [detached], BOB), {
+      do: "fail",
+      reason: NOT_RUNNING,
+    });
+    assert.deepStrictEqual(decide(byAgent(target), target, [], BOB), {
+      do: "fail",
+      reason: NOT_RUNNING,
+    });
+  });
+
+  it("gives the run it names to no other", () => {
+    const target = delivery("passed", { run: "run_3" });
+    assert.deepStrictEqual(decide(byAgent(target), target, [live], BOB), {
+      do: "fail",
+      reason: NOT_RUNNING,
+    });
+  });
+
+  it("says the words come from their agent", () => {
+    assert.strictEqual(kindOf(byAgent(delivery("passed")), delivery("passed"), BOB), "agent");
+  });
+});
+
 describe("decide", () => {
   it("starts a new session on the model its author chose, even beside a live run", () => {
     const target = delivery("passed", { model: "claude-opus-5-5" });

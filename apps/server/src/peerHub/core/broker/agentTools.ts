@@ -188,7 +188,7 @@ const definitions = [
     ["paths"],
   ],
   ["release", "Drop reported claims.", { paths: array }, []],
-  ["note", "Note to agents sharing your files.", { text: string, overlap: string }, ["text"]],
+  ["note", "Tell the agents that share your files, in your room.", { text: string }, ["text"]],
   ["resolve", "Close overlaps with the agreement.", { text: string, overlap: string }, ["text"]],
   [
     "ask",
@@ -344,6 +344,7 @@ export const CORE_AGENT_TOOLS: ReadonlyArray<PeerAgentTool> = definitions.map(
         case "release":
           return (input.paths as string[] | undefined) ?? [];
         case "note":
+          return plain("text");
         case "resolve":
           return [...plain("text"), ...flag("overlap")];
         case "ask":

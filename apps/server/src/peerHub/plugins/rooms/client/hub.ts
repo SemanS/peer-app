@@ -11,6 +11,7 @@ import {
   PeerRoomsSetReachResult,
   type PeerRoomAnchor,
   type PeerRoomCapacity,
+  type PeerRoomMark,
   type PeerRoomMove,
   type PeerRoomReachValue,
   type PeerRoomTargetInput,
@@ -35,6 +36,7 @@ export interface PostBody {
   readonly replyTo?: number | undefined;
   /** An agent's post: the run it comes from. A person's names none. */
   readonly run?: string | undefined;
+  readonly mark?: PeerRoomMark | undefined;
 }
 
 export interface MoveBody {

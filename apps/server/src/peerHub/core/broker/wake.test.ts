@@ -1,6 +1,24 @@
-import { describe, expect, it } from "vite-plus/test";
-import { NO_PLUGINS } from "./host.ts";
+import * as Effect from "effect/Effect";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";
 import { brokerFixture } from "./testkit.ts";
+
+const ANNOUNCEMENT = "A new project announcement";
+
+/** A plugin with a notice that wakes, whenever it is read. */
+const announcing: PeerBrokerPlugins = {
+  ...NO_PLUGINS,
+  active: [
+    {
+      id: "announcements",
+      title: "fake",
+      contributions: {
+        hooks: { notices: [{ wakes: true, read: () => Effect.succeed(ANNOUNCEMENT) }] },
+      },
+    },
+  ],
+};
 
 describe("advisory tool wake delivery", () => {
   it("preserves a bound agent when the selected runtime is temporarily unknown", async () => {
@@ -12,10 +30,7 @@ describe("advisory tool wake delivery", () => {
       await fixture.register("current");
       const session = fixture.broker.sessions.get("claude:current")!;
       session.status = "idle";
-      fixture.broker.news = () => "A new project announcement";
-      expect(await fixture.broker.wakingNews(session, NO_PLUGINS)).toBe(
-        "A new project announcement",
-      );
+      expect(await fixture.broker.wakingNews(session, announcing)).toBe(ANNOUNCEMENT);
       expect(fixture.broker.sessions.has(session.id)).toBe(true);
     } finally {
       await fixture.dispose();
@@ -33,15 +48,67 @@ describe("advisory tool wake delivery", () => {
         await fixture.register("previous");
         const session = fixture.broker.sessions.get("claude:previous")!;
         session.status = "idle";
-        fixture.broker.news = () => "A new project announcement";
-        expect(await fixture.broker.wakingNews(session, NO_PLUGINS)).toBe(
-          "A new project announcement",
-        );
+        expect(await fixture.broker.wakingNews(session, announcing)).toBe(ANNOUNCEMENT);
         selected = { agent, nativeId: "current", cwd: "" };
-        expect(await fixture.broker.wakingNews(session, NO_PLUGINS)).toBeNull();
+        expect(await fixture.broker.wakingNews(session, announcing)).toBeNull();
         expect(fixture.broker.sessions.has(session.id)).toBe(false);
         await fixture.register("previous");
         expect(fixture.broker.sessions.has(session.id)).toBe(false);
+      } finally {
+        await fixture.dispose();
+      }
+    },
+  );
+  it.each(["claude", "codex"])(
+    "leaves a colleague's note on an overlap for the next step of an idle %s agent",
+    async (agent) => {
+      const queueCodex = vi.fn(async () => true);
+      const fixture = await brokerFixture(() => ({ queueCodex }));
+      try {
+        const session = await fixture.broker.createSession(
+          agent,
+          { session_id: "one", cwd: fixture.root },
+          undefined,
+        );
+        const at = "2026-10-09T12:00:00Z";
+        fixture.broker.views.set("acme", {
+          sessions: [],
+          overlaps: [
+            {
+              id: "overlap",
+              project: "app",
+              sessions: [session!.id, "claude:zed"],
+              files: ["pay.ts"],
+              state: "open",
+              notes: [
+                {
+                  id: "note",
+                  session: "claude:zed",
+                  email: "zed@acme.test",
+                  text: "Renamed; pull before you push",
+                  at,
+                },
+              ],
+              openedAt: at,
+              updatedAt: at,
+            },
+          ],
+          at,
+        });
+        expect(await fixture.broker.wakingNews(session!, NO_PLUGINS)).toBeNull();
+        expect(await fixture.broker.wakingNews(session!, announcing)).toBe(ANNOUNCEMENT);
+        await fixture.broker.wakeIdle();
+        expect(queueCodex).not.toHaveBeenCalled();
+        const next = await fixture.broker.hook(
+          {
+            session_id: "one",
+            cwd: fixture.root,
+            hook_event_name: "UserPromptSubmit",
+            prompt: "continue",
+          },
+          { "x-peer-agent": agent },
+        );
+        expect(JSON.stringify(next)).toContain("pull before you push");
       } finally {
         await fixture.dispose();
       }

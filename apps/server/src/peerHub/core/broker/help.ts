@@ -29,11 +29,6 @@ const CORE_HELP: { readonly [Name in Exclude<(typeof CORE_COMMANDS)[number], "he
       usage: "status",
       summary: "who works on what in this project, your overlaps and their notes",
     },
-    note: {
-      name: "note",
-      usage: 'note "<text>" [--overlap <id>]',
-      summary: "a note to the agents you share files with (they hear it at their next step)",
-    },
     resolve: {
       name: "resolve",
       usage: 'resolve "<agreement>" [--overlap <id>]',

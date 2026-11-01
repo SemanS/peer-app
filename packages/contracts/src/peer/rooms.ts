@@ -16,7 +16,7 @@ export const PEER_ROOMS_PLUGIN = {
   title: "Task rooms",
   summary: "One conversation per task, where everyone brings their own agent.",
   defaultEnabled: true,
-  hubFeature: { id: "rooms", revision: 1 },
+  hubFeature: { id: "rooms", revision: 2 },
 } as const;
 
 /** The states of a delivery, as Hubs name them today. */
@@ -45,6 +45,10 @@ export const PEER_ROOM_START_GRACE_MS = 120_000;
 /** The moves a person's client or a Peer makes on a delivery. */
 export const PEER_ROOM_MOVES = ["pass", "decline", "take", "fail", "heard"] as const;
 export type PeerRoomMove = (typeof PEER_ROOM_MOVES)[number];
+
+/** What an agent's message says of its work, besides its words. */
+export const PEER_ROOM_MARKS = ["ready", "blocked", "overlap"] as const;
+export type PeerRoomMark = (typeof PEER_ROOM_MARKS)[number];
 
 /** A run's reach: `own`, or `team` on the project's shared capacity. */
 export const PeerRoomReachValue = Schema.Literals(["own", "team"]);
@@ -77,6 +81,8 @@ export const PeerRoomTargetInput = Schema.Union([
     model: Schema.optional(TrimmedNonEmptyString),
     /** Its reasoning effort, a value the harness names. */
     effort: Schema.optional(TrimmedNonEmptyString),
+    /** The run it reaches, on any task of the project. */
+    run: Schema.optional(TrimmedNonEmptyString),
   }),
 ]);
 export type PeerRoomTargetInput = typeof PeerRoomTargetInput.Type;
@@ -88,7 +94,7 @@ export const PeerRoomTarget = Schema.Struct({
   email: Schema.String,
   /** One of `PEER_ROOM_DELIVERY_STATES`. */
   state: Schema.optional(Schema.String),
-  /** The computer that acts on it, once it is passed. */
+  /** The computer that acts on it, once it is passed or a run hears it. */
   environment: Schema.optional(Schema.String),
   run: Schema.optional(Schema.String),
   harness: Schema.optional(Schema.String),
@@ -119,6 +125,8 @@ export const PeerRoomMessage = Schema.Struct({
   replyTo: Schema.optional(Schema.Number),
   anchor: Schema.optional(PeerRoomAnchor),
   to: Schema.Array(PeerRoomTarget),
+  /** One of `PEER_ROOM_MARKS`. */
+  mark: Schema.optional(Schema.String),
 });
 export type PeerRoomMessage = typeof PeerRoomMessage.Type;
 
@@ -177,6 +185,19 @@ export const PeerRoomRevs = Schema.Record(
 );
 export type PeerRoomRevs = typeof PeerRoomRevs.Type;
 
+/** One room as the Feed lists it: no words, who wrote last and what the room's agent said of its work. */
+export const PeerRoomListed = Schema.Struct({
+  project: Schema.String,
+  task: Schema.String,
+  seq: Schema.Number,
+  seen: Schema.Number,
+  updated: Schema.optional(Schema.String),
+  author: Schema.optional(PeerRoomAuthor),
+  /** One of `PEER_ROOM_MARKS`. */
+  mark: Schema.optional(Schema.String),
+});
+export type PeerRoomListed = typeof PeerRoomListed.Type;
+
 export const PeerRoomInbox = Schema.Struct({
   waiting: Schema.Array(PeerRoomInboxItem),
   mentions: Schema.Array(PeerRoomInboxItem),
@@ -184,6 +205,8 @@ export const PeerRoomInbox = Schema.Struct({
   work: Schema.Array(PeerRoomInboxItem),
   seqs: PeerRoomSeqs,
   revs: PeerRoomRevs,
+  /** The rooms of `seqs`, newest first; absent from a Hub before the Feed. */
+  rooms: Schema.optional(Schema.Array(PeerRoomListed)),
 });
 export type PeerRoomInbox = typeof PeerRoomInbox.Type;
 
@@ -215,6 +238,8 @@ export const PeerRoomsStatus = Schema.Struct({
   revs: Schema.Record(Schema.String, PeerRoomRevs),
   /** Whether this computer's pins of its agents' work go to origin; absent from an older Peer. */
   shareWork: Schema.optional(Schema.Boolean),
+  /** `workspace` → its rooms, newest first. */
+  rooms: Schema.optional(Schema.Record(Schema.String, Schema.Array(PeerRoomListed))),
 });
 export type PeerRoomsStatus = typeof PeerRoomsStatus.Type;
 

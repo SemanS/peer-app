@@ -515,8 +515,8 @@ describe("the hub decides an edit", () => {
     }
   });
 
-  it("sends one op with each note or resolution, one for the command and told apart per overlap", async () => {
-    const posted: Array<{ kind: string; overlap: string; op: string | undefined }> = [];
+  it("sends one op with each resolution, one for the command and told apart per overlap", async () => {
+    const posted: Array<{ overlap: string; op: string | undefined }> = [];
     const other = (id: string): HubOverlap => ({
       ...overlapWith("claude:me"),
       id,
@@ -524,12 +524,8 @@ describe("the hub decides an edit", () => {
     });
     const fixture = await brokerFixture(() => ({
       report: async () => viewOf({ overlaps: [other("aaaaaaaaaaaa"), other("bbbbbbbbbbbb")] }),
-      note: async (_workspace, _project, overlap, _text, _session, op) => {
-        posted.push({ kind: "note", overlap, op });
-        return other(overlap);
-      },
       resolve: async (_workspace, _project, overlap, _text, _session, op) => {
-        posted.push({ kind: "resolve", overlap, op });
+        posted.push({ overlap, op });
         return { ...other(overlap), state: "resolved" };
       },
     }));
@@ -540,20 +536,13 @@ describe("the hub decides an edit", () => {
         undefined,
       );
       const headers = { "x-peer-session": "claude:me" };
-      await fixture.broker["runCli"]("note", ["I change pay() only"], headers);
-      await fixture.broker["runCli"]("note", ["I change pay() only"], headers);
       await fixture.broker["runCli"]("resolve", ["Ana first"], headers);
-      expect(posted).toHaveLength(6);
+      expect(posted).toHaveLength(2);
       const ops = posted.map(({ op }) => op ?? "");
       for (const op of ops) expect(op.length).toBeGreaterThan(0);
       for (const op of ops) expect(op.length).toBeLessThanOrEqual(64);
-      // Every post is its own (the hub never takes one for another), and an invocation's overlaps share the command's.
-      expect(new Set(ops).size).toBe(6);
-      const command = (post: number) => ops[post]?.split(":")[0];
-      expect(command(0)).toBe(command(1));
-      expect(command(2)).toBe(command(3));
-      expect(command(4)).toBe(command(5));
-      expect(new Set([command(0), command(2), command(4)]).size).toBe(3);
+      expect(new Set(ops).size).toBe(2);
+      expect(ops[0]?.split(":")[0]).toBe(ops[1]?.split(":")[0]);
       expect(ops[0]?.endsWith(`:${posted[0]?.overlap}`)).toBe(true);
     } finally {
       await fixture.dispose();

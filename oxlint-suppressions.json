@@ -853,27 +853,6 @@
       "count": 3
     }
   },
-  "apps/server/src/peerHub/plugins/ask/Ask.test.ts": {
-    "t3code/no-real-time-wait-in-tests": {
-      "count": 1
-    },
-    "t3code/no-wall-clock-in-tests": {
-      "count": 1
-    }
-  },
-  "apps/server/src/peerHub/plugins/ask/Ask.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    },
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/ask/index.ts": {
-    "t3code/no-low-value-comments": {
-      "count": 1
-    }
-  },
   "apps/server/src/peerHub/plugins/capacity/Capacity.ts": {
     "t3code/no-low-value-comments": {
       "count": 1
@@ -1416,7 +1395,7 @@
       "count": 1
     },
     "t3code/prefer-effect-fn": {
-      "count": 4
+      "count": 3
     }
   },
   "apps/server/src/peerHub/plugins/rooms/client/diff.ts": {

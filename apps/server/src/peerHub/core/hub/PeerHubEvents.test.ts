@@ -102,7 +102,7 @@ describe("the Hub's change pings", () => {
         listening("requests", { changes: ["requests"] }, heard),
         listening("roles", { changes: ["roles.changed"], ownEcho: true }, heard),
         listening("audit", { changes: ["requests"] }, heard, false),
-        listening("ask", { changes: ["done"] }, heard),
+        listening("herdr", { changes: ["done"] }, heard),
         listening("observe", { changes: ["plans"] }, heard),
       ]);
       // Connecting is a resync for every active listener. Nobody follows `gossip`; this
@@ -111,16 +111,16 @@ describe("the Hub's change pings", () => {
       assert.deepStrictEqual(yield* nextHeard(heard, 12), [
         "requests resync acme - ",
         "roles resync acme - ",
-        "ask resync acme - ",
+        "herdr resync acme - ",
         "observe resync acme - ",
         "requests requests acme bob-laptop ",
         "observe plans acme bob-laptop q4",
         "roles roles.changed acme ana-laptop pay,2",
         "requests resync acme - ",
         "roles resync acme - ",
-        "ask resync acme - ",
+        "herdr resync acme - ",
         "observe resync acme - ",
-        "ask done acme - ",
+        "herdr done acme - ",
       ]);
       assert.strictEqual(yield* Queue.size(heard), 0);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
@@ -129,16 +129,16 @@ describe("the Hub's change pings", () => {
   it.effect("read a workspace's work once for a burst, and skip what this environment did", () =>
     Effect.gen(function* () {
       const { heard, reacted } = yield* following((heard) => [
-        listening("ask", { changes: ["done"] }, heard),
+        listening("herdr", { changes: ["done"] }, heard),
         listening("observe", { changes: ["plans"] }, heard),
       ]);
       assert.deepStrictEqual(yield* nextHeard(heard, 6), [
-        "ask resync acme - ",
+        "herdr resync acme - ",
         "observe resync acme - ",
         "observe plans acme bob-laptop q4",
-        "ask resync acme - ",
+        "herdr resync acme - ",
         "observe resync acme - ",
-        "ask done acme - ",
+        "herdr done acme - ",
       ]);
       // Its own `work` ping read nothing; bob's `coord` and the resync did.
       assert.deepStrictEqual(yield* Queue.takeAll(reacted), ["coord", "coord", "projects"]);

@@ -17,8 +17,8 @@ import * as Context from "effect/Context";
 import { McpPlugin } from "../plugins/mcp/index.ts";
 
 import { AuditPlugin } from "../plugins/audit/index.ts";
+import { CardPlugin } from "../plugins/card/index.ts";
 import { AnnouncementsPlugin } from "../plugins/announcements/index.ts";
-import { AskPlugin } from "../plugins/ask/index.ts";
 import { CapacityPlugin } from "../plugins/capacity/index.ts";
 import { GitHubPlugin } from "../plugins/github/index.ts";
 import { HerdrPlugin } from "../plugins/herdr/index.ts";
@@ -38,7 +38,6 @@ import type { PeerPluginEntry } from "./plugin.ts";
  */
 export const CORE_COMMANDS = [
   "status",
-  "note",
   "resolve",
   "claim",
   "release",
@@ -72,8 +71,8 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   CapacityPlugin,
   RequestsPlugin,
   ObservePlugin,
-  AskPlugin,
 
+  CardPlugin,
   AuditPlugin,
   ToolTrustPlugin,
   McpPlugin,

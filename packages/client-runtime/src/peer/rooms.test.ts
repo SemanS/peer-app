@@ -17,6 +17,7 @@ import {
   needsYouByTask,
   nextLostStart,
   roomBadgeCount,
+  roomFeed,
   roomNeedsYou,
   roomRev,
   roomSeq,
@@ -331,5 +332,68 @@ describe("needs you", () => {
     expect(roomRev(rooms, { ...place, workspace: "other" })).toBe(0);
     expect(roomRev(rooms, { ...place, task: "t-9" })).toBe(0);
     expect(roomRev(undefined, place)).toBe(0);
+  });
+});
+
+describe("roomFeed", () => {
+  const status = (over: Partial<PeerRoomsStatus> = {}): PeerRoomsStatus => ({
+    waiting: [],
+    mentions: [],
+    seqs: {},
+    revs: {},
+    rooms: {
+      acme: [
+        { project: "app", task: "a", seq: 5, seen: 5, updated: "2026-11-01T10:00:00Z" },
+        {
+          project: "app",
+          task: "b",
+          seq: 7,
+          seen: 3,
+          updated: "2026-11-01T09:00:00Z",
+          mark: "ready",
+        },
+        {
+          project: "app",
+          task: "c",
+          seq: 2,
+          seen: 2,
+          updated: "2026-11-01T08:00:00Z",
+          mark: "blocked",
+        },
+      ],
+    },
+    ...over,
+  });
+
+  it("puts what waits on the person first, then ready work, then what only moves", () => {
+    const rows = roomFeed(status());
+    expect(rows.map((row) => [row.task, row.state, row.unread])).toEqual([
+      ["c", "yours", 0],
+      ["b", "ready", 4],
+      ["a", "moving", 0],
+    ]);
+  });
+
+  it("says a room is theirs when something in it waits on them", () => {
+    const need = {
+      workspace: "acme",
+      project: "app",
+      task: "a",
+      seq: 5,
+      author: "eva@acme.test",
+      text: "Why?",
+      at: "2026-11-01T10:00:00Z",
+    };
+    const rows = roomFeed(status({ waiting: [need] }));
+    expect(rows.filter((row) => row.state === "yours").map((row) => [row.task, row.needs])).toEqual(
+      [
+        ["a", 1],
+        ["c", 0],
+      ],
+    );
+  });
+
+  it("is empty for a Hub that lists no rooms", () => {
+    expect(roomFeed(undefined)).toEqual([]);
   });
 });

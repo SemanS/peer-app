@@ -41,5 +41,6 @@ export function statusOf(read: ReadonlyMap<string, PeerRoomInbox>): PeerRoomsSta
     mentions: needs((inbox) => inbox.mentions),
     seqs: Object.fromEntries(all.map(([workspace, inbox]) => [workspace, inbox.seqs])),
     revs: Object.fromEntries(all.map(([workspace, inbox]) => [workspace, inbox.revs])),
+    rooms: Object.fromEntries(all.map(([workspace, inbox]) => [workspace, inbox.rooms ?? []])),
   };
 }

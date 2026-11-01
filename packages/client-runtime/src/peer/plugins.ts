@@ -17,7 +17,6 @@ const PRE_PLUGIN_FEATURES: ReadonlySet<string> = new Set<PeerPluginId>([
   "capacity",
   "requests",
   "observe",
-  "ask",
 ]);
 
 /** What these read of a status: its plugins, and whether someone is signed in, when known. */

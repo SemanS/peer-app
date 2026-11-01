@@ -2,11 +2,11 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
 
-import type { PeerHookContext, PeerSessionView } from "../../core/plugin.ts";
+import type { PeerHookContext, PeerSessionView, PeerToolContext } from "../../core/plugin.ts";
 import { sessionOf } from "./fixtures.test.ts";
 import { localOf, roomHooks } from "./hooks.ts";
 import type { Rooms } from "./Rooms.ts";
-import type { Heard } from "./text.ts";
+import type { Heard, RoomLine } from "./text.ts";
 
 const heard = (seq: number, text = "Why?"): Heard => ({
   ref: `vl-7:${seq}`,
@@ -26,11 +26,18 @@ const hooksOf = (
   waiting: Heard[],
   tellable: (candidates: ReadonlyArray<Heard>) => ReadonlyArray<Heard> = (all) => all,
   projects?: string,
+  lines: ReadonlyArray<RoomLine> = [],
 ) => {
   const queued: string[] = [];
   let wakes = 0;
   const rooms = {
     waiting: () => waiting,
+    overlapLines: () => Effect.void,
+    unread: (_session: PeerSessionView, after: number) =>
+      Effect.succeed({
+        seq: Math.max(after, ...lines.map(({ seq }) => seq)),
+        unread: lines.filter(({ seq }) => seq > after),
+      }),
     projectsOf: () => Effect.succeed(projects),
     tellable: (_run: string | undefined, candidates: ReadonlyArray<Heard>) =>
       Effect.succeed(tellable(candidates)),
@@ -57,6 +64,81 @@ const read = (hooks: ReturnType<typeof hooksOf>["hooks"], session: PeerSessionVi
   hooks.notices[0]!.read(ctxOf(session));
 const refsOf = (said: unknown) =>
   typeof said === "object" && said !== null ? (said as { refs: string[] }).refs : [];
+
+describe("a colleague's words to a running agent", () => {
+  const waking = (hooks: ReturnType<typeof hooksOf>["hooks"], session: PeerSessionView) =>
+    hooks.notices[0]!.read({ ...ctxOf(session), waking: true });
+
+  it.effect("reach it at its next step and never wake it", () =>
+    Effect.gen(function* () {
+      const { hooks } = hooksOf([{ ...heard(12), quiet: true }]);
+      const session = sessionOf();
+      assert.strictEqual(yield* waking(hooks, session), null);
+      assert.deepStrictEqual(refsOf(yield* read(hooks, session)), ["vl-7:12"]);
+    }),
+  );
+
+  it.effect("wake it six times an hour at most when they are agents' words", () =>
+    Effect.gen(function* () {
+      const waiting = [1, 2, 3, 4, 5, 6, 7].map((seq) => ({ ...heard(seq), byAgent: true }));
+      const { hooks } = hooksOf(waiting);
+      const session = sessionOf();
+      for (const seq of [1, 2, 3, 4, 5, 6]) {
+        const said = yield* waking(hooks, session);
+        assert.isTrue(refsOf(said).length > 0, `wake ${seq}`);
+        localOf(session).offering.clear();
+        waiting.splice(0, refsOf(said).length);
+        if (waiting.length === 0) waiting.push({ ...heard(8), byAgent: true });
+      }
+      assert.strictEqual(yield* waking(hooks, session), null);
+      yield* TestClock.adjust("61 minutes");
+      assert.isTrue(refsOf(yield* waking(hooks, session)).length > 0, "an hour later");
+    }),
+  );
+});
+
+describe("a landing step", () => {
+  const landing = (hooks: ReturnType<typeof hooksOf>["hooks"], session: PeerSessionView) =>
+    hooks.notices[1]!.read({
+      ...ctxOf(session),
+      event: "pre-tool",
+      tool: "Bash",
+      paths: [],
+      command: "git push origin main",
+    } as PeerToolContext);
+
+  it.effect("gives once what the room said that this session did not hear", () =>
+    Effect.gen(function* () {
+      const line = { ref: "vl-7:4", seq: 4, author: "Eva's agent", text: "Cents, not euros." };
+      const { hooks } = hooksOf([], undefined, undefined, [line]);
+      const session = sessionOf();
+      const said = yield* landing(hooks, session);
+      assert.include(String(said), "#4 Eva's agent: Cents, not euros.");
+      assert.include(String(said), "<shared-context>");
+      assert.strictEqual(yield* landing(hooks, session), null);
+    }),
+  );
+
+  it.effect("says nothing at an ordinary step", () =>
+    Effect.gen(function* () {
+      const line = { ref: "vl-7:4", seq: 4, author: "Eva's agent", text: "Cents." };
+      const { hooks } = hooksOf([], undefined, undefined, [line]);
+      assert.strictEqual(yield* hooks.notices[1]!.read(ctxOf(sessionOf())), null);
+    }),
+  );
+});
+
+describe("a colleague's words its agent heard", () => {
+  it.effect("bring no reminder, which would wake it to answer them", () =>
+    Effect.gen(function* () {
+      const waiting = [{ ...heard(12), quiet: true }];
+      const { hooks } = hooksOf(waiting);
+      const session = sessionOf();
+      yield* hooks.delivery({ session, refs: ["vl-7:12"], state: "modelInput" });
+      assert.strictEqual(localOf(session).unanswered.size, 0);
+    }),
+  );
+});
 
 describe("a run across projects whose first prompt was lost", () => {
   it.effect("hears where its projects are with the message, once", () =>

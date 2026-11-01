@@ -234,6 +234,21 @@ export async function attachRun(this: CoordinationBroker, session: LocalSession,
 }
 
 /** A session that gained a task (an assignment, a branch) gets a run as it would at its start. */
+/** The first thing a session on no task says opens a chat of the project, and with it a room. */
+export async function openRoom(this: CoordinationBroker, id: string) {
+  const session = this.sessions.get(id);
+  if (session === undefined || this.host.createChat === undefined) return undefined;
+  if (session.task === undefined)
+    session.task = await this.host.createChat(
+      session.workspace,
+      session.project,
+      session.label ?? session.branch ?? "Chat",
+    );
+  if (session.task === undefined) return undefined;
+  await this.adoptRun(session);
+  return this.sessionView(session);
+}
+
 export async function adoptRun(this: CoordinationBroker, session: LocalSession) {
   if (session.run !== undefined || session.task === undefined) return;
   const task = session.task;

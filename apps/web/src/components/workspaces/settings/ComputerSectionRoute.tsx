@@ -8,10 +8,12 @@ import {
   type ComputerSection,
 } from "./peerSettings.logic";
 import type { ComputerPageProps } from "./pageProps";
+import { CardPage } from "./pages/CardPage";
 import { CoordinationAndPlugins } from "./pages/CoordinationAndPlugins";
 import { ToolTrustPage } from "./pages/ToolTrustPage";
 
 const PAGES: Readonly<Record<ComputerSection, ComponentType<ComputerPageProps>>> = {
+  card: CardPage,
   coordination: CoordinationAndPlugins,
   "tool-trust": ToolTrustPage,
 };

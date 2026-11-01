@@ -43,34 +43,29 @@ describe("peer command outcomes", () => {
       await fixture.dispose();
     }
   });
-  it("reports a later refusal as uncertain after a note or resolution already took effect", async () => {
-    for (const command of ["note", "resolve"] as const) {
-      let writes = 0;
-      const write = async () => {
-        if (++writes === 2)
-          throw new PeerHubError({ detail: "Later overlap changed", refused: true });
-        return {
-          ...overlap,
-          state: command === "resolve" ? ("resolved" as const) : ("open" as const),
-        };
-      };
-      const fixture = await brokerFixture(() => ({ note: write, resolve: write }));
-      try {
-        await fixture.register("one");
-        fixture.broker.syncNow = async () => {};
-        fixture.broker.views.set("acme", {
-          sessions: [],
-          overlaps: [overlap, { ...overlap, id: "second" }],
-          at: context.updatedAt,
-        });
-        await expect(fixture.broker.runCli(command, ["agreed"], headers)).rejects.toMatchObject({
-          outcome: "uncertain",
-          next: expect.stringContaining("peer status"),
-        });
-        expect(writes).toBe(2);
-      } finally {
-        await fixture.dispose();
-      }
+  it("reports a later refusal as uncertain after a resolution already took effect", async () => {
+    let writes = 0;
+    const resolve = async () => {
+      if (++writes === 2)
+        throw new PeerHubError({ detail: "Later overlap changed", refused: true });
+      return { ...overlap, state: "resolved" as const };
+    };
+    const fixture = await brokerFixture(() => ({ resolve }));
+    try {
+      await fixture.register("one");
+      fixture.broker.syncNow = async () => {};
+      fixture.broker.views.set("acme", {
+        sessions: [],
+        overlaps: [overlap, { ...overlap, id: "second" }],
+        at: context.updatedAt,
+      });
+      await expect(fixture.broker.runCli("resolve", ["agreed"], headers)).rejects.toMatchObject({
+        outcome: "uncertain",
+        next: expect.stringContaining("peer status"),
+      });
+      expect(writes).toBe(2);
+    } finally {
+      await fixture.dispose();
     }
   });
   it("rejects invalid arguments and local refusals without changing claims, notes or reads", async () => {
@@ -83,7 +78,6 @@ describe("peer command outcomes", () => {
       session.pending.push("unheard note");
       const before = JSON.stringify(fixture.broker.snapshot());
       const rows: ReadonlyArray<readonly [string, string[], "usage" | "refused", string]> = [
-        ["note", [], "usage", "peer note"],
         ["resolve", [], "usage", "peer resolve"],
         ["claim", [], "usage", "peer claim"],
         ["claim", ["/outside/checkout"], "usage", "peer claim"],
@@ -94,7 +88,6 @@ describe("peer command outcomes", () => {
         ["index", ["0"], "usage", "peer index"],
         ["release", ["--typo"], "usage", "peer release"],
         ["claim", ["pay.ts", "--intent"], "usage", "peer claim"],
-        ["note", ["hello"], "refused", "peer room say"],
         ["resolve", ["agreed"], "refused", "peer status"],
         ["review", [], "refused", "on a task in Peer"],
         ["done", [], "refused", "on a task in Peer"],
@@ -116,7 +109,7 @@ describe("peer command outcomes", () => {
     }
   });
 
-  it("classifies each write failure and never acknowledges an uncertain note or context read", async () => {
+  it("classifies each write failure and never acknowledges an uncertain resolution or context read", async () => {
     const failures = [
       new PeerHubError({ detail: "Hub refused the command", refused: true }),
       new PeerHubError({ detail: "Connection lost" }),
@@ -135,7 +128,6 @@ describe("peer command outcomes", () => {
         tasks: () => tasks,
         taskOf: () => "other",
         readContext: async () => context,
-        note: fail,
         resolve: fail,
         contextRead: fail,
         finishTask: fail,
@@ -151,7 +143,6 @@ describe("peer command outcomes", () => {
         const session = fixture.broker.sessions.get("claude:one")!;
         const outcome = "refused" in failure && failure.refused ? "refused" : "uncertain";
         for (const [command, args] of [
-          ["note", ["hello"]],
           ["resolve", ["agreed"]],
           ["ack", ["KRK-7"]],
           ["context", []],

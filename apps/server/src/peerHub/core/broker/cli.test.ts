@@ -19,7 +19,6 @@ import { brokerFixture } from "./testkit.ts";
 const HELP_WITHOUT_PLUGINS = [
   "peer — coordinate with the other agents on this project through Peer.",
   "  peer status                     who works on what in this project, your overlaps and their notes",
-  '  peer note "<text>" [--overlap <id>]  a note to the agents you share files with (they hear it at their next step)',
   '  peer resolve "<agreement>" [--overlap <id>]  close your open overlaps with what was agreed',
   '  peer claim <path>... [--intent "<why>"]   files or directories/ you are about to change',
   "  peer release [<path>...]        drop claims",

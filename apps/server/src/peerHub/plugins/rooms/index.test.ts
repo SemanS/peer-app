@@ -30,7 +30,7 @@ describe("peer room through the broker", () => {
         const fixture = yield* peer.brokered;
         assert.match(
           yield* peerRoom(fixture, "one"),
-          /^peer: usage: This session is on no task, so it has no room\./,
+          /^peer: usage: This session is on no task, so it has no room yet\./,
         );
         const { tools } = yield* peer.agents.tools;
         assert.includeMembers(

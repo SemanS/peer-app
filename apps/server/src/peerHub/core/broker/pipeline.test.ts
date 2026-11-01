@@ -200,7 +200,7 @@ describe("what plugins add to hook answers", () => {
   it("answers on time without a slow notice, which reaches the agent at its next step", async () => {
     const ready = Promise.withResolvers<void>();
     let reads = 0;
-    const slow = plugin("ask", {
+    const slow = plugin("observe", {
       hooks: {
         notices: [
           {
@@ -309,7 +309,7 @@ describe("a step that ended in an error", () => {
 
 describe("waking an idle agent", () => {
   it("uses only the notices it must answer", async () => {
-    const asking = plugin("ask", {
+    const asking = plugin("observe", {
       hooks: {
         notices: [
           { wakes: true, read: () => Effect.succeed("Vir's agent asks where you keep the names.") },

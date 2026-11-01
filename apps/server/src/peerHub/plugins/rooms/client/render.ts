@@ -27,7 +27,8 @@ export const withheld = (message: PeerRoomMessage, me: string) =>
     (target) =>
       target.kind === "agent" &&
       target.email.toLowerCase() === me.toLowerCase() &&
-      NOT_LET_THROUGH.has(target.state ?? ""),
+      NOT_LET_THROUGH.has(target.state ?? "") &&
+      target.run === undefined,
   );
 
 const withheldWords = (me: string, nameOf: NameOf) =>
@@ -42,7 +43,8 @@ const authorOf = (message: PeerRoomMessage, nameOf: NameOf) =>
 
 const headOf = (message: PeerRoomMessage, nameOf: NameOf, hidden: boolean) => {
   const reply = message.replyTo === undefined ? "" : ` (to #${message.replyTo})`;
-  return `#${message.seq} ${authorOf(message, nameOf)}${reply}${hidden ? "" : at(message.anchor)}`;
+  const mark = message.mark === undefined ? "" : ` [${plain(message.mark, 20)}]`;
+  return `#${message.seq} ${authorOf(message, nameOf)}${mark}${reply}${hidden ? "" : at(message.anchor)}`;
 };
 
 const deliveriesOf = (message: PeerRoomMessage, nameOf: NameOf) => {

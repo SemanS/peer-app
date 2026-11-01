@@ -64,7 +64,7 @@ export const roomTools: ReadonlyArray<PeerAgentTool> = [
   {
     name: "peer_room_say",
     description:
-      "Post in your task's room as your person's agent. reply answers a message by its number; to names people; at anchors it (<path>:<line>). Your message wakes nobody.",
+      "Post in your task's room as your person's agent. reply answers a message by its number; to names people; agents names people whose agents you address; in names another task's room; at anchors it (<path>:<line>). A colleague's agent hears it at its next step; only its person can start it.",
     command: "room",
     inputSchema: {
       type: "object",
@@ -72,30 +72,70 @@ export const roomTools: ReadonlyArray<PeerAgentTool> = [
         text: { type: "string" },
         reply: { type: "number" },
         to: { type: "array", items: { type: "string" } },
+        agents: { type: "array", items: { type: "string" } },
+        in: { type: "string" },
         at: { type: "string" },
       },
       required: ["text"],
       additionalProperties: false,
     },
     arguments: (input) => {
-      const { text, reply, to, at } = input;
+      const { text, reply, to, agents, in: room, at } = input;
       if (typeof text !== "string" || text.trim() === "" || text.trimStart().startsWith("--"))
         throw usage(CLOSED, "give it a plain text, without a leading --.");
       if (reply !== undefined && (typeof reply !== "number" || !Number.isInteger(reply)))
         throw usage(CLOSED, "reply is a message's number.");
       if (at !== undefined && typeof at !== "string") throw usage(CLOSED, "at is <path>:<line>.");
-      if (
-        to !== undefined &&
-        (!Array.isArray(to) || to.some((one) => typeof one !== "string" || one.startsWith("--")))
-      )
-        throw usage(CLOSED, "to is a list of people.");
+      if (room !== undefined && (typeof room !== "string" || room.startsWith("--")))
+        throw usage(CLOSED, "in is a task's key or id.");
+      for (const list of [to, agents])
+        if (
+          list !== undefined &&
+          (!Array.isArray(list) ||
+            list.some((one) => typeof one !== "string" || one.startsWith("--")))
+        )
+          throw usage(CLOSED, "to and agents are lists of people.");
       return [
         "say",
         text,
         ...(reply === undefined ? [] : ["--reply", String(reply)]),
         ...((to as ReadonlyArray<string> | undefined) ?? []).flatMap((one) => ["--to", one]),
+        ...((agents as ReadonlyArray<string> | undefined) ?? []).flatMap((one) => ["--agent", one]),
+        ...(room === undefined ? [] : ["--in", room as string]),
         ...(at === undefined ? [] : ["--at", at]),
       ];
+    },
+  },
+  {
+    name: "peer_ready",
+    description:
+      "Say your work is done. Your person reads it in the room; then leave notes on the lines they might have decided differently.",
+    command: "ready",
+    inputSchema: {
+      type: "object",
+      properties: { text: { type: "string" } },
+      additionalProperties: false,
+    },
+    arguments: ({ text }) => {
+      if (text !== undefined && (typeof text !== "string" || text.startsWith("--")))
+        throw usage("invalid arguments for peer_ready", "text is plain words.");
+      return text === undefined ? [] : [text];
+    },
+  },
+  {
+    name: "peer_blocked",
+    description: "Say that only a person can go on, and what you need from them.",
+    command: "blocked",
+    inputSchema: {
+      type: "object",
+      properties: { text: { type: "string" } },
+      required: ["text"],
+      additionalProperties: false,
+    },
+    arguments: ({ text }) => {
+      if (typeof text !== "string" || text.trim() === "" || text.startsWith("--"))
+        throw usage("invalid arguments for peer_blocked", "text says what you need.");
+      return [text];
     },
   },
 ];

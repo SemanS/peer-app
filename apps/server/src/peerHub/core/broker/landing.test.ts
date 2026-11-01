@@ -343,7 +343,7 @@ describe("the messages waiting at a landing step", () => {
   });
 
   it("adds the plugins' notices flagged landing after the notes, and no advice", async () => {
-    const decision = plugin("ask", {
+    const decision = plugin("observe", {
       hooks: {
         notices: [
           {
@@ -394,7 +394,7 @@ describe("the messages waiting at a landing step", () => {
   });
 
   it("does not wait for a notice that is slow, nor lose the notes meanwhile", async () => {
-    const slow = plugin("ask", {
+    const slow = plugin("observe", {
       hooks: { notices: [{ wakes: false, landing: true, read: () => Effect.never }] },
     });
     const { fixture, view, waiting } = await landingFixture(only(slow));
@@ -521,7 +521,7 @@ describe("a landing step in the agent's shell", () => {
 
   it("has a plugin judge a step that lands work whatever its words name, and no other that names peer", async () => {
     const judged: string[] = [];
-    const guarding = plugin("ask", {
+    const guarding = plugin("observe", {
       hooks: {
         preTool: {
           on: "shell",
@@ -617,7 +617,7 @@ describe("a landing step in the agent's shell", () => {
 
   it("stops for a plugin's notice flagged landing, and does not say it again at the next step", async () => {
     let told = false;
-    const deciding = plugin("ask", {
+    const deciding = plugin("observe", {
       hooks: {
         notices: [
           {
@@ -770,7 +770,7 @@ describe("a landing step in the agent's shell", () => {
 
   it("puts a plugin's text back to wait for the next step when its stop is dropped", async () => {
     let told = false;
-    const deciding = plugin("ask", {
+    const deciding = plugin("observe", {
       hooks: {
         notices: [
           {
@@ -977,7 +977,7 @@ describe("peer review and peer done", () => {
   });
 
   it("also end refused for a plugin's notice flagged landing", async () => {
-    const deciding = plugin("ask", {
+    const deciding = plugin("observe", {
       hooks: {
         notices: [
           {

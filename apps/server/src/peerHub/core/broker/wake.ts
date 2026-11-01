@@ -43,8 +43,7 @@ export async function wait(
     await this.paneOf(agent, body, headerOf(headers, "x-herdr-pane")),
   );
   if (session === null) return "";
-  // Findings wait for the agent's next step; only a note on an overlap wakes it, or a plugin's
-  // notice it must answer.
+  // Only a plugin's notice it must answer wakes it; everything else waits for its next step.
   const deliveries: PreparedDelivery[] = [];
   const ready = await this.wakingNews(session, await this.plugins(), deliveries);
   if (ready !== null) {
@@ -79,8 +78,8 @@ export async function wait(
 }
 
 /**
- * What wakes an idle agent: a note on one of its overlaps, then the active plugins' notices it
- * must answer. Findings and everything else wait for its next step.
+ * What wakes an idle agent: the active plugins' notices it must answer. Overlaps and everything
+ * else wait for its next step, since a colleague's work starts no turn on its person's capacity.
  */
 export async function wakingNews(
   this: CoordinationBroker,
@@ -100,9 +99,7 @@ export async function wakingNews(
           { session: step.session, event: "stop", remainingMs: 0 },
           { waking: true },
         );
-  // Core's news comes last: the session's memory (`sessionMemory.ts`) is not written while what
-  // it marks heard still waits for the plugins' notices, before it goes out or into the queue.
-  return withPluginText(this.news(session, { team: false, waking: true }), notices);
+  return withPluginText(null, notices);
 }
 
 /** Wakes idle agents that have something new to hear: one round at a time, another if asked meanwhile. */

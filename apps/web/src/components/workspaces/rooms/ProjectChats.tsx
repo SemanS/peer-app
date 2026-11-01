@@ -3,14 +3,12 @@ import { MessagesSquareIcon } from "lucide-react";
 
 import { isSetScope } from "../projectSets.logic";
 import type { ProjectSlotProps } from "../slots.types";
-import { ALL_PROJECTS } from "../workBoard.logic";
 import { useWorkScope } from "../workScope";
-import { sharedRoomOf } from "./sharedRoom.logic";
 
 /**
  * The project's chats: rooms bound to no task. A project without one shows nothing. A room across
- * projects has a chat in each, so where several projects stand together it shows once: under
- * Rooms for a workspace, under its home for all projects.
+ * projects has a chat in each and shows under every one of them, as all of them are in it; only a
+ * workspace lists it once, under Rooms.
  */
 export function ProjectChats({ project, status }: ProjectSlotProps) {
   const [scope] = useWorkScope();
@@ -19,15 +17,9 @@ export function ProjectChats({ project, status }: ProjectSlotProps) {
       .find((workspace) => workspace.slug === project.workspace)
       ?.projects.find((state) => state.project.id === project.projectId)
       ?.work.tasks.find((task) => task.id === chat)?.group;
-  const chats = (project.chats ?? []).filter((chat) => {
-    const group = groupOf(chat.id);
-    if (group === undefined) return true;
-    if (isSetScope(scope)) return false;
-    return (
-      scope !== ALL_PROJECTS ||
-      sharedRoomOf(status, group)?.home.place.project === project.projectId
-    );
-  });
+  const chats = (project.chats ?? []).filter(
+    (chat) => !isSetScope(scope) || groupOf(chat.id) === undefined,
+  );
   if (chats.length === 0) return null;
   return (
     <div className="flex flex-col gap-0.5">

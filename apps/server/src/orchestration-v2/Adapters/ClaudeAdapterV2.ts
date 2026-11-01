@@ -2034,8 +2034,8 @@ const CLAUDE_ROLLBACK_PAST_GAP_REFUSAL =
 
 /**
  * Claude rewinds to a message id, and a compaction in that session can have removed the message.
- * An id that is gone fails every later turn, and nothing here can tell it from one still there.
- * A fork slices the raw transcript, so only a rewind needs this.
+ * An id that is gone fails every later turn, and a session Peer could not read can't show which
+ * ids are gone. A fork slices the raw transcript, so only a rewind needs this.
  */
 const isBeforeCliGap = (
   providerThread: OrchestrationV2ProviderThread,

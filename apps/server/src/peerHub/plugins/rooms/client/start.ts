@@ -397,37 +397,39 @@ export const roomStarts = (
             ? []
             : [{ project: folder.project, repository: "", task: "", root: tree.root }];
         });
-        if (roots.length + folderRoots.length > 0) {
+        if (roots.length + folderRoots.length > 0)
           yield* runRootsData(state)
             .update((current) => {
               const stored = Option.getOrUndefined(current);
               return { ...stored, runs: { ...stored?.runs, [run]: [...roots, ...folderRoots] } };
             })
             .pipe(state.lock.withPermits(1));
-          // The same record as the run's own checkout, so it is cleaned up when its task is done.
-          const contributions = yield* plugins.contributions;
-          yield* Effect.forEach(
-            roots,
-            (root, index) =>
-              Effect.forEach(
-                contributions,
-                (contribution) =>
-                  contribution.taskWorktreeCreated?.({
-                    kind: "task-worktree-created",
-                    workspace,
-                    project: root.project,
-                    repository: root.repository,
-                    task: root.task,
-                    thread: started.threadKey,
-                    root: root.root,
-                    identity: started.alsoTrees?.[index]?.identity ?? "",
-                  }) ?? Effect.void,
-                { discard: true },
-              ),
-            { discard: true },
-          );
-        }
         yield* work.refresh().pipe(state.lock.withPermits(1));
+        yield* work.taskWorktreeCreated(
+          {
+            workspace,
+            project: project.id,
+            repository: checkout.repository.id,
+            task: task.id,
+            thread: started.threadKey,
+          },
+          started.worktree,
+        );
+        yield* Effect.forEach(
+          others,
+          (other, index) =>
+            work.taskWorktreeCreated(
+              {
+                workspace,
+                project: other.project.id,
+                repository: other.checkout.repository.id,
+                task: other.task.id,
+                thread: started.threadKey,
+              },
+              started.alsoTrees?.[index],
+            ),
+          { discard: true },
+        );
         return { run, typed: started.promptError === undefined };
       }),
   };

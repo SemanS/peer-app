@@ -131,11 +131,12 @@ const continueInHerdr = (
     if (!isHarness(run.agent)) return notStarted(`herdr cannot start ${run.agent} again.`);
     const harness = run.agent;
     const peerState = yield* PeerState.PeerState;
+    const work = yield* PeerWork.PeerWork;
     const launcher = yield* (yield* PeerPlugins.PeerPlugins).require("taskLauncher");
     const unavailable = yield* launcher.unavailable;
     if (unavailable !== null) return notStarted(unavailable);
     const { workspace, project } = yield* peerState.project(run.workspace, run.project);
-    const task = (yield* (yield* PeerWork.PeerWork).tasks(workspace.slug, project.id)).find(
+    const task = (yield* work.tasks(workspace.slug, project.id)).find(
       (candidate) => candidate.id === run.task,
     );
     const repository = project.repositories[0];
@@ -188,6 +189,16 @@ const continueInHerdr = (
       runs.book
         .hold(run.id, started.threadKey, started.paneId, started.root)
         .catch(() => undefined),
+    );
+    yield* work.taskWorktreeCreated(
+      {
+        workspace: workspace.slug,
+        project: project.id,
+        repository: repository.id,
+        task: task.id,
+        thread: started.threadKey,
+      },
+      started.worktree,
     );
     return { started: true } satisfies PeerHubContinueRunResult;
   });

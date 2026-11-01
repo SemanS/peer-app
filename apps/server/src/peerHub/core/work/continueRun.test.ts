@@ -17,7 +17,12 @@ import * as PeerAdapters from "../coordination/PeerAdapters.ts";
 import * as PeerAgents from "../coordination/PeerAgents.ts";
 import * as PeerCoordination from "../coordination/PeerCoordination.ts";
 import * as PeerContextView from "../index/PeerContextView.ts";
-import { bindPlugin, type PeerRpcWrap, type PeerTaskLauncher } from "../plugin.ts";
+import {
+  bindPlugin,
+  type PeerLifecycleEvent,
+  type PeerRpcWrap,
+  type PeerTaskLauncher,
+} from "../plugin.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerWork from "./PeerWork.ts";
 import * as PeerHubClient from "../hub/PeerHubClient.ts";
@@ -25,8 +30,8 @@ import { coreLayer, meAnswer, paymentsSeed, seedState, standInHub } from "../tes
 import * as PeerRuns from "./runs.ts";
 import { stateOf } from "./runs.ts";
 
-/** Where the stand-in launcher says it made a new checkout. */
-const NEW_CHECKOUT = "/trees/new";
+/** The folder the stand-in launcher makes a new checkout in, under the one it was told. */
+const NEW_CHECKOUT = "KRK-1-new";
 const FOREIGN = "run_FOREIGN00000000000";
 /** Ana's own run that her other computer minted and left detached. */
 const DESK = "run_DESK0000000000000000";
@@ -86,6 +91,7 @@ const wrap: PeerRpcWrap = {
 const setup = Effect.gen(function* () {
   // What herdr's task launcher was asked to start, through a stand-in for the plugin.
   const launched: Array<Parameters<PeerTaskLauncher["launch"]>[0]> = [];
+  const created: Array<PeerLifecycleEvent> = [];
   const herdr = bindPlugin({
     id: "herdr",
     title: "herdr",
@@ -93,16 +99,19 @@ const setup = Effect.gen(function* () {
     defaultEnabled: true,
     layer: Layer.empty,
     make: Effect.succeed({
+      taskWorktreeCreated: (event) => Effect.sync(() => void created.push(event)),
       taskLauncher: {
         unavailable: Effect.succeed(null),
         launch: (asked) =>
           Effect.sync(() => {
             launched.push(asked);
+            const made = NodePath.join(asked.worktrees, NEW_CHECKOUT);
             return {
               paneId: "pane-9",
               terminalId: "term-9",
               threadKey: "herdr:term-9",
-              root: asked.reuse ?? NEW_CHECKOUT,
+              root: asked.reuse ?? made,
+              ...(asked.reuse === undefined ? { worktree: { root: made, identity: "1:2" } } : {}),
             };
           }),
       },
@@ -180,7 +189,7 @@ const setup = Effect.gen(function* () {
     ),
   );
   const client = yield* RpcTest.makeClient(RunsRpcGroup).pipe(Effect.provide(handlers));
-  return { hub, runs, queued, fixture, client, launched, desk, core };
+  return { hub, runs, queued, fixture, client, launched, created, desk, core };
 });
 
 /** A run of this computer whose one session ended. */
@@ -289,7 +298,7 @@ describe("continuing a herdr run", () => {
 
   it.effect("goes on in the checkout it left when that holds work", () =>
     Effect.gen(function* () {
-      const { runs, client, launched } = yield* setup;
+      const { runs, client, launched, created } = yield* setup;
       const tree = yield* taskCheckout;
       const id = yield* detached(runs, "herdr", "claude:native-4");
       yield* Effect.promise(() => runs.book.hold(id, "herdr:term-1", "pane-1", tree));
@@ -303,6 +312,7 @@ describe("continuing a herdr run", () => {
 
       assert.strictEqual(launched[0]!.reuse, tree);
       assert.strictEqual(runs.book.get(id)!.root, tree);
+      assert.deepStrictEqual(created, []);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
@@ -328,7 +338,7 @@ describe("continuing a herdr run", () => {
 
   it.effect("starts from the base when the checkout it left holds nothing", () =>
     Effect.gen(function* () {
-      const { runs, client, launched } = yield* setup;
+      const { runs, client, launched, created } = yield* setup;
       const tree = yield* taskCheckout;
       const id = yield* detached(runs, "herdr", "claude:native-4");
       yield* Effect.promise(() => runs.book.hold(id, "herdr:term-1", "pane-1", tree));
@@ -338,7 +348,20 @@ describe("continuing a herdr run", () => {
       });
 
       assert.isUndefined(launched[0]!.reuse);
-      assert.strictEqual(runs.book.get(id)!.root, NEW_CHECKOUT);
+      const root = NodePath.join(launched[0]!.worktrees, NEW_CHECKOUT);
+      assert.strictEqual(runs.book.get(id)!.root, root);
+      assert.deepStrictEqual(created, [
+        {
+          kind: "task-worktree-created",
+          workspace: "acme",
+          project: "pay",
+          repository: "api",
+          task: "krk-1",
+          thread: "herdr:term-9",
+          root,
+          identity: "1:2",
+        },
+      ]);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

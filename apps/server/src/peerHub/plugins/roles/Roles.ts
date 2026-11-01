@@ -490,6 +490,16 @@ const make = Effect.gen(function* () {
         ],
       });
       yield* work.refresh().pipe(state.lock.withPermits(1));
+      yield* work.taskWorktreeCreated(
+        {
+          workspace: workspace.slug,
+          project: project.id,
+          repository: repository.id,
+          task: task.id,
+          thread: started.threadKey,
+        },
+        started.worktree,
+      );
       yield* status.publish;
       return {
         thread: started.threadKey,

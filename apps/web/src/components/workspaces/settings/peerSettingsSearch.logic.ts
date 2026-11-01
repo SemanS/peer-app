@@ -88,13 +88,6 @@ const WORKSPACE_ENTRIES: ReadonlyArray<Entry> = [
     place: w("people"),
     terms: "invite member admin owner role people remove",
   },
-  {
-    id: "team-metrics",
-    title: "Team metrics",
-    place: w("people"),
-    terms: "usage per person metrics team outcomes",
-    plugin: "metrics",
-  },
   // Shared capacity
   {
     id: "capacity",

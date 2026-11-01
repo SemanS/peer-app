@@ -291,7 +291,7 @@ function TeamBody({
           <h1 className="text-xl font-semibold text-foreground">Team</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
             What the team's agents are doing, from facts Peer keeps. Other people's chats are
-            counted, never listed. Requests and personal metrics stay out.
+            counted, never listed. Requests stay out.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

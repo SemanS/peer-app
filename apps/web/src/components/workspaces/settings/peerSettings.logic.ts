@@ -390,7 +390,7 @@ const SLOT_HOMES: Readonly<Record<SlotKind, SlotHost>> = {
 const SLOT_PLACEMENTS: Readonly<Record<SlotKind, Readonly<Record<string, SlotHost>>>> = {
   settings: { capacity: "capacity", "tool-trust": "tool-trust" },
   alwaysSettings: {},
-  workspaceSettings: { audit: "audit", github: "github", metrics: "people" },
+  workspaceSettings: { audit: "audit", github: "github" },
   projectSettings: { capacity: "own", acceptance: "coordination" },
 };
 

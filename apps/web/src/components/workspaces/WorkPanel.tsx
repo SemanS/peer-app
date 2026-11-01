@@ -7,7 +7,6 @@ import { type ReactNode, useState } from "react";
 
 import { Button } from "../ui/button";
 import { SidebarMenu } from "../ui/sidebar";
-import { ProjectHistory } from "./ProjectHistory";
 import { ProjectSection } from "./ProjectSection";
 import { SignalTiles } from "./ProjectSignals";
 import { useNewThreadHandler } from "../../hooks/useHandleNewThread";
@@ -346,13 +345,6 @@ function ProjectTab({
         plugins={plugins}
         activeThread={activeThread}
         show={(signal) => signal.id === "overlaps"}
-      />
-      <ProjectHistory
-        environmentId={environmentId}
-        status={status}
-        project={project}
-        plugins={plugins}
-        activeThread={activeThread}
       />
     </section>
   );

@@ -10,7 +10,7 @@ it("does not invoke Hub hooks or reports for a local project on a signed-in envi
     ...NO_PLUGINS,
     active: [
       { id: "requests", title: "Team requests", requiresHub: true, contributions: {} },
-      { id: "metrics", title: "Local metrics", contributions: {} },
+      { id: "audit", title: "Local audit", contributions: {} },
     ],
     commands: [
       {
@@ -28,7 +28,7 @@ it("does not invoke Hub hooks or reports for a local project on a signed-in envi
     ],
   };
   const local = pluginsForWorkspace(plugins, PEER_LOCAL_WORKSPACE);
-  expect(local.active.map((p) => p.id)).toEqual(["metrics"]);
+  expect(local.active.map((p) => p.id)).toEqual(["audit"]);
   expect(local.commands[0]?.refused).toBe("hub");
   expect(local.reportSessions).toEqual([]);
   expect(pluginsForWorkspace(plugins, "team")).toBe(plugins);

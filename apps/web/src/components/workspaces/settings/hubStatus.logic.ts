@@ -129,16 +129,6 @@ const FEATURES: ReadonlyArray<Feature> = [
     },
   },
   {
-    id: "metrics",
-    name: "Team metrics",
-    without: "nothing",
-    words: {
-      on: "Workspace › People shows usage per person.",
-      off: "Team metrics can’t be shared: this Hub doesn’t run them.",
-      newer: "Team metrics can’t be shared until the Hub is updated.",
-    },
-  },
-  {
     id: "usage",
     name: "Workspace usage",
     without: "nothing",

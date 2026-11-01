@@ -3,7 +3,6 @@ import { plansMobilePlugin } from "./plans";
 import { agreementsMobilePlugin } from "./agreements";
 import { changesMobilePlugin } from "./changes";
 
-import { metricsMobilePlugin } from "./metrics";
 import { needsYouMobilePlugin } from "./needs-you";
 import { handoffMobilePlugin } from "./handoff";
 import { resourcesMobilePlugin } from "./resources";
@@ -55,7 +54,6 @@ export const PEER_MOBILE_PLUGINS: ReadonlyArray<PeerMobilePlugin> = [
   needsYouMobilePlugin,
   resourcesMobilePlugin,
 
-  metricsMobilePlugin,
   impactMobilePlugin,
   ownershipMobilePlugin,
   plansMobilePlugin,

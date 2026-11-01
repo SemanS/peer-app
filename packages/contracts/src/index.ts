@@ -117,8 +117,6 @@ export * from "./peer/handoff.rpc.ts";
 export * from "./peer/resources.ts";
 export * from "./peer/resources.rpc.ts";
 
-export * from "./peer/metrics.ts";
-export * from "./peer/metrics.rpc.ts";
 export * from "./peer/usage.ts";
 export * from "./peer/usage.rpc.ts";
 

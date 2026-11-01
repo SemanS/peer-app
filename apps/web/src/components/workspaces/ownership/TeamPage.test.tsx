@@ -258,9 +258,7 @@ describe("every member's Team page", () => {
       expect(section(label), label).toBeDefined();
     }
     expect(page()).toContain("What the team's agents are doing, from facts Peer keeps.");
-    expect(page()).toContain(
-      "Other people's chats are counted, never listed. Requests and personal metrics stay out.",
-    );
+    expect(page()).toContain("Other people's chats are counted, never listed. Requests stay out.");
     expect(renderer!.root.findByProps({ "data-project": true }).children).toEqual([
       "Ordering demo",
     ]);
@@ -306,7 +304,7 @@ describe("what the page never shows", () => {
     await show({ viewer: CYRIL });
     expect(everything()).not.toContain("SECRET");
     // The page says that requests stay out; it names none, and none shows among the facts.
-    const body = page().replace("Requests and personal metrics stay out.", "");
+    const body = page().replace("Requests stay out.", "");
     expect(body).not.toMatch(/request/i);
   });
 

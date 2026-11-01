@@ -16,7 +16,6 @@ import { PEER_RESOURCES_METHODS, ResourcesRpcGroup, ResourcesRpcScopes } from ".
 import { PeerHubSubscribeInput } from "./needs-you.ts";
 import { PEER_NEEDS_YOU_METHODS, NeedsYouRpcGroup, NeedsYouRpcScopes } from "./needs-you.rpc.ts";
 import { PEER_SETTLE_METHODS, SettleRpcGroup, SettleRpcScopes } from "./settle.rpc.ts";
-import { MetricsRpcGroup, MetricsRpcScopes, PEER_METRICS_METHODS } from "./metrics.rpc.ts";
 import { HandoffRpcGroup, HandoffRpcScopes, PEER_HANDOFF_METHODS } from "./handoff.rpc.ts";
 import {
   DependenciesRpcGroup,
@@ -581,7 +580,6 @@ const PeerCoreRpcScopes = {
 /** Every Peer method, as `WS_METHODS` spreads them. */
 export const PEER_WS_METHODS = {
   ...PEER_RESOURCES_METHODS,
-  ...PEER_METRICS_METHODS,
   ...PEER_USAGE_METHODS,
   ...PEER_IMPACT_METHODS,
   ...PEER_PLANS_METHODS,
@@ -616,7 +614,6 @@ export const PEER_WS_METHODS = {
 
 export const PeerRpcGroup = PeerCoreRpcGroup.merge(
   ResourcesRpcGroup,
-  MetricsRpcGroup,
   UsageRpcGroup,
   PeerImpactRpcs,
   PlansRpcGroup,
@@ -651,7 +648,6 @@ export const PeerRpcGroup = PeerCoreRpcGroup.merge(
 /** The scope each Peer method needs, as the server's authorization table spreads them. */
 export const PEER_RPC_SCOPES = {
   ...ResourcesRpcScopes,
-  ...MetricsRpcScopes,
   ...UsageRpcScopes,
   ...ImpactRpcScopes,
   ...PlansRpcScopes,

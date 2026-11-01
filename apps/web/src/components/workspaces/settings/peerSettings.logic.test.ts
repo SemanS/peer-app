@@ -280,7 +280,6 @@ describe("where plugin settings are hosted", () => {
     expect(slotHost("settings", "tool-trust")).toBe("tool-trust");
     expect(slotHost("workspaceSettings", "audit")).toBe("audit");
     expect(slotHost("workspaceSettings", "github")).toBe("github");
-    expect(slotHost("workspaceSettings", "metrics")).toBe("people");
     // The review policy sits with the project's other coordination rules.
     expect(slotHost("projectSettings", "acceptance")).toBe("coordination");
   });

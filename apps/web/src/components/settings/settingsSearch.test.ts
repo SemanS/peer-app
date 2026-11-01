@@ -409,15 +409,9 @@ describe("every page of the app's settings", () => {
 });
 
 describe("searching Peer's pages", () => {
-  const PLUGINS = [
-    "github",
-    "capacity",
-    "audit",
-    "tool-trust",
-    "needs-you",
-    "settle",
-    "metrics",
-  ].map((id) => ({ id, title: id, enabled: true, active: true }));
+  const PLUGINS = ["github", "capacity", "audit", "tool-trust", "needs-you", "settle"].map(
+    (id) => ({ id, title: id, enabled: true, active: true }),
+  );
 
   const acme = (role: PeerNavWorkspace["role"]): PeerNavWorkspace => ({
     slug: "acme",

@@ -64,7 +64,6 @@
         // Peer's lab, its report and the Hub smoke test run by hand: the Hub's
         // docs/operations.md gives the commands.
         "scripts/peer-coordination-lab.ts",
-        "scripts/peer-coordination-report.ts",
         "scripts/peer-hub-smoke.ts",
         "scripts/probe-claude-fork-local-rollback-replay.ts",
         "scripts/update-test-shard-weights.ts",
@@ -153,7 +152,6 @@
         "src/components/workspaces/knowledge/knowledge.logic.ts": ["exports"],
         "src/components/workspaces/memory/MemoryRecords.tsx": ["exports"],
         "src/components/workspaces/memory/memory.actions.ts": ["exports"],
-        "src/components/workspaces/metrics/Metrics.tsx": ["exports"],
         "src/components/workspaces/overlap/overlap.logic.ts": ["exports"],
         "src/components/workspaces/ownership/ownerDecision.logic.ts": ["exports"],
         "src/components/workspaces/ownership/ownership.testkit.ts": ["exports"],

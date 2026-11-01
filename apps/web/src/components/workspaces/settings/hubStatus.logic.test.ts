@@ -41,7 +41,6 @@ const ALL = [
   "resources",
   "github",
   "audit",
-  "metrics",
   "usage",
   "requests",
   "observe",
@@ -84,7 +83,6 @@ describe("the features of a Hub that serves them all", () => {
       "resources",
       "github",
       "audit",
-      "metrics",
       "usage",
       "requests",
       "observe",
@@ -114,10 +112,6 @@ describe("the features of a Hub that serves them all", () => {
     expect(byId(list, "audit")).toMatchObject({
       name: "Audit log",
       effect: "Every settings change is recorded with who, what, from and to.",
-    });
-    expect(byId(list, "metrics")).toMatchObject({
-      name: "Team metrics",
-      effect: "Workspace › People shows usage per person.",
     });
   });
 });
@@ -340,7 +334,7 @@ describe("what the app cannot tell", () => {
 
   it("leaves out the features no plugin waits for, which an older Hub says nothing of", () => {
     const list = rows();
-    for (const id of ["audit", "metrics", "announcements", "impact"]) {
+    for (const id of ["audit", "announcements"]) {
       expect(byId(list, id)).toBeUndefined();
     }
   });

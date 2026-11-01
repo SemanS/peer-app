@@ -283,12 +283,8 @@ export interface PeerWebPlugin {
   };
   /** Items of a project's More menu, each with its label and hint. */
   readonly projectActions?: ReadonlyArray<ProjectAction>;
-  /** Rows at the top of an open project, for what holds now. Past events belong in its History. */
+  /** Rows at the top of an open project, for what holds now. */
   readonly projectRows?: ComponentType<ProjectSlotProps>;
-  /** A section of a project's History, the view one click below its tasks. */
-  readonly projectHistory?: ComponentType<ProjectSlotProps>;
-  /** A short mark beside the History button, e.g. how much changed while the person was away. */
-  readonly historyBadge?: ComponentType<ProjectSlotProps>;
   /**
    * A project's signals: a row in the open project while it counts something and opens a page, and
    * a chip on project cards and the Work board while it counts something.

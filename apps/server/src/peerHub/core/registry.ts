@@ -1,4 +1,3 @@
-import { MetricsPlugin } from "../plugins/metrics/index.ts";
 import { UsagePlugin } from "../plugins/usage/index.ts";
 import { NeedsYouPlugin } from "../plugins/needs-you/index.ts";
 import { SettlePlugin } from "../plugins/settle/index.ts";
@@ -91,7 +90,6 @@ export const peerPlugins = (): ReadonlyArray<PeerPluginEntry> => [
   NeedsYouPlugin,
   SettlePlugin,
   ResourcesPlugin,
-  MetricsPlugin,
   UsagePlugin,
   ImpactPlugin,
   OwnershipPlugin,

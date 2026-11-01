@@ -117,11 +117,11 @@ describe("Needs you", () => {
   });
 });
 
-it("shows metrics only when active and keeps older environments quiet", () => {
-  const registry = [...REGISTRY, { id: "metrics" }];
-  expect(ids(selectPeerPlugins(registry, status([plugin("metrics")])))).toEqual(["metrics"]);
-  expect(ids(selectPeerPlugins(registry, status([plugin("metrics", false)])))).toEqual([]);
-  expect(ids(selectPeerPlugins(registry, status()))).not.toContain("metrics");
+it("shows a plugin only when active and keeps older environments quiet", () => {
+  const registry = [...REGISTRY, { id: "audit" }];
+  expect(ids(selectPeerPlugins(registry, status([plugin("audit")])))).toEqual(["audit"]);
+  expect(ids(selectPeerPlugins(registry, status([plugin("audit", false)])))).toEqual([]);
+  expect(ids(selectPeerPlugins(registry, status()))).not.toContain("audit");
 });
 
 describe("what plugins add to the Team page", () => {

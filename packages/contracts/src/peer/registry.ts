@@ -1,4 +1,3 @@
-import { PeerMetricsStatus } from "./metrics.ts";
 import { PeerHandoffStatus } from "./handoff.ts";
 import { PeerResourcesState } from "./resources.ts";
 import { PeerImpactStatus } from "./impact.ts";
@@ -42,7 +41,6 @@ export const peerPluginStatusFields = {
   resources: SchemaValues.optional(PeerResourcesState),
   needsYou: SchemaValues.optional(PeerNeedsYouStatus),
   settle: SchemaValues.optional(PeerSettleStatus),
-  metrics: SchemaValues.optional(PeerMetricsStatus),
   handoff: SchemaValues.optional(PeerHandoffStatus),
   dependencies: SchemaValues.optional(SchemaValues.Array(PeerDependencySnapshot)),
   toolTrust: SchemaValues.optional(PeerToolTrustStatus),

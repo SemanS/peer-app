@@ -27,7 +27,6 @@ export const PEER_PLUGIN_IDS = [
   "needs-you",
   "settle",
   "resources",
-  "metrics",
   "usage",
   "impact",
   "ownership",

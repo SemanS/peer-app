@@ -626,11 +626,11 @@ it.layer(NodeServices.layer)("EnvironmentAuth.layer", (it) => {
           method: authenticated.method,
           scopes: new Set(authenticated.scopes),
         };
-        yield* requireEnvironmentScope(
-          requiredScopeForRpcMethod(WS_METHODS.peerMetricsSummary),
-        ).pipe(Effect.provideService(EnvironmentAuthenticatedPrincipal, principal));
+        yield* requireEnvironmentScope(requiredScopeForRpcMethod(WS_METHODS.peerRoomsRead)).pipe(
+          Effect.provideService(EnvironmentAuthenticatedPrincipal, principal),
+        );
         const refused = yield* requireEnvironmentScope(
-          requiredScopeForRpcMethod(WS_METHODS.peerMetricsConfigure),
+          requiredScopeForRpcMethod(WS_METHODS.peerRoomsShareWork),
         ).pipe(Effect.provideService(EnvironmentAuthenticatedPrincipal, principal), Effect.flip);
         expect(refused._tag).toBe("EnvironmentScopeRequiredError");
         expect(refused.requiredScope).toBe("access:write");

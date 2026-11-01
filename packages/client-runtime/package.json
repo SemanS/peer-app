@@ -605,7 +605,6 @@
     "./peer/contextView": "./src/peer/contextView.ts",
     "./peer/resources": "./src/peer/resources.ts",
     "./peer-resources": "./src/peer/resources.ts",
-    "./peer/metrics": "./src/peer/metrics.ts",
     "./peer/usage": "./src/peer/usage.ts",
     "./peer/ownership": "./src/peer/ownership.ts",
     "./peer/test-reports": "./src/peer/testReports.ts",

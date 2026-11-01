@@ -9,7 +9,7 @@ import { HostedSettings } from "../PluginSlots";
 /**
  * This computer's coordination and plugins: first what decides whether its agents take part at
  * all (the switch, Claude Code and Codex hooks, Codex's trust) with the settings plugins bring
- * (herdr, GitHub CLI, metrics and the rest), then the default policy where a project sets none, and
+ * (herdr, GitHub CLI and the rest), then the default policy where a project sets none, and
  * the Peer plugins folded, as most people never change one. These are this computer's own, so
  * whoever uses it sees them whatever workspace is open.
  */

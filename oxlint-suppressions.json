@@ -1437,16 +1437,6 @@
       "count": 1
     }
   },
-  "apps/server/src/peerHub/plugins/metrics/client/hubSync.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 2
-    }
-  },
-  "apps/server/src/peerHub/plugins/metrics/service.ts": {
-    "t3code/prefer-effect-fn": {
-      "count": 3
-    }
-  },
   "apps/server/src/peerHub/plugins/needs-you/service.ts": {
     "t3code/prefer-effect-fn": {
       "count": 1

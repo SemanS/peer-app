@@ -61,6 +61,7 @@ export interface ScopeGroup {
   readonly projectKey: string;
   readonly displayName: string;
   readonly memberProjectRefs: ReadonlyArray<ScopedProjectRef>;
+  readonly memberProjects?: ReadonlyArray<{ readonly physicalProjectKey: string }>;
 }
 
 /** What the scope can be resolved against. */
@@ -115,7 +116,11 @@ export function resolveProjectScope(stored: string, known: ProjectCatalog): Reso
   }
   if (isLocalScope(stored)) {
     const key = stored.slice(LOCAL_SCOPE_PREFIX.length);
-    const group = known.groups.find((candidate) => candidate.projectKey === key);
+    const group =
+      known.groups.find((candidate) => candidate.projectKey === key) ??
+      known.groups.find((candidate) =>
+        candidate.memberProjects?.some((member) => member.physicalProjectKey === key),
+      );
     if (group === undefined) return EVERY_PROJECT;
     // A local project someone shared since is its workspace project now: the choice follows it.
     const keys = new Set(group.memberProjectRefs.map(projectRefKey));
@@ -123,7 +128,11 @@ export function resolveProjectScope(stored: string, known: ProjectCatalog): Reso
       entry.refs.some((ref) => keys.has(projectRefKey(ref))),
     );
     return moved === undefined
-      ? { scope: stored, name: group.displayName, refs: group.memberProjectRefs }
+      ? {
+          scope: localScope(group.projectKey),
+          name: group.displayName,
+          refs: group.memberProjectRefs,
+        }
       : { scope: moved.scope, name: moved.name, refs: moved.refs };
   }
   const project = known.peer.find((entry) => entry.scope === stored);

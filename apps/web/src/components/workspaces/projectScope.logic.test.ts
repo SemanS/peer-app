@@ -147,6 +147,38 @@ describe("the project scope Tasks and Chats share", () => {
     expect(resolved).toEqual(shared);
   });
 
+  it.each([false, true])(
+    "keeps a physical project choice after repository discovery, shared=%s",
+    (shared) => {
+      const physicalKey = "laptop:/projects/dotfiles";
+      const group: ScopeGroup = {
+        ...dotfiles,
+        memberProjects: [{ physicalProjectKey: physicalKey }],
+      };
+      const workspaceProject: PeerProjectEntry = {
+        scope: "webinson/dotfiles",
+        name: "Dotfiles",
+        refs: [ref("laptop", "p-9")],
+      };
+      const known = {
+        ...catalog,
+        groups: [group],
+        peer: shared ? [workspaceProject] : [],
+        sets: [{ id: "saved", name: "My workspace", projects: [localScope(physicalKey)] }],
+      };
+      const expected = shared
+        ? workspaceProject
+        : {
+            scope: localScope(dotfiles.projectKey),
+            name: dotfiles.displayName,
+            refs: dotfiles.memberProjectRefs,
+          };
+      expect(resolveProjectScope(localScope(physicalKey), known)).toEqual(expected);
+      expect(resolveProjectScope("set:saved", known).members).toHaveLength(1);
+      expect(resolveProjectScope(localScope("other:/projects/dotfiles"), known).refs).toBeNull();
+    },
+  );
+
   it("falls back to every project for a project that is gone", () => {
     const every = { scope: "all", name: undefined, refs: null };
     expect(resolveProjectScope("webinson/removed", catalog)).toEqual(every);

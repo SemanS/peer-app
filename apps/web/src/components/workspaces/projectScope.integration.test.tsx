@@ -15,6 +15,9 @@ import type { PeerProjectEntry, ScopeGroup } from "./projectScope.logic";
 
 const source = vi.hoisted(() => ({ peer: [] as PeerProjectEntry[], groups: [] as ScopeGroup[] }));
 vi.mock("@effect/atom-react", () => ({ useAtomValue: () => JSON.stringify(source.peer) }));
+vi.mock("../../hooks/useSidebarProjectGroups", () => ({
+  useSidebarProjectGroups: () => source.groups,
+}));
 vi.mock("../../state/environments", () => ({ usePrimaryEnvironment: () => null }));
 vi.mock("../../state/entities", () => ({ useThreadShell: () => null }));
 vi.mock("../../state/server", () => ({ serverEnvironment: {} }));

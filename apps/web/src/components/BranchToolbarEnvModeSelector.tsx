@@ -21,6 +21,9 @@ import {
   SelectValue,
 } from "./ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import { useAtomValue } from "@effect/atom-react";
+import { shortcutLabelForCommand } from "../keybindings";
+import { primaryServerKeybindingsAtom } from "../state/server";
 
 const PREVIOUS_WORKTREE_SELECT_VALUE = "previous-worktree";
 
@@ -48,6 +51,10 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   terminology,
 }: BranchToolbarEnvModeSelectorProps) {
   const composerFloatingLayerProps = useComposerMenuProps();
+  const shortcutLabel = shortcutLabelForCommand(
+    useAtomValue(primaryServerKeybindingsAtom),
+    "composer.workspace",
+  );
   const showPreviousWorktree = Boolean(previousWorktreeLabel && onUsePreviousWorktree);
   const envModeItems = [
     {
@@ -69,7 +76,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
   if (envLocked || forceNewWorktree) {
     const lockedRow = (
       <span
-        className="inline-flex h-7 min-w-0 items-center gap-1 border border-transparent px-1.75 font-normal text-muted-foreground/70 text-xs sm:h-6"
+        className="inline-flex h-7 min-w-0 items-center gap-1.5 border border-transparent px-1.75 font-normal text-muted-foreground/70 text-sm sm:h-6 sm:text-xs"
         data-composer-context-control
       >
         {activeWorktreePath ? (
@@ -140,6 +147,7 @@ export const BranchToolbarEnvModeSelector = memo(function BranchToolbarEnvModeSe
           {effectiveEnvMode === "worktree"
             ? resolveEnvModeLabel("worktree", terminology)
             : resolveCurrentWorkspaceLabel(activeWorktreePath, terminology)}
+          {shortcutLabel ? ` · ${shortcutLabel}` : null}
         </TooltipPopup>
       </Tooltip>
       <SelectPopup

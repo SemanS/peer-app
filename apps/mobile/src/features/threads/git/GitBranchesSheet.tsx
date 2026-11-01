@@ -6,6 +6,7 @@ import { Platform, Pressable, ScrollView, useWindowDimensions, View } from "reac
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AndroidSheetHeader } from "../../../components/ui/AndroidScreenHeader";
+import { SheetHeader } from "../../../components/ui/SheetHeader";
 import { ScreenContent } from "../../../components/ui/ScreenContent";
 import { NativeStackScreenOptions } from "../../../native/StackHeader";
 import { AppText as Text, AppTextInput as TextInput } from "../../../components/ui/AppText";
@@ -28,7 +29,7 @@ export function GitBranchesSheet(_props: GitBranchesSheetProps) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
   const { selectedThread } = useThreadSelection();
-  const { selectedThreadCwd, selectedThreadWorktreePath } = useSelectedThreadWorktree();
+  const { selectedThreadCwd } = useSelectedThreadWorktree();
   const gitState = useSelectedThreadGitState();
   const gitActions = useSelectedThreadGitActions();
   const { canChangeThreadBranch } = gitActions;
@@ -46,7 +47,7 @@ export function GitBranchesSheet(_props: GitBranchesSheetProps) {
   const noRefLabel =
     gitStatus.data?.vcs?.kind === "jj" ? `No ${vcsTerminology.refNoun}` : "Detached HEAD";
   const currentBranchLabel = gitStatus.data?.refName ?? selectedThread?.branch ?? noRefLabel;
-  const currentWorktreePath = selectedThreadWorktreePath;
+  const currentWorktreePath = selectedThreadCwd;
   const availableBranches = gitState.selectedThreadBranches;
   const branchesLoading = gitState.selectedThreadBranchesLoading;
   const busy = gitState.gitOperationLabel !== null;
@@ -85,11 +86,18 @@ export function GitBranchesSheet(_props: GitBranchesSheetProps) {
           onBack={() => navigation.goBack()}
           hideBottomBorder
         />
-      ) : null}
+      ) : (
+        <SheetHeader
+          presentation="native"
+          title="Branches & worktrees"
+          onClose={() => navigation.goBack()}
+        />
+      )}
       <ScreenContent fitToContents>
         <ScrollView
           nestedScrollEnabled
           className="android:shrink android:grow-0 ios:flex-1"
+          contentInsetAdjustmentBehavior={Platform.OS === "ios" ? "automatic" : "never"}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           contentInset={{ bottom: Math.max(insets.bottom, 18) + 18 }}

@@ -1,3 +1,5 @@
+import * as CodexManagedTokenBroker from "../provider/CodexManagedTokenBroker.ts";
+import * as PortScanner from "../preview/PortScanner.ts";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as SourceControlProviderRegistry from "../sourceControl/SourceControlProviderRegistry.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -191,6 +193,18 @@ const layerOrchestration = RuntimeLayer.layer.pipe(
   Layer.provide(layerBackgroundPolicy),
   Layer.provide(layerPlatformTest),
   Layer.provide(McpProviderSessions.layer),
+  Layer.provide(
+    Layer.merge(
+      Layer.mock(PortScanner.PortDiscovery)({
+        scan: () => Effect.succeed([]),
+        trackAgent: () => () => {},
+      }),
+      Layer.mock(CodexManagedTokenBroker.CodexManagedTokenBroker)({
+        endpoint: Effect.die("Unexpected Codex token broker request"),
+        awaitIdle: Effect.void,
+      }),
+    ),
+  ),
 );
 
 const layerContinuationWorker = ProviderContinuationService.layer.pipe(

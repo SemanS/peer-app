@@ -1,13 +1,7 @@
+import { render } from "../../../test/render";
 import { DEFAULT_CLIENT_SETTINGS, DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts";
-import {
-  createMemoryHistory,
-  createRootRoute,
-  createRouter,
-  RouterProvider,
-} from "@tanstack/react-router";
-import { act, StrictMode, type ReactNode } from "react";
-import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { StrictMode, type ReactNode } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 const { listBrowserImportSources } = vi.hoisted(() => ({
   listBrowserImportSources: vi.fn().mockResolvedValue([]),
@@ -54,49 +48,25 @@ vi.mock(import("./SettingsScopeContext"), async (original) => ({
   useOptionalSettingsScope: () => null,
 }));
 
-import { IntegrationsSettingsPanel } from "./IntegrationsSettings";
-
-let root: Root;
-let container: HTMLDivElement;
-
-beforeEach(() => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  listBrowserImportSources.mockClear();
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-});
-
-afterEach(async () => {
-  await act(async () => root.unmount());
-  container.remove();
-  vi.unstubAllGlobals();
-});
+import { BrowserSettingsPanel } from "./IntegrationsSettings";
 
 async function openSettings() {
-  const router = createRouter({
-    routeTree: createRootRoute({ component: IntegrationsSettingsPanel }),
-    history: createMemoryHistory(),
-  });
-  await router.load();
-  await act(async () =>
-    root.render(
-      <StrictMode>
-        <RouterProvider router={router} />
-      </StrictMode>,
-    ),
+  const screen = await render(
+    <StrictMode>
+      <BrowserSettingsPanel />
+    </StrictMode>,
   );
-  await vi.waitFor(() => expect(container.querySelector("#browser")).not.toBeNull());
+  await vi.waitFor(() => expect(screen.container.querySelector("#browser")).not.toBeNull());
+  return screen;
 }
 
 describe("Integrations browser discovery", () => {
   it("does not scan browser files when entering or revisiting settings", async () => {
-    await openSettings();
+    listBrowserImportSources.mockClear();
+    await using screen = await openSettings();
     expect(listBrowserImportSources).not.toHaveBeenCalled();
-
-    await act(async () => root.unmount());
-    root = createRoot(container);
-    await openSettings();
+    await screen.unmount();
+    await using _nextScreen = await openSettings();
     expect(listBrowserImportSources).not.toHaveBeenCalled();
   });
 });

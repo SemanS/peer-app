@@ -229,6 +229,7 @@ function DiffHere({
       setFolded(new Set([...folded].filter((id) => id !== focusItem)));
     }
   }
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Scrolls the imperative diff viewer to the line requested by the room.
   useEffect(() => {
     if (focusAsk === undefined || focusItem === undefined || focusLine === undefined) return;
     viewer.current?.scrollTo({
@@ -322,7 +323,7 @@ function DiffHere({
               onAddPaths={onAddPaths}
             />
           )}
-          renderAnnotation={(annotation) => (
+          renderAnnotation={(...[annotation]) => (
             <ul className="divide-y divide-border/30 border-y border-border/30 bg-background">
               {annotation.metadata?.messages.map((message) => (
                 <li key={message.seq}>

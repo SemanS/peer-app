@@ -98,6 +98,7 @@ export function RoomFileSurface({
   };
   return (
     <FilePreviewPanel
+      openInShortcutEnabled
       environmentId={environmentId}
       cwd={folder}
       projectName={projectName}

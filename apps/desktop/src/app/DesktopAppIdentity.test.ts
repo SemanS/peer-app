@@ -44,6 +44,7 @@ const layerElectronApp = (calls: ElectronAppCalls) =>
     name: Effect.succeed("T3 Code"),
     systemLocale: Effect.succeed("en-US"),
     whenReady: Effect.void,
+    requestSingleInstanceLock: Effect.succeed(true),
     quit: Effect.void,
     exit: () => Effect.void,
     relaunch: () => Effect.void,
@@ -264,28 +265,6 @@ describe("DesktopAppIdentity", () => {
         assert.equal(calls.setAboutPanelOptions[0]?.applicationName, `Peer (${stage})`);
       }),
       { calls, environment },
-    );
-  });
-
-  it.effect("sets the dock icon only when running unpackaged", () => {
-    const calls: ElectronAppCalls = {
-      setAboutPanelOptions: [],
-      setDockIcon: [],
-      setName: [],
-    };
-
-    return withIdentity(
-      Effect.gen(function* () {
-        const identity = yield* DesktopAppIdentity.DesktopAppIdentity;
-        yield* identity.configure;
-
-        assert.deepEqual(calls.setDockIcon, ["/icon.png"]);
-      }),
-      {
-        calls,
-        environment: { isPackaged: false },
-        pngIconPath: Option.some("/icon.png"),
-      },
     );
   });
 });

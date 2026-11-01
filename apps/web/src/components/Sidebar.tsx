@@ -1,3 +1,7 @@
+import { useDeadlinePassed } from "~/hooks/useDeadline";
+import { QUEUED_TURN_START_GRACE_MS } from "@t3tools/client-runtime/state/thread-settled";
+import { hasQueuedTurnStart } from "@t3tools/client-runtime/state/thread-settled";
+import { useActiveRowReveal, type SidebarRouteReveal } from "./sidebar/routeReveal";
 import { type EnvironmentId, type ScopedProjectRef } from "@t3tools/contracts";
 import type { EnvironmentServerConfig } from "@t3tools/client-runtime/connection";
 import { ThreadHoverCard, ThreadHoverCardPopup } from "./ThreadHoverCard";
@@ -12,7 +16,7 @@ import {
 import { discardComposerDraft } from "../lib/discardComposerDraft";
 import { requestCustomSnooze } from "./CustomSnoozeDialog";
 import { useSupportsMultiplePullRequests } from "~/hooks/useSupportsMultiplePullRequests";
-import { resolveThreadCurrentPullRequestLink } from "@t3tools/shared/threadPullRequests";
+import { resolveThreadCurrentPullRequestLink } from "@t3tools/client-runtime/thread-pull-requests";
 import { useAtomValue } from "@effect/atom-react";
 import * as Option from "effect/Option";
 import { Atom } from "effect/reactivity";
@@ -120,7 +124,7 @@ import { isMacPlatform } from "~/lib/utils";
 import { useOpenPrLink } from "../lib/openPullRequestLink";
 import { readLocalApi } from "../localApi";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
-import { selectProjectGroupingSettings } from "../logicalProject";
+import { selectProjectGroupingSettings } from "@t3tools/client-runtime/state/project-grouping";
 import {
   getSidebarProjectSettingsKey,
   projectGroupsSpanEnvironments,
@@ -148,7 +152,13 @@ import {
   useEnvironmentMachines,
   usePrimaryEnvironmentId,
 } from "../state/environments";
-import { readThreadShell, useProjects, useServerConfigs, useThreadShells } from "../state/entities";
+import {
+  readThreadShell,
+  useProjects,
+  useServerConfigs,
+  useThreadShells,
+  useDelegatedUnderParent,
+} from "../state/entities";
 import { environmentPresentations } from "../state/presentation";
 import { primaryServerKeybindingsAtom } from "../state/server";
 import { vcsEnvironment } from "../state/vcs";
@@ -311,6 +321,7 @@ type SidebarProviderEntry = Pick<
   | "acpRegistryAgentId"
   | "acpRegistryIconUrl"
   | "models"
+  | "enabled"
 >;
 
 function sameSidebarProviderEntries(
@@ -327,7 +338,8 @@ function sameSidebarProviderEntries(
       other.accentColor !== entry.accentColor ||
       other.acpRegistryAgentId !== entry.acpRegistryAgentId ||
       other.acpRegistryIconUrl !== entry.acpRegistryIconUrl ||
-      other.models !== entry.models
+      other.models !== entry.models ||
+      other.enabled !== entry.enabled
     ) {
       return false;
     }
@@ -400,6 +412,7 @@ interface SidebarThreadPartitionInput {
   // Snooze wakes and the queued-turn grace depend on the clock, so the minute
   // tick and the precise snooze-wake tick are inputs: a new key repartitions.
   readonly clockKey: string;
+  readonly delegatedUnderParent: ReadonlySet<string>;
 }
 
 function threadShellKey(thread: Pick<SidebarThreadSummary, "environmentId" | "id">): string {
@@ -463,12 +476,14 @@ function useSidebarThreads(input: {
   const { projectScopeKey, scopedProjectKeys, serverConfigs, optimisticDrop, routeThreadKey } =
     input;
   const threads = useThreadShells();
+  const delegatedUnderParent = useDelegatedUnderParent();
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
   const nowMinute = useNowMinute();
   // Snooze wake times are second-precise, so classifying with the quantized
   // minute would hold a woken thread on the shelf for up to a minute.
   const [snoozeWakeTick, bumpSnoozeWakeTick] = useState(0);
   const [nextSnoozeWakeAt, setNextSnoozeWakeAt] = useState<string | null>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Keeps the snooze expiry timer armed for the next server deadline and cancels it on unmount.
   useEffect(
     () => scheduleSnoozeWake(nextSnoozeWakeAt, () => bumpSnoozeWakeTick((tick) => tick + 1)),
     [nextSnoozeWakeAt],
@@ -506,6 +521,7 @@ function useSidebarThreads(input: {
     optimisticDrop,
     workingShelfEnabled,
     clockKey: `${nowMinute}:${snoozeWakeTick}`,
+    delegatedUnderParent,
   });
   const partitionNextWakeAt = partition.snoozedThreads[0]?.snoozedUntil ?? null;
   if (partitionNextWakeAt !== nextSnoozeWakeAt) setNextSnoozeWakeAt(partitionNextWakeAt);
@@ -595,7 +611,11 @@ function useSidebarThreads(input: {
 function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
   const { threads, scopedProjectKeys, serverConfigs, optimisticDrop, workingShelfEnabled } = input;
   const preciseNow = new Date().toISOString();
-  const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys);
+  const visible = filterSidebarV2VisibleThreads(
+    threads,
+    scopedProjectKeys,
+    input.delegatedUnderParent,
+  );
   inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
@@ -865,6 +885,7 @@ function WorkingDuration(props: { startedAt: string | null }) {
   const startedMs = props.startedAt !== null ? Date.parse(props.startedAt) : Number.NaN;
   // Mount time is close enough for the first frame; the interval keeps it current.
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Keeps the visible duration in step with the wall clock and releases its interval on unmount.
   useEffect(() => {
     if (Number.isNaN(startedMs)) return;
     const id = window.setInterval(() => setNowMs(Date.now()), 1_000);
@@ -1032,9 +1053,13 @@ function SnoozeMenuButton(props: {
   onOpenChange: (open: boolean) => void;
   onSnooze: (preset: Pick<SnoozePreset, "snoozedUntil">) => void;
   timestampFormat: TimestampFormat;
+  environmentId: EnvironmentId;
 }) {
   const { open, onOpenChange, onSnooze, timestampFormat } = props;
-  const presets = open ? resolveSnoozePresets(new Date(), timestampFormat) : [];
+  const presets = open
+    ? // oxlint-disable-next-line react/purity -- Resolve fresh preset deadlines whenever the menu opens.
+      resolveSnoozePresets(new Date(), timestampFormat, props.environmentId)
+    : [];
   return (
     <Menu open={open} onOpenChange={onOpenChange}>
       <Tooltip>
@@ -1140,6 +1165,7 @@ const draftTileClassName =
 // blue and a new reply is green; no shimmer on any of it: a label that animates forever is
 // noise in a sidebar full of them (and repaints every vsync on high-refresh displays).
 const CHAT_STATUS_CLASS_NAME: Readonly<Record<SidebarV2TopStatusKind, string>> = {
+  request: "text-warning-foreground",
   approval: "text-warning-foreground",
   done: "text-success",
   failed: "text-error",
@@ -1621,6 +1647,7 @@ type SidebarThreadRowProps = {
   pinningSupported: boolean;
   isPinned: boolean;
   sortable?: SortableThreadRowBag | undefined;
+  revealActiveRow: (row: HTMLElement | null, key: string) => void;
   dropVerb: SidebarDropVerb | null;
   dragOverPinned: boolean;
   sweepAction: SidebarSweepAction | null;
@@ -1697,6 +1724,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   const threadRef = scopeThreadRef(thread.environmentId, thread.id);
   const threadKey = scopedThreadKey(threadRef);
   const canOperateThread = useEnvironmentScope(thread.environmentId, AuthOrchestrationOperateScope);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Closes the active rename editor when the server revokes its operation permission.
   useEffect(() => {
     if (!canOperateThread && isRenaming) onCancelRename();
   }, [canOperateThread, isRenaming, onCancelRename]);
@@ -1867,6 +1895,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         addFolders: () => {},
       })
     : null;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Registers dragend cleanup while the native drag session owns this row highlight.
   useEffect(() => {
     if (!isFileDragOver) return;
     const clearFileDrag = () => setIsFileDragOver(false);
@@ -1874,9 +1903,6 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     return () => window.removeEventListener("dragend", clearFileDrag);
   }, [isFileDragOver]);
   const renameCommittedRef = useRef(false);
-  useEffect(() => {
-    if (isRenaming) renameCommittedRef.current = false;
-  }, [isRenaming]);
   const handleRenameKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     event.stopPropagation();
     if (event.nativeEvent.isComposing || event.keyCode === 229) return;
@@ -1924,10 +1950,33 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     onSnooze(threadRef, preset);
   };
   const [snoozeMenuOpenRaw, setSnoozeMenuOpen] = useState(false);
+  // The React Compiler caches render results on their inputs, so a clock read
+  // here would stay frozen until `thread` changes and a queued-turn gate would
+  // never reopen. The gate's clock is state, reset with the thread.
+  const [snoozeGateClock, setSnoozeGateClock] = useState(() => ({
+    thread,
+    now: new Date().toISOString(),
+  }));
+  if (snoozeGateClock.thread !== thread) {
+    // oxlint-disable-next-line react/purity -- Reseeds the snooze gate clock only in the render-phase adjustment that runs when the thread changes.
+    setSnoozeGateClock({ thread, now: new Date().toISOString() });
+  }
+  const snoozeGateNow = snoozeGateClock.now;
+  const snoozeGateExpiryMs = hasQueuedTurnStart(thread, { now: snoozeGateNow })
+    ? Date.parse(thread.latestUserMessageAt ?? "") + QUEUED_TURN_START_GRACE_MS
+    : Number.NaN;
+  // A gate still closed past its expiry is held by runtime status, not time,
+  // so no clock tick can open it.
+  const snoozeGateOpensAt =
+    Number.isFinite(snoozeGateExpiryMs) && snoozeGateExpiryMs > Date.parse(snoozeGateNow)
+      ? snoozeGateExpiryMs + 50
+      : null;
+  const snoozeGateOpened = useDeadlinePassed(snoozeGateOpensAt);
+  if (snoozeGateOpened && snoozeGateOpensAt !== null) {
+    setSnoozeGateClock({ thread, now: new Date(snoozeGateOpensAt).toISOString() });
+  }
   const showSnoozeButton =
-    canOperateThread &&
-    props.snoozeSupported &&
-    canSnooze(thread, { now: new Date().toISOString() });
+    canOperateThread && props.snoozeSupported && canSnooze(thread, { now: snoozeGateNow });
   const showHoverActions =
     (canOperateThread && props.settlementSupported) || showSnoozeButton || hasUnsentDraft;
   // Closing here, not just masking, keeps the menu from reopening when the button returns.
@@ -2027,7 +2076,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         value={renamingTitle}
         aria-label="Thread title"
         onChange={(event) => onRenameTitleChange(event.target.value)}
-        onFocus={(event) => event.currentTarget.select()}
+        onFocus={(event) => {
+          renameCommittedRef.current = false;
+          event.currentTarget.select();
+        }}
         onKeyDown={handleRenameKeyDown}
         onBlur={handleRenameBlur}
         onClick={(event) => event.stopPropagation()}
@@ -2237,6 +2289,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             onOpenChange={setSnoozeMenuOpen}
             onSnooze={handleSnoozePreset}
             timestampFormat={props.timestampFormat}
+            environmentId={thread.environmentId}
           />
         ) : null}
         {canOperateThread && props.settlementSupported ? (
@@ -2276,7 +2329,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
         <TooltipTrigger
           render={
             <div
-              ref={rowRef}
+              ref={(row) => {
+                if (props.isActive) props.revealActiveRow(row, threadKey);
+                return rowRef(row);
+              }}
               role="button"
               tabIndex={0}
               aria-label={accessibility.label}
@@ -2442,6 +2498,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
     },
     addFolders: () => {},
   });
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Registers dragend cleanup while the native drag session owns this row highlight.
   useEffect(() => {
     if (!isFileDragOver) return;
     const clearFileDrag = () => setIsFileDragOver(false);
@@ -2546,7 +2603,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
   );
 });
 
-export default function Sidebar() {
+export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReveal }) {
   const {
     projects,
     serverConfigs,
@@ -2699,6 +2756,7 @@ export default function Sidebar() {
   const routeThreadRef = resolveActiveThreadRouteRef(routeTarget, routeDraftThread);
   const routeThreadKey = routeThreadRef ? scopedThreadKey(routeThreadRef) : null;
   const routeThreadKeyRef = useRef(routeThreadKey);
+  const revealActiveRow = useActiveRowReveal(routeReveal, routeThreadKey);
 
   const showProjectEnvironments = projectGroupsSpanEnvironments(projectGroups);
   const scratchMachineLabelFor = (
@@ -2736,6 +2794,7 @@ export default function Sidebar() {
   });
   // A selection made under one scope can hold threads the next scope hides.
   const selectionScopeRef = useRef(projectScope.scope);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Synchronizes the shared sidebar selection with route-driven project scope changes.
   useEffect(() => {
     if (selectionScopeRef.current === projectScope.scope) return;
     selectionScopeRef.current = projectScope.scope;
@@ -2805,11 +2864,15 @@ export default function Sidebar() {
   const threadSearchMatchByKey = new Map(
     threadSearch.matches.map((match) => [threadSearchMatchKey(match), match] as const),
   );
-  const threadSearchResults = searchSidebarThreads(
+  const threadSearchGroups = searchSidebarThreads(
     searchableThreads,
     threadSearchQuery,
     new Set(threadSearchMatchByKey.keys()),
   );
+  const threadSearchResults = [
+    ...threadSearchGroups.titleMatches,
+    ...threadSearchGroups.contentMatches,
+  ];
   const threadSearchResultOrderKey = threadSearchResults
     .map((thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)))
     .join("\0");
@@ -2832,6 +2895,7 @@ export default function Sidebar() {
     activeSearchResult === undefined
       ? null
       : scopedThreadKey(scopeThreadRef(activeSearchResult.environmentId, activeSearchResult.id));
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Keeps the highlighted search result visible in the DOM scroller.
   useEffect(() => {
     if (activeSearchResultKey === null) return;
     document
@@ -3082,6 +3146,7 @@ export default function Sidebar() {
       }
     })();
   };
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Registers the mounted sidebar navigation handler with the global finish command.
   useEffect(() => registerSettleAndAdvance(attemptSettle), [attemptSettle]);
   const settleThreads = (threadKeys: readonly string[]) => {
     const coSettlingKeys = new Set(threadKeys);
@@ -3200,6 +3265,7 @@ export default function Sidebar() {
   };
   const dndSensors = useSensors(useSensor(SidebarPointerSensor, pointerSensorOptions));
   const sectionByThreadKeyRef = useRef(sectionByThreadKey);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Updates the snapshots consumed by native pointer and keyboard listeners after each commit.
   useLayoutEffect(() => {
     routeThreadKeyRef.current = routeThreadKey;
     projectGroupsRef.current = projectGroups;
@@ -3400,6 +3466,7 @@ export default function Sidebar() {
     // into the collapsed Settled shelf.
     sidebarListItems = sidebarListItemsFresh;
   }
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Cancels the native pointer sensor and drag overlay if its source row disappears.
   useEffect(() => {
     if (
       dragState !== null &&
@@ -3421,6 +3488,7 @@ export default function Sidebar() {
   // The effect reads only `animate`; the pass object is cached on both fields,
   // so a new layout key alone also triggers it.
   const listMotionPass = { layoutKey: listMotionLayoutKey, animate: listMotionAnimate };
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Synchronizes the imperative list animation with committed row geometry.
   useLayoutEffect(() => {
     listMotionRef.current?.update(listMotionPass.animate);
   }, [listMotionPass]);
@@ -3733,7 +3801,11 @@ export default function Sidebar() {
       const unpinMenuItem = buildBulkUnpinContextMenuItem({
         pinnedCount: pinnedSelectedThreads.length,
       });
-      const snoozePresets = resolveSnoozePresets(new Date(), timestampFormat);
+      const snoozePresets = resolveSnoozePresets(
+        new Date(),
+        timestampFormat,
+        selectedThreads[0]!.environmentId,
+      );
       const clicked = await settlePromise(() =>
         api.contextMenu.show(
           [
@@ -4043,7 +4115,11 @@ export default function Sidebar() {
         const isSettled = settledThreadKeysRef.current.has(threadKey);
         const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
         const isPinned = thread.pinnedAt != null;
-        const snoozePresets = resolveSnoozePresets(new Date(), timestampFormat);
+        const snoozePresets = resolveSnoozePresets(
+          new Date(),
+          timestampFormat,
+          thread.environmentId,
+        );
         const threadProjectGroup =
           projectGroupsRef.current.find((project) =>
             project.memberProjectRefs.some(
@@ -4286,6 +4362,7 @@ export default function Sidebar() {
       ? selectThreadTerminalUiState(state.terminalUiStateByThreadKey, routeThreadRef).terminalOpen
       : false,
   );
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Registers sidebar keyboard navigation on the window and releases it on unmount.
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat || isCommandPaletteOpen() || isModelPickerOpen()) {
@@ -4386,6 +4463,7 @@ export default function Sidebar() {
       },
     },
   );
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Keeps the delayed modifier-key hint timer synchronized with keyboard state.
   useEffect(() => {
     updateThreadJumpHintsVisibility(shouldShowJumpHintsNow);
   }, [shouldShowJumpHintsNow, updateThreadJumpHintsVisibility]);
@@ -4657,6 +4735,7 @@ export default function Sidebar() {
                             }
                             wokeAt={threadWokeAt(thread, { now: snoozeNow })}
                             isActive={routeThreadKey === threadKey}
+                            revealActiveRow={revealActiveRow}
                             openPullRequestsInRightPanel={routeThreadRef !== null}
                             jumpLabel={
                               showJumpHints ? (jumpLabelByKey.get(threadKey) ?? null) : null

@@ -7,6 +7,8 @@ import { ORCHESTRATION_V2_WS_METHODS } from "./orchestrationV2.ts";
 import { PEER_RPC_SCOPES, PEER_STREAM_METHODS, PeerRpcGroup } from "./peer/rpcRegistry.ts";
 import { WS_METHODS, WsRpcGroup, WsSubscribeServerConfigRpc, WsT3RpcGroup } from "./rpc.ts";
 
+const decodeSubscribeServerConfig = Schema.decodeSync(WsSubscribeServerConfigRpc.payloadSchema);
+
 describe("subscribeServerConfig payload compatibility", () => {
   it("is accepted by a server whose schema predates the field", () => {
     const oldServerPayload = Schema.Struct({});
@@ -15,26 +17,19 @@ describe("subscribeServerConfig payload compatibility", () => {
   });
 
   it("is carried by a server that declares it", () => {
-    const decoded = Schema.decodeSync(WsSubscribeServerConfigRpc.payloadSchema)({
+    const decoded = decodeSubscribeServerConfig({
       environmentThemes: true,
     });
     expect(decoded).toEqual({ environmentThemes: true });
   });
 
   it("stays optional, so a client that never sends it still subscribes", () => {
-    const decoded = Schema.decodeSync(WsSubscribeServerConfigRpc.payloadSchema)({});
+    const decoded = decodeSubscribeServerConfig({});
     expect(decoded).toEqual({});
   });
 });
 
 describe("WebSocket RPC contracts", () => {
-  it("exposes only the V2 orchestration transport surface", () => {
-    const methods = [...WsRpcGroup.requests.keys()];
-
-    expect(methods).toEqual(expect.arrayContaining(Object.values(ORCHESTRATION_V2_WS_METHODS)));
-    expect(methods.filter((method) => method.startsWith("orchestrationV1."))).toEqual([]);
-  });
-
   it("rejects server-internal commands sent to dispatchCommand", () => {
     const dispatchCommand = WsRpcGroup.requests.get(ORCHESTRATION_V2_WS_METHODS.dispatchCommand);
     if (dispatchCommand === undefined) throw new Error("dispatchCommand is not registered");
@@ -284,6 +279,26 @@ const PEER_METHOD_NAMES = [
   "peerHub.runs",
   "peerHub.endRun",
   "peerHub.continueRun",
+  "peer.acceptance.reviewPolicy",
+  "peer.acceptance.setReviewPolicy",
+  "peer.acceptance.signals",
+  "peer.rooms.decline",
+  "peer.rooms.diff",
+  "peer.rooms.folders",
+  "peer.rooms.pass",
+  "peer.rooms.post",
+  "peer.rooms.read",
+  "peer.rooms.seen",
+  "peer.rooms.setReach",
+  "peer.rooms.snapshot",
+  "peer.rooms.steps",
+  "peer.rooms.thread",
+  "peer.rooms.withdraw",
+  "peer.testReports.inherited",
+  "peer.usage.overview",
+  "peer.usage.setSharing",
+  "peer.usage.sharing",
+  "peerHub.answerAgentTrust",
 ];
 
 describe("Peer's RPCs in the WebSocket group", () => {

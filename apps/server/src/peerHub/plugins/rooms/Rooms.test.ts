@@ -796,7 +796,7 @@ describe("a session that leaves", () => {
         const before = reads(peer);
         yield* hooks.sessionEnd!(ending());
         yield* TestClock.adjust("2 seconds");
-        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 20)));
+        yield* TestClock.withLive(Effect.sleep("20 millis"));
         assert.strictEqual(reads(peer), before);
         yield* TestClock.adjust("1 second");
         yield* waitFor(() => reads(peer) > before);
@@ -809,9 +809,11 @@ describe("a session that leaves", () => {
       Effect.gen(function* () {
         const { peer, hooks } = yield* taken;
         const before = reads(peer);
-        yield* hooks.sessionEnd!(ending({ run: undefined }));
+        const event = ending();
+        const { run: _run, ...session } = event.session;
+        yield* hooks.sessionEnd!({ ...event, session });
         yield* TestClock.adjust("3 seconds");
-        yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 20)));
+        yield* TestClock.withLive(Effect.sleep("20 millis"));
         assert.strictEqual(reads(peer), before);
       }),
     ),

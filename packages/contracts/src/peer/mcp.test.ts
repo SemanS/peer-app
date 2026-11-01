@@ -3,23 +3,26 @@ import { describe, expect, it } from "vite-plus/test";
 import { PeerHubStatus } from "../peerHub.ts";
 import { PeerLocalAgent } from "./herdr.ts";
 import { PeerMcpStatus } from "./mcp.ts";
+const decodeMcpStatus = Schema.decodeSync(PeerMcpStatus);
+const decodeLocalAgent = Schema.decodeSync(PeerLocalAgent);
+const decodeOptionalStatus = Schema.decodeSync(Schema.Struct({ mcp: PeerHubStatus.fields.mcp }));
+
 describe("advisory tools compatibility", () => {
   it("keeps the optional status and existing C wire literal", () => {
-    const status = Schema.Struct({ mcp: PeerHubStatus.fields.mcp });
-    expect(Schema.decodeUnknownSync(status)({})).toEqual({});
+    expect(decodeOptionalStatus({})).toEqual({});
     expect(
-      Schema.decodeUnknownSync(status)({
+      decodeOptionalStatus({
         mcp: { enabled: true, command: "/peer mcp", agents: ["herdr:cursor:1"] },
       }).mcp,
     ).toEqual(
-      Schema.decodeUnknownSync(PeerMcpStatus)({
+      decodeMcpStatus({
         enabled: true,
         command: "/peer mcp",
         agents: ["herdr:cursor:1"],
       }),
     );
     expect(
-      Schema.decodeUnknownSync(PeerLocalAgent)({
+      decodeLocalAgent({
         id: "herdr:cursor:1",
         paneId: "1",
         title: "Cursor",

@@ -1,16 +1,4 @@
-/**
- * The one settings navigation (design artboard 3d): the Overview on top, then Workspace (named),
- * Projects, Me, This computer and App, with the pages the person may open and nothing else. Peer's
- * pages and the app's own sit in one list; where a page lives is what the person asks, not which
- * product made it. Pure, so who sees what is a function of the role, the plugins and the address.
- *
- * - A member gets no admin page (Shared capacity, Secrets, Integrations, Audit log).
- * - A plugin turned off takes its pages with it; Integrations goes when Slack, GitHub's checks and
- *   webhooks are all off.
- * - App is folded behind its count unless a page of it is open.
- * - A mark beside a page (a dot, "2 detected") says something there is left to do, as the Overview
- *   counts it.
- */
+/** Settings navigation follows workspace roles and enabled plugins; marks come from the overview. */
 import type { OverviewGroup } from "./overview.logic";
 import { toFinishLabel, overviewSummary } from "./overview.logic";
 import { SETTINGS_SECTION_LABELS, settingsPagePath, type SettingsPath } from "./settingsSearch";
@@ -97,9 +85,8 @@ function navItemOfRow(rowId: string): string | undefined {
   if (rowId === "me:slack") return "workspace:slack";
   if (rowId === "me:plans") return "workspace:plans";
   if (rowId === "computer:slack-plugin") return "computer:coordination";
-  if (rowId === "computer:browser" || rowId === "computer:device-hub") {
-    return "settings:/settings/integrations";
-  }
+  if (rowId === "computer:browser") return "settings:/settings/browser";
+  if (rowId === "computer:device-hub") return "settings:/settings/devices";
   if (rowId.startsWith("computer:provider:")) return "settings:/settings/providers";
   if (rowId.startsWith("computer:source-control")) return "settings:/settings/source-control";
   return undefined;
@@ -135,10 +122,10 @@ export interface SettingsNavInput {
   readonly marks?: NavMarks | undefined;
 }
 
-/** A page of the app's settings is on while the address is it or below it; its detail pages belong to General. */
+/** A page of the app's settings is on while the address is it or below it; its diagnostics and license pages belong to About. */
 function staticCurrent(to: SettingsPath, pathname: string): boolean {
   const here = pathname.replace(/\/+$/, "");
-  if (to === "/settings/general") {
+  if (to === "/settings/about") {
     return (
       here === to || here === "/settings/open-source-licenses" || here === "/settings/diagnostics"
     );
@@ -173,8 +160,11 @@ export function peerLocationCurrent(
 /** The app's own pages of This computer, after Peer's two, in the design's order. */
 export const COMPUTER_PAGES = [
   "/settings/providers",
+  "/settings/threads",
   "/settings/source-control",
-  "/settings/integrations",
+  "/settings/worktrees",
+  "/settings/browser",
+  "/settings/devices",
   "/settings/scheduled-tasks",
 ] as const satisfies ReadonlyArray<SettingsPath>;
 
@@ -182,11 +172,17 @@ export const COMPUTER_PAGES = [
 export const APP_PAGES = [
   "/settings/general",
   "/settings/appearance",
+  "/settings/chat",
+  "/settings/diffs",
   "/settings/keybindings",
   "/settings/snap-shot",
-  "/settings/storage",
+  "/settings/maintenance",
   "/settings/connections",
+  "/settings/access",
+  "/settings/secrets",
   "/settings/archived",
+  "/settings/labs",
+  "/settings/about",
 ] as const satisfies ReadonlyArray<SettingsPath>;
 
 /** The Workspace pages whose plugins decide whether they are listed (Integrations: any of three). */

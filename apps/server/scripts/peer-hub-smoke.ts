@@ -376,7 +376,7 @@ const program = Effect.gen(function* () {
     .find((w) => w.slug === "acme")!
     .projects.find((p) => p.project.id === "demo")!.sharedCapacity;
   log("shared capacity on", JSON.stringify(sharedState));
-  const settings = yield* client[WS_METHODS.serverGetSettings]({});
+  const { settings } = yield* client[WS_METHODS.serverGetConfig]({});
   const instanceId = sharedState.instanceIds[0];
   const instance =
     instanceId === undefined
@@ -769,7 +769,7 @@ const program = Effect.gen(function* () {
   // Leaving drops the workspace and its shared capacity here.
   const left = yield* client[WS_METHODS.peerHubLeaveWorkspace]({ workspace: "acme" });
   log("left acme", summary(left));
-  const afterLeave = yield* client[WS_METHODS.serverGetSettings]({});
+  const { settings: afterLeave } = yield* client[WS_METHODS.serverGetConfig]({});
   if (left.workspaces.some((w) => w.slug === "acme")) throw new Error("acme is still listed");
   if (
     instanceId !== undefined &&

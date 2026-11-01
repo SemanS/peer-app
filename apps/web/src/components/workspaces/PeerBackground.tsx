@@ -1,6 +1,6 @@
 import type { EnvironmentId } from "@t3tools/contracts";
 import { type Dispatch, type SetStateAction, useEffect, useState } from "react";
-import { useEnvironmentIds } from "../../state/environments";
+import { useEnvironments } from "../../state/environments";
 import { PEER_WEB_PLUGINS, usePeerPlugins } from "./slots";
 import { usePeerHubStatus } from "./WorkspaceAccess";
 
@@ -20,7 +20,9 @@ function withPlugins(
 
 /** Plugin effects survive navigation and are mounted once across environments. */
 export function PeerBackground() {
-  const environmentIds = useEnvironmentIds();
+  const environmentIds = useEnvironments().environments.map(
+    (environment) => environment.environmentId,
+  );
   const [active, setActive] = useState<ActivePlugins>(new Map());
   const ids = new Set(environmentIds.flatMap((environment) => active.get(environment) ?? []));
   return (
@@ -50,12 +52,14 @@ function BackgroundEnvironment({
   const status = usePeerHubStatus(environmentId),
     plugins = usePeerPlugins(status);
   const connected = status !== null;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Keeps the mounted background-plugin resource registry in step with server-advertised plugins.
   useEffect(() => {
     const running = !connected
       ? []
       : plugins.filter((plugin) => plugin.background !== undefined).map((plugin) => plugin.id);
     setActive((previous) => withPlugins(previous, environmentId, running));
   }, [environmentId, plugins, connected, setActive]);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Removes this environment from the background-plugin registry when its subscription unmounts.
   useEffect(
     () => () => setActive((previous) => withPlugins(previous, environmentId, null)),
     [environmentId, setActive],

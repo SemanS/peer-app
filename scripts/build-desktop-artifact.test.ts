@@ -84,6 +84,7 @@ import {
   LinuxBrowserSecretHostError,
   stageBrowserSecret,
   validateWindowsPackagedPayload,
+  verifyPackagedBundleIsSelfContained,
   WindowsPrimaryNativeProbeError,
   WindowsDesktopBuildPrerequisitesMissingError,
   WindowsPackagedPayloadValidationError,
@@ -371,8 +372,8 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         undefined,
       );
 
-      assert.notProperty(preview, "publish");
-      assert.notProperty(previewChannel, "publish");
+      assert.isNull(preview.publish);
+      assert.isNull(previewChannel.publish);
       assert.deepStrictEqual(release.publish, [
         {
           provider: "github",
@@ -755,7 +756,10 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         ...KONTEXT_EXTRA_RESOURCES,
         ...WINDOWS_SERVER_EXTRA_RESOURCES,
       ]);
-      assert.deepStrictEqual(win.nsis, { differentialPackage: true });
+      assert.deepStrictEqual(win.nsis, {
+        differentialPackage: true,
+        include: "apps/desktop/resources/installer.nsh",
+      });
       assert.deepStrictEqual(WINDOWS_SERVER_ASAR_IGNORE_GLOBS, [
         "**/node_modules/@cursor/sdk-*",
         "**/node_modules/@cursor/sdk-*/**",
@@ -2049,11 +2053,10 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
           copyUnpackedNatives: true,
           serverEntrySource: 'import "t3code-deliberately-missing-package";\n',
         });
-        const error = yield* validateWindowsPackagedPayload({
-          stageDistDir: fixture.stageDistDir,
-          appExecutableName: fixture.appExecutableName,
-          targetArch: "x64",
-          appVersion: WINDOWS_PAYLOAD_FIXTURE_VERSION,
+        const path = yield* Path.Path;
+        const error = yield* verifyPackagedBundleIsSelfContained({
+          asarPath: path.join(fixture.packagedAppDir, "resources", WINDOWS_SERVER_ASAR_RESOURCE),
+          verbose: false,
         }).pipe(Effect.flip);
 
         assert.instanceOf(error, BundleNotSelfContainedError);

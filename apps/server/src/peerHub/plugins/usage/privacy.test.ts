@@ -1,3 +1,5 @@
+import * as CodexUsageHistory from "../../../usage/CodexUsageHistory.ts";
+import { MuseUsageHome } from "@t3tools/provider-muse/server";
 // @effect-diagnostics nodeBuiltinImport:off globalDate:off globalDateInEffect:off preferSchemaOverJson:off - real repositories and transcripts on disk, stamped now, on purpose.
 /**
  * The boundary, end to end: real transcripts through the real usage engine, real `git remote`, the
@@ -114,6 +116,12 @@ const engineLayer = (home: string, stateDir: string) =>
   Layer.fresh(CursorUsageAccounts.layer).pipe(
     Layer.provide(CursorAccountReader.layer.pipe(Layer.provide(CursorKeychain.layer))),
     Layer.provideMerge(AntigravityUsage.layer),
+    Layer.provideMerge(
+      Layer.mock(CodexUsageHistory.CodexUsageHistory)({ resolve: () => Effect.succeed(new Map()) }),
+    ),
+    Layer.provideMerge(
+      Layer.mock(MuseUsageHome.MuseUsageHome)({ resolve: () => Effect.succeed(undefined) }),
+    ),
     Layer.provideMerge(ProviderHostLive.layer),
     Layer.provideMerge(Layer.mock(BackgroundPolicy.BackgroundPolicy)({})),
     Layer.provideMerge(Layer.mock(ServerSecretStore.ServerSecretStore)({})),

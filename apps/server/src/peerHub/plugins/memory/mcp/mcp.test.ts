@@ -4,7 +4,7 @@ import { EnvironmentId, ProviderInstanceId, ThreadId } from "@t3tools/contracts"
 import {
   resolveT3McpToolDefinition,
   resolveT3McpToolPresentation,
-  resolveT3McpToolSummaryAction,
+  resolveT3McpSummaryAction,
 } from "@t3tools/shared/t3McpToolPresentation";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -226,7 +226,7 @@ it("publishes memory's tools under unique names, with reference-free object-root
     ).toBe(true);
     for (const name of [tool.name, `mcp__t3-code__${tool.name}`, `T3-code.${tool.name}`]) {
       expect(resolveT3McpToolPresentation(name)?.logo, name).toBe("t3-code");
-      expect(resolveT3McpToolSummaryAction(name), name).not.toBeNull();
+      expect(resolveT3McpSummaryAction(name, undefined), name).not.toBeNull();
     }
   }
   expect(names.size).toBe(8);

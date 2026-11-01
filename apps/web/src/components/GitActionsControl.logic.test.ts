@@ -56,7 +56,7 @@ describe("upstream Git copy and jj action guards", () => {
         item: push,
         gitStatus: dirty,
         isBusy: false,
-        hasPrimaryRemote: true,
+        hasOriginRemote: true,
       }),
       "Commit or stash local changes before pushing.",
     );
@@ -67,7 +67,7 @@ describe("upstream Git copy and jj action guards", () => {
         item: commit,
         gitStatus: clean,
         isBusy: false,
-        hasPrimaryRemote: true,
+        hasOriginRemote: true,
       }),
       "Worktree is clean. Make changes before committing.",
     );
@@ -85,7 +85,7 @@ describe("upstream Git copy and jj action guards", () => {
         item: push,
         gitStatus: dirty,
         isBusy: false,
-        hasPrimaryRemote: true,
+        hasOriginRemote: true,
       }),
       "Commit local changes before pushing.",
     );
@@ -723,15 +723,15 @@ describe("when: on default ref without open PR", () => {
 });
 
 describe("when: working tree has local changes and ref is behind upstream", () => {
-  it("resolveQuickAction still prefers commit, push, and create PR", () => {
+  it("resolveQuickAction commits without pushing while behind upstream", () => {
     const quick = resolveQuickAction(
       status({ hasWorkingTreeChanges: true, behindCount: 1 }),
       false,
     );
     assert.deepInclude(quick, {
       kind: "run_action",
-      action: "commit_push_pr",
-      label: "Commit, push & PR",
+      action: "commit",
+      label: "Commit",
     });
   });
 
@@ -1079,9 +1079,9 @@ describe("resolveDefaultBranchActionDialogCopy", () => {
     });
 
     assert.deepEqual(copy, {
-      title: "Push to default ref?",
+      title: "Push to default branch?",
       description:
-        'This action will push local commits on "main". You can continue on this ref or create a feature ref and run the same action there.',
+        'This action will push local commits on "main". You can continue on this branch or create a feature branch and run the same action there.',
       continueLabel: "Push to main",
     });
   });
@@ -1094,9 +1094,9 @@ describe("resolveDefaultBranchActionDialogCopy", () => {
     });
 
     assert.deepEqual(copy, {
-      title: "Push & create PR from default ref?",
+      title: "Push & create PR from default branch?",
       description:
-        'This action will push local commits and create a pull request on "main". You can continue on this ref or create a feature ref and run the same action there.',
+        'This action will push local commits and create a PR on "main". You can continue on this branch or create a feature branch and run the same action there.',
       continueLabel: "Push & create PR",
     });
   });
@@ -1109,9 +1109,9 @@ describe("resolveDefaultBranchActionDialogCopy", () => {
     });
 
     assert.deepEqual(copy, {
-      title: "Commit, push & create PR from default ref?",
+      title: "Commit, push & create PR from default branch?",
       description:
-        'This action will commit, push, and create a pull request on "main". You can continue on this ref or create a feature ref and run the same action there.',
+        'This action will commit, push, and create a PR on "main". You can continue on this branch or create a feature branch and run the same action there.',
       continueLabel: "Commit, push & create PR",
     });
   });

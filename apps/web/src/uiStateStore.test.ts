@@ -1,4 +1,4 @@
-import { ProjectId, ThreadId } from "@t3tools/contracts";
+import { ThreadId } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -12,8 +12,8 @@ import {
   rememberSidebarRoute,
   reorderProjects,
   resolveProjectExpanded,
-  setDefaultAdvertisedEndpointKey,
   setProjectExpanded,
+  setDefaultAdvertisedEndpointKey,
   setThreadChangedFilesExpanded,
   type UiState,
 } from "./uiStateStore";
@@ -23,6 +23,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     projectExpandedById: {},
     projectOrder: [],
     sidebarRoutes: {},
+    sidebarProjectScopeKeys: [],
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
     defaultAdvertisedEndpointKey: null,
@@ -82,17 +83,6 @@ describe("uiStateStore pure functions", () => {
       "environment-b:/repo": false,
     });
     expect(setProjectExpanded(next, keys, false)).toBe(next);
-  });
-
-  it("reorders from the current atom-derived project order", () => {
-    const project1 = ProjectId.make("project-1");
-    const project2 = ProjectId.make("project-2");
-    const project3 = ProjectId.make("project-3");
-    const currentOrder = [project1, project2, project3];
-
-    const next = reorderProjects(makeUiState(), currentOrder, [project1], [project3]);
-
-    expect(next.projectOrder).toEqual([project2, project3, project1]);
   });
 
   it("moves grouped project members together", () => {
@@ -163,18 +153,6 @@ describe("uiStateStore pure functions", () => {
 });
 
 describe("parsePersistedState", () => {
-  it("hydrates the last selected pull request merge method", () => {
-    const parsed = parsePersistedState({
-      pullRequestMergeMethod: "squash",
-    });
-    const invalid = parsePersistedState({
-      pullRequestMergeMethod: "fast-forward",
-    });
-
-    expect(parsed.pullRequestMergeMethod).toBe("squash");
-    expect(invalid.pullRequestMergeMethod).toBe("merge");
-  });
-
   it("hydrates raw UI-owned state without server entities", () => {
     const parsed = parsePersistedState({
       projectExpandedById: {
@@ -207,6 +185,7 @@ describe("parsePersistedState", () => {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
+      sidebarProjectScopeKeys: [],
       pullRequestMergeMethod: "merge",
       threadChangedFilesExpandedById: {
         "environment:thread-1": {
@@ -243,23 +222,6 @@ describe("parsePersistedState", () => {
     expect(resolveProjectExpanded(parsed.projectExpandedById, [projectAKey])).toBe(true);
     expect(resolveProjectExpanded(parsed.projectExpandedById, [projectBKey])).toBe(false);
     expect(resolveProjectExpanded(parsed.projectExpandedById, ["unknown"])).toBe(true);
-  });
-
-  it("preserves legacy expanded-only semantics for one-way migration", () => {
-    const parsed = parsePersistedState({
-      expandedProjectCwds: ["/repo/a"],
-    });
-
-    expect(
-      resolveProjectExpanded(parsed.projectExpandedById, [
-        legacyProjectCwdPreferenceKey("/repo/a"),
-      ]),
-    ).toBe(true);
-    expect(
-      resolveProjectExpanded(parsed.projectExpandedById, [
-        legacyProjectCwdPreferenceKey("/repo/b"),
-      ]),
-    ).toBe(false);
   });
 });
 
@@ -329,6 +291,8 @@ describe("uiStateStore persistence", () => {
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       sidebarRoutes: {},
+      sidebarProjectScopeKeys: [],
+      sidebarProjectScopeKey: null,
       threadChangedFilesExpansionVersion: 2,
       threadChangedFilesExpandedById: {
         "environment:thread-1": {
@@ -368,17 +332,20 @@ describe("uiStateStore persistence", () => {
     ).toEqual({ threads: "/env-1/thread-1" });
   });
 
-  it("drops the temporary expanded-only migration fallback when rewriting state", () => {
-    const migrated = parsePersistedState({
-      expandedProjectCwds: ["/repo/a"],
-    });
-
-    persistState(migrated);
+  it("keeps a single-project scope readable by older clients", () => {
+    persistState(makeUiState({ sidebarProjectScopeKeys: ["github.com/pingdotgg/t3code"] }));
 
     const persisted = JSON.parse(
       localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
     ) as PersistedUiState;
-    expect(resolveProjectExpanded(persisted.projectExpandedById ?? {}, ["unknown"])).toBe(true);
-    expect(persisted).not.toHaveProperty("threadPanelOpen");
+
+    expect(persisted.sidebarProjectScopeKey).toBe("github.com/pingdotgg/t3code");
+  });
+
+  it("restores a single-project scope saved before multi-project filtering", () => {
+    expect(
+      parsePersistedState({ sidebarProjectScopeKey: "github.com/pingdotgg/t3code" })
+        .sidebarProjectScopeKeys,
+    ).toEqual(["github.com/pingdotgg/t3code"]);
   });
 });

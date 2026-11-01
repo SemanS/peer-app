@@ -1,3 +1,4 @@
+import * as BuiltInDrivers from "./builtInDrivers.ts";
 import { SourceControlProviderKind } from "@t3tools/contracts";
 import { assert, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -14,18 +15,18 @@ import * as ServerConfig from "../config.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
 import * as VcsProcess from "../vcs/VcsProcess.ts";
-import * as AzureDevOpsCli from "@t3tools/source-control-azure-devops/server/AzureDevOpsCli";
-import * as AzureDevOpsPullRequestCli from "@t3tools/source-control-azure-devops/server/AzureDevOpsPullRequestCli";
-import * as BitbucketApi from "@t3tools/source-control-bitbucket/server/BitbucketApi";
-import * as BitbucketPullRequestApi from "@t3tools/source-control-bitbucket/server/BitbucketPullRequestApi";
-import * as GitHubRest from "@t3tools/source-control-github/server/GitHubRest";
-import * as GitHubRequestPolicy from "@t3tools/source-control-github/server/GitHubRequestPolicy";
-import * as GitHubPullRequestApi from "@t3tools/source-control-github/server/GitHubPullRequestApi";
-import * as GitLabCli from "@t3tools/source-control-gitlab/server/GitLabCli";
-import * as GitLabPullRequestCli from "@t3tools/source-control-gitlab/server/GitLabPullRequestCli";
-import * as ForgejoCli from "@t3tools/source-control-forgejo/server/ForgejoCli";
-import * as GitCafeApi from "@t3tools/source-control-gitcafe/server/GitCafeApi";
-import * as GitCafeCredentials from "@t3tools/source-control-gitcafe/server/GitCafeCredentials";
+import * as AzureDevOpsCli from "../../../../packages/source-control-azure-devops/src/server/AzureDevOpsCli.ts";
+import * as AzureDevOpsPullRequestCli from "../../../../packages/source-control-azure-devops/src/server/AzureDevOpsPullRequestCli.ts";
+import * as BitbucketApi from "../../../../packages/source-control-bitbucket/src/server/BitbucketApi.ts";
+import * as BitbucketPullRequestApi from "../../../../packages/source-control-bitbucket/src/server/BitbucketPullRequestApi.ts";
+import * as GitHubRest from "../../../../packages/source-control-github/src/server/GitHubRest.ts";
+import * as GitHubRequestPolicy from "../../../../packages/source-control-github/src/server/GitHubRequestPolicy.ts";
+import * as GitHubPullRequestApi from "../../../../packages/source-control-github/src/server/GitHubPullRequestApi.ts";
+import * as GitLabCli from "../../../../packages/source-control-gitlab/src/server/GitLabCli.ts";
+import * as GitLabPullRequestCli from "../../../../packages/source-control-gitlab/src/server/GitLabPullRequestCli.ts";
+import * as ForgejoCli from "../../../../packages/source-control-forgejo/src/server/ForgejoCli.ts";
+import * as GitCafeApi from "../../../../packages/source-control-gitcafe/src/server/GitCafeApi.ts";
+import * as GitCafeCredentials from "../../../../packages/source-control-gitcafe/src/server/GitCafeCredentials.ts";
 import * as SourceControlDiscovery from "./SourceControlDiscovery.ts";
 import * as SourceControlProviderRegistry from "./SourceControlProviderRegistry.ts";
 import * as ServerSourceControlHost from "./ServerSourceControlHost.ts";
@@ -35,6 +36,7 @@ const layerSourceControlProviderRegistryTest = (input: {
   readonly process: Partial<VcsProcess.VcsProcess["Service"]>;
 }) =>
   SourceControlProviderRegistry.layer.pipe(
+    Layer.provide(BuiltInDrivers.layer),
     Layer.provide(
       Layer.mergeAll(
         ServerConfig.layerTest(process.cwd(), {
@@ -173,12 +175,14 @@ it.effect("reports implemented tools separately from locally available executabl
       ],
     );
     assert.deepStrictEqual(
-      result.sourceControlProviders.map((item) => ({
-        kind: item.kind,
-        status: item.status,
-        auth: item.auth.status,
-        account: item.auth.account,
-      })),
+      result.sourceControlProviders
+        .map((item) => ({
+          kind: item.kind,
+          status: item.status,
+          auth: item.auth.status,
+          account: item.auth.account,
+        }))
+        .sort((a, b) => a.kind.localeCompare(b.kind)),
       [
         {
           kind: SourceControlProviderKind.make("github"),
@@ -216,7 +220,7 @@ it.effect("reports implemented tools separately from locally available executabl
           auth: "unknown",
           account: Option.none(),
         },
-      ],
+      ].sort((a, b) => a.kind.localeCompare(b.kind)),
     );
     const bitbucket = result.sourceControlProviders.find((item) => item.kind === "bitbucket");
     assert.ok(bitbucket);

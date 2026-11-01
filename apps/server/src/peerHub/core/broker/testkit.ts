@@ -78,9 +78,9 @@ export async function placesOfState(projects: ReadonlyArray<readonly [string, st
       Effect.provide(
         PeerState.layer.pipe(
           Layer.provide(Layer.merge(ServerConfig.layerTest(process.cwd(), baseDir), environment)),
+          Layer.provide(NodeServices.layer),
         ),
       ),
-      Effect.provide(NodeServices.layer),
     ),
   );
   return {

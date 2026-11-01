@@ -9,8 +9,9 @@ import {
   type ServerSettings,
 } from "@t3tools/contracts";
 import { normalizeGitRemoteUrl } from "@t3tools/shared/git";
-import { canonicalRepositoryKey, isSshRemoteUrl } from "@t3tools/shared/sourceControl";
+import { isSshRemoteUrl } from "@t3tools/shared/sourceControl";
 
+import { sourceControlDefinitions } from "../sourceControl/sourceControlDefinitions.ts";
 import type * as GitManager from "../git/GitManager.ts";
 import {
   normalizePullRequestReference,
@@ -322,8 +323,10 @@ export const makeJjPullRequestThread = (deps: JjPullRequestThreadDeps): JjPullRe
                   if (
                     remoteUrl.length === 0 ||
                     pullRequestKey === null ||
-                    canonicalRepositoryKey(pullRequestKey) !==
-                      canonicalRepositoryKey(normalizeGitRemoteUrl(remoteUrl))
+                    sourceControlDefinitions.canonicalRepositoryKey(pullRequestKey) !==
+                      sourceControlDefinitions.canonicalRepositoryKey(
+                        normalizeGitRemoteUrl(remoteUrl),
+                      )
                   ) {
                     return yield* Effect.fail(cause);
                   }

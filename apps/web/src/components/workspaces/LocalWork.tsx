@@ -77,7 +77,7 @@ export function LocalWork({
               <li key={`${thread.environmentId}:${thread.id}`}>
                 <button
                   type="button"
-                  className="flex min-h-11 w-full items-start justify-between gap-3 rounded-md py-3 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex min-h-11 w-full items-start justify-between gap-3 rounded-md py-3 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   onClick={() =>
                     void navigate({
                       to: "/$environmentId/$threadId",
@@ -165,7 +165,8 @@ export function LocalWork({
                         project: overlap.project,
                         overlap: overlap.id,
                       },
-                      search: { environmentId: targetEnvironment },
+                      search:
+                        targetEnvironment === undefined ? {} : { environmentId: targetEnvironment },
                     })
                   }
                 >
@@ -201,7 +202,8 @@ export function LocalWork({
                         project: project.id,
                         scope: "project-aggregate",
                       },
-                      search: { environmentId: targetEnvironment },
+                      search:
+                        targetEnvironment === undefined ? {} : { environmentId: targetEnvironment },
                     })
                   }
                 >

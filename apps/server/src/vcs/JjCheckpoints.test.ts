@@ -1,13 +1,16 @@
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import { assert, it } from "@effect/vitest";
-import { ThreadId } from "@t3tools/contracts";
+import { CheckpointRef, ThreadId } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 
 import { parseTurnDiffFilesFromNumstat } from "../checkpointing/Diffs.ts";
-import { checkpointRefForThreadTurn } from "../checkpointing/Utils.ts";
+import * as Base64Url from "effect/encoding/Base64Url";
+function checkpointRefForThreadTurn(threadId: ThreadId, turnCount: number): CheckpointRef {
+  return CheckpointRef.make(`refs/t3/checkpoints/${Base64Url.encode(threadId)}/turn/${turnCount}`);
+}
 import type * as JjVcsDriver from "./JjVcsDriver.ts";
 import type * as VcsDriver from "./VcsDriver.ts";
 import { makeJjCheckpointOps } from "./JjCheckpoints.ts";

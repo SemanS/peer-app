@@ -21,6 +21,14 @@ import {
   settleHandover,
 } from "./settle.ts";
 
+const decodeNeedsYou = Schema.decodeUnknownSync(PeerNeedsYouStatus);
+const decodeHubStatus = Schema.decodeUnknownSync(PeerHubStatus);
+const { needsYou: _needsYou, ...oldFields } = PeerHubStatus.fields;
+const decodeOldHubStatus = Schema.decodeUnknownSync(Schema.Struct(oldFields));
+const decodeSubscribe = Schema.decodeSync(PeerHubSubscribeInput);
+const decodeOldSubscribe = Schema.decodeSync(Schema.Struct({}));
+const decodeOverlap = Schema.decodeSync(PeerOverlap);
+
 const now = Date.parse("2026-10-09T12:00:00Z");
 const ago = (ms: number) => DateTime.formatIso(DateTime.makeUnsafe(now - ms));
 const overlap = (extra: object = {}) => ({
@@ -108,16 +116,13 @@ describe("Needs you identities and overlap attention", () => {
         },
       ],
     };
-    expect(Schema.decodeUnknownSync(PeerNeedsYouStatus)(fragment)).toEqual(fragment);
-    expect(Schema.decodeUnknownSync(PeerHubStatus)(status).needsYou).toBeUndefined();
-    const { needsYou: _needsYou, ...oldFields } = PeerHubStatus.fields;
-    expect(
-      Schema.decodeUnknownSync(Schema.Struct(oldFields))({ ...status, needsYou: fragment }),
-    ).not.toHaveProperty("needsYou");
-    expect(Schema.decodeUnknownSync(PeerHubSubscribeInput)({ scope: "needs-you" })).toEqual({
+    expect(decodeNeedsYou(fragment)).toEqual(fragment);
+    expect(decodeHubStatus(status).needsYou).toBeUndefined();
+    expect(decodeOldHubStatus({ ...status, needsYou: fragment })).not.toHaveProperty("needsYou");
+    expect(decodeSubscribe({ scope: "needs-you" })).toEqual({
       scope: "needs-you",
     });
-    expect(() => Schema.decodeUnknownSync(Schema.Struct({}))({ scope: "needs-you" })).not.toThrow();
+    expect(() => decodeOldSubscribe({ scope: "needs-you" })).not.toThrow();
     const oldOverlap = {
       ...overlap(),
       id: "o",
@@ -126,10 +131,8 @@ describe("Needs you identities and overlap attention", () => {
       sessions: [],
       files: [],
     };
-    expect(Schema.decodeUnknownSync(PeerOverlap)(oldOverlap).policy).toBe("ask");
-    expect(
-      Schema.decodeUnknownSync(PeerOverlap)({ ...oldOverlap, policy: undefined }).policy,
-    ).toBeUndefined();
+    expect(decodeOverlap(oldOverlap).policy).toBe("ask");
+    expect(decodeOverlap({ ...oldOverlap, policy: undefined }).policy).toBeUndefined();
   });
 });
 

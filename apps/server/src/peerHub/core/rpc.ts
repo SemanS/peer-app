@@ -1,13 +1,5 @@
 import * as PeerContextView from "./index/PeerContextView.ts";
-/**
- * Peer's WebSocket RPC handlers, which `ws.ts` merges with T3's through `PeerHub.rpcLayer`, handing
- * over its per-connection authorization and tracing. Core's methods each call one of core's
- * services. A plugin's come from its contributions and are refused while it is inactive; a method
- * of a plugin this build excludes is refused too, so a client of another build hears why rather
- * than meeting an unknown method.
- *
- * @module peerHub/core/rpc
- */
+/** Peer RPC uses ws.ts authorization; inactive or absent plugins return an explicit refusal. */
 import {
   PEER_CORE_METHODS,
   PEER_RUNS_METHODS,
@@ -438,6 +430,7 @@ export const layer = (wrap: PeerRpcWrap): Layer.Layer<PeerRpcHandlers, never, Pe
       );
       // The plugins' handlers come from their contributions while Peer starts, so the type system
       // cannot see that they cover the plugins' groups in `PeerRpcGroup`.
+      // @effect-diagnostics-next-line unsafeEffectTypeAssertion:off - Dynamic plugin groups plus unserved fallbacks cover the full Peer RPC registry.
       return Layer.mergeAll(
         coreRpcLayer(wrap),
         runsRpcLayer(wrap),

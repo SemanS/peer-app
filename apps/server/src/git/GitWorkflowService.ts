@@ -1,6 +1,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as FileSystem from "effect/FileSystem";
 
 import {
   GitManagerError,
@@ -35,6 +36,7 @@ import * as GitManager from "./GitManager.ts";
 import * as GitVcsDriver from "../vcs/GitVcsDriver.ts";
 import * as JjVcsDriver from "../vcs/JjVcsDriver.ts";
 import * as VcsDriverRegistry from "../vcs/VcsDriverRegistry.ts";
+import { withWorkspaceLease } from "../workspace/workspaceLease.ts";
 
 /**
  * The workflow surface every VCS kind implements. `GitWorkflowService` routes by kind; the Git and
@@ -141,6 +143,15 @@ export class GitWorkflowService extends Context.Service<
       projectCwd: string,
       workspacePath: string | null,
     ) => Effect.Effect<boolean, GitManagerServiceError>;
+    readonly currentBranch: (cwd: string) => Effect.Effect<string | null, GitManagerServiceError>;
+    readonly resolveWorktreeBaseRemote: GitVcsDriver.GitVcsDriver["Service"]["resolveWorktreeBaseRemote"];
+    readonly fetchWorktreeBaseCommit: (input: {
+      readonly cwd: string;
+      readonly refName: string;
+    }) => Effect.Effect<
+      { readonly commitSha: string; readonly remoteRefName: string } | null,
+      GitCommandError
+    >;
   }
 >()("t3/git/GitWorkflowService") {}
 
@@ -187,6 +198,16 @@ export const make = Effect.gen(function* () {
   const gitManager = yield* GitManager.GitManager;
   const jjWorkflow = yield* JjWorkflow.JjWorkflow;
   const jj = yield* JjVcsDriver.JjVcsDriver;
+  const fileSystem = yield* FileSystem.FileSystem;
+
+  // Nested projects and path aliases must share the checkout's branch-mutation lease.
+  const withCheckoutLease = <A, E, R>(rootPath: string, effect: Effect.Effect<A, E, R>) =>
+    registry.detect({ cwd: rootPath }).pipe(
+      Effect.map((handle) => handle?.repository?.rootPath ?? rootPath),
+      Effect.orElseSucceed(() => rootPath),
+      Effect.flatMap((path) => fileSystem.realPath(path).pipe(Effect.orElseSucceed(() => path))),
+      Effect.flatMap((cwd) => withWorkspaceLease(cwd, effect)),
+    );
 
   /**
    * The driver kind that owns a project cwd. `null` means "not a repository", which is what the
@@ -421,6 +442,12 @@ export const make = Effect.gen(function* () {
             : git.resolveBranchName(cwd, "HEAD"),
         ),
       ),
+    currentBranch: (cwd) =>
+      detectForFacade(cwd).pipe(
+        Effect.flatMap((handle) => handle === null ? Effect.succeed(null) : handle.kind === "jj"
+          ? jjWorkflow.localStatus({ cwd }).pipe(Effect.map((status) => status.refName))
+          : git.resolveBranchName(cwd, "HEAD")),
+      ),
     validateWorkspace: (projectCwd, workspacePath) =>
       detectForFacade(projectCwd).pipe(
         Effect.flatMap((project) => {
@@ -508,7 +535,7 @@ export const make = Effect.gen(function* () {
     runStackedAction: (input, options) =>
       route("GitWorkflowService.runStackedAction", workflowRouting, {
         git: (actionInput: GitRunStackedActionInput) =>
-          gitManager.runStackedAction(actionInput, options),
+          withCheckoutLease(actionInput.cwd, gitManager.runStackedAction(actionInput, options)),
         jj: (actionInput: GitRunStackedActionInput) =>
           jjWorkflow.runStackedAction(actionInput, options),
       })(input),
@@ -520,7 +547,9 @@ export const make = Effect.gen(function* () {
       "GitWorkflowService.preparePullRequestThread",
       workflowRouting,
       {
-        git: gitManager.preparePullRequestThread,
+        git: (input: GitPreparePullRequestThreadInput) => input.mode === "local"
+          ? withCheckoutLease(input.cwd, gitManager.preparePullRequestThread(input))
+          : gitManager.preparePullRequestThread(input),
         jj: jjWorkflow.preparePullRequestThread,
       },
     ),
@@ -562,6 +591,26 @@ export const make = Effect.gen(function* () {
         jj: jjWorkflow.resolveRemoteTrackingCommit,
       },
     ),
+    resolveWorktreeBaseRemote: (input) =>
+      detectForFacade(input.cwd).pipe(Effect.flatMap((handle) =>
+        handle?.kind === "jj"
+          ? jj.ensureUsable("GitWorkflowService.resolveWorktreeBaseRemote", input.cwd).pipe(
+              Effect.mapError((cause) => new GitCommandError({ operation: "GitWorkflowService.resolveWorktreeBaseRemote", command: "jj", cwd: input.cwd, detail: "Failed to resolve the repository's backing checkout.", cause })),
+              Effect.flatMap((paths) => git.resolveWorktreeBaseRemote({ ...input, cwd: paths.mainWorkspaceRoot })),
+            )
+          : git.resolveWorktreeBaseRemote(input))),
+    fetchWorktreeBaseCommit: (input) =>
+      detectForFacade(input.cwd).pipe(Effect.flatMap((handle) =>
+        handle?.kind === "jj"
+          ? jj.ensureUsable("GitWorkflowService.fetchWorktreeBaseCommit", input.cwd).pipe(
+              Effect.mapError((cause) => new GitCommandError({ operation: "GitWorkflowService.fetchWorktreeBaseCommit", command: "jj", cwd: input.cwd, detail: "Failed to resolve the repository's backing checkout.", cause })),
+              Effect.flatMap((paths) => git.resolveWorktreeBaseRemote({ ...input, cwd: paths.mainWorkspaceRoot })),
+              Effect.flatMap((remote) => remote === null ? Effect.succeed(null) :
+                jjWorkflow.fetchRemote({ cwd: input.cwd, remoteName: remote.remoteName, refName: remote.branchName }).pipe(
+                  Effect.andThen(jjWorkflow.resolveRemoteTrackingCommit({ cwd: input.cwd, refName: remote.branchName, fallbackRemoteName: remote.remoteName })),
+                )),
+            )
+          : git.fetchWorktreeBaseCommit(input))),
     // Dispatched on the workspace path, not the project: a Git worktree inside a colocated jj
     // project must keep being removable after the detection flip.
     removeWorktree: (input) =>
@@ -584,13 +633,14 @@ export const make = Effect.gen(function* () {
       jj: jjWorkflow.deleteLocalBranch,
     }),
     createRef: route("GitWorkflowService.createRef", commandRouting, {
-      git: git.createRef,
+      git: (input: VcsCreateRefInput) => input.switchRef
+        ? withCheckoutLease(input.cwd, git.createRef(input)) : git.createRef(input),
       jj: jjWorkflow.createRef,
     }),
     // The Git driver's `switchRef` needs a `Scope` the service closes locally; the declared type
     // carries none, and leaking it would reach every caller. The jj arm needs no scope.
     switchRef: route("GitWorkflowService.switchRef", commandRouting, {
-      git: (input) => Effect.scoped(git.switchRef(input)),
+      git: (input) => withCheckoutLease(input.cwd, Effect.scoped(git.switchRef(input))),
       jj: jjWorkflow.switchRef,
     }),
     renameBranch: route("GitWorkflowService.renameBranch", workflowRouting, {

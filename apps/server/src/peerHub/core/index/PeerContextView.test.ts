@@ -1,3 +1,4 @@
+import * as PeerConversationReport from "./PeerConversationReport.ts";
 // @effect-diagnostics nodeBuiltinImport:off - isolated authority state; never touches the running environment.
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
@@ -98,6 +99,23 @@ function serving(
     workspaceErrors: new Map(options.workspaceError === true ? [[workspace, "offline"]] : []),
   } as unknown as PeerState.RuntimeState;
   const provided = layer.pipe(
+    Layer.provide(
+      Layer.mock(PeerConversationReport.PeerConversationReportService)({
+        read: () =>
+          Effect.succeed({
+            state: "unavailable",
+            updatedAt: null,
+            checkedAt: null,
+            error: null,
+            total: 0,
+            available: 0,
+            working: 0,
+            waiting: 0,
+            items: [],
+            coverage: { total: 0, omittedCount: 0, nextCursor: null, historyAvailableFrom: null },
+          }),
+      }),
+    ),
     Layer.provide(
       Layer.mergeAll(
         Layer.mock(PeerState.PeerState)({

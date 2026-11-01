@@ -188,8 +188,8 @@ describe("preparing and applying trailers", () => {
     assert.isNull(await applyTrailers(jj, "/repo", prepared, ".ai", 1_000));
     assert.strictEqual(state.describes, 1);
     // Every read and the rewrite leave the working copy alone, and the rewrite names the change, not `@-`.
-    for (const call of state.calls) assert.include(call, "--ignore-working-copy");
-    assert.include(state.calls.at(-1), change);
+    for (const call of state.calls) assert.include([...call], "--ignore-working-copy");
+    assert.include(state.calls.at(-1)!, change);
   });
 
   it("leaves a change that ships no knowledge, and one jj refuses to rewrite", async () => {
@@ -272,7 +272,7 @@ const flowsWith = (input: {
     freshMs: 60_000,
     log: (event, fields) => Effect.sync(() => void logs.push({ event, fields })),
     slot: (session) =>
-      session.local("knowledge-test", (): { trailers: PreparedTrailers | undefined } => ({
+      session.local("knowledge", (): { trailers: PreparedTrailers | undefined } => ({
         trailers: undefined,
       })),
   });

@@ -22,8 +22,8 @@ export const useProjectDecisions = create<{
 export function withProjectDecision(
   requestId: RuntimeRequestId,
   questions: ReadonlyArray<UserInputQuestion>,
-  answers: Record<string, string | string[]>,
-): Record<string, string | string[]> {
+  answers: Record<string, string | ReadonlyArray<string>>,
+): Record<string, string | ReadonlyArray<string>> {
   const marked = useProjectDecisions.getState().marked[requestId] === true;
   useProjectDecisions.getState().mark(requestId, false);
   if (!marked) return answers;
@@ -32,7 +32,7 @@ export function withProjectDecision(
   if (last === undefined || answer === undefined || last.allowCustomAnswer === false) {
     return answers;
   }
-  const labels = (Array.isArray(answer) ? answer : [answer]).map(
+  const labels = (typeof answer === "string" ? [answer] : answer).map(
     (value) =>
       last.options.find((option) => (option.value ?? option.label) === value)?.label ?? value,
   );

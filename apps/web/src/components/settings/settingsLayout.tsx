@@ -11,8 +11,8 @@ import {
   type ComponentPropsWithoutRef,
   type ReactNode,
   useContext,
-  useEffect,
   useState,
+  useEffect,
 } from "react";
 
 import {
@@ -87,7 +87,10 @@ function SettingsSearchTargetProvider({
   return <SettingsSearchTargetContext value={value}>{children}</SettingsSearchTargetContext>;
 }
 
+let pendingTargetScroll: AbortController | undefined;
+
 function scrollAndFocusSettingsTarget(target: HTMLElement, highlight = true): void {
+  pendingTargetScroll?.abort();
   const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const markedScrollTarget =
     typeof target.querySelector === "function"
@@ -99,10 +102,60 @@ function scrollAndFocusSettingsTarget(target: HTMLElement, highlight = true): vo
       ? (target.firstElementChild as HTMLElement)
       : target);
 
-  scrollTarget.scrollIntoView({
-    behavior: prefersReducedMotion ? "auto" : "smooth",
-    block: "center",
-  });
+  const scroll = () =>
+    scrollTarget.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "center",
+    });
+  scroll();
+  const panel = target.parentElement?.closest<HTMLElement>(
+    '[data-slot="collapsible-panel"][data-open]',
+  );
+  const heightTransition = () =>
+    panel
+      ?.getAnimations()
+      .find(
+        (animation) =>
+          animation instanceof CSSTransition && animation.transitionProperty === "height",
+      );
+  if (panel && (panel.hasAttribute("data-starting-style") || heightTransition())) {
+    const controller = new AbortController();
+    pendingTargetScroll = controller;
+    const { signal } = controller;
+    const finishScroll = () => {
+      if (signal.aborted) return;
+      controller.abort();
+      if (
+        panel.hasAttribute("data-open") &&
+        target.isConnected &&
+        document.activeElement === target
+      ) {
+        scroll();
+      }
+    };
+    const waitForHeight = () => {
+      const transition = heightTransition();
+      if (transition) {
+        void transition.finished.then(finishScroll, () => controller.abort());
+      } else {
+        finishScroll();
+      }
+    };
+    // Base UI clears the starting style before the height transition finishes.
+    if (panel.hasAttribute("data-starting-style")) {
+      const observer = new MutationObserver(() => {
+        if (!panel.hasAttribute("data-starting-style")) {
+          observer.disconnect();
+          waitForHeight();
+        }
+      });
+      observer.observe(panel, { attributes: true, attributeFilter: ["data-starting-style"] });
+      signal.addEventListener("abort", () => observer.disconnect(), { once: true });
+    } else {
+      waitForHeight();
+    }
+    target.addEventListener("blur", () => controller.abort(), { once: true, signal });
+  }
   target.focus({ preventScroll: true });
   target.classList.remove("settings-search-target-pulse");
   if (!highlight || prefersReducedMotion) return;
@@ -142,7 +195,9 @@ export function SettingsSearchTarget({
   );
 }
 
-export const SETTINGS_PICKER_TRIGGER_CLASSNAME = "min-w-0 max-w-none shrink-0";
+// Settings pickers reuse composer controls but match the bordered selects beside them.
+export const SETTINGS_PICKER_TRIGGER_CLASSNAME =
+  "min-w-0 max-w-none shrink-0 border-input bg-background font-normal text-foreground shadow-xs/5 hover:bg-accent/50 dark:bg-input/32 [&_svg[data-composer-control-chevron]]:stroke-[1.75] [&_svg[data-composer-control-chevron]]:opacity-70";
 
 export function PolicyTooltip({ children }: { readonly children: string }) {
   return (
@@ -162,6 +217,7 @@ export function PolicyTooltip({ children }: { readonly children: string }) {
 
 export function useRelativeTimeTick(intervalMs = 1_000) {
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- Keep relative-time labels in step with a mounted timer.
   useEffect(() => {
     const id = setInterval(() => setNowMs(Date.now()), intervalMs);
     return () => clearInterval(id);

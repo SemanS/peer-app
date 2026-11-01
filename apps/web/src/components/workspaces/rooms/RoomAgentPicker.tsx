@@ -82,8 +82,6 @@ export const RoomAgentPicker = memo(function RoomAgentPicker({
           provider={active.driverKind}
           models={withEffortOnly(active.models)}
           model={choice.model}
-          prompt=""
-          onPromptChange={() => {}}
           modelOptions={
             choice.effort === undefined
               ? []

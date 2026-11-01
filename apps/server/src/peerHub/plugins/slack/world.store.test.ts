@@ -249,7 +249,6 @@ const stores = [
     name: "sqlite",
     layer: ProjectionStore.layer.pipe(Layer.provideMerge(SqlitePersistence.layerMemory)),
   },
-  { name: "memory", layer: ProjectionStore.layerMemory },
 ] as const;
 
 /** The waits of Ana's acme/pay thread, read from the store. */

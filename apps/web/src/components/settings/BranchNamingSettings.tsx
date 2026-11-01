@@ -1,3 +1,4 @@
+import { DEFAULT_VCS_TERMINOLOGY } from "@t3tools/shared/vcs";
 import { useRef } from "react";
 import { BranchNamingMode, DEFAULT_SERVER_SETTINGS } from "@t3tools/contracts";
 import type { VcsTerminology } from "@t3tools/shared/vcs";
@@ -20,7 +21,11 @@ const MODES = {
   custom: "Custom instructions",
 } satisfies Record<BranchNamingMode, string>;
 
-export function BranchNamingSettings({ terminology }: { terminology: VcsTerminology }) {
+export function BranchNamingSettings({
+  terminology = DEFAULT_VCS_TERMINOLOGY,
+}: {
+  terminology?: VcsTerminology;
+}) {
   const settings = useScopedSettings();
   const { targets } = useSettingsScope();
   const scopeKey = targets.map((target) => `${target.environmentId}:${target.projectId}`).join(",");

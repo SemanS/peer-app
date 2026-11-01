@@ -1,7 +1,6 @@
-import { act } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { act, render, stubGlobal } from "../../../test/render";
 import { EnvironmentId, ProjectId, type PeerHubStatus } from "@t3tools/contracts";
-import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
+import { expect, it, vi } from "vite-plus/test";
 
 const mocks = vi.hoisted(() => ({
   importThreads: vi.fn(),
@@ -39,7 +38,9 @@ vi.mock("../../state/use-atom-command", () => ({
           ? mocks.join
           : mocks.refresh,
 }));
-vi.mock("../../onboarding/firstRun", () => ({ useCompleteOnboarding: () => mocks.complete }));
+vi.mock("../../onboarding/firstRun", () => ({
+  completeOnboarding: (...args: unknown[]) => mocks.complete(...args),
+}));
 vi.mock("../../state/entities", () => ({
   useProjects: () => mocks.projects,
   readProjects: () => mocks.projects,
@@ -115,12 +116,9 @@ vi.mock("../ui/toast", () => ({
 
 import { WelcomeWizard } from "./WelcomeWizard";
 
-let root: Root;
-let container: HTMLDivElement;
-
-beforeEach(() => {
+function setup() {
   vi.clearAllMocks();
-  vi.stubGlobal(
+  const observer = stubGlobal(
     "ResizeObserver",
     class {
       observe() {}
@@ -128,6 +126,7 @@ beforeEach(() => {
       disconnect() {}
     },
   );
+  const animations = Object.getOwnPropertyDescriptor(Element.prototype, "getAnimations");
   Object.defineProperty(Element.prototype, "getAnimations", {
     configurable: true,
     value: () => [],
@@ -143,15 +142,14 @@ beforeEach(() => {
     _tag: "Success",
     value: { importedCount: 28, skippedCount: 1 },
   });
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  container = document.createElement("div");
-  document.body.append(container);
-  root = createRoot(container);
-});
-afterEach(async () => {
-  await act(async () => root.unmount());
-  container.remove();
-});
+  return {
+    [Symbol.dispose]() {
+      observer[Symbol.dispose]();
+      if (animations) Object.defineProperty(Element.prototype, "getAnimations", animations);
+      else Reflect.deleteProperty(Element.prototype, "getAnimations");
+    },
+  };
+}
 
 async function click(label: string) {
   const button = [...document.querySelectorAll("button")].find(
@@ -162,12 +160,14 @@ async function click(label: string) {
 }
 
 it("enters the workspace after a partial import and warns after navigation finishes", async () => {
+  using _setup = setup();
+  await using screen = await render(null);
   let finishNavigation = () => {};
   const navigation = new Promise<void>((resolve) => {
     finishNavigation = resolve;
   });
   const onDone = vi.fn(() => navigation);
-  await act(async () => root.render(<WelcomeWizard localAvailable onDone={onDone} />));
+  await screen.rerender(<WelcomeWizard localAvailable onDone={onDone} />);
   await click("Skip for now");
   await click("Continue");
   await click("Continue");
@@ -198,12 +198,14 @@ it.each([
 ] as const)(
   "finishes setup with %i imported and %i skipped threads",
   async (importedCount, skippedCount, warning) => {
+    using _setup = setup();
+    await using screen = await render(null);
     mocks.importThreads.mockResolvedValue({
       _tag: "Success",
       value: { importedCount, skippedCount },
     });
     const onDone = vi.fn();
-    await act(async () => root.render(<WelcomeWizard localAvailable onDone={onDone} />));
+    await screen.rerender(<WelcomeWizard localAvailable onDone={onDone} />);
     await click("Skip for now");
     await click("Continue");
     await click("Continue");
@@ -225,9 +227,11 @@ it.each([
 );
 
 it("keeps setup open when saving completion fails and preserves the import warning on retry", async () => {
+  using _setup = setup();
+  await using screen = await render(null);
   mocks.complete.mockRejectedValueOnce(new Error("settings unavailable"));
   const onDone = vi.fn();
-  await act(async () => root.render(<WelcomeWizard localAvailable onDone={onDone} />));
+  await screen.rerender(<WelcomeWizard localAvailable onDone={onDone} />);
   await click("Skip for now");
   await click("Continue");
   await click("Continue");
@@ -276,8 +280,10 @@ const SIGNED_OUT: PeerHubStatus = {
 };
 
 it("asks for a work email first, then offers the workspaces that address may join", async () => {
+  using _setup = setup();
+  await using screen = await render(null);
   mocks.peerHubStatus = SIGNED_OUT;
-  await act(async () => root.render(<WelcomeWizard localAvailable onDone={vi.fn()} />));
+  await screen.rerender(<WelcomeWizard localAvailable onDone={vi.fn()} />);
   expect(document.querySelector("h1")?.textContent).toBe("Join your team");
   expect(document.querySelector("#peer-sign-in-email")).not.toBeNull();
 
@@ -287,7 +293,7 @@ it("asks for a work email first, then offers the workspaces that address may joi
     email: "ana@acme.test",
     joinable: [{ slug: "acme", name: "Acme", allowedDomains: ["acme.test"], reason: "domain" }],
   };
-  await act(async () => root.render(<WelcomeWizard localAvailable onDone={vi.fn()} />));
+  await screen.rerender(<WelcomeWizard localAvailable onDone={vi.fn()} />);
   expect(document.querySelector("h1")?.textContent).toBe("Choose a workspace");
   expect(document.body.textContent).toContain("Anyone with an @acme.test address can join.");
 
@@ -296,14 +302,18 @@ it("asks for a work email first, then offers the workspaces that address may joi
 });
 
 it("leaves the workspace step out without a local server", async () => {
-  await act(async () => root.render(<WelcomeWizard localAvailable={false} onDone={vi.fn()} />));
+  using _setup = setup();
+  await using screen = await render(null);
+  await screen.rerender(<WelcomeWizard localAvailable={false} onDone={vi.fn()} />);
   expect(document.querySelector("h1")?.textContent).toBe("Connect your computers");
 });
 
 it("offers the company's own workspace, ready to create, when its domain has none", async () => {
+  using _setup = setup();
+  await using screen = await render(null);
   mocks.peerHubStatus = { ...SIGNED_OUT, signedIn: true, email: "ana@acme.test" };
   mocks.refresh.mockResolvedValue({ _tag: "Success", value: null });
-  await act(async () => root.render(<WelcomeWizard localAvailable onDone={vi.fn()} />));
+  await screen.rerender(<WelcomeWizard localAvailable onDone={vi.fn()} />);
   expect(document.body.textContent).toContain("Create the Acme workspace");
   await click("Create Acme");
   expect(mocks.refresh).toHaveBeenCalledWith({
@@ -315,6 +325,8 @@ it("offers the company's own workspace, ready to create, when its domain has non
 it.each(["confirm", "cancel", "no dialog"] as const)(
   "requires explicit consent before joining an offered workspace: %s",
   async (decision) => {
+    using _setup = setup();
+    await using screen = await render(null);
     mocks.peerHubStatus = {
       ...SIGNED_OUT,
       signedIn: true,
@@ -330,7 +342,7 @@ it.each(["confirm", "cancel", "no dialog"] as const)(
     };
     mocks.confirm.mockResolvedValue(decision === "confirm");
     mocks.dialogAvailable = decision !== "no dialog";
-    await act(async () => root.render(<WelcomeWizard localAvailable onDone={vi.fn()} />));
+    await screen.rerender(<WelcomeWizard localAvailable onDone={vi.fn()} />);
     expect(document.body.textContent).toContain("Acme holds it");
     expect(document.body.textContent).not.toContain("Create the Acme workspace");
     await click("Review");

@@ -1,5 +1,6 @@
 import type {
   PeerKnowledgePremise,
+  PeerKnowledgeLastVerified,
   PeerKnowledgeSince,
   PeerKnowledgeVerification,
 } from "@t3tools/contracts";
@@ -32,6 +33,7 @@ export interface KnowledgeEntry {
   readonly checked?: string | undefined;
   /** How it was last verified, from kontext's ledger; a kontext before the ledger gives none. */
   readonly verification?: PeerKnowledgeVerification | undefined;
+  readonly lastVerified?: PeerKnowledgeLastVerified | undefined;
   /** Commits on its paths after that verification's commit. */
   readonly since?: PeerKnowledgeSince | undefined;
   /** The shell command it names to check itself. */

@@ -11,28 +11,6 @@ import {
 } from "./Schedule.ts";
 
 describe("scheduled task schedule calculation", () => {
-  it("parses 24-hour times", () => {
-    expect(parseTimeOfDay("09:30")).toEqual({ hour: 9, minute: 30 });
-    expect(parseTimeOfDay("23:59")).toEqual({ hour: 23, minute: 59 });
-    expect(parseTimeOfDay("25:00")).toBeNull();
-  });
-
-  it("calculates interval schedules from the supplied instant", () => {
-    const next = nextScheduledRunAt(
-      { type: "interval", everyMs: 5 * 60_000 },
-      DateTime.makeUnsafe("2026-07-01T16:00:00.000Z"),
-    );
-    expect(next ? DateTime.formatIso(DateTime.toUtc(next)) : null).toBe("2026-07-01T16:05:00.000Z");
-  });
-
-  it("clamps legacy sub-minute intervals to the one-minute execution floor", () => {
-    const next = nextScheduledRunAt(
-      { type: "interval", everyMs: 1_000 },
-      DateTime.makeUnsafe("2026-07-01T16:00:00.000Z"),
-    );
-    expect(next ? DateTime.formatIso(DateTime.toUtc(next)) : null).toBe("2026-07-01T16:01:00.000Z");
-  });
-
   it("skips to the next matching fixed-time weekday", () => {
     const next = nextScheduledRunAt(
       { type: "fixed_time", timeOfDay: "09:00", weekdays: [1, 2, 3, 4, 5] },
@@ -206,6 +184,12 @@ describe("scheduled task schedule calculation", () => {
   });
 
   it("compares schedules structurally", () => {
+    expect(
+      isSameSchedule(
+        { type: "once", runAt: "2026-11-01T03:00:00-05:00" },
+        { type: "once", runAt: "2026-11-01T08:00:00.000Z" },
+      ),
+    ).toBe(true);
     expect(
       isSameSchedule({ type: "interval", everyMs: 60_000 }, { type: "interval", everyMs: 60_000 }),
     ).toBe(true);

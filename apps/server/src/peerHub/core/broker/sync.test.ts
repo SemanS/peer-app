@@ -51,7 +51,7 @@ describe("syncing with the hub", () => {
     try {
       await fixture.register("crashed");
       await fixture.register("working");
-      fixture.broker.sessions.get("claude:crashed")!.lastActivity = Date.now() - 31 * 60_000;
+      fixture.broker.sessions.get("claude:crashed")!.lastActivity -= 31 * 60_000;
       await fixture.broker.sync();
       expect(heard).toEqual(["expired claude:crashed"]);
       expect(fixture.broker.sessions.has("claude:crashed")).toBe(false);

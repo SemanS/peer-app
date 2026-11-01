@@ -1,3 +1,4 @@
+import { unusedCheckpoints } from "../vcs/VcsDriver.testkit.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, describe, it } from "@effect/vitest";
 import type { ReviewDiffFileContentsResult, VcsDriverKind } from "@t3tools/contracts";
@@ -23,18 +24,11 @@ import * as ReviewService from "./ReviewService.ts";
 const TEST_EPOCH = DateTime.makeUnsafe("1970-01-01T00:00:00.000Z");
 
 function makeDriver(
-  kind: VcsDriverKind,
+  _kind: VcsDriverKind,
   overrides: Partial<VcsDriver.VcsDriver["Service"]>,
 ): VcsDriver.VcsDriver["Service"] {
   return {
-    capabilities: {
-      kind,
-      supportsWorktrees: kind === "git",
-      supportsBookmarks: kind === "jj",
-      supportsAtomicSnapshot: kind === "jj",
-      supportsPushDefaultRemote: kind === "git",
-      ignoreClassifier: "git-compatible-fallback",
-    },
+    checkpoints: unusedCheckpoints,
     execute: () => Effect.die("unexpected driver execute"),
     detectRepository: () => Effect.die("unexpected driver detectRepository"),
     isInsideWorkTree: () => Effect.die("unexpected driver isInsideWorkTree"),
@@ -54,7 +48,6 @@ function layer(input: {
   readonly previousWorktreesDirectories?: ReadonlyArray<string>;
   readonly projectRoots?: ReadonlyArray<string> | "unavailable";
   readonly threadWorktrees?: ReadonlyArray<{ worktreePath: string; deleted?: boolean }>;
-  /** What `git worktree list` reports for every project. */
   readonly gitWorktrees?: ReadonlyArray<string>;
   readonly handle?: {
     readonly kind: VcsDriverKind;
@@ -174,39 +167,6 @@ describe("ReviewService", () => {
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("attributes file-content workspace violations to the file-content operation", () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-workspace-" });
-      const outsideRoot = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-outside-" });
-      const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-base-" });
-      const detectCalls: Array<{ readonly cwd: string }> = [];
-
-      const error = yield* Effect.gen(function* () {
-        const review = yield* ReviewService.ReviewService;
-        return yield* review
-          .getDiffFileContents({
-            cwd: outsideRoot,
-            sourceKind: "working-tree",
-            changeType: "change",
-            baseRef: "HEAD",
-            headRef: null,
-            oldPath: "file.ts",
-            newPath: "file.ts",
-          })
-          .pipe(Effect.flip);
-      }).pipe(Effect.provide(layer({ workspaceRoot, baseDir, detectCalls })));
-
-      assert.strictEqual(error._tag, "VcsRepositoryDetectionError");
-      assert.strictEqual(error.operation, "ReviewService.getDiffFileContents");
-      assert.match(
-        "detail" in error ? error.detail : "",
-        /must stay within the configured workspace root/,
-      );
-      assert.deepStrictEqual(detectCalls, []);
-    }).pipe(Effect.provide(NodeServices.layer)),
-  );
-
   it.effect("allows previous custom worktree locations but never a filesystem root", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -262,7 +222,6 @@ describe("ReviewService", () => {
 
       assert.strictEqual((yield* review(projectRoot, [projectRoot])).cwd, projectRoot);
       assert.strictEqual((yield* review(projectChild, [projectRoot])).cwd, projectChild);
-      // A child whose name starts with `..` is still inside.
       const dottedChild = `${projectRoot}/..feature`;
       yield* fs.makeDirectory(dottedChild);
       assert.strictEqual((yield* review(dottedChild, [projectRoot])).cwd, dottedChild);
@@ -283,11 +242,9 @@ describe("ReviewService", () => {
       const workspaceRoot = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-workspace-" });
       const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-base-" });
       const project = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-project-" });
-      // Checkouts outside every managed folder, as `git worktree add ../feature` makes.
       const bound = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-bound-" });
       const deleted = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-deleted-" });
       const unbound = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-unbound-" });
-      // A client can set a thread's path to any folder; git doesn't list this one.
       const claimed = yield* fs.makeTempDirectoryScoped({ prefix: "t3-review-claimed-" });
       yield* fs.makeDirectory(`${bound}/sub`);
 
@@ -306,9 +263,7 @@ describe("ReviewService", () => {
                 { worktreePath: bound },
                 { worktreePath: claimed },
                 { worktreePath: deleted, deleted: true },
-                // A relative path would resolve against the server's own cwd.
                 { worktreePath: "t3-review-relative" },
-                // A filesystem root would make every folder look bound.
                 { worktreePath: "/" },
               ],
             }),

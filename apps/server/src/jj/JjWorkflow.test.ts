@@ -106,6 +106,8 @@ const withWorkflow = <A, E>(
                         createdAt: IsoDateTime.make("2026-01-01T00:00:00.000Z"),
                         updatedAt: IsoDateTime.make("2026-01-01T00:00:00.000Z"),
                         deletedAt: null,
+                        pinnedAt: null,
+                        archivedAt: null,
                       })
                     : Option.none(),
                 ),

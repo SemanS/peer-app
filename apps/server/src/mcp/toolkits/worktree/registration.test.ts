@@ -1,3 +1,12 @@
+import * as RemoteDelegation from "../../../peer/RemoteDelegation.ts";
+import * as ProjectCloneTracker from "../../../project/ProjectCloneTracker.ts";
+import * as PeerLinks from "../../../peer/PeerLinks.ts";
+import * as PeerLinkRequests from "../../../peer/PeerLinkRequests.ts";
+import * as PeerForwarding from "../../../peer/PeerForwarding.ts";
+import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
+import * as DocumentText from "../../../provider/DocumentText.ts";
+import * as Context from "effect/Context";
+import { unusedCheckpoints } from "../../../vcs/VcsDriver.testkit.ts";
 import * as Orchestrator from "../../../orchestration-v2/Orchestrator.ts";
 import * as ProjectionStore from "../../../orchestration-v2/ProjectionStore.ts";
 import * as DeviceService from "../../../device/DeviceService.ts";
@@ -39,6 +48,14 @@ import * as PreviewAutomationBroker from "../../PreviewAutomationBroker.ts";
 import * as PreviewBrowser from "../../../preview/PreviewBrowser.ts";
 
 const layerStubServices = Layer.mergeAll(
+  Layer.mock(DocumentText.DocumentText)({}),
+  Layer.mock(McpProviderSessions.McpProviderSessions)({}),
+  Layer.mock(PeerForwarding.PeerForwarding)({}),
+  Layer.mock(PeerLinkRequests.PeerLinkRequests)({}),
+  Layer.mock(PeerLinks.PeerLinks)({}),
+  Layer.mock(ProjectCloneTracker.ProjectCloneTracker)({}),
+  Layer.mock(RemoteDelegation.RemoteDelegation)({}),
+
   Layer.mock(Orchestrator.OrchestratorV2)({}),
   Layer.mock(ProjectionStore.ProjectionStoreV2)({}),
   Layer.mock(DeviceService.DeviceService)({}),
@@ -56,6 +73,7 @@ const layerStubServices = Layer.mergeAll(
   Layer.mock(VcsStatusBroadcaster.VcsStatusBroadcaster)({}),
   Layer.mock(GitVcsDriver.GitVcsDriver)({}),
   Layer.mock(JjVcsDriver.JjVcsDriver)({
+    checkpoints: unusedCheckpoints,
     capabilities: {
       kind: "jj",
       supportsWorktrees: false,
@@ -98,8 +116,8 @@ const decodeToolsListPayload = Schema.decodeUnknownEffect(ToolsListPayload);
 it.effect("production mcp layer lists worktree tools over http", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const layerRoutes = McpHttpServer.layer.pipe(Layer.provide(McpSessionRegistry.layer));
-      yield* HttpRouter.serve(layerRoutes, {
+      const layerRoutes = McpHttpServer.layer.pipe(Layer.provideMerge(McpSessionRegistry.layer));
+      const context = yield* HttpRouter.serve(layerRoutes, {
         disableListenLog: true,
         disableLogger: true,
       }).pipe(
@@ -114,7 +132,7 @@ it.effect("production mcp layer lists worktree tools over http", () =>
         Layer.build,
       );
 
-      const registry = McpSessionRegistry.issueActiveMcpCredential({
+      const registry = Context.get(context, McpSessionRegistry.McpSessionRegistry).issue({
         threadId: ThreadId.make("thread-scratch"),
         providerInstanceId: ProviderInstanceId.make("claudeAgent"),
       });

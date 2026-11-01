@@ -1,12 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off preferSchemaOverJson:off globalDate:off - Peer Core's list of folders, a JSON file beside peer-hub.json.
-/**
- * T3's projects without T3: Peer Core (`t3 peer-core`) knows the folders a person registered with
- * `t3 peer-core share`, kept in `<stateDir>/peer-core-projects.json`. Core reads projects by id, by
- * folder and as a list; the rest of T3's project service refuses clearly, since there is no T3
- * database here.
- *
- * @module peerHub/headless/HeadlessProjects
- */
+/** Peer Core reads registered folders without the T3 database; unsupported project mutations fail. */
 import * as NodeCrypto from "node:crypto";
 import * as NodeFS from "node:fs";
 import * as NodeFSP from "node:fs/promises";
@@ -190,17 +183,18 @@ export const layer = Layer.effect(
       );
 
     return ProjectService.ProjectService.of({
-      create: (input) =>
-        Effect.gen(function* () {
-          const { project, created } = yield* register(input.workspaceRoot, input.title);
-          if (!created)
-            return yield* new ProjectService.ProjectConflictError({
-              projectId: input.projectId,
-              workspaceRoot: project.workspaceRoot,
-              conflictingProjectId: ProjectId.make(project.id),
-            });
-          return toProject(project);
-        }),
+      create: Effect.fn("HeadlessProjects.create")(function* (
+        input: Parameters<ProjectService.ProjectService["Service"]["create"]>[0],
+      ) {
+        const { project, created } = yield* register(input.workspaceRoot, input.title);
+        if (!created)
+          return yield* new ProjectService.ProjectConflictError({
+            projectId: input.projectId,
+            workspaceRoot: project.workspaceRoot,
+            conflictingProjectId: ProjectId.make(project.id),
+          });
+        return toProject(project);
+      }),
       bootstrap: (input) =>
         register(input.workspaceRoot, input.title).pipe(
           Effect.map(({ project, created }) => ({ project: toProject(project), created })),
@@ -221,6 +215,13 @@ export const layer = Layer.effect(
       getShell: (projectId) =>
         listShells({ projectIds: [projectId] }).pipe(
           Effect.map((shells) => Option.fromUndefinedOr(shells[0])),
+        ),
+      listPage: ({ cursor, limit }) =>
+        all.pipe(
+          Effect.map((rows) => ({
+            projects: rows.slice(cursor, cursor + limit).map(toProject),
+            nextCursor: cursor + limit < rows.length ? cursor + limit : null,
+          })),
         ),
       listShells,
     });

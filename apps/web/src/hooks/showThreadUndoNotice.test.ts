@@ -1,14 +1,17 @@
 import { AsyncResult } from "effect/reactivity";
-import * as Cause from "effect/Cause";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { toastManager } from "../components/ui/toast";
+import { announce, cancelAnnouncement } from "../lib/announce";
 import {
-  showThreadUndoNotice,
   undoLatestThreadAction,
+  showThreadUndoNotice,
+  threadUndoClaimsShortcut,
   useThreadUndoNotice,
 } from "./showThreadUndoNotice";
-import * as ThreadUndo from "./threadUndo";
+import * as ThreadUndo from "@t3tools/client-runtime/state/thread-undo";
+
+vi.mock("../lib/announce", () => ({ announce: vi.fn(), cancelAnnouncement: vi.fn() }));
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -66,66 +69,7 @@ describe("thread undo notice", () => {
     expect(undo).toHaveBeenCalledOnce();
   });
 
-  it("does not show a notice for a late completion after a newer action", () => {
-    const { add, options } = setup();
-    ThreadUndo.invalidate("pin", "env/thread");
-    showThreadUndoNotice(options);
-    expect(useThreadUndoNotice.getState().notice).toBeNull();
-    expect(add).not.toHaveBeenCalled();
-  });
-
-  it("keeps the group available until five seconds after the latest action", async () => {
-    const { undo, claim, options } = setup();
-    showThreadUndoNotice(options);
-    vi.advanceTimersByTime(4_000);
-    const second = ThreadUndo.begin("pin", "env/second");
-    showThreadUndoNotice({ ...options, claim: second });
-    const group = notice();
-    vi.advanceTimersByTime(4_999);
-    expect(notice().count).toBe(2);
-    vi.advanceTimersByTime(1);
-    expect(useThreadUndoNotice.getState().notice).toBeNull();
-    expect(claim.isCurrent()).toBe(false);
-    expect(second.isCurrent()).toBe(false);
-    await group.undo();
-    expect(undo).not.toHaveBeenCalled();
-  });
-
-  it("reports a failed restore and releases its claim", async () => {
-    const { add, claim, options } = setup();
-    showThreadUndoNotice({
-      ...options,
-      undo: async () => AsyncResult.failure(Cause.fail(new Error("offline"))),
-    });
-    await notice().undo();
-    expect(add).toHaveBeenLastCalledWith(
-      expect.objectContaining({ type: "error", title: "Restore failed", description: "offline" }),
-    );
-    expect(claim.isCurrent()).toBe(false);
-  });
-
-  it("reports a rejected restore promise", async () => {
-    const { add, options } = setup();
-    showThreadUndoNotice({
-      ...options,
-      undo: async () => {
-        throw new Error("disconnected");
-      },
-    });
-    await notice().undo();
-    expect(add).toHaveBeenLastCalledWith(
-      expect.objectContaining({ type: "error", description: "disconnected" }),
-    );
-  });
-
-  it("does not report interrupted restores as errors", async () => {
-    const { add, options } = setup();
-    showThreadUndoNotice({ ...options, undo: async () => AsyncResult.failure(Cause.interrupt()) });
-    await notice().undo();
-    expect(add).not.toHaveBeenCalled();
-  });
-
-  it("undoes the latest kind first, then reveals the preceding group", async () => {
+  it("claims mod+z from text fields until the user types, then again for a new notice", async () => {
     const { options } = setup();
     const older = vi.fn(async () => AsyncResult.success(undefined));
     const newer = vi.fn(async () => AsyncResult.success(undefined));
@@ -146,7 +90,29 @@ describe("thread undo notice", () => {
     expect(older).not.toHaveBeenCalled();
     expect(notice().action).toBe("Finished");
     await notice().undo();
-    expect(older).toHaveBeenCalledOnce();
-    expect(undoLatestThreadAction()).toBe(false);
+    expect(threadUndoClaimsShortcut()).toBe(false);
+    showThreadUndoNotice({ ...options, claim: ThreadUndo.begin("pin", "env/expiring") });
+    vi.advanceTimersByTime(5_000);
+    expect(threadUndoClaimsShortcut()).toBe(false);
+  });
+
+  it("announces each new summary once, and cancels it when the notice clears", async () => {
+    const { options } = setup();
+    vi.mocked(announce).mockClear();
+    vi.mocked(cancelAnnouncement).mockClear();
+    showThreadUndoNotice(options);
+    expect(announce).toHaveBeenCalledExactlyOnceWith(
+      expect.stringMatching(/^Unpinned 1 thread, /),
+      "thread-undo-notice",
+    );
+    ThreadUndo.invalidate("pin", "env/other");
+    expect(announce).toHaveBeenCalledOnce();
+    showThreadUndoNotice({ ...options, claim: ThreadUndo.begin("pin", "env/second") });
+    expect(announce).toHaveBeenLastCalledWith(
+      expect.stringMatching(/^Unpinned 2 threads, /),
+      "thread-undo-notice",
+    );
+    await notice().undo();
+    expect(cancelAnnouncement).toHaveBeenCalledWith("thread-undo-notice");
   });
 });

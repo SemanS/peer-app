@@ -1,3 +1,4 @@
+import { unusedCheckpoints } from "../vcs/VcsDriver.testkit.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import { GitCommandError, ProjectId, VcsRepositoryDetectionError } from "@t3tools/contracts";
@@ -112,6 +113,7 @@ const withWorkspace = (scenario: Scenario) =>
       detail: "unavailable",
     });
     const jjLayer = Layer.mock(JjVcsDriver.JjVcsDriver)({
+      checkpoints: unusedCheckpoints,
       capabilities: {
         kind: "jj",
         supportsWorktrees: true,

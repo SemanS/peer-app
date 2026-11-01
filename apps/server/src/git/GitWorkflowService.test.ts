@@ -1,6 +1,7 @@
+import { unusedCheckpoints } from "../vcs/VcsDriver.testkit.ts";
 import { assert, describe, expect, it, vi } from "@effect/vitest";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as DateTime from "effect/DateTime";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
@@ -44,6 +45,7 @@ function makeLayer(input: {
   readonly jjDriver?: Partial<JjVcsDriver.JjVcsDriver["Service"]>;
 }) {
   return GitWorkflowService.layer.pipe(
+    Layer.provide(NodeServices.layer),
     Layer.provide(
       Layer.mock(VcsDriverRegistry.VcsDriverRegistry)({
         detect: input.detect,
@@ -54,6 +56,7 @@ function makeLayer(input: {
     Layer.provide(Layer.mock(JjWorkflow.JjWorkflow)(input.jj ?? {})),
     Layer.provide(
       Layer.mock(JjVcsDriver.JjVcsDriver)({
+        checkpoints: unusedCheckpoints,
         ...input.jjDriver,
         capabilities: input.jjDriver?.capabilities ?? jjCapabilities,
       }),
@@ -866,7 +869,12 @@ describe("GitWorkflowService", () => {
           ),
           Layer.provide(Layer.mock(GitManager.GitManager)({})),
           Layer.provide(Layer.mock(JjWorkflow.JjWorkflow)({})),
-          Layer.provide(Layer.mock(JjVcsDriver.JjVcsDriver)({ capabilities: jjCapabilities })),
+          Layer.provide(
+            Layer.mock(JjVcsDriver.JjVcsDriver)({
+              checkpoints: unusedCheckpoints,
+              capabilities: jjCapabilities,
+            }),
+          ),
           Layer.provideMerge(GitVcsDriver.layer),
           Layer.provideMerge(VcsProcess.layer),
           Layer.provideMerge(

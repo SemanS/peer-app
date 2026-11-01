@@ -10,75 +10,83 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WelcomeRouteImport } from './routes/welcome'
-import { Route as UsageRouteImport } from './routes/usage'
-import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PairRouteImport } from './routes/pair'
+import { Route as GuestRouteImport } from './routes/guest'
 import { Route as ConnectAgentRouteImport } from './routes/connect-agent'
 import { Route as ConnectRouteImport } from './routes/connect'
 import { Route as ChatRouteImport } from './routes/_chat'
 import { Route as ChatIndexRouteImport } from './routes/_chat.index'
-import { Route as SettingsWorkspacesRouteImport } from './routes/settings.workspaces'
-import { Route as SettingsStorageRouteImport } from './routes/settings.storage'
-import { Route as SettingsSourceControlRouteImport } from './routes/settings.source-control'
-import { Route as SettingsSnapShotRouteImport } from './routes/settings.snap-shot'
-import { Route as SettingsScheduledTasksRouteImport } from './routes/settings.scheduled-tasks'
-import { Route as SettingsProvidersRouteImport } from './routes/settings.providers'
-import { Route as SettingsProjectsRouteImport } from './routes/settings.projects'
-import { Route as SettingsPeerRouteImport } from './routes/settings.peer'
-import { Route as SettingsOverviewRouteImport } from './routes/settings.overview'
-import { Route as SettingsOpenSourceLicensesRouteImport } from './routes/settings.open-source-licenses'
-import { Route as SettingsKeybindingsRouteImport } from './routes/settings.keybindings'
-import { Route as SettingsIntegrationsRouteImport } from './routes/settings.integrations'
-import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
-import { Route as SettingsDiagnosticsRouteImport } from './routes/settings.diagnostics'
-import { Route as SettingsConnectionsRouteImport } from './routes/settings.connections'
-import { Route as SettingsArchivedRouteImport } from './routes/settings.archived'
-import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 import { Route as ProjectsProjectKeyRouteImport } from './routes/projects.$projectKey'
 import { Route as ChatWorkRouteImport } from './routes/_chat.work'
+import { Route as ChatUsageRouteImport } from './routes/_chat.usage'
+import { Route as ChatSettingsRouteImport } from './routes/_chat.settings'
 import { Route as ChatPullRequestsRouteImport } from './routes/_chat.pull-requests'
 import { Route as ChatNewRouteImport } from './routes/_chat.new'
-import { Route as SettingsPeerSplatRouteImport } from './routes/settings.peer.$'
 import { Route as ChatWorkspaceSetIdRouteImport } from './routes/_chat.workspace.$setId'
 import { Route as ChatTogetherGroupRouteImport } from './routes/_chat.together.$group'
 import { Route as ChatTeamUsageWorkspaceRouteImport } from './routes/_chat.team-usage.$workspace'
+import { Route as ChatSettingsWorktreesRouteImport } from './routes/_chat.settings.worktrees'
+import { Route as ChatSettingsWorkspacesRouteImport } from './routes/_chat.settings.workspaces'
+import { Route as ChatSettingsThreadsRouteImport } from './routes/_chat.settings.threads'
+import { Route as ChatSettingsStorageRouteImport } from './routes/_chat.settings.storage'
+import { Route as ChatSettingsSourceControlRouteImport } from './routes/_chat.settings.source-control'
+import { Route as ChatSettingsSnapShotRouteImport } from './routes/_chat.settings.snap-shot'
+import { Route as ChatSettingsSecretsRouteImport } from './routes/_chat.settings.secrets'
+import { Route as ChatSettingsScheduledTasksRouteImport } from './routes/_chat.settings.scheduled-tasks'
+import { Route as ChatSettingsProvidersRouteImport } from './routes/_chat.settings.providers'
+import { Route as ChatSettingsProjectsRouteImport } from './routes/_chat.settings.projects'
+import { Route as ChatSettingsPeerRouteImport } from './routes/_chat.settings.peer'
+import { Route as ChatSettingsOverviewRouteImport } from './routes/_chat.settings.overview'
+import { Route as ChatSettingsOpenSourceLicensesRouteImport } from './routes/_chat.settings.open-source-licenses'
+import { Route as ChatSettingsMaintenanceRouteImport } from './routes/_chat.settings.maintenance'
+import { Route as ChatSettingsLabsRouteImport } from './routes/_chat.settings.labs'
+import { Route as ChatSettingsKeybindingsRouteImport } from './routes/_chat.settings.keybindings'
+import { Route as ChatSettingsIntegrationsRouteImport } from './routes/_chat.settings.integrations'
+import { Route as ChatSettingsGeneralRouteImport } from './routes/_chat.settings.general'
+import { Route as ChatSettingsDiffsRouteImport } from './routes/_chat.settings.diffs'
+import { Route as ChatSettingsDiagnosticsRouteImport } from './routes/_chat.settings.diagnostics'
+import { Route as ChatSettingsDevicesRouteImport } from './routes/_chat.settings.devices'
+import { Route as ChatSettingsConnectionsRouteImport } from './routes/_chat.settings.connections'
+import { Route as ChatSettingsChatRouteImport } from './routes/_chat.settings.chat'
+import { Route as ChatSettingsBrowserRouteImport } from './routes/_chat.settings.browser'
+import { Route as ChatSettingsBetaRouteImport } from './routes/_chat.settings.beta'
+import { Route as ChatSettingsArchivedRouteImport } from './routes/_chat.settings.archived'
+import { Route as ChatSettingsAppearanceRouteImport } from './routes/_chat.settings.appearance'
+import { Route as ChatSettingsAccessRouteImport } from './routes/_chat.settings.access'
+import { Route as ChatSettingsAboutRouteImport } from './routes/_chat.settings.about'
 import { Route as ChatDraftDraftIdRouteImport } from './routes/_chat.draft.$draftId'
 import { Route as ChatAgentAgentIdRouteImport } from './routes/_chat.agent.$agentId'
 import { Route as ChatEnvironmentIdThreadIdRouteImport } from './routes/_chat.$environmentId.$threadId'
-import { Route as SettingsPeerComputerSectionRouteImport } from './routes/settings.peer.computer.$section'
 import { Route as ChatTeamWorkspaceProjectRouteImport } from './routes/_chat.team.$workspace.$project'
+import { Route as ChatSettingsPeerSplatRouteImport } from './routes/_chat.settings.peer.$'
 import { Route as ChatOperationsWorkspaceProjectRouteImport } from './routes/_chat.operations.$workspace.$project'
 import { Route as ChatMemoryWorkspaceProjectRouteImport } from './routes/_chat.memory.$workspace.$project'
 import { Route as ChatKnowledgeWorkspaceProjectRouteImport } from './routes/_chat.knowledge.$workspace.$project'
 import { Route as ChatIntegrationWorkspaceProjectRouteImport } from './routes/_chat.integration.$workspace.$project'
 import { Route as ChatChangesWorkspaceProjectRouteImport } from './routes/_chat.changes.$workspace.$project'
-import { Route as SettingsPeerWWorkspaceSectionRouteImport } from './routes/settings.peer.w.$workspace.$section'
 import { Route as ChatTaskWorkspaceProjectTaskRouteImport } from './routes/_chat.task.$workspace.$project.$task'
+import { Route as ChatSettingsPeerComputerSectionRouteImport } from './routes/_chat.settings.peer.computer.$section'
 import { Route as ChatRoomWorkspaceProjectTaskRouteImport } from './routes/_chat.room.$workspace.$project.$task'
 import { Route as ChatReviewWorkspaceProjectTaskRouteImport } from './routes/_chat.review.$workspace.$project.$task'
 import { Route as ChatOverlapWorkspaceProjectOverlapRouteImport } from './routes/_chat.overlap.$workspace.$project.$overlap'
 import { Route as ChatObserveWorkspaceEnvironmentThreadRouteImport } from './routes/_chat.observe.$workspace.$environment.$thread'
 import { Route as ChatContextWorkspaceProjectScopeRouteImport } from './routes/_chat.context.$workspace.$project.$scope'
-import { Route as SettingsPeerWWorkspaceProjectProjectIdTabRouteImport } from './routes/settings.peer.w.$workspace.project.$projectId.$tab'
+import { Route as ChatSettingsPeerWWorkspaceSectionRouteImport } from './routes/_chat.settings.peer.w.$workspace.$section'
+import { Route as ChatSettingsPeerWWorkspaceProjectProjectIdTabRouteImport } from './routes/_chat.settings.peer.w.$workspace.project.$projectId.$tab'
 
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
-const UsageRoute = UsageRouteImport.update({
-  id: '/usage',
-  path: '/usage',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PairRoute = PairRouteImport.update({
   id: '/pair',
   path: '/pair',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GuestRoute = GuestRouteImport.update({
+  id: '/guest',
+  path: '/guest',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConnectAgentRoute = ConnectAgentRouteImport.update({
@@ -100,92 +108,6 @@ const ChatIndexRoute = ChatIndexRouteImport.update({
   path: '/',
   getParentRoute: () => ChatRoute,
 } as any)
-const SettingsWorkspacesRoute = SettingsWorkspacesRouteImport.update({
-  id: '/workspaces',
-  path: '/workspaces',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsStorageRoute = SettingsStorageRouteImport.update({
-  id: '/storage',
-  path: '/storage',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsSourceControlRoute = SettingsSourceControlRouteImport.update({
-  id: '/source-control',
-  path: '/source-control',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsSnapShotRoute = SettingsSnapShotRouteImport.update({
-  id: '/snap-shot',
-  path: '/snap-shot',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsScheduledTasksRoute = SettingsScheduledTasksRouteImport.update({
-  id: '/scheduled-tasks',
-  path: '/scheduled-tasks',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsProvidersRoute = SettingsProvidersRouteImport.update({
-  id: '/providers',
-  path: '/providers',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsProjectsRoute = SettingsProjectsRouteImport.update({
-  id: '/projects',
-  path: '/projects',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsPeerRoute = SettingsPeerRouteImport.update({
-  id: '/peer',
-  path: '/peer',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsOverviewRoute = SettingsOverviewRouteImport.update({
-  id: '/overview',
-  path: '/overview',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsOpenSourceLicensesRoute =
-  SettingsOpenSourceLicensesRouteImport.update({
-    id: '/open-source-licenses',
-    path: '/open-source-licenses',
-    getParentRoute: () => SettingsRoute,
-  } as any)
-const SettingsKeybindingsRoute = SettingsKeybindingsRouteImport.update({
-  id: '/keybindings',
-  path: '/keybindings',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsIntegrationsRoute = SettingsIntegrationsRouteImport.update({
-  id: '/integrations',
-  path: '/integrations',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsGeneralRoute = SettingsGeneralRouteImport.update({
-  id: '/general',
-  path: '/general',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsDiagnosticsRoute = SettingsDiagnosticsRouteImport.update({
-  id: '/diagnostics',
-  path: '/diagnostics',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsConnectionsRoute = SettingsConnectionsRouteImport.update({
-  id: '/connections',
-  path: '/connections',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsArchivedRoute = SettingsArchivedRouteImport.update({
-  id: '/archived',
-  path: '/archived',
-  getParentRoute: () => SettingsRoute,
-} as any)
-const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
-  id: '/appearance',
-  path: '/appearance',
-  getParentRoute: () => SettingsRoute,
-} as any)
 const ProjectsProjectKeyRoute = ProjectsProjectKeyRouteImport.update({
   id: '/projects/$projectKey',
   path: '/projects/$projectKey',
@@ -194,6 +116,16 @@ const ProjectsProjectKeyRoute = ProjectsProjectKeyRouteImport.update({
 const ChatWorkRoute = ChatWorkRouteImport.update({
   id: '/work',
   path: '/work',
+  getParentRoute: () => ChatRoute,
+} as any)
+const ChatUsageRoute = ChatUsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
+  getParentRoute: () => ChatRoute,
+} as any)
+const ChatSettingsRoute = ChatSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => ChatRoute,
 } as any)
 const ChatPullRequestsRoute = ChatPullRequestsRouteImport.update({
@@ -205,11 +137,6 @@ const ChatNewRoute = ChatNewRouteImport.update({
   id: '/new',
   path: '/new',
   getParentRoute: () => ChatRoute,
-} as any)
-const SettingsPeerSplatRoute = SettingsPeerSplatRouteImport.update({
-  id: '/$',
-  path: '/$',
-  getParentRoute: () => SettingsPeerRoute,
 } as any)
 const ChatWorkspaceSetIdRoute = ChatWorkspaceSetIdRouteImport.update({
   id: '/workspace/$setId',
@@ -225,6 +152,155 @@ const ChatTeamUsageWorkspaceRoute = ChatTeamUsageWorkspaceRouteImport.update({
   id: '/team-usage/$workspace',
   path: '/team-usage/$workspace',
   getParentRoute: () => ChatRoute,
+} as any)
+const ChatSettingsWorktreesRoute = ChatSettingsWorktreesRouteImport.update({
+  id: '/worktrees',
+  path: '/worktrees',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsWorkspacesRoute = ChatSettingsWorkspacesRouteImport.update({
+  id: '/workspaces',
+  path: '/workspaces',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsThreadsRoute = ChatSettingsThreadsRouteImport.update({
+  id: '/threads',
+  path: '/threads',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsStorageRoute = ChatSettingsStorageRouteImport.update({
+  id: '/storage',
+  path: '/storage',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsSourceControlRoute =
+  ChatSettingsSourceControlRouteImport.update({
+    id: '/source-control',
+    path: '/source-control',
+    getParentRoute: () => ChatSettingsRoute,
+  } as any)
+const ChatSettingsSnapShotRoute = ChatSettingsSnapShotRouteImport.update({
+  id: '/snap-shot',
+  path: '/snap-shot',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsSecretsRoute = ChatSettingsSecretsRouteImport.update({
+  id: '/secrets',
+  path: '/secrets',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsScheduledTasksRoute =
+  ChatSettingsScheduledTasksRouteImport.update({
+    id: '/scheduled-tasks',
+    path: '/scheduled-tasks',
+    getParentRoute: () => ChatSettingsRoute,
+  } as any)
+const ChatSettingsProvidersRoute = ChatSettingsProvidersRouteImport.update({
+  id: '/providers',
+  path: '/providers',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsProjectsRoute = ChatSettingsProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsPeerRoute = ChatSettingsPeerRouteImport.update({
+  id: '/peer',
+  path: '/peer',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsOverviewRoute = ChatSettingsOverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsOpenSourceLicensesRoute =
+  ChatSettingsOpenSourceLicensesRouteImport.update({
+    id: '/open-source-licenses',
+    path: '/open-source-licenses',
+    getParentRoute: () => ChatSettingsRoute,
+  } as any)
+const ChatSettingsMaintenanceRoute = ChatSettingsMaintenanceRouteImport.update({
+  id: '/maintenance',
+  path: '/maintenance',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsLabsRoute = ChatSettingsLabsRouteImport.update({
+  id: '/labs',
+  path: '/labs',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsKeybindingsRoute = ChatSettingsKeybindingsRouteImport.update({
+  id: '/keybindings',
+  path: '/keybindings',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsIntegrationsRoute =
+  ChatSettingsIntegrationsRouteImport.update({
+    id: '/integrations',
+    path: '/integrations',
+    getParentRoute: () => ChatSettingsRoute,
+  } as any)
+const ChatSettingsGeneralRoute = ChatSettingsGeneralRouteImport.update({
+  id: '/general',
+  path: '/general',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsDiffsRoute = ChatSettingsDiffsRouteImport.update({
+  id: '/diffs',
+  path: '/diffs',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsDiagnosticsRoute = ChatSettingsDiagnosticsRouteImport.update({
+  id: '/diagnostics',
+  path: '/diagnostics',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsDevicesRoute = ChatSettingsDevicesRouteImport.update({
+  id: '/devices',
+  path: '/devices',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsConnectionsRoute = ChatSettingsConnectionsRouteImport.update({
+  id: '/connections',
+  path: '/connections',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsChatRoute = ChatSettingsChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsBrowserRoute = ChatSettingsBrowserRouteImport.update({
+  id: '/browser',
+  path: '/browser',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsBetaRoute = ChatSettingsBetaRouteImport.update({
+  id: '/beta',
+  path: '/beta',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsArchivedRoute = ChatSettingsArchivedRouteImport.update({
+  id: '/archived',
+  path: '/archived',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsAppearanceRoute = ChatSettingsAppearanceRouteImport.update({
+  id: '/appearance',
+  path: '/appearance',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsAccessRoute = ChatSettingsAccessRouteImport.update({
+  id: '/access',
+  path: '/access',
+  getParentRoute: () => ChatSettingsRoute,
+} as any)
+const ChatSettingsAboutRoute = ChatSettingsAboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => ChatSettingsRoute,
 } as any)
 const ChatDraftDraftIdRoute = ChatDraftDraftIdRouteImport.update({
   id: '/draft/$draftId',
@@ -242,18 +318,17 @@ const ChatEnvironmentIdThreadIdRoute =
     path: '/$environmentId/$threadId',
     getParentRoute: () => ChatRoute,
   } as any)
-const SettingsPeerComputerSectionRoute =
-  SettingsPeerComputerSectionRouteImport.update({
-    id: '/computer/$section',
-    path: '/computer/$section',
-    getParentRoute: () => SettingsPeerRoute,
-  } as any)
 const ChatTeamWorkspaceProjectRoute =
   ChatTeamWorkspaceProjectRouteImport.update({
     id: '/team/$workspace/$project',
     path: '/team/$workspace/$project',
     getParentRoute: () => ChatRoute,
   } as any)
+const ChatSettingsPeerSplatRoute = ChatSettingsPeerSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => ChatSettingsPeerRoute,
+} as any)
 const ChatOperationsWorkspaceProjectRoute =
   ChatOperationsWorkspaceProjectRouteImport.update({
     id: '/operations/$workspace/$project',
@@ -284,17 +359,17 @@ const ChatChangesWorkspaceProjectRoute =
     path: '/changes/$workspace/$project',
     getParentRoute: () => ChatRoute,
   } as any)
-const SettingsPeerWWorkspaceSectionRoute =
-  SettingsPeerWWorkspaceSectionRouteImport.update({
-    id: '/w/$workspace/$section',
-    path: '/w/$workspace/$section',
-    getParentRoute: () => SettingsPeerRoute,
-  } as any)
 const ChatTaskWorkspaceProjectTaskRoute =
   ChatTaskWorkspaceProjectTaskRouteImport.update({
     id: '/task/$workspace/$project/$task',
     path: '/task/$workspace/$project/$task',
     getParentRoute: () => ChatRoute,
+  } as any)
+const ChatSettingsPeerComputerSectionRoute =
+  ChatSettingsPeerComputerSectionRouteImport.update({
+    id: '/computer/$section',
+    path: '/computer/$section',
+    getParentRoute: () => ChatSettingsPeerRoute,
   } as any)
 const ChatRoomWorkspaceProjectTaskRoute =
   ChatRoomWorkspaceProjectTaskRouteImport.update({
@@ -326,170 +401,215 @@ const ChatContextWorkspaceProjectScopeRoute =
     path: '/context/$workspace/$project/$scope',
     getParentRoute: () => ChatRoute,
   } as any)
-const SettingsPeerWWorkspaceProjectProjectIdTabRoute =
-  SettingsPeerWWorkspaceProjectProjectIdTabRouteImport.update({
+const ChatSettingsPeerWWorkspaceSectionRoute =
+  ChatSettingsPeerWWorkspaceSectionRouteImport.update({
+    id: '/w/$workspace/$section',
+    path: '/w/$workspace/$section',
+    getParentRoute: () => ChatSettingsPeerRoute,
+  } as any)
+const ChatSettingsPeerWWorkspaceProjectProjectIdTabRoute =
+  ChatSettingsPeerWWorkspaceProjectProjectIdTabRouteImport.update({
     id: '/w/$workspace/project/$projectId/$tab',
     path: '/w/$workspace/project/$projectId/$tab',
-    getParentRoute: () => SettingsPeerRoute,
+    getParentRoute: () => ChatSettingsPeerRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof ChatIndexRoute
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
+  '/guest': typeof GuestRoute
   '/pair': typeof PairRoute
-  '/settings': typeof SettingsRouteWithChildren
-  '/usage': typeof UsageRoute
   '/welcome': typeof WelcomeRoute
   '/new': typeof ChatNewRoute
   '/pull-requests': typeof ChatPullRequestsRoute
+  '/settings': typeof ChatSettingsRouteWithChildren
+  '/usage': typeof ChatUsageRoute
   '/work': typeof ChatWorkRoute
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
-  '/settings/appearance': typeof SettingsAppearanceRoute
-  '/settings/archived': typeof SettingsArchivedRoute
-  '/settings/connections': typeof SettingsConnectionsRoute
-  '/settings/diagnostics': typeof SettingsDiagnosticsRoute
-  '/settings/general': typeof SettingsGeneralRoute
-  '/settings/integrations': typeof SettingsIntegrationsRoute
-  '/settings/keybindings': typeof SettingsKeybindingsRoute
-  '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
-  '/settings/overview': typeof SettingsOverviewRoute
-  '/settings/peer': typeof SettingsPeerRouteWithChildren
-  '/settings/projects': typeof SettingsProjectsRoute
-  '/settings/providers': typeof SettingsProvidersRoute
-  '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
-  '/settings/snap-shot': typeof SettingsSnapShotRoute
-  '/settings/source-control': typeof SettingsSourceControlRoute
-  '/settings/storage': typeof SettingsStorageRoute
-  '/settings/workspaces': typeof SettingsWorkspacesRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/settings/about': typeof ChatSettingsAboutRoute
+  '/settings/access': typeof ChatSettingsAccessRoute
+  '/settings/appearance': typeof ChatSettingsAppearanceRoute
+  '/settings/archived': typeof ChatSettingsArchivedRoute
+  '/settings/beta': typeof ChatSettingsBetaRoute
+  '/settings/browser': typeof ChatSettingsBrowserRoute
+  '/settings/chat': typeof ChatSettingsChatRoute
+  '/settings/connections': typeof ChatSettingsConnectionsRoute
+  '/settings/devices': typeof ChatSettingsDevicesRoute
+  '/settings/diagnostics': typeof ChatSettingsDiagnosticsRoute
+  '/settings/diffs': typeof ChatSettingsDiffsRoute
+  '/settings/general': typeof ChatSettingsGeneralRoute
+  '/settings/integrations': typeof ChatSettingsIntegrationsRoute
+  '/settings/keybindings': typeof ChatSettingsKeybindingsRoute
+  '/settings/labs': typeof ChatSettingsLabsRoute
+  '/settings/maintenance': typeof ChatSettingsMaintenanceRoute
+  '/settings/open-source-licenses': typeof ChatSettingsOpenSourceLicensesRoute
+  '/settings/overview': typeof ChatSettingsOverviewRoute
+  '/settings/peer': typeof ChatSettingsPeerRouteWithChildren
+  '/settings/projects': typeof ChatSettingsProjectsRoute
+  '/settings/providers': typeof ChatSettingsProvidersRoute
+  '/settings/scheduled-tasks': typeof ChatSettingsScheduledTasksRoute
+  '/settings/secrets': typeof ChatSettingsSecretsRoute
+  '/settings/snap-shot': typeof ChatSettingsSnapShotRoute
+  '/settings/source-control': typeof ChatSettingsSourceControlRoute
+  '/settings/storage': typeof ChatSettingsStorageRoute
+  '/settings/threads': typeof ChatSettingsThreadsRoute
+  '/settings/workspaces': typeof ChatSettingsWorkspacesRoute
+  '/settings/worktrees': typeof ChatSettingsWorktreesRoute
   '/team-usage/$workspace': typeof ChatTeamUsageWorkspaceRoute
   '/together/$group': typeof ChatTogetherGroupRoute
   '/workspace/$setId': typeof ChatWorkspaceSetIdRoute
-  '/settings/peer/$': typeof SettingsPeerSplatRoute
   '/changes/$workspace/$project': typeof ChatChangesWorkspaceProjectRoute
   '/integration/$workspace/$project': typeof ChatIntegrationWorkspaceProjectRoute
   '/knowledge/$workspace/$project': typeof ChatKnowledgeWorkspaceProjectRoute
   '/memory/$workspace/$project': typeof ChatMemoryWorkspaceProjectRoute
   '/operations/$workspace/$project': typeof ChatOperationsWorkspaceProjectRoute
+  '/settings/peer/$': typeof ChatSettingsPeerSplatRoute
   '/team/$workspace/$project': typeof ChatTeamWorkspaceProjectRoute
-  '/settings/peer/computer/$section': typeof SettingsPeerComputerSectionRoute
   '/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
   '/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
   '/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
   '/review/$workspace/$project/$task': typeof ChatReviewWorkspaceProjectTaskRoute
   '/room/$workspace/$project/$task': typeof ChatRoomWorkspaceProjectTaskRoute
+  '/settings/peer/computer/$section': typeof ChatSettingsPeerComputerSectionRoute
   '/task/$workspace/$project/$task': typeof ChatTaskWorkspaceProjectTaskRoute
-  '/settings/peer/w/$workspace/$section': typeof SettingsPeerWWorkspaceSectionRoute
-  '/settings/peer/w/$workspace/project/$projectId/$tab': typeof SettingsPeerWWorkspaceProjectProjectIdTabRoute
+  '/settings/peer/w/$workspace/$section': typeof ChatSettingsPeerWWorkspaceSectionRoute
+  '/settings/peer/w/$workspace/project/$projectId/$tab': typeof ChatSettingsPeerWWorkspaceProjectProjectIdTabRoute
 }
 export interface FileRoutesByTo {
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
+  '/guest': typeof GuestRoute
   '/pair': typeof PairRoute
-  '/settings': typeof SettingsRouteWithChildren
-  '/usage': typeof UsageRoute
   '/welcome': typeof WelcomeRoute
   '/new': typeof ChatNewRoute
   '/pull-requests': typeof ChatPullRequestsRoute
+  '/settings': typeof ChatSettingsRouteWithChildren
+  '/usage': typeof ChatUsageRoute
   '/work': typeof ChatWorkRoute
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
-  '/settings/appearance': typeof SettingsAppearanceRoute
-  '/settings/archived': typeof SettingsArchivedRoute
-  '/settings/connections': typeof SettingsConnectionsRoute
-  '/settings/diagnostics': typeof SettingsDiagnosticsRoute
-  '/settings/general': typeof SettingsGeneralRoute
-  '/settings/integrations': typeof SettingsIntegrationsRoute
-  '/settings/keybindings': typeof SettingsKeybindingsRoute
-  '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
-  '/settings/overview': typeof SettingsOverviewRoute
-  '/settings/peer': typeof SettingsPeerRouteWithChildren
-  '/settings/projects': typeof SettingsProjectsRoute
-  '/settings/providers': typeof SettingsProvidersRoute
-  '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
-  '/settings/snap-shot': typeof SettingsSnapShotRoute
-  '/settings/source-control': typeof SettingsSourceControlRoute
-  '/settings/storage': typeof SettingsStorageRoute
-  '/settings/workspaces': typeof SettingsWorkspacesRoute
   '/': typeof ChatIndexRoute
   '/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/settings/about': typeof ChatSettingsAboutRoute
+  '/settings/access': typeof ChatSettingsAccessRoute
+  '/settings/appearance': typeof ChatSettingsAppearanceRoute
+  '/settings/archived': typeof ChatSettingsArchivedRoute
+  '/settings/beta': typeof ChatSettingsBetaRoute
+  '/settings/browser': typeof ChatSettingsBrowserRoute
+  '/settings/chat': typeof ChatSettingsChatRoute
+  '/settings/connections': typeof ChatSettingsConnectionsRoute
+  '/settings/devices': typeof ChatSettingsDevicesRoute
+  '/settings/diagnostics': typeof ChatSettingsDiagnosticsRoute
+  '/settings/diffs': typeof ChatSettingsDiffsRoute
+  '/settings/general': typeof ChatSettingsGeneralRoute
+  '/settings/integrations': typeof ChatSettingsIntegrationsRoute
+  '/settings/keybindings': typeof ChatSettingsKeybindingsRoute
+  '/settings/labs': typeof ChatSettingsLabsRoute
+  '/settings/maintenance': typeof ChatSettingsMaintenanceRoute
+  '/settings/open-source-licenses': typeof ChatSettingsOpenSourceLicensesRoute
+  '/settings/overview': typeof ChatSettingsOverviewRoute
+  '/settings/peer': typeof ChatSettingsPeerRouteWithChildren
+  '/settings/projects': typeof ChatSettingsProjectsRoute
+  '/settings/providers': typeof ChatSettingsProvidersRoute
+  '/settings/scheduled-tasks': typeof ChatSettingsScheduledTasksRoute
+  '/settings/secrets': typeof ChatSettingsSecretsRoute
+  '/settings/snap-shot': typeof ChatSettingsSnapShotRoute
+  '/settings/source-control': typeof ChatSettingsSourceControlRoute
+  '/settings/storage': typeof ChatSettingsStorageRoute
+  '/settings/threads': typeof ChatSettingsThreadsRoute
+  '/settings/workspaces': typeof ChatSettingsWorkspacesRoute
+  '/settings/worktrees': typeof ChatSettingsWorktreesRoute
   '/team-usage/$workspace': typeof ChatTeamUsageWorkspaceRoute
   '/together/$group': typeof ChatTogetherGroupRoute
   '/workspace/$setId': typeof ChatWorkspaceSetIdRoute
-  '/settings/peer/$': typeof SettingsPeerSplatRoute
   '/changes/$workspace/$project': typeof ChatChangesWorkspaceProjectRoute
   '/integration/$workspace/$project': typeof ChatIntegrationWorkspaceProjectRoute
   '/knowledge/$workspace/$project': typeof ChatKnowledgeWorkspaceProjectRoute
   '/memory/$workspace/$project': typeof ChatMemoryWorkspaceProjectRoute
   '/operations/$workspace/$project': typeof ChatOperationsWorkspaceProjectRoute
+  '/settings/peer/$': typeof ChatSettingsPeerSplatRoute
   '/team/$workspace/$project': typeof ChatTeamWorkspaceProjectRoute
-  '/settings/peer/computer/$section': typeof SettingsPeerComputerSectionRoute
   '/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
   '/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
   '/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
   '/review/$workspace/$project/$task': typeof ChatReviewWorkspaceProjectTaskRoute
   '/room/$workspace/$project/$task': typeof ChatRoomWorkspaceProjectTaskRoute
+  '/settings/peer/computer/$section': typeof ChatSettingsPeerComputerSectionRoute
   '/task/$workspace/$project/$task': typeof ChatTaskWorkspaceProjectTaskRoute
-  '/settings/peer/w/$workspace/$section': typeof SettingsPeerWWorkspaceSectionRoute
-  '/settings/peer/w/$workspace/project/$projectId/$tab': typeof SettingsPeerWWorkspaceProjectProjectIdTabRoute
+  '/settings/peer/w/$workspace/$section': typeof ChatSettingsPeerWWorkspaceSectionRoute
+  '/settings/peer/w/$workspace/project/$projectId/$tab': typeof ChatSettingsPeerWWorkspaceProjectProjectIdTabRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_chat': typeof ChatRouteWithChildren
   '/connect': typeof ConnectRoute
   '/connect-agent': typeof ConnectAgentRoute
+  '/guest': typeof GuestRoute
   '/pair': typeof PairRoute
-  '/settings': typeof SettingsRouteWithChildren
-  '/usage': typeof UsageRoute
   '/welcome': typeof WelcomeRoute
   '/_chat/new': typeof ChatNewRoute
   '/_chat/pull-requests': typeof ChatPullRequestsRoute
+  '/_chat/settings': typeof ChatSettingsRouteWithChildren
+  '/_chat/usage': typeof ChatUsageRoute
   '/_chat/work': typeof ChatWorkRoute
   '/projects/$projectKey': typeof ProjectsProjectKeyRoute
-  '/settings/appearance': typeof SettingsAppearanceRoute
-  '/settings/archived': typeof SettingsArchivedRoute
-  '/settings/connections': typeof SettingsConnectionsRoute
-  '/settings/diagnostics': typeof SettingsDiagnosticsRoute
-  '/settings/general': typeof SettingsGeneralRoute
-  '/settings/integrations': typeof SettingsIntegrationsRoute
-  '/settings/keybindings': typeof SettingsKeybindingsRoute
-  '/settings/open-source-licenses': typeof SettingsOpenSourceLicensesRoute
-  '/settings/overview': typeof SettingsOverviewRoute
-  '/settings/peer': typeof SettingsPeerRouteWithChildren
-  '/settings/projects': typeof SettingsProjectsRoute
-  '/settings/providers': typeof SettingsProvidersRoute
-  '/settings/scheduled-tasks': typeof SettingsScheduledTasksRoute
-  '/settings/snap-shot': typeof SettingsSnapShotRoute
-  '/settings/source-control': typeof SettingsSourceControlRoute
-  '/settings/storage': typeof SettingsStorageRoute
-  '/settings/workspaces': typeof SettingsWorkspacesRoute
   '/_chat/': typeof ChatIndexRoute
   '/_chat/$environmentId/$threadId': typeof ChatEnvironmentIdThreadIdRoute
   '/_chat/agent/$agentId': typeof ChatAgentAgentIdRoute
   '/_chat/draft/$draftId': typeof ChatDraftDraftIdRoute
+  '/_chat/settings/about': typeof ChatSettingsAboutRoute
+  '/_chat/settings/access': typeof ChatSettingsAccessRoute
+  '/_chat/settings/appearance': typeof ChatSettingsAppearanceRoute
+  '/_chat/settings/archived': typeof ChatSettingsArchivedRoute
+  '/_chat/settings/beta': typeof ChatSettingsBetaRoute
+  '/_chat/settings/browser': typeof ChatSettingsBrowserRoute
+  '/_chat/settings/chat': typeof ChatSettingsChatRoute
+  '/_chat/settings/connections': typeof ChatSettingsConnectionsRoute
+  '/_chat/settings/devices': typeof ChatSettingsDevicesRoute
+  '/_chat/settings/diagnostics': typeof ChatSettingsDiagnosticsRoute
+  '/_chat/settings/diffs': typeof ChatSettingsDiffsRoute
+  '/_chat/settings/general': typeof ChatSettingsGeneralRoute
+  '/_chat/settings/integrations': typeof ChatSettingsIntegrationsRoute
+  '/_chat/settings/keybindings': typeof ChatSettingsKeybindingsRoute
+  '/_chat/settings/labs': typeof ChatSettingsLabsRoute
+  '/_chat/settings/maintenance': typeof ChatSettingsMaintenanceRoute
+  '/_chat/settings/open-source-licenses': typeof ChatSettingsOpenSourceLicensesRoute
+  '/_chat/settings/overview': typeof ChatSettingsOverviewRoute
+  '/_chat/settings/peer': typeof ChatSettingsPeerRouteWithChildren
+  '/_chat/settings/projects': typeof ChatSettingsProjectsRoute
+  '/_chat/settings/providers': typeof ChatSettingsProvidersRoute
+  '/_chat/settings/scheduled-tasks': typeof ChatSettingsScheduledTasksRoute
+  '/_chat/settings/secrets': typeof ChatSettingsSecretsRoute
+  '/_chat/settings/snap-shot': typeof ChatSettingsSnapShotRoute
+  '/_chat/settings/source-control': typeof ChatSettingsSourceControlRoute
+  '/_chat/settings/storage': typeof ChatSettingsStorageRoute
+  '/_chat/settings/threads': typeof ChatSettingsThreadsRoute
+  '/_chat/settings/workspaces': typeof ChatSettingsWorkspacesRoute
+  '/_chat/settings/worktrees': typeof ChatSettingsWorktreesRoute
   '/_chat/team-usage/$workspace': typeof ChatTeamUsageWorkspaceRoute
   '/_chat/together/$group': typeof ChatTogetherGroupRoute
   '/_chat/workspace/$setId': typeof ChatWorkspaceSetIdRoute
-  '/settings/peer/$': typeof SettingsPeerSplatRoute
   '/_chat/changes/$workspace/$project': typeof ChatChangesWorkspaceProjectRoute
   '/_chat/integration/$workspace/$project': typeof ChatIntegrationWorkspaceProjectRoute
   '/_chat/knowledge/$workspace/$project': typeof ChatKnowledgeWorkspaceProjectRoute
   '/_chat/memory/$workspace/$project': typeof ChatMemoryWorkspaceProjectRoute
   '/_chat/operations/$workspace/$project': typeof ChatOperationsWorkspaceProjectRoute
+  '/_chat/settings/peer/$': typeof ChatSettingsPeerSplatRoute
   '/_chat/team/$workspace/$project': typeof ChatTeamWorkspaceProjectRoute
-  '/settings/peer/computer/$section': typeof SettingsPeerComputerSectionRoute
   '/_chat/context/$workspace/$project/$scope': typeof ChatContextWorkspaceProjectScopeRoute
   '/_chat/observe/$workspace/$environment/$thread': typeof ChatObserveWorkspaceEnvironmentThreadRoute
   '/_chat/overlap/$workspace/$project/$overlap': typeof ChatOverlapWorkspaceProjectOverlapRoute
   '/_chat/review/$workspace/$project/$task': typeof ChatReviewWorkspaceProjectTaskRoute
   '/_chat/room/$workspace/$project/$task': typeof ChatRoomWorkspaceProjectTaskRoute
+  '/_chat/settings/peer/computer/$section': typeof ChatSettingsPeerComputerSectionRoute
   '/_chat/task/$workspace/$project/$task': typeof ChatTaskWorkspaceProjectTaskRoute
-  '/settings/peer/w/$workspace/$section': typeof SettingsPeerWWorkspaceSectionRoute
-  '/settings/peer/w/$workspace/project/$projectId/$tab': typeof SettingsPeerWWorkspaceProjectProjectIdTabRoute
+  '/_chat/settings/peer/w/$workspace/$section': typeof ChatSettingsPeerWWorkspaceSectionRoute
+  '/_chat/settings/peer/w/$workspace/project/$projectId/$tab': typeof ChatSettingsPeerWWorkspaceProjectProjectIdTabRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -497,50 +617,63 @@ export interface FileRouteTypes {
     | '/'
     | '/connect'
     | '/connect-agent'
+    | '/guest'
     | '/pair'
-    | '/settings'
-    | '/usage'
     | '/welcome'
     | '/new'
     | '/pull-requests'
+    | '/settings'
+    | '/usage'
     | '/work'
     | '/projects/$projectKey'
+    | '/$environmentId/$threadId'
+    | '/agent/$agentId'
+    | '/draft/$draftId'
+    | '/settings/about'
+    | '/settings/access'
     | '/settings/appearance'
     | '/settings/archived'
+    | '/settings/beta'
+    | '/settings/browser'
+    | '/settings/chat'
     | '/settings/connections'
+    | '/settings/devices'
     | '/settings/diagnostics'
+    | '/settings/diffs'
     | '/settings/general'
     | '/settings/integrations'
     | '/settings/keybindings'
+    | '/settings/labs'
+    | '/settings/maintenance'
     | '/settings/open-source-licenses'
     | '/settings/overview'
     | '/settings/peer'
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
+    | '/settings/secrets'
     | '/settings/snap-shot'
     | '/settings/source-control'
     | '/settings/storage'
+    | '/settings/threads'
     | '/settings/workspaces'
-    | '/$environmentId/$threadId'
-    | '/agent/$agentId'
-    | '/draft/$draftId'
+    | '/settings/worktrees'
     | '/team-usage/$workspace'
     | '/together/$group'
     | '/workspace/$setId'
-    | '/settings/peer/$'
     | '/changes/$workspace/$project'
     | '/integration/$workspace/$project'
     | '/knowledge/$workspace/$project'
     | '/memory/$workspace/$project'
     | '/operations/$workspace/$project'
+    | '/settings/peer/$'
     | '/team/$workspace/$project'
-    | '/settings/peer/computer/$section'
     | '/context/$workspace/$project/$scope'
     | '/observe/$workspace/$environment/$thread'
     | '/overlap/$workspace/$project/$overlap'
     | '/review/$workspace/$project/$task'
     | '/room/$workspace/$project/$task'
+    | '/settings/peer/computer/$section'
     | '/task/$workspace/$project/$task'
     | '/settings/peer/w/$workspace/$section'
     | '/settings/peer/w/$workspace/project/$projectId/$tab'
@@ -548,51 +681,64 @@ export interface FileRouteTypes {
   to:
     | '/connect'
     | '/connect-agent'
+    | '/guest'
     | '/pair'
-    | '/settings'
-    | '/usage'
     | '/welcome'
     | '/new'
     | '/pull-requests'
+    | '/settings'
+    | '/usage'
     | '/work'
     | '/projects/$projectKey'
+    | '/'
+    | '/$environmentId/$threadId'
+    | '/agent/$agentId'
+    | '/draft/$draftId'
+    | '/settings/about'
+    | '/settings/access'
     | '/settings/appearance'
     | '/settings/archived'
+    | '/settings/beta'
+    | '/settings/browser'
+    | '/settings/chat'
     | '/settings/connections'
+    | '/settings/devices'
     | '/settings/diagnostics'
+    | '/settings/diffs'
     | '/settings/general'
     | '/settings/integrations'
     | '/settings/keybindings'
+    | '/settings/labs'
+    | '/settings/maintenance'
     | '/settings/open-source-licenses'
     | '/settings/overview'
     | '/settings/peer'
     | '/settings/projects'
     | '/settings/providers'
     | '/settings/scheduled-tasks'
+    | '/settings/secrets'
     | '/settings/snap-shot'
     | '/settings/source-control'
     | '/settings/storage'
+    | '/settings/threads'
     | '/settings/workspaces'
-    | '/'
-    | '/$environmentId/$threadId'
-    | '/agent/$agentId'
-    | '/draft/$draftId'
+    | '/settings/worktrees'
     | '/team-usage/$workspace'
     | '/together/$group'
     | '/workspace/$setId'
-    | '/settings/peer/$'
     | '/changes/$workspace/$project'
     | '/integration/$workspace/$project'
     | '/knowledge/$workspace/$project'
     | '/memory/$workspace/$project'
     | '/operations/$workspace/$project'
+    | '/settings/peer/$'
     | '/team/$workspace/$project'
-    | '/settings/peer/computer/$section'
     | '/context/$workspace/$project/$scope'
     | '/observe/$workspace/$environment/$thread'
     | '/overlap/$workspace/$project/$overlap'
     | '/review/$workspace/$project/$task'
     | '/room/$workspace/$project/$task'
+    | '/settings/peer/computer/$section'
     | '/task/$workspace/$project/$task'
     | '/settings/peer/w/$workspace/$section'
     | '/settings/peer/w/$workspace/project/$projectId/$tab'
@@ -601,63 +747,75 @@ export interface FileRouteTypes {
     | '/_chat'
     | '/connect'
     | '/connect-agent'
+    | '/guest'
     | '/pair'
-    | '/settings'
-    | '/usage'
     | '/welcome'
     | '/_chat/new'
     | '/_chat/pull-requests'
+    | '/_chat/settings'
+    | '/_chat/usage'
     | '/_chat/work'
     | '/projects/$projectKey'
-    | '/settings/appearance'
-    | '/settings/archived'
-    | '/settings/connections'
-    | '/settings/diagnostics'
-    | '/settings/general'
-    | '/settings/integrations'
-    | '/settings/keybindings'
-    | '/settings/open-source-licenses'
-    | '/settings/overview'
-    | '/settings/peer'
-    | '/settings/projects'
-    | '/settings/providers'
-    | '/settings/scheduled-tasks'
-    | '/settings/snap-shot'
-    | '/settings/source-control'
-    | '/settings/storage'
-    | '/settings/workspaces'
     | '/_chat/'
     | '/_chat/$environmentId/$threadId'
     | '/_chat/agent/$agentId'
     | '/_chat/draft/$draftId'
+    | '/_chat/settings/about'
+    | '/_chat/settings/access'
+    | '/_chat/settings/appearance'
+    | '/_chat/settings/archived'
+    | '/_chat/settings/beta'
+    | '/_chat/settings/browser'
+    | '/_chat/settings/chat'
+    | '/_chat/settings/connections'
+    | '/_chat/settings/devices'
+    | '/_chat/settings/diagnostics'
+    | '/_chat/settings/diffs'
+    | '/_chat/settings/general'
+    | '/_chat/settings/integrations'
+    | '/_chat/settings/keybindings'
+    | '/_chat/settings/labs'
+    | '/_chat/settings/maintenance'
+    | '/_chat/settings/open-source-licenses'
+    | '/_chat/settings/overview'
+    | '/_chat/settings/peer'
+    | '/_chat/settings/projects'
+    | '/_chat/settings/providers'
+    | '/_chat/settings/scheduled-tasks'
+    | '/_chat/settings/secrets'
+    | '/_chat/settings/snap-shot'
+    | '/_chat/settings/source-control'
+    | '/_chat/settings/storage'
+    | '/_chat/settings/threads'
+    | '/_chat/settings/workspaces'
+    | '/_chat/settings/worktrees'
     | '/_chat/team-usage/$workspace'
     | '/_chat/together/$group'
     | '/_chat/workspace/$setId'
-    | '/settings/peer/$'
     | '/_chat/changes/$workspace/$project'
     | '/_chat/integration/$workspace/$project'
     | '/_chat/knowledge/$workspace/$project'
     | '/_chat/memory/$workspace/$project'
     | '/_chat/operations/$workspace/$project'
+    | '/_chat/settings/peer/$'
     | '/_chat/team/$workspace/$project'
-    | '/settings/peer/computer/$section'
     | '/_chat/context/$workspace/$project/$scope'
     | '/_chat/observe/$workspace/$environment/$thread'
     | '/_chat/overlap/$workspace/$project/$overlap'
     | '/_chat/review/$workspace/$project/$task'
     | '/_chat/room/$workspace/$project/$task'
+    | '/_chat/settings/peer/computer/$section'
     | '/_chat/task/$workspace/$project/$task'
-    | '/settings/peer/w/$workspace/$section'
-    | '/settings/peer/w/$workspace/project/$projectId/$tab'
+    | '/_chat/settings/peer/w/$workspace/$section'
+    | '/_chat/settings/peer/w/$workspace/project/$projectId/$tab'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   ChatRoute: typeof ChatRouteWithChildren
   ConnectRoute: typeof ConnectRoute
   ConnectAgentRoute: typeof ConnectAgentRoute
+  GuestRoute: typeof GuestRoute
   PairRoute: typeof PairRoute
-  SettingsRoute: typeof SettingsRouteWithChildren
-  UsageRoute: typeof UsageRoute
   WelcomeRoute: typeof WelcomeRoute
   ProjectsProjectKeyRoute: typeof ProjectsProjectKeyRoute
 }
@@ -671,25 +829,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/usage': {
-      id: '/usage'
-      path: '/usage'
-      fullPath: '/usage'
-      preLoaderRoute: typeof UsageRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/pair': {
       id: '/pair'
       path: '/pair'
       fullPath: '/pair'
       preLoaderRoute: typeof PairRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/guest': {
+      id: '/guest'
+      path: '/guest'
+      fullPath: '/guest'
+      preLoaderRoute: typeof GuestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/connect-agent': {
@@ -720,125 +871,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatIndexRouteImport
       parentRoute: typeof ChatRoute
     }
-    '/settings/workspaces': {
-      id: '/settings/workspaces'
-      path: '/workspaces'
-      fullPath: '/settings/workspaces'
-      preLoaderRoute: typeof SettingsWorkspacesRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/storage': {
-      id: '/settings/storage'
-      path: '/storage'
-      fullPath: '/settings/storage'
-      preLoaderRoute: typeof SettingsStorageRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/source-control': {
-      id: '/settings/source-control'
-      path: '/source-control'
-      fullPath: '/settings/source-control'
-      preLoaderRoute: typeof SettingsSourceControlRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/snap-shot': {
-      id: '/settings/snap-shot'
-      path: '/snap-shot'
-      fullPath: '/settings/snap-shot'
-      preLoaderRoute: typeof SettingsSnapShotRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/scheduled-tasks': {
-      id: '/settings/scheduled-tasks'
-      path: '/scheduled-tasks'
-      fullPath: '/settings/scheduled-tasks'
-      preLoaderRoute: typeof SettingsScheduledTasksRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/providers': {
-      id: '/settings/providers'
-      path: '/providers'
-      fullPath: '/settings/providers'
-      preLoaderRoute: typeof SettingsProvidersRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/projects': {
-      id: '/settings/projects'
-      path: '/projects'
-      fullPath: '/settings/projects'
-      preLoaderRoute: typeof SettingsProjectsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/peer': {
-      id: '/settings/peer'
-      path: '/peer'
-      fullPath: '/settings/peer'
-      preLoaderRoute: typeof SettingsPeerRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/overview': {
-      id: '/settings/overview'
-      path: '/overview'
-      fullPath: '/settings/overview'
-      preLoaderRoute: typeof SettingsOverviewRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/open-source-licenses': {
-      id: '/settings/open-source-licenses'
-      path: '/open-source-licenses'
-      fullPath: '/settings/open-source-licenses'
-      preLoaderRoute: typeof SettingsOpenSourceLicensesRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/keybindings': {
-      id: '/settings/keybindings'
-      path: '/keybindings'
-      fullPath: '/settings/keybindings'
-      preLoaderRoute: typeof SettingsKeybindingsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/integrations': {
-      id: '/settings/integrations'
-      path: '/integrations'
-      fullPath: '/settings/integrations'
-      preLoaderRoute: typeof SettingsIntegrationsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/general': {
-      id: '/settings/general'
-      path: '/general'
-      fullPath: '/settings/general'
-      preLoaderRoute: typeof SettingsGeneralRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/diagnostics': {
-      id: '/settings/diagnostics'
-      path: '/diagnostics'
-      fullPath: '/settings/diagnostics'
-      preLoaderRoute: typeof SettingsDiagnosticsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/connections': {
-      id: '/settings/connections'
-      path: '/connections'
-      fullPath: '/settings/connections'
-      preLoaderRoute: typeof SettingsConnectionsRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/archived': {
-      id: '/settings/archived'
-      path: '/archived'
-      fullPath: '/settings/archived'
-      preLoaderRoute: typeof SettingsArchivedRouteImport
-      parentRoute: typeof SettingsRoute
-    }
-    '/settings/appearance': {
-      id: '/settings/appearance'
-      path: '/appearance'
-      fullPath: '/settings/appearance'
-      preLoaderRoute: typeof SettingsAppearanceRouteImport
-      parentRoute: typeof SettingsRoute
-    }
     '/projects/$projectKey': {
       id: '/projects/$projectKey'
       path: '/projects/$projectKey'
@@ -851,6 +883,20 @@ declare module '@tanstack/react-router' {
       path: '/work'
       fullPath: '/work'
       preLoaderRoute: typeof ChatWorkRouteImport
+      parentRoute: typeof ChatRoute
+    }
+    '/_chat/usage': {
+      id: '/_chat/usage'
+      path: '/usage'
+      fullPath: '/usage'
+      preLoaderRoute: typeof ChatUsageRouteImport
+      parentRoute: typeof ChatRoute
+    }
+    '/_chat/settings': {
+      id: '/_chat/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof ChatSettingsRouteImport
       parentRoute: typeof ChatRoute
     }
     '/_chat/pull-requests': {
@@ -866,13 +912,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/new'
       preLoaderRoute: typeof ChatNewRouteImport
       parentRoute: typeof ChatRoute
-    }
-    '/settings/peer/$': {
-      id: '/settings/peer/$'
-      path: '/$'
-      fullPath: '/settings/peer/$'
-      preLoaderRoute: typeof SettingsPeerSplatRouteImport
-      parentRoute: typeof SettingsPeerRoute
     }
     '/_chat/workspace/$setId': {
       id: '/_chat/workspace/$setId'
@@ -895,6 +934,209 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatTeamUsageWorkspaceRouteImport
       parentRoute: typeof ChatRoute
     }
+    '/_chat/settings/worktrees': {
+      id: '/_chat/settings/worktrees'
+      path: '/worktrees'
+      fullPath: '/settings/worktrees'
+      preLoaderRoute: typeof ChatSettingsWorktreesRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/workspaces': {
+      id: '/_chat/settings/workspaces'
+      path: '/workspaces'
+      fullPath: '/settings/workspaces'
+      preLoaderRoute: typeof ChatSettingsWorkspacesRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/threads': {
+      id: '/_chat/settings/threads'
+      path: '/threads'
+      fullPath: '/settings/threads'
+      preLoaderRoute: typeof ChatSettingsThreadsRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/storage': {
+      id: '/_chat/settings/storage'
+      path: '/storage'
+      fullPath: '/settings/storage'
+      preLoaderRoute: typeof ChatSettingsStorageRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/source-control': {
+      id: '/_chat/settings/source-control'
+      path: '/source-control'
+      fullPath: '/settings/source-control'
+      preLoaderRoute: typeof ChatSettingsSourceControlRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/snap-shot': {
+      id: '/_chat/settings/snap-shot'
+      path: '/snap-shot'
+      fullPath: '/settings/snap-shot'
+      preLoaderRoute: typeof ChatSettingsSnapShotRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/secrets': {
+      id: '/_chat/settings/secrets'
+      path: '/secrets'
+      fullPath: '/settings/secrets'
+      preLoaderRoute: typeof ChatSettingsSecretsRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/scheduled-tasks': {
+      id: '/_chat/settings/scheduled-tasks'
+      path: '/scheduled-tasks'
+      fullPath: '/settings/scheduled-tasks'
+      preLoaderRoute: typeof ChatSettingsScheduledTasksRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/providers': {
+      id: '/_chat/settings/providers'
+      path: '/providers'
+      fullPath: '/settings/providers'
+      preLoaderRoute: typeof ChatSettingsProvidersRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/projects': {
+      id: '/_chat/settings/projects'
+      path: '/projects'
+      fullPath: '/settings/projects'
+      preLoaderRoute: typeof ChatSettingsProjectsRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/peer': {
+      id: '/_chat/settings/peer'
+      path: '/peer'
+      fullPath: '/settings/peer'
+      preLoaderRoute: typeof ChatSettingsPeerRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/overview': {
+      id: '/_chat/settings/overview'
+      path: '/overview'
+      fullPath: '/settings/overview'
+      preLoaderRoute: typeof ChatSettingsOverviewRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/open-source-licenses': {
+      id: '/_chat/settings/open-source-licenses'
+      path: '/open-source-licenses'
+      fullPath: '/settings/open-source-licenses'
+      preLoaderRoute: typeof ChatSettingsOpenSourceLicensesRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/maintenance': {
+      id: '/_chat/settings/maintenance'
+      path: '/maintenance'
+      fullPath: '/settings/maintenance'
+      preLoaderRoute: typeof ChatSettingsMaintenanceRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/labs': {
+      id: '/_chat/settings/labs'
+      path: '/labs'
+      fullPath: '/settings/labs'
+      preLoaderRoute: typeof ChatSettingsLabsRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/keybindings': {
+      id: '/_chat/settings/keybindings'
+      path: '/keybindings'
+      fullPath: '/settings/keybindings'
+      preLoaderRoute: typeof ChatSettingsKeybindingsRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/integrations': {
+      id: '/_chat/settings/integrations'
+      path: '/integrations'
+      fullPath: '/settings/integrations'
+      preLoaderRoute: typeof ChatSettingsIntegrationsRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/general': {
+      id: '/_chat/settings/general'
+      path: '/general'
+      fullPath: '/settings/general'
+      preLoaderRoute: typeof ChatSettingsGeneralRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/diffs': {
+      id: '/_chat/settings/diffs'
+      path: '/diffs'
+      fullPath: '/settings/diffs'
+      preLoaderRoute: typeof ChatSettingsDiffsRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/diagnostics': {
+      id: '/_chat/settings/diagnostics'
+      path: '/diagnostics'
+      fullPath: '/settings/diagnostics'
+      preLoaderRoute: typeof ChatSettingsDiagnosticsRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/devices': {
+      id: '/_chat/settings/devices'
+      path: '/devices'
+      fullPath: '/settings/devices'
+      preLoaderRoute: typeof ChatSettingsDevicesRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/connections': {
+      id: '/_chat/settings/connections'
+      path: '/connections'
+      fullPath: '/settings/connections'
+      preLoaderRoute: typeof ChatSettingsConnectionsRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/chat': {
+      id: '/_chat/settings/chat'
+      path: '/chat'
+      fullPath: '/settings/chat'
+      preLoaderRoute: typeof ChatSettingsChatRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/browser': {
+      id: '/_chat/settings/browser'
+      path: '/browser'
+      fullPath: '/settings/browser'
+      preLoaderRoute: typeof ChatSettingsBrowserRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/beta': {
+      id: '/_chat/settings/beta'
+      path: '/beta'
+      fullPath: '/settings/beta'
+      preLoaderRoute: typeof ChatSettingsBetaRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/archived': {
+      id: '/_chat/settings/archived'
+      path: '/archived'
+      fullPath: '/settings/archived'
+      preLoaderRoute: typeof ChatSettingsArchivedRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/appearance': {
+      id: '/_chat/settings/appearance'
+      path: '/appearance'
+      fullPath: '/settings/appearance'
+      preLoaderRoute: typeof ChatSettingsAppearanceRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/access': {
+      id: '/_chat/settings/access'
+      path: '/access'
+      fullPath: '/settings/access'
+      preLoaderRoute: typeof ChatSettingsAccessRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
+    '/_chat/settings/about': {
+      id: '/_chat/settings/about'
+      path: '/about'
+      fullPath: '/settings/about'
+      preLoaderRoute: typeof ChatSettingsAboutRouteImport
+      parentRoute: typeof ChatSettingsRoute
+    }
     '/_chat/draft/$draftId': {
       id: '/_chat/draft/$draftId'
       path: '/draft/$draftId'
@@ -916,19 +1158,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatEnvironmentIdThreadIdRouteImport
       parentRoute: typeof ChatRoute
     }
-    '/settings/peer/computer/$section': {
-      id: '/settings/peer/computer/$section'
-      path: '/computer/$section'
-      fullPath: '/settings/peer/computer/$section'
-      preLoaderRoute: typeof SettingsPeerComputerSectionRouteImport
-      parentRoute: typeof SettingsPeerRoute
-    }
     '/_chat/team/$workspace/$project': {
       id: '/_chat/team/$workspace/$project'
       path: '/team/$workspace/$project'
       fullPath: '/team/$workspace/$project'
       preLoaderRoute: typeof ChatTeamWorkspaceProjectRouteImport
       parentRoute: typeof ChatRoute
+    }
+    '/_chat/settings/peer/$': {
+      id: '/_chat/settings/peer/$'
+      path: '/$'
+      fullPath: '/settings/peer/$'
+      preLoaderRoute: typeof ChatSettingsPeerSplatRouteImport
+      parentRoute: typeof ChatSettingsPeerRoute
     }
     '/_chat/operations/$workspace/$project': {
       id: '/_chat/operations/$workspace/$project'
@@ -965,19 +1207,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatChangesWorkspaceProjectRouteImport
       parentRoute: typeof ChatRoute
     }
-    '/settings/peer/w/$workspace/$section': {
-      id: '/settings/peer/w/$workspace/$section'
-      path: '/w/$workspace/$section'
-      fullPath: '/settings/peer/w/$workspace/$section'
-      preLoaderRoute: typeof SettingsPeerWWorkspaceSectionRouteImport
-      parentRoute: typeof SettingsPeerRoute
-    }
     '/_chat/task/$workspace/$project/$task': {
       id: '/_chat/task/$workspace/$project/$task'
       path: '/task/$workspace/$project/$task'
       fullPath: '/task/$workspace/$project/$task'
       preLoaderRoute: typeof ChatTaskWorkspaceProjectTaskRouteImport
       parentRoute: typeof ChatRoute
+    }
+    '/_chat/settings/peer/computer/$section': {
+      id: '/_chat/settings/peer/computer/$section'
+      path: '/computer/$section'
+      fullPath: '/settings/peer/computer/$section'
+      preLoaderRoute: typeof ChatSettingsPeerComputerSectionRouteImport
+      parentRoute: typeof ChatSettingsPeerRoute
     }
     '/_chat/room/$workspace/$project/$task': {
       id: '/_chat/room/$workspace/$project/$task'
@@ -1014,19 +1256,115 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChatContextWorkspaceProjectScopeRouteImport
       parentRoute: typeof ChatRoute
     }
-    '/settings/peer/w/$workspace/project/$projectId/$tab': {
-      id: '/settings/peer/w/$workspace/project/$projectId/$tab'
+    '/_chat/settings/peer/w/$workspace/$section': {
+      id: '/_chat/settings/peer/w/$workspace/$section'
+      path: '/w/$workspace/$section'
+      fullPath: '/settings/peer/w/$workspace/$section'
+      preLoaderRoute: typeof ChatSettingsPeerWWorkspaceSectionRouteImport
+      parentRoute: typeof ChatSettingsPeerRoute
+    }
+    '/_chat/settings/peer/w/$workspace/project/$projectId/$tab': {
+      id: '/_chat/settings/peer/w/$workspace/project/$projectId/$tab'
       path: '/w/$workspace/project/$projectId/$tab'
       fullPath: '/settings/peer/w/$workspace/project/$projectId/$tab'
-      preLoaderRoute: typeof SettingsPeerWWorkspaceProjectProjectIdTabRouteImport
-      parentRoute: typeof SettingsPeerRoute
+      preLoaderRoute: typeof ChatSettingsPeerWWorkspaceProjectProjectIdTabRouteImport
+      parentRoute: typeof ChatSettingsPeerRoute
     }
   }
 }
 
+interface ChatSettingsPeerRouteChildren {
+  ChatSettingsPeerSplatRoute: typeof ChatSettingsPeerSplatRoute
+  ChatSettingsPeerComputerSectionRoute: typeof ChatSettingsPeerComputerSectionRoute
+  ChatSettingsPeerWWorkspaceSectionRoute: typeof ChatSettingsPeerWWorkspaceSectionRoute
+  ChatSettingsPeerWWorkspaceProjectProjectIdTabRoute: typeof ChatSettingsPeerWWorkspaceProjectProjectIdTabRoute
+}
+
+const ChatSettingsPeerRouteChildren: ChatSettingsPeerRouteChildren = {
+  ChatSettingsPeerSplatRoute: ChatSettingsPeerSplatRoute,
+  ChatSettingsPeerComputerSectionRoute: ChatSettingsPeerComputerSectionRoute,
+  ChatSettingsPeerWWorkspaceSectionRoute:
+    ChatSettingsPeerWWorkspaceSectionRoute,
+  ChatSettingsPeerWWorkspaceProjectProjectIdTabRoute:
+    ChatSettingsPeerWWorkspaceProjectProjectIdTabRoute,
+}
+
+const ChatSettingsPeerRouteWithChildren =
+  ChatSettingsPeerRoute._addFileChildren(ChatSettingsPeerRouteChildren)
+
+interface ChatSettingsRouteChildren {
+  ChatSettingsAboutRoute: typeof ChatSettingsAboutRoute
+  ChatSettingsAccessRoute: typeof ChatSettingsAccessRoute
+  ChatSettingsAppearanceRoute: typeof ChatSettingsAppearanceRoute
+  ChatSettingsArchivedRoute: typeof ChatSettingsArchivedRoute
+  ChatSettingsBetaRoute: typeof ChatSettingsBetaRoute
+  ChatSettingsBrowserRoute: typeof ChatSettingsBrowserRoute
+  ChatSettingsChatRoute: typeof ChatSettingsChatRoute
+  ChatSettingsConnectionsRoute: typeof ChatSettingsConnectionsRoute
+  ChatSettingsDevicesRoute: typeof ChatSettingsDevicesRoute
+  ChatSettingsDiagnosticsRoute: typeof ChatSettingsDiagnosticsRoute
+  ChatSettingsDiffsRoute: typeof ChatSettingsDiffsRoute
+  ChatSettingsGeneralRoute: typeof ChatSettingsGeneralRoute
+  ChatSettingsIntegrationsRoute: typeof ChatSettingsIntegrationsRoute
+  ChatSettingsKeybindingsRoute: typeof ChatSettingsKeybindingsRoute
+  ChatSettingsLabsRoute: typeof ChatSettingsLabsRoute
+  ChatSettingsMaintenanceRoute: typeof ChatSettingsMaintenanceRoute
+  ChatSettingsOpenSourceLicensesRoute: typeof ChatSettingsOpenSourceLicensesRoute
+  ChatSettingsOverviewRoute: typeof ChatSettingsOverviewRoute
+  ChatSettingsPeerRoute: typeof ChatSettingsPeerRouteWithChildren
+  ChatSettingsProjectsRoute: typeof ChatSettingsProjectsRoute
+  ChatSettingsProvidersRoute: typeof ChatSettingsProvidersRoute
+  ChatSettingsScheduledTasksRoute: typeof ChatSettingsScheduledTasksRoute
+  ChatSettingsSecretsRoute: typeof ChatSettingsSecretsRoute
+  ChatSettingsSnapShotRoute: typeof ChatSettingsSnapShotRoute
+  ChatSettingsSourceControlRoute: typeof ChatSettingsSourceControlRoute
+  ChatSettingsStorageRoute: typeof ChatSettingsStorageRoute
+  ChatSettingsThreadsRoute: typeof ChatSettingsThreadsRoute
+  ChatSettingsWorkspacesRoute: typeof ChatSettingsWorkspacesRoute
+  ChatSettingsWorktreesRoute: typeof ChatSettingsWorktreesRoute
+}
+
+const ChatSettingsRouteChildren: ChatSettingsRouteChildren = {
+  ChatSettingsAboutRoute: ChatSettingsAboutRoute,
+  ChatSettingsAccessRoute: ChatSettingsAccessRoute,
+  ChatSettingsAppearanceRoute: ChatSettingsAppearanceRoute,
+  ChatSettingsArchivedRoute: ChatSettingsArchivedRoute,
+  ChatSettingsBetaRoute: ChatSettingsBetaRoute,
+  ChatSettingsBrowserRoute: ChatSettingsBrowserRoute,
+  ChatSettingsChatRoute: ChatSettingsChatRoute,
+  ChatSettingsConnectionsRoute: ChatSettingsConnectionsRoute,
+  ChatSettingsDevicesRoute: ChatSettingsDevicesRoute,
+  ChatSettingsDiagnosticsRoute: ChatSettingsDiagnosticsRoute,
+  ChatSettingsDiffsRoute: ChatSettingsDiffsRoute,
+  ChatSettingsGeneralRoute: ChatSettingsGeneralRoute,
+  ChatSettingsIntegrationsRoute: ChatSettingsIntegrationsRoute,
+  ChatSettingsKeybindingsRoute: ChatSettingsKeybindingsRoute,
+  ChatSettingsLabsRoute: ChatSettingsLabsRoute,
+  ChatSettingsMaintenanceRoute: ChatSettingsMaintenanceRoute,
+  ChatSettingsOpenSourceLicensesRoute: ChatSettingsOpenSourceLicensesRoute,
+  ChatSettingsOverviewRoute: ChatSettingsOverviewRoute,
+  ChatSettingsPeerRoute: ChatSettingsPeerRouteWithChildren,
+  ChatSettingsProjectsRoute: ChatSettingsProjectsRoute,
+  ChatSettingsProvidersRoute: ChatSettingsProvidersRoute,
+  ChatSettingsScheduledTasksRoute: ChatSettingsScheduledTasksRoute,
+  ChatSettingsSecretsRoute: ChatSettingsSecretsRoute,
+  ChatSettingsSnapShotRoute: ChatSettingsSnapShotRoute,
+  ChatSettingsSourceControlRoute: ChatSettingsSourceControlRoute,
+  ChatSettingsStorageRoute: ChatSettingsStorageRoute,
+  ChatSettingsThreadsRoute: ChatSettingsThreadsRoute,
+  ChatSettingsWorkspacesRoute: ChatSettingsWorkspacesRoute,
+  ChatSettingsWorktreesRoute: ChatSettingsWorktreesRoute,
+}
+
+const ChatSettingsRouteWithChildren = ChatSettingsRoute._addFileChildren(
+  ChatSettingsRouteChildren,
+)
+
 interface ChatRouteChildren {
   ChatNewRoute: typeof ChatNewRoute
   ChatPullRequestsRoute: typeof ChatPullRequestsRoute
+  ChatSettingsRoute: typeof ChatSettingsRouteWithChildren
+  ChatUsageRoute: typeof ChatUsageRoute
   ChatWorkRoute: typeof ChatWorkRoute
   ChatIndexRoute: typeof ChatIndexRoute
   ChatEnvironmentIdThreadIdRoute: typeof ChatEnvironmentIdThreadIdRoute
@@ -1052,6 +1390,8 @@ interface ChatRouteChildren {
 const ChatRouteChildren: ChatRouteChildren = {
   ChatNewRoute: ChatNewRoute,
   ChatPullRequestsRoute: ChatPullRequestsRoute,
+  ChatSettingsRoute: ChatSettingsRouteWithChildren,
+  ChatUsageRoute: ChatUsageRoute,
   ChatWorkRoute: ChatWorkRoute,
   ChatIndexRoute: ChatIndexRoute,
   ChatEnvironmentIdThreadIdRoute: ChatEnvironmentIdThreadIdRoute,
@@ -1078,76 +1418,12 @@ const ChatRouteChildren: ChatRouteChildren = {
 
 const ChatRouteWithChildren = ChatRoute._addFileChildren(ChatRouteChildren)
 
-interface SettingsPeerRouteChildren {
-  SettingsPeerSplatRoute: typeof SettingsPeerSplatRoute
-  SettingsPeerComputerSectionRoute: typeof SettingsPeerComputerSectionRoute
-  SettingsPeerWWorkspaceSectionRoute: typeof SettingsPeerWWorkspaceSectionRoute
-  SettingsPeerWWorkspaceProjectProjectIdTabRoute: typeof SettingsPeerWWorkspaceProjectProjectIdTabRoute
-}
-
-const SettingsPeerRouteChildren: SettingsPeerRouteChildren = {
-  SettingsPeerSplatRoute: SettingsPeerSplatRoute,
-  SettingsPeerComputerSectionRoute: SettingsPeerComputerSectionRoute,
-  SettingsPeerWWorkspaceSectionRoute: SettingsPeerWWorkspaceSectionRoute,
-  SettingsPeerWWorkspaceProjectProjectIdTabRoute:
-    SettingsPeerWWorkspaceProjectProjectIdTabRoute,
-}
-
-const SettingsPeerRouteWithChildren = SettingsPeerRoute._addFileChildren(
-  SettingsPeerRouteChildren,
-)
-
-interface SettingsRouteChildren {
-  SettingsAppearanceRoute: typeof SettingsAppearanceRoute
-  SettingsArchivedRoute: typeof SettingsArchivedRoute
-  SettingsConnectionsRoute: typeof SettingsConnectionsRoute
-  SettingsDiagnosticsRoute: typeof SettingsDiagnosticsRoute
-  SettingsGeneralRoute: typeof SettingsGeneralRoute
-  SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute
-  SettingsKeybindingsRoute: typeof SettingsKeybindingsRoute
-  SettingsOpenSourceLicensesRoute: typeof SettingsOpenSourceLicensesRoute
-  SettingsOverviewRoute: typeof SettingsOverviewRoute
-  SettingsPeerRoute: typeof SettingsPeerRouteWithChildren
-  SettingsProjectsRoute: typeof SettingsProjectsRoute
-  SettingsProvidersRoute: typeof SettingsProvidersRoute
-  SettingsScheduledTasksRoute: typeof SettingsScheduledTasksRoute
-  SettingsSnapShotRoute: typeof SettingsSnapShotRoute
-  SettingsSourceControlRoute: typeof SettingsSourceControlRoute
-  SettingsStorageRoute: typeof SettingsStorageRoute
-  SettingsWorkspacesRoute: typeof SettingsWorkspacesRoute
-}
-
-const SettingsRouteChildren: SettingsRouteChildren = {
-  SettingsAppearanceRoute: SettingsAppearanceRoute,
-  SettingsArchivedRoute: SettingsArchivedRoute,
-  SettingsConnectionsRoute: SettingsConnectionsRoute,
-  SettingsDiagnosticsRoute: SettingsDiagnosticsRoute,
-  SettingsGeneralRoute: SettingsGeneralRoute,
-  SettingsIntegrationsRoute: SettingsIntegrationsRoute,
-  SettingsKeybindingsRoute: SettingsKeybindingsRoute,
-  SettingsOpenSourceLicensesRoute: SettingsOpenSourceLicensesRoute,
-  SettingsOverviewRoute: SettingsOverviewRoute,
-  SettingsPeerRoute: SettingsPeerRouteWithChildren,
-  SettingsProjectsRoute: SettingsProjectsRoute,
-  SettingsProvidersRoute: SettingsProvidersRoute,
-  SettingsScheduledTasksRoute: SettingsScheduledTasksRoute,
-  SettingsSnapShotRoute: SettingsSnapShotRoute,
-  SettingsSourceControlRoute: SettingsSourceControlRoute,
-  SettingsStorageRoute: SettingsStorageRoute,
-  SettingsWorkspacesRoute: SettingsWorkspacesRoute,
-}
-
-const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
-  SettingsRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   ChatRoute: ChatRouteWithChildren,
   ConnectRoute: ConnectRoute,
   ConnectAgentRoute: ConnectAgentRoute,
+  GuestRoute: GuestRoute,
   PairRoute: PairRoute,
-  SettingsRoute: SettingsRouteWithChildren,
-  UsageRoute: UsageRoute,
   WelcomeRoute: WelcomeRoute,
   ProjectsProjectKeyRoute: ProjectsProjectKeyRoute,
 }

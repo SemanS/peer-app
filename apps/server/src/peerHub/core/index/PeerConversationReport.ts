@@ -7,6 +7,7 @@ import {
   type PeerHubStatus,
   type OrchestrationV2ThreadShell,
 } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -18,6 +19,8 @@ import * as PeerStatus from "../status/PeerStatus.ts";
 import * as PeerWork from "../work/PeerWork.ts";
 import { shellStatus, taskNamed } from "../work/report.ts";
 import { contextPage } from "./contextView.ts";
+
+const isPeerHubError = Schema.is(PeerHubError);
 
 type Item = PeerConversationReport["items"][number] & { readonly task?: string | undefined };
 type Place = Pick<PeerContextViewInput, "workspace" | "project">;
@@ -82,7 +85,7 @@ export class PeerConversationReportService extends Context.Service<
     ) => Effect.Effect<PeerConversationReport, PeerHubError>;
     readonly refresh: Effect.Effect<void>;
   }
->()("t3/peerHub/core/index/PeerConversationReport") {}
+>()("t3/peerHub/core/index/PeerConversationReport/PeerConversationReportService") {}
 
 const make = Effect.gen(function* () {
   const projections = yield* ProjectionStore.ProjectionStoreV2;
@@ -257,7 +260,7 @@ const make = Effect.gen(function* () {
       const stale =
         thread.runtimePresent === false ||
         !Number.isFinite(seenAt) ||
-        Date.now() - seenAt >= 3 * 60_000;
+        (yield* Clock.currentTimeMillis) - seenAt >= 3 * 60_000;
       // Other people's private transcripts never become a project-wide summary via the Hub.
       items.push({
         id: `${thread.environment}:${thread.email}:${thread.id}`,
@@ -279,8 +282,10 @@ const make = Effect.gen(function* () {
       (a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.id.localeCompare(b.id),
     );
     const now = DateTime.formatIso(yield* DateTime.now);
-    if (job.updatedAt === null || JSON.stringify(items) !== JSON.stringify(job.items))
-      job.updatedAt = now;
+    const itemJson = Schema.encodeEffect(Schema.fromJsonString(Schema.Array(Schema.Unknown)));
+    const currentItems = yield* itemJson(items);
+    const previousItems = yield* itemJson(job.items);
+    if (job.updatedAt === null || currentItems !== previousItems) job.updatedAt = now;
     job.items = items;
     job.cache = nextCache;
     job.checkedAt = now;
@@ -308,7 +313,8 @@ const make = Effect.gen(function* () {
     }
     if (
       !job.pending &&
-      (job.checkedAt === null || Date.now() - Date.parse(job.checkedAt) >= minimumAge)
+      (job.checkedAt === null ||
+        (yield* Clock.currentTimeMillis) - Date.parse(job.checkedAt) >= minimumAge)
     ) {
       job.pending = true;
       const target = job;
@@ -317,9 +323,10 @@ const make = Effect.gen(function* () {
       ).pipe(
         collectionSlots.withPermits(1),
         Effect.catchCause(() =>
-          Effect.sync(() => {
+          Effect.gen(function* () {
+            const checkedAt = DateTime.formatIso(yield* DateTime.now);
             target.error = "Could not update conversations. Peer will retry automatically.";
-            target.checkedAt = new Date().toISOString();
+            target.checkedAt = checkedAt;
           }),
         ),
         Effect.ensuring(
@@ -362,7 +369,7 @@ const make = Effect.gen(function* () {
             input.conversationCursor,
           ),
         catch: (cause) =>
-          Schema.is(PeerHubError)(cause)
+          isPeerHubError(cause)
             ? cause
             : new PeerHubError({ detail: "Could not page the conversation report." }),
       });

@@ -1,10 +1,3 @@
-/**
- * The Chats view's rows in words. A row has two lines: the title with the chat's state, then
- * `‹task key› · ‹project› · ‹agent›` (`No task` when its project has tasks and the chat is on
- * none). This module decides what those lines say, which chats must add when they started to be
- * told apart, and the words of the status cell and the Finished shelf; the row components only
- * lay them out.
- */
 import { runTaskOf, type PeerHubStatus, type PeerTask, type PeerWorkRun } from "@t3tools/contracts";
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 
@@ -21,6 +14,7 @@ const NO_TASK_LABEL = "No task";
  * chat can wait on you for.
  */
 export const CHAT_STATUS_LABEL: Readonly<Record<SidebarV2TopStatusKind, string>> = {
+  request: "Asks you",
   approval: "Needs approval",
   done: "New reply",
   failed: "Failed",

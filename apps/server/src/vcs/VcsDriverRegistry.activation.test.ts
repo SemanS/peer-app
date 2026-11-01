@@ -1,3 +1,4 @@
+import { unusedCheckpoints } from "./VcsDriver.testkit.ts";
 import { assert, it, describe } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { VcsUnsupportedOperationError } from "@t3tools/contracts";
@@ -55,7 +56,10 @@ describe("VcsDriverRegistry activation", () => {
       yield* fileSystem.makeDirectory(path.join(root, ".jj", "repo"), { recursive: true });
       yield* fileSystem.makeDirectory(path.join(root, ".git"), { recursive: true });
 
-      assert.strictEqual((yield* registry.get("jj")).capabilities.kind, "jj");
+      assert.strictEqual(
+        typeof (yield* registry.get("jj")).checkpoints.captureCheckpoint,
+        "function",
+      );
 
       const detected = yield* registry.detect({ cwd: root });
       assert.strictEqual(detected?.kind, "jj");
@@ -69,6 +73,7 @@ describe("VcsDriverRegistry activation", () => {
       Layer.provide(
         failJjDetection
           ? Layer.mock(JjVcsDriver.JjVcsDriver)({
+              checkpoints: unusedCheckpoints,
               capabilities: {
                 kind: "jj",
                 supportsWorktrees: true,
@@ -113,6 +118,11 @@ describe("VcsDriverRegistry activation", () => {
                   stderr: "fatal: not a git repository",
                 };
               }
+              if (command === "rev-parse --is-inside-work-tree --show-toplevel --git-common-dir") {
+                return processOutput(
+                  `true\n${repoDir}\n${path.relative(input.cwd, path.join(repoDir, ".git"))}\n`,
+                );
+              }
               if (command === "rev-parse --is-inside-work-tree") return processOutput("true\n");
               if (command === "rev-parse --show-toplevel") return processOutput(`${repoDir}\n`);
               if (command === "rev-parse --git-common-dir") {
@@ -137,9 +147,7 @@ describe("VcsDriverRegistry activation", () => {
         assert.equal(handle?.kind, "git");
         assert.equal(handle?.repository.rootPath, repoDir);
         assert.deepStrictEqual(calls, [
-          "rev-parse --is-inside-work-tree",
-          "rev-parse --show-toplevel",
-          "rev-parse --git-common-dir",
+          "rev-parse --is-inside-work-tree --show-toplevel --git-common-dir",
         ]);
       }).pipe(Effect.provide(makeDiskBackedLayer(repoDir, calls, true)));
     }).pipe(Effect.provide(NodeServices.layer)),

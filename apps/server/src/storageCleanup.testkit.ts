@@ -1,3 +1,4 @@
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as Context from "effect/Context";
@@ -187,7 +188,16 @@ export const cleanupFixture = (
         getShellSnapshot: (input?: { location?: string }) =>
           Effect.sync(() => {
             snapshotReads++;
-            return { threads: input?.location === "archive" ? [] : threads };
+            return {
+              threads:
+                input?.location === "archive"
+                  ? []
+                  : threads.filter((thread) => thread.archivedAt === null),
+              archivedThreads:
+                input?.location === "active"
+                  ? []
+                  : threads.filter((thread) => thread.archivedAt !== null),
+            };
           }),
         getThreadWorktreePaths: () =>
           Effect.sync(() =>
@@ -332,6 +342,7 @@ export const pausedMeasurementFixture = (
 export const cleanupTestLayer = GitVcsDriver.layer.pipe(
   Layer.provideMerge(ServerConfig.layerTest(process.cwd(), { prefix: "storage-cleanup-" })),
   Layer.provideMerge(NodeServices.layer),
+  Layer.provideMerge(NodeCrypto.layer),
 );
 export const runCleanupTest = <A, E>(
   effect: Effect.Effect<

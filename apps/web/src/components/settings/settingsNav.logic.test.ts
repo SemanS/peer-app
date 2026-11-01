@@ -90,18 +90,27 @@ describe("the one settings navigation", () => {
       "Coordination & plugins",
       "Tool trust",
       "Providers",
+      "Threads",
       "Source control",
-      "Browser & devices",
+      "Worktrees",
+      "Browser",
+      "Devices",
       "Scheduled tasks",
     ]);
     expect(labels("app")).toEqual([
       "General",
       "Appearance",
-      "Keyboard shortcuts",
-      "Snapshots",
-      "Storage",
-      "Connections",
-      "Archived chats",
+      "Chat",
+      "Diffs & pull requests",
+      "Keybindings",
+      "SnapShots",
+      "Maintenance",
+      "Environments",
+      "Sharing & access",
+      "Secrets",
+      "Archive",
+      "Labs",
+      "About",
     ]);
   });
 
@@ -112,7 +121,15 @@ describe("the one settings navigation", () => {
       .filter((to) => ["computer", "app"].includes(SETTINGS_PAGE_GROUPS[to]))
       // The Project page is listed while a project is chosen, and Diagnostics is opened from
       // the places that link to it (the sidebar's utility menu), not from this navigation.
-      .filter((to) => to !== "/settings/projects" && to !== "/settings/diagnostics");
+      .filter(
+        (to) =>
+          ![
+            "/settings/projects",
+            "/settings/diagnostics",
+            "/settings/integrations",
+            "/settings/storage",
+          ].includes(to),
+      );
     expect([...listed].toSorted()).toEqual([...grouped].toSorted());
   });
 });
@@ -172,7 +189,7 @@ describe("who sees which page", () => {
 
   it("shows the app's Project page under This computer only while a project is chosen", () => {
     expect(labels("computer")).not.toContain("Project");
-    expect(labels("computer", { projectPage: true })?.[0]).toBe("Project");
+    expect(labels("computer", { projectPage: true })?.[0]).toBe("Projects");
   });
 });
 
@@ -198,15 +215,21 @@ describe("with no workspace", () => {
         "Coordination & plugins",
         "Tool trust",
         "Providers",
+        "Threads",
         "Source control",
-        "Browser & devices",
+        "Worktrees",
+        "Browser",
+        "Devices",
         "Scheduled tasks",
       ]);
     for (const signedOut of [undefined]) {
       expect(computer(signedOut)?.map((item) => item.label)).toEqual([
         "Providers",
+        "Threads",
         "Source control",
-        "Browser & devices",
+        "Worktrees",
+        "Browser",
+        "Devices",
         "Scheduled tasks",
       ]);
     }
@@ -236,9 +259,9 @@ describe("the page being shown", () => {
     expect(current("/settings/providers")).toEqual(["settings:/settings/providers"]);
   });
 
-  it("keeps General on for the pages that belong to it", () => {
-    expect(current("/settings/open-source-licenses")).toEqual(["settings:/settings/general"]);
-    expect(current("/settings/diagnostics")).toEqual(["settings:/settings/general"]);
+  it("keeps About on for its diagnostic and license pages", () => {
+    expect(current("/settings/open-source-licenses")).toEqual(["settings:/settings/about"]);
+    expect(current("/settings/diagnostics")).toEqual(["settings:/settings/about"]);
   });
 
   it("does not mark a project row for another workspace's project", () => {
@@ -255,11 +278,11 @@ describe("the page being shown", () => {
 describe("App, folded unless open", () => {
   const app = (pathname: string) => nav({ pathname }).groups.find((group) => group.id === "app");
 
-  it("is folded behind its seven pages while another page is open", () => {
+  it("is folded behind its app pages while another page is open", () => {
     expect(app("/settings/overview")?.folded).toBe(true);
     expect(app("/settings/peer/w/acme/general")?.folded).toBe(true);
     expect(app("/settings/providers")?.folded).toBe(true);
-    expect(app("/settings/overview")?.items).toHaveLength(7);
+    expect(app("/settings/overview")?.items).toHaveLength(APP_PAGES.length);
   });
 
   it("is open when one of its pages is", () => {
@@ -315,6 +338,25 @@ describe("what the navigation marks", () => {
       rows: [row({ id: "me:plans", group: "me", attention: true, badge: "2 detected" })],
     },
   ];
+
+  it("marks the split browser and device pages independently", () => {
+    const marks = navMarks([
+      {
+        id: "computer",
+        title: "This computer",
+        who: "Local",
+        rows: [
+          row({ id: "computer:browser", group: "computer", underway: true }),
+          row({ id: "computer:device-hub", group: "computer", underway: true }),
+        ],
+      },
+    ]);
+    const computer = nav({ marks }).groups.find((group) => group.id === "computer");
+    expect(computer?.items.filter((item) => item.dot).map((item) => item.id)).toEqual([
+      "settings:/settings/browser",
+      "settings:/settings/devices",
+    ]);
+  });
 
   it("puts a dot on Integrations while Slack is at a step, and '2 detected' beside AI subscriptions", () => {
     const marks = navMarks(groups);

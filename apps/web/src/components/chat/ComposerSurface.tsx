@@ -3,14 +3,14 @@ import type { ComponentProps } from "react";
 import { cn } from "~/lib/utils";
 
 function Shell({
-  contextStrip = false,
+  contextRow = false,
   className,
   ...props
-}: ComponentProps<"div"> & { contextStrip?: boolean }) {
+}: ComponentProps<"div"> & { contextRow?: boolean }) {
   return (
     <div
       data-slot="composer-shell"
-      data-with-context={contextStrip || undefined}
+      data-context-row={contextRow || undefined}
       className={cn(
         "@container/composer-surface group/composer-surface relative isolate mx-auto w-full max-w-(--chat-content-max-width)",
         "[--chat-composer-drawer-inset:0rem] [--chat-composer-glass-surface:var(--card)] [--chat-composer-outline:var(--border)]",
@@ -65,6 +65,7 @@ function Main({ className, ...props }: ComponentProps<"div">) {
   );
 }
 
+/** A plain row under the card (environment, worktree, branch) with no surface of its own. */
 function ContextStrip({ className, ...props }: ComponentProps<"div">) {
   return (
     <div

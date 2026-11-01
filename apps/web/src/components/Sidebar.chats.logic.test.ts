@@ -47,7 +47,19 @@ function status(
           {
             project: { id: "ordering" },
             repositories: [{ id: "app", projectId: "t3-ordering" }],
-            work: { areas: [], tasks, threads: [], assignments },
+            work: {
+              areas: [],
+              tasks,
+              threads: [],
+              runs: Object.entries(assignments).map(([key, task]) => ({
+                id: key,
+                task,
+                agent: "claude",
+                runtime: "peer",
+                state: "running",
+                keys: [key],
+              })),
+            },
           },
         ],
       },

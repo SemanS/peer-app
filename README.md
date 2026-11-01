@@ -28,6 +28,7 @@ Peer runs providers on the connected computer. Install and authenticate the prov
 | Grok Build  | Install [Grok Build CLI](https://x.ai/cli), then run `grok login`.                           |
 | OpenCode    | Install [OpenCode](https://opencode.ai), then run `opencode auth login`.                     |
 | Antigravity | Enable it in Settings, choose **Install Antigravity**, then **Sign in with Google**.         |
+| fx          | Install [fx](https://fx.sh), then run `fx login` on the connected computer.                  |
 
 Local edit coordination has hooks for Claude Code and Codex. Other providers' coordination support
 depends on their MCP adapter. See [Peer Local](docs/user/peer-local.md) for the limits.

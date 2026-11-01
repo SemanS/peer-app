@@ -1,4 +1,5 @@
 import { DEFAULT_VCS_TERMINOLOGY, type VcsTerminology } from "@t3tools/shared/vcs";
+import { Button } from "../../components/ui/Button";
 import {
   worktreeSetupStageLabel,
   type WorktreeSetupSnapshot,
@@ -123,7 +124,7 @@ export function WorktreeSetupCard(props: WorktreeSetupCardProps) {
               />
             ) : null}
             <Text numberOfLines={1} className="shrink text-2xs text-foreground-secondary">
-              {backgroundSetup ? scriptName : "Details"}
+              {backgroundSetup ? "Background setup" : "Details"}
             </Text>
             {!backgroundSetup ? (
               <SymbolView name="chevron.right" size={10} tintColorClassName="accent-icon-muted" />
@@ -248,28 +249,24 @@ function SetupDetailsSheet({
         ) : null}
         {canCancel ? (
           <View className="mt-3 flex-row items-center justify-end gap-4 border-t border-border pt-1">
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Cancel ${vcsTerminology.workspaceNoun} setup`}
+            <Button
+              label="Cancel setup"
+              tone="danger"
+              accessibilityLabel="Cancel worktree setup"
               onPress={() => {
                 onClose();
                 onCancel();
               }}
-              className="min-h-11 justify-center px-2"
-            >
-              <Text className="text-sm text-danger-foreground">Cancel setup</Text>
-            </Pressable>
+            />
             {onWorkLocally ? (
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                label="Work locally"
+                tone="secondary"
                 onPress={() => {
                   onClose();
                   onWorkLocally();
                 }}
-                className="min-h-11 justify-center px-2"
-              >
-                <Text className="text-sm text-foreground">Work locally</Text>
-              </Pressable>
+              />
             ) : null}
           </View>
         ) : null}

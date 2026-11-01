@@ -1,22 +1,6 @@
-/**
- * Knowledge trailers on Jujutsu changes. kontext's `prepare-commit-msg` git hook adds a trailer
- * (`Decision: <id>`, `Learning: <id>`, …) to a commit that ships a knowledge file, which is how
- * `kontext log` and `git log --format='%(trailers:key=Decision)'` give an entry its lineage. jj runs
- * no git hook, so a change described with `jj commit`, `jj describe` or `jj squash` loses them unless
- * the author writes them by hand. Peer puts them back at the landing step, in two halves:
- *
- * - before the command runs, kontext's `prepare-commit` report names the trailers of the knowledge
- *   the working copy changed against its parent (`prepareTrailers`): kontext decides which apply,
- *   Peer reads nothing of `.ai` itself;
- * - after it ran, when the change it described touches the store, the trailers its description
- *   lacks are appended with `jj describe` (`applyTrailers`), once: a trailer already there is never
- *   repeated, and a change jj refuses to rewrite (a teammate's, immutable) is left as it is.
- *
- * Every jj call takes `--ignore-working-copy`: the jujutsu plugin owns the snapshot, and a describe
- * must not take one between its steps. Paths are read from the workspace root, where jj prints them
- * relative to the root. A step too short for the reads skips them: the next landing step reads again.
- *
- * @module peerHub/plugins/knowledge/client/trailers
+/** kontext selects knowledge trailers before a jj landing command; Peer appends missing ones after it.
+ * All jj calls use --ignore-working-copy so they cannot snapshot between the command's steps.
+ * Immutable changes and steps without enough time are left for a later landing.
  */
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -252,82 +236,81 @@ export function trailerFlows(input: {
   const saidAbsent = new Set<string>();
 
   /** The store directory of a jj checkout, from kontext's status; null without kontext or a store. */
-  const storeOf = (ctx: PeerToolContext) =>
-    Effect.gen(function* () {
-      const checkout = yield* Effect.promise(() => input.checkout(ctx.session.cwd));
-      if (checkout === null || checkout.kind !== "jj") return null;
-      const now = yield* Clock.currentTimeMillis;
-      const known = stores.get(checkout.root);
-      const dir =
-        known !== undefined && now - known.at < input.freshMs
-          ? known.dir
-          : yield* Effect.promise(() =>
-              engineStatus(input.kontext, checkout.root).then(
-                (engine) => (engine.store.configured ? engine.store.dir : null),
-                () => null,
-              ),
-            );
-      stores.set(checkout.root, { at: now, dir });
-      if (dir === null && !saidAbsent.has(ctx.session.id)) {
-        saidAbsent.add(ctx.session.id);
-        yield* input.log("knowledge.trailers-skipped", {
-          session: ctx.session.id,
-          reason: "no kontext store",
-        });
-      }
-      return dir === null ? null : { root: checkout.root, dir };
-    });
-
-  const before = (ctx: PeerToolContext) =>
-    Effect.gen(function* () {
-      const slot = input.slot(ctx.session);
-      slot.trailers = undefined;
-      if (
-        ctx.command === undefined ||
-        ctx.session.public === true ||
-        describedChange(ctx.command) === null ||
-        ctx.remainingMs < MARGIN_MS + LEAST_MS
-      )
-        return null;
-      const store = yield* storeOf(ctx);
-      if (store === null) return null;
-      const command = ctx.command;
-      slot.trailers = yield* Effect.promise(() =>
-        prepareTrailers(input.kontext, store.root, command, ctx.remainingMs - MARGIN_MS),
-      );
-      return null;
-    });
-
-  const after = (ctx: PeerToolContext) =>
-    Effect.gen(function* () {
-      const slot = input.slot(ctx.session);
-      const prepared = slot.trailers;
-      slot.trailers = undefined;
-      if (prepared === undefined || prepared.command !== ctx.command || ctx.failed === true)
-        return null;
-      if (ctx.remainingMs < MARGIN_MS + LEAST_MS) {
-        yield* input.log("knowledge.trailers-late", { session: ctx.session.id });
-        return null;
-      }
-      const store = yield* storeOf(ctx);
-      if (store === null) return null;
-      const applied = yield* Effect.promise(() =>
-        applyTrailers(
-          input.jj,
-          store.root,
-          prepared,
-          store.dir,
-          Math.min(2_000, ctx.remainingMs - MARGIN_MS),
-        ),
-      );
-      if (applied === null) return null;
-      yield* input.log("knowledge.trailers", {
+  const storeOf = Effect.fn("KnowledgeTrailers.storeOf")(function* (ctx: PeerToolContext) {
+    const checkout = yield* Effect.promise(() => input.checkout(ctx.session.cwd));
+    if (checkout === null || checkout.kind !== "jj") return null;
+    const now = yield* Clock.currentTimeMillis;
+    const known = stores.get(checkout.root);
+    const dir =
+      known !== undefined && now - known.at < input.freshMs
+        ? known.dir
+        : yield* Effect.promise(() =>
+            engineStatus(input.kontext, checkout.root).then(
+              (engine) => (engine.store.configured ? engine.store.dir : null),
+              () => null,
+            ),
+          );
+    stores.set(checkout.root, { at: now, dir });
+    if (dir === null && !saidAbsent.has(ctx.session.id)) {
+      saidAbsent.add(ctx.session.id);
+      yield* input.log("knowledge.trailers-skipped", {
         session: ctx.session.id,
-        change: applied.changeId,
-        added: applied.added.length,
+        reason: "no kontext store",
       });
-      return trailersNotice(applied);
+    }
+    return dir === null ? null : { root: checkout.root, dir };
+  });
+
+  const before = Effect.fn("KnowledgeTrailers.before")(function* (ctx: PeerToolContext) {
+    const slot = input.slot(ctx.session);
+    slot.trailers = undefined;
+    if (
+      ctx.command === undefined ||
+      ctx.session.public === true ||
+      describedChange(ctx.command) === null ||
+      ctx.remainingMs < MARGIN_MS + LEAST_MS
+    )
+      return null;
+    const store = yield* storeOf(ctx);
+    if (store === null) return null;
+    const command = ctx.command;
+    slot.trailers = yield* Effect.promise(() =>
+      prepareTrailers(input.kontext, store.root, command, ctx.remainingMs - MARGIN_MS).then(
+        (prepared) => prepared ?? undefined,
+      ),
+    );
+    return null;
+  });
+
+  const after = Effect.fn("KnowledgeTrailers.after")(function* (ctx: PeerToolContext) {
+    const slot = input.slot(ctx.session);
+    const prepared = slot.trailers;
+    slot.trailers = undefined;
+    if (prepared === undefined || prepared.command !== ctx.command || ctx.failed === true)
+      return null;
+    if (ctx.remainingMs < MARGIN_MS + LEAST_MS) {
+      yield* input.log("knowledge.trailers-late", { session: ctx.session.id });
+      return null;
+    }
+    const store = yield* storeOf(ctx);
+    if (store === null) return null;
+    const applied = yield* Effect.promise(() =>
+      applyTrailers(
+        input.jj,
+        store.root,
+        prepared,
+        store.dir,
+        Math.min(2_000, ctx.remainingMs - MARGIN_MS),
+      ),
+    );
+    if (applied === null) return null;
+    yield* input.log("knowledge.trailers", {
+      session: ctx.session.id,
+      change: applied.changeId,
+      added: applied.added.length,
     });
+    return trailersNotice(applied);
+  });
 
   return { before, after };
 }

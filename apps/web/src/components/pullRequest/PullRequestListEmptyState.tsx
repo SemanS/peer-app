@@ -45,6 +45,8 @@ function BranchMark({ joined }: { joined: boolean }) {
 }
 
 export function PullRequestListEmptyState({
+  refreshing,
+  onRefresh,
   query,
   filtered,
   searching,
@@ -55,6 +57,8 @@ export function PullRequestListEmptyState({
   onClearFilters,
   onLoadMore,
 }: {
+  refreshing: boolean;
+  onRefresh: () => void;
   query: string;
   filtered: boolean;
   searching: boolean;
@@ -133,6 +137,9 @@ export function PullRequestListEmptyState({
         </EmptyDescription>
       </EmptyHeader>
       <div className="flex flex-wrap justify-center gap-2">
+        <Button size="sm" variant="outline" disabled={refreshing} onClick={onRefresh}>
+          {refreshing ? "Refreshing..." : "Refresh"}
+        </Button>
         {canLoadMore ? (
           <Button size="sm" variant="outline" disabled={loadingMore} onClick={onLoadMore}>
             {loadingMore ? "Loading..." : "Load more pull requests"}

@@ -1,3 +1,4 @@
+import { useProjects } from "../../state/entities";
 import { useAuth } from "@clerk/react";
 import { useAtomValue } from "@effect/atom-react";
 import type {
@@ -15,6 +16,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import {
+  AgentSessionSource,
   AuthTerminalOperateScope,
   CommandId,
   defaultInstanceIdForDriver,
@@ -39,7 +41,7 @@ import { useLocalStorage } from "../../hooks/useLocalStorage";
 import { hasCloudPublicConfig } from "../../cloud/publicConfig";
 import { PRIVACY_POLICY_URL } from "../../legalLinks";
 import { useT3ConnectAuthPrompt } from "../clerk/useT3ConnectAuthPrompt";
-import { useCompleteOnboarding } from "../../onboarding/firstRun";
+import { completeOnboarding } from "../../onboarding/firstRun";
 import {
   groupOnboardingProjects,
   partitionOnboardingProjects,
@@ -57,7 +59,7 @@ import {
 } from "../../onboarding/providerReadiness.logic";
 import { newProjectId, randomUUID } from "../../lib/utils";
 import { agentSessionImport } from "../../state/agentSessions";
-import { readProjects, useProjects } from "../../state/entities";
+import { readProjects, waitForProject } from "../../state/entities";
 import { useEnvironments, usePrimaryEnvironment } from "../../state/environments";
 import {
   isOnboardingRelayEnvironment,
@@ -129,7 +131,6 @@ export function WelcomeWizard({
   /** `work` lands on the team's tasks: someone who just joined reads what is going on first. */
   readonly onDone: (projectRef?: ScopedProjectRef, landing?: "work") => void | Promise<void>;
 }) {
-  const completeOnboarding = useCompleteOnboarding();
   const [mode, setMode] = useState<"local" | "team" | "remote">("local");
   const [teamProjectPicked, setTeamProjectPicked] = useState(false);
   const stages: readonly WizardStep[] = resumeEnvironmentId
@@ -146,8 +147,7 @@ export function WelcomeWizard({
   );
   const { environments } = useEnvironments();
   const [selection, setSelection] = useState<ReadonlySet<EnvironmentId> | null>(null);
-  // One registry for the wizard's lifetime, shared with the connect list, so a computer is
-  // auto-selected once even after the user unchecks it.
+  // Share the registry for the wizard's lifetime so unchecked computers are not auto-selected again.
   const [autoSelectedComputers] = useState(() => new Set<EnvironmentId>());
   const [setupIds, setSetupIds] = useState<readonly EnvironmentId[]>(
     resumeEnvironmentId ? [resumeEnvironmentId] : [],
@@ -156,6 +156,7 @@ export function WelcomeWizard({
   const finishingPromiseRef = useRef<Promise<boolean> | null>(null);
   const completionErrorToastIdRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
   const primaryEnvironment = usePrimaryEnvironment();
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- marks newly listed computers in the shared auto-select registry once and selects the enabled ones
   useEffect(() => {
     const newComputers = environments.filter(
       (environment) => !autoSelectedComputers.has(environment.environmentId),
@@ -246,12 +247,18 @@ export function WelcomeWizard({
   };
 
   return (
-    <Dialog open disablePointerDismissal onOpenChange={(_, event) => event.cancel()}>
+    <Dialog
+      open
+      disablePointerDismissal
+      onOpenChange={(_, event) => {
+        event.cancel();
+        if (event.reason === "close-press" && !isImporting) void finish();
+      }}
+    >
       <WizardPopup
         size="wide"
         placement="top"
         bottomStickOnMobile={false}
-        showCloseButton={false}
         initialFocus={() => document.getElementById("onboarding-pairing-url") ?? true}
       >
         <WizardHeader
@@ -413,6 +420,7 @@ function ConnectionStep({
     .filter((environment) => skippedIds.includes(environment.environmentId))
     .map((environment) => environment.label);
   const continueRef = useRef<HTMLButtonElement>(null);
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- moves DOM focus to the Continue button once setup is ready and nothing else holds focus
   useEffect(() => {
     if (
       ready &&
@@ -462,6 +470,11 @@ function ConnectionStep({
                 {environment.displayUrl ? (
                   <span className="mt-0.5 block text-xs break-all text-muted-foreground">
                     {environment.displayUrl}
+                  </span>
+                ) : null}
+                {environment.connection.phase === "unsupported" && environment.connection.error ? (
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {environment.connection.error}
                   </span>
                 ) : null}
               </span>
@@ -641,6 +654,7 @@ function PairingForm({
   const [errorMessage, setErrorMessage] = useState("");
   const mountedRef = useRef(true);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- tracks mount so a pairing request that settles after unmount does not set state
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -723,12 +737,12 @@ function PairingForm({
           </div>
           <CollapsiblePanel>
             <p className="pt-3 text-sm text-muted-foreground">
-              Run this on the computer with your code.
+              On the computer with your code, start T3 Code or run{" "}
+              <code className="font-mono">npx t3 serve</code>, then run:
             </p>
             <CommandBlock command="npx t3 pair" className="mt-2" />
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              Start T3 Code first, or run <code className="font-mono">npx t3 serve</code>. Add{" "}
-              <code className="font-mono">--tailscale</code> to use your tailnet.
+              On a tailnet, run <code className="font-mono">npx t3 pair --tailscale</code> instead.
             </p>
           </CollapsiblePanel>
         </Collapsible>
@@ -807,6 +821,7 @@ function ConnectedAgentsStep({
   } | null>(null);
   const canOperateTerminal = useEnvironmentScope(environmentId, AuthTerminalOperateScope);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- asks the environment to refresh its provider list when the environment changes
   useEffect(() => {
     void refreshProviders({ environmentId, input: {} });
   }, [environmentId, refreshProviders]);
@@ -1122,9 +1137,9 @@ function AgentInstallTerminal({
   >("preparing");
   const terminalReady = setupState === "ready" || setupState === "writeFailed";
 
-  // In Strict Mode, a canceled open can finish after the replacement setup
-  // starts; it must not close or pre-type into the replacement session that
-  // shares this terminal id.
+  // StrictMode can finish a cancelled open after replacement setup; it must not close or pre-type into that
+  // session.
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- opens the setup PTY, types the command into it, and closes it on cleanup
   useEffect(() => {
     const generation = setupGenerationRef.current + 1;
     setupGenerationRef.current = generation;
@@ -1166,8 +1181,7 @@ function AgentInstallTerminal({
       setSetupState(wrote._tag === "Success" ? "ready" : "writeFailed");
     });
 
-    // Close the PTY only while this connection still has terminal access;
-    // revocation leaves it running.
+    // Revocation leaves the PTY running; close only while terminal access remains.
     return () => {
       if (activeSetupGenerationRef.current === generation) {
         activeSetupGenerationRef.current = null;
@@ -1246,11 +1260,8 @@ function AgentInstallTerminal({
             providerInstanceId={providerInstanceId}
             advancedTypography={advancedTypography}
             onSessionExited={onClose}
-            focusRequestId={1}
             autoFocus
             visible
-            resizeEpoch={0}
-            drawerHeight={256}
             keybindings={keybindings}
           />
         ) : null}
@@ -1280,12 +1291,10 @@ function ImportStep({
   const writableEnvironments = useEnvironmentsWithScope(scans, AuthOrchestrationOperateScope);
   const createProject = useAtomCommand(projectEnvironment.create, { reportFailure: false });
   const importThreads = useAtomCommand(agentSessionImport, { reportFailure: false });
-  const projects = useProjects();
   const [selectedPaths, setSelectedPaths] = useState<ReadonlySet<string> | null>(null);
   const [includeHistory, setIncludeHistory] = useState(false);
   const importWarningRef = useRef("");
   const importedThreadCountRef = useRef(0);
-  const [landingProject, setLandingProject] = useState<ScopedProjectRef | null>(null);
   const importedProjectsRef = useRef(new Map<string, ScopedProjectRef>());
   const projectsWithImportedHistoryRef = useRef(new Map<string, ScopedProjectRef>());
   const lastImportSelectionRef = useRef<ReadonlyArray<string>>([]);
@@ -1294,31 +1303,13 @@ function ImportStep({
   );
   const importGenerationRef = useRef(0);
 
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- bumps the import generation on mount and unmount so in-flight imports drop stale results
   useEffect(() => {
     importGenerationRef.current += 1;
     return () => {
       importGenerationRef.current += 1;
     };
   }, []);
-
-  useEffect(() => {
-    if (
-      landingProject !== null &&
-      projects.some(
-        (project) =>
-          project.id === landingProject.projectId &&
-          project.environmentId === landingProject.environmentId,
-      )
-    ) {
-      // oxlint-disable-next-line react/set-state-in-effect -- The landing project is known only once the projects subscription delivers it.
-      setLandingProject(null);
-      void onDone(landingProject, importWarningRef.current, importedThreadCountRef.current).then(
-        (completed) => {
-          if (!completed) setIsImporting(false);
-        },
-      );
-    }
-  }, [landingProject, onDone, projects, setIsImporting]);
 
   const { available: candidates, recent } = partitionOnboardingProjects(
     scans.flatMap((scan) =>
@@ -1354,7 +1345,23 @@ function ImportStep({
       return;
     }
     setIsImporting(true);
-    setLandingProject(projectRef);
+    const importGeneration = importGenerationRef.current;
+    // waitForProject gives up after its timeout, so a project that never reaches the client
+    // still finishes setup, just without landing in it.
+    void waitForProject(projectRef)
+      .then(
+        () => projectRef,
+        () => undefined,
+      )
+      .then(async (landing) => {
+        if (importGeneration !== importGenerationRef.current) return;
+        const completed = await onDone(
+          landing,
+          importWarningRef.current,
+          importedThreadCountRef.current,
+        );
+        if (!completed) setIsImporting(false);
+      });
   };
 
   const runImport = async (selection: typeof candidates) => {
@@ -1839,41 +1846,38 @@ function ImportCandidateRow({
   );
 }
 
+const IMPORT_SOURCE_NAMES: Record<AgentSessionSource, string> = {
+  claudeAgent: "Claude Code",
+  codex: "Codex",
+  pi: "Pi",
+};
+
 function ImportRowMeta({
   sources,
   threadCount,
   lastActiveAt,
 }: {
-  readonly sources: ReadonlyArray<"claudeAgent" | "codex"> | null;
+  readonly sources: ReadonlyArray<AgentSessionSource> | null;
   readonly threadCount: number;
   readonly lastActiveAt: string | null;
 }) {
   const relative = lastActiveAt === null ? null : formatRelativeTime(lastActiveAt);
   const age = relative === null ? "" : relative.suffix === null ? "now" : relative.value;
   return (
-    <span className="ml-auto grid shrink-0 grid-cols-[1rem_1rem_2.5rem_2.25rem] items-center gap-x-1 text-xs text-muted-foreground tabular-nums">
-      <span className="flex size-4 items-center justify-center">
-        {sources?.includes("claudeAgent") ? (
-          <span role="img" aria-label="Claude Code">
-            <ProviderInstanceIcon
-              driverKind={ProviderDriverKind.make("claudeAgent")}
-              displayName="Claude Code"
-              iconClassName="size-3"
-            />
-          </span>
-        ) : null}
-      </span>
-      <span className="flex size-4 items-center justify-center">
-        {sources?.includes("codex") ? (
-          <span role="img" aria-label="Codex">
-            <ProviderInstanceIcon
-              driverKind={ProviderDriverKind.make("codex")}
-              displayName="Codex"
-              iconClassName="size-3"
-            />
-          </span>
-        ) : null}
-      </span>
+    <span className="ml-auto grid shrink-0 grid-cols-[1rem_1rem_1rem_2.5rem_2.25rem] items-center gap-x-1 text-xs text-muted-foreground tabular-nums">
+      {AgentSessionSource.literals.map((source) => (
+        <span key={source} className="flex size-4 items-center justify-center">
+          {sources?.includes(source) ? (
+            <span role="img" aria-label={IMPORT_SOURCE_NAMES[source]}>
+              <ProviderInstanceIcon
+                driverKind={ProviderDriverKind.make(source)}
+                displayName={IMPORT_SOURCE_NAMES[source]}
+                iconClassName="size-3"
+              />
+            </span>
+          ) : null}
+        </span>
+      ))}
       <span className="text-right">{threadCount}</span>
       <span className="text-right whitespace-nowrap">{age}</span>
     </span>

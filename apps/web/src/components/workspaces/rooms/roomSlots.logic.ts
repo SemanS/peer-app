@@ -10,11 +10,31 @@ const projectOf = (status: Pick<PeerHubStatus, "workspaces">, place: RoomPlace) 
     .find((workspace) => workspace.slug === place.workspace)
     ?.projects.find((entry) => entry.project.id === place.project);
 
+const taskOf = (status: Pick<PeerHubStatus, "workspaces">, place: RoomPlace) =>
+  projectOf(status, place)?.work.tasks.find((row) => row.id === place.task);
+
+/** A Local room is a project's, and the place only carries the project's id. */
+const localRoomName = (status: Pick<PeerHubStatus, "coordination">, place: RoomPlace) =>
+  status.coordination.local?.projects?.find((project) => project.id === place.project)?.name ??
+  place.project;
+
 /** A task as Needs you names it: its key, else its title, else its id. */
-export function roomTaskLabel(status: Pick<PeerHubStatus, "workspaces">, place: RoomPlace) {
-  if (place.workspace === PEER_LOCAL_WORKSPACE) return place.project;
-  const task = projectOf(status, place)?.work.tasks.find((row) => row.id === place.task);
+export function roomTaskLabel(
+  status: Pick<PeerHubStatus, "workspaces" | "coordination">,
+  place: RoomPlace,
+) {
+  if (place.workspace === PEER_LOCAL_WORKSPACE) return localRoomName(status, place);
+  const task = taskOf(status, place);
   return task?.key ?? task?.title ?? place.task;
+}
+
+/** A task as the Feed names it, where nothing else on the row says what it is about. */
+export function roomTaskName(
+  status: Pick<PeerHubStatus, "workspaces" | "coordination">,
+  place: RoomPlace,
+) {
+  const task = place.workspace === PEER_LOCAL_WORKSPACE ? undefined : taskOf(status, place);
+  return task?.key === undefined ? roomTaskLabel(status, place) : [task.key, task.title].join(" ");
 }
 
 /**

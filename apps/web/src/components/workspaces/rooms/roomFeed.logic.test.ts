@@ -1,5 +1,5 @@
 import type { RoomFeedRow } from "@t3tools/client-runtime/peer/rooms";
-import type { PeerHubStatus } from "@t3tools/contracts";
+import { PEER_LOCAL_WORKSPACE, type PeerHubStatus } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import { feedAuthor, feedInScope, feedSections } from "./roomFeed.logic";
@@ -63,5 +63,14 @@ describe("feedAuthor", () => {
     expect(feedAuthor(status, row({ author }))).toBe("Ana");
     expect(feedAuthor(status, row({ author: { ...author, run: "r1" } }))).toBe("Ana's agent");
     expect(feedAuthor(status, row({}))).toBeUndefined();
+  });
+
+  it("calls this person You, here and in a Local room", () => {
+    const signedIn = { ...status, email: "ana@acme.test" } as PeerHubStatus;
+    const author = { email: "ana@acme.test" };
+    expect(feedAuthor(signedIn, row({ author }))).toBe("You");
+    expect(feedAuthor(signedIn, row({ author: { ...author, run: "r1" } }))).toBe("Your agent");
+    const local = { workspace: PEER_LOCAL_WORKSPACE, author: { email: "local", run: "r1" } };
+    expect(feedAuthor(status, row(local))).toBe("Your agent");
   });
 });

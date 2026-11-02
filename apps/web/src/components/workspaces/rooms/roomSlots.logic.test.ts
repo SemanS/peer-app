@@ -1,7 +1,7 @@
-import type { PeerHubStatus } from "@t3tools/contracts";
+import { PEER_LOCAL_WORKSPACE, type PeerHubStatus } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { roomPalette, roomTaskLabel } from "./roomSlots.logic";
+import { roomPalette, roomTaskLabel, roomTaskName } from "./roomSlots.logic";
 
 const need = { workspace: "w", project: "p", task: "t1", seq: 1, author: "a", text: "", at: "" };
 const status = {
@@ -36,6 +36,25 @@ describe("a task's name in Needs you", () => {
     expect(roomTaskLabel(status, { ...place, task: "t1" })).toBe("ORD-1");
     expect(roomTaskLabel(status, { ...place, task: "t2" })).toBe("No key");
     expect(roomTaskLabel(status, { ...place, task: "t3" })).toBe("t3");
+  });
+
+  it("gives a Local room its project's name", () => {
+    const local = {
+      ...status,
+      coordination: { local: { projects: [{ id: "local-1", name: "Shop" }] } },
+    } as unknown as PeerHubStatus;
+    const place = { workspace: PEER_LOCAL_WORKSPACE, task: "room" };
+    expect(roomTaskLabel(local, { ...place, project: "local-1" })).toBe("Shop");
+    expect(roomTaskName(local, { ...place, project: "local-1" })).toBe("Shop");
+    expect(roomTaskName(local, { ...place, project: "gone" })).toBe("gone");
+  });
+});
+
+describe("a task's name in the Feed", () => {
+  it("adds the title to the key", () => {
+    const place = { workspace: "w", project: "p" };
+    expect(roomTaskName(status, { ...place, task: "t1" })).toBe("ORD-1 Darker hero");
+    expect(roomTaskName(status, { ...place, task: "t2" })).toBe("No key");
   });
 });
 

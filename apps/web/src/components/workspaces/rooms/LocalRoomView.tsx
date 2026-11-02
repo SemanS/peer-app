@@ -13,6 +13,7 @@ import { SidebarInset } from "../../ui/sidebar";
 import { Textarea } from "../../ui/textarea";
 import { WorkspacePageHeader } from "../../WorkspacePageHeader";
 import { useWorkData } from "../useWorkData";
+import { roomTaskLabel } from "./roomSlots.logic";
 import { useRoomRead } from "./useRoom";
 
 /** A project's room on a computer with no Hub for it: this person and their running agents. */
@@ -48,6 +49,9 @@ function LocalRoom({
         <WorkspacePageHeader electron={isElectron}>
           <MessagesSquareIcon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
           <span className="shrink-0 text-base font-semibold text-foreground">Room</span>
+          <span className="min-w-0 truncate text-sm text-muted-foreground">
+            {roomTaskLabel(status, place)}
+          </span>
         </WorkspacePageHeader>
         <ul className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-(--workspace-page-gutter) py-6">
           {messages.length === 0 ? (

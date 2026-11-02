@@ -1,10 +1,11 @@
 /** The Feed's lists: what a person's rooms come to, in the order they ask for it. */
 import { personName } from "@t3tools/client-runtime/peer/needs-you";
 import type { RoomFeedRow, RoomFeedState } from "@t3tools/client-runtime/peer/rooms";
-import type { PeerHubStatus } from "@t3tools/contracts";
+import { PEER_LOCAL_WORKSPACE, type PeerHubStatus } from "@t3tools/contracts";
 
 import type { ResolvedProjectScope } from "../projectScope.logic";
 import { ALL_PROJECTS, projectScopeKey } from "@t3tools/client-runtime/peer/work";
+import { authorOf } from "./room.logic";
 
 const FEED_HEADINGS: ReadonlyArray<{ readonly state: RoomFeedState; readonly title: string }> = [
   { state: "yours", title: "Waiting on you" },
@@ -42,6 +43,8 @@ export function feedSections(rows: ReadonlyArray<RoomFeedRow>): ReadonlyArray<Fe
 /** Who wrote last in a room: a person, or a person's agent. */
 export function feedAuthor(status: PeerHubStatus, row: RoomFeedRow): string | undefined {
   if (row.author === undefined) return undefined;
-  const name = personName(status, row.workspace, row.author.email);
-  return row.author.run === undefined ? name : `${name}'s agent`;
+  // Everyone in a Local room is this person, whatever address its rows carry.
+  const me = row.workspace === PEER_LOCAL_WORKSPACE ? row.author.email : status.email;
+  const nameOf = (email: string) => personName(status, row.workspace, email);
+  return authorOf({ author: row.author }, me, nameOf).name;
 }

@@ -24,7 +24,7 @@ import { useWorkData } from "../useWorkData";
 import { inScope, projectScopeKey } from "@t3tools/client-runtime/peer/work";
 import { WorkNoProjects } from "../WorkNoProjects";
 import { WorkScopePicker } from "../WorkScopePicker";
-import { roomTaskLabel } from "./roomSlots.logic";
+import { roomTaskName } from "./roomSlots.logic";
 import { feedAuthor, feedInScope, feedSections } from "./roomFeed.logic";
 
 /**
@@ -151,7 +151,7 @@ function FeedRow({ status, row }: { readonly status: PeerHubStatus; readonly row
         className="flex min-w-0 items-baseline gap-3 rounded-md px-2 py-2 outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-          {roomTaskLabel(status, row)}
+          {roomTaskName(status, row)}
         </span>
         <span className="min-w-0 truncate text-xs text-muted-foreground">
           {[author, said].filter((part) => part !== undefined).join(" · ")}

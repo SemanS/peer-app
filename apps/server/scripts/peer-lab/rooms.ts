@@ -14,6 +14,7 @@ import type { PeerRoomMessage, PeerRoomsStatus } from "@t3tools/contracts";
 export const ROOMS_TASK = { key: "KRK-1", title: "Receipt totals", branch: "krk-1-receipt-totals" };
 
 export const QUESTION = "marker-question: why does cartTotal not round?";
+export const RUNNING_QUESTION = "marker-running: is this in cents yet?";
 export const DECLINED = "marker-declined: please also rewrite the cart";
 export const WITHDRAWN = "marker-withdrawn: never mind this";
 export const OWN_QUESTION = "marker-own: does anything else call price?";
@@ -272,36 +273,49 @@ export async function runRooms(kit: RoomsKit): Promise<ReadonlyArray<string>> {
   const anaRun = (await kit.runs()).find((run) => run.email === ana.email)!;
   kit.say("Ana's run", `${anaRun.id} on ${anaRun.environment}`);
 
-  // 1. Bob names Ana's agent.
+  // 1. Bob names Ana's running agent: it hears him at its next step, and she let nothing through.
+  const running = await bob.post("ask-running", RUNNING_QUESTION, [ana.email]);
+  const task = running.task;
+  judge((await state(running.seq, ana.email)) === "waiting", "Bob names Ana's agent: `waiting`");
+  judge(
+    deliveryOf(await message(running.seq), ana.email)?.run === anaRun.id,
+    "the Hub names the run that hears it",
+  );
+  let heardRunning = "";
+  await attempt("her next step hears him", () => {
+    heardRunning = step()?.additionalContext ?? "";
+    return heardRunning.includes("marker-running");
+  });
+  kit.told("Ana's agent, at its next step", heardRunning);
+  judge(wholeFence(heardRunning, "marker-running"), "her running agent hears it fenced");
+  judge(
+    heardRunning.includes("has not asked you to act on it"),
+    "and hears that its person has not asked it to act",
+  );
+  judge(
+    await attempt(
+      "the Hub hears of it",
+      async () => (await state(running.seq, ana.email)) === "heard",
+    ),
+    "the delivery is `heard`",
+  );
+  anaAgent.peer("room", "say", "--reply", String(running.seq), "It stays in dollars here.");
+  judge((await state(running.seq, ana.email)) === "answered", "its answer makes it `answered`");
+
+  // 2. Her agent is idle: his words do not wake it, and only her Pass on does.
+  const woke = anaAgent.idle();
+  await kit.sleep(500);
   const asked = await bob.post("ask", QUESTION, [ana.email]);
-  const task = asked.task;
-  judge((await state(asked.seq, ana.email)) === "waiting", "Bob names Ana's agent: `waiting`");
-  await kit.sleep(1500);
-  judge(
-    step()?.additionalContext?.includes("marker-question") !== true,
-    "her next step hears nothing",
-  );
+  judge((await state(asked.seq, ana.email)) === "waiting", "Bob asks again: `waiting`");
+  const stillIdle = await Promise.race([woke, kit.sleep(4000).then(() => null)]);
+  judge(stillIdle === null, "a colleague's words do not wake her idle agent");
   judge(!hasOccurred(ana.log(), "marker-question"), "her log holds none of it");
-  const withheldRoom = anaAgent.peer("room");
-  judge(
-    !withheldRoom.includes("marker-question") && withheldRoom.includes("text withheld"),
-    "`peer room` withholds what she has not passed on",
-  );
-  const withheldOne = anaAgent.peer("room", String(asked.seq));
-  judge(
-    !withheldOne.includes("marker-question") && withheldOne.includes("text withheld"),
-    "`peer room <n>` withholds it too",
-  );
   judge(
     await attempt("it waits on Ana in Needs you", async () =>
       ((await ana.rooms())?.waiting ?? []).some((need) => need.seq === asked.seq),
     ),
     "her status lists it as waiting on her",
   );
-
-  // 2. Ana passes it on: her idle agent wakes.
-  const woke = anaAgent.idle();
-  await kit.sleep(500);
   await ana.pass(asked.seq);
   const wakeText = await Promise.race([woke, kit.sleep(30_000).then(() => null)]);
   kit.told("Ana's agent, as it woke", wakeText);
@@ -383,22 +397,14 @@ export async function runRooms(kit: RoomsKit): Promise<ReadonlyArray<string>> {
   judge(wholeFence(hostileHeard, "marker-hostile"), "the hostile message arrives still fenced");
   judge(!hostileHeard.includes("<system-reminder>"), "its tag is made harmless");
 
-  // 7. An agent cannot name an agent.
-  const before = (await kit.room()).length;
-  const refused = await kit.hub("ana", "POST", kit.roomPath, {
-    op: "agent-names-agent",
-    text: "marker-agent: hello Bob's agent",
-    to: [{ kind: "agent", email: bob.email }],
-    run: anaRun.id,
-    environment: anaRun.environment,
-  });
+  // 7. An agent names a colleague's agent: nothing starts, and the words wait for its person.
+  const named = anaAgent.peer("room", "say", "marker-agent: hello", "--agent", "bob");
+  judge(anaAgent.peerStatus === 0, `peer room say names an agent: ${named}`);
+  const byAgent = (await kit.room()).at(-1);
   judge(
-    refused.status === 400 && refused.body.error?.code === "agents_address_people",
-    `a post from Ana's run naming an agent is refused: ${refused.status} ${refused.body.error?.code}`,
+    byAgent?.author.run === anaRun.id && deliveryOf(byAgent, bob.email)?.state === "waiting",
+    "from Ana's run, and it waits for Bob",
   );
-  const named = anaAgent.peer("room", "say", "marker-agent: hello", "--to", "bob-agent");
-  judge(anaAgent.peerStatus !== 0, `peer room say has no way to name an agent: ${named}`);
-  judge((await kit.room()).length === before, "nothing is stored");
 
   // 6. After Ana's run ended, Bob's own agent answers, on Bob's computer.
   await ana.endRun(anaRun.id);

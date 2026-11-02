@@ -164,7 +164,14 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
           else if (state === "modelInput") {
             confirm(session, ref);
             yield* rooms.queueHeard(session, ref);
-          } else if (session.adapter !== "mod") confirm(session, ref);
+          } else if (session.adapter !== "mod") {
+            // Its person is asked about these until the Hub hears it has them; a hook's word is all there is.
+            const quiet = rooms
+              .waiting(queueOf(session))
+              .some((one) => one.ref === ref && one.quiet === true);
+            confirm(session, ref);
+            if (quiet) yield* rooms.queueHeard(session, ref);
+          }
         }
       }),
     stop: (ctx) =>

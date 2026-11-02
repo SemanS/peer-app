@@ -404,9 +404,12 @@ const make = Effect.gen(function* () {
         Effect.asVoid,
       );
     },
+    // A Pass on replaces what its agent would only have heard at its next step.
     queue: (item, run, kind) =>
       Effect.gen(function* () {
-        queues.add(run, yield* heardOf(workspace, item, kind, me));
+        const heard = yield* heardOf(workspace, item, kind, me);
+        queues.remove(run, heard.ref);
+        queues.add(run, heard);
       }),
     unqueue: (item, run) =>
       Effect.sync(() => queues.remove(run, refOf(item.task, item.message.seq))),

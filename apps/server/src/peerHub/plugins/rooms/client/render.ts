@@ -8,6 +8,7 @@
 import type { PeerRoomMessage, PeerRoomTarget } from "@t3tools/contracts";
 
 import { block, fenced, plain } from "../../../peerText.ts";
+import { hearsWhileWaiting } from "./queue.ts";
 import { at, clipped, taskLine } from "../text.ts";
 
 const LIST_TEXT_MAX = 400;
@@ -28,7 +29,7 @@ export const withheld = (message: PeerRoomMessage, me: string) =>
       target.kind === "agent" &&
       target.email.toLowerCase() === me.toLowerCase() &&
       NOT_LET_THROUGH.has(target.state ?? "") &&
-      target.run === undefined,
+      !hearsWhileWaiting(target),
   );
 
 const withheldWords = (me: string, nameOf: NameOf) =>

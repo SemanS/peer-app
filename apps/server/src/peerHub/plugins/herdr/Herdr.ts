@@ -321,7 +321,7 @@ const make = Effect.gen(function* () {
           .current()
           ?.find((candidate) => keyOf(candidate) === `herdr:${sessionId}`);
         if (agent === undefined) return Promise.resolve({ status: "unavailable" as const });
-        return client.wake({ ...agent, session: sessionOf(agent) }, text);
+        return client.wake({ ...agent, session: sessionOf(agent) }, text, undefined, sessionOf);
       }),
     view: (threadKey) => agentView(threadKey),
     notify: (title, body) => Effect.sync(() => void client.notify(title, body)),

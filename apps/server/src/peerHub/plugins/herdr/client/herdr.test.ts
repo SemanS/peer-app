@@ -99,6 +99,24 @@ describe("wakeHerdrAgent", () => {
     }
   });
 
+  it("reads the session as the caller does where herdr reports none", async () => {
+    const herdr = await fakeHerdr((request) =>
+      request.method === "agent.list"
+        ? { result: agentList([current({ agent_session: undefined })]) }
+        : { result: {} },
+    );
+    const hooksSaw = () => expected.session;
+    assert.strictEqual(
+      (await wakeHerdrAgent(expected, "marker", herdr.socketPath)).status,
+      "unavailable",
+      "with nothing to compare, nothing matches",
+    );
+    assert.strictEqual(
+      (await wakeHerdrAgent(expected, "marker", herdr.socketPath, hooksSaw)).status,
+      "queued",
+    );
+  });
+
   it("does not report delivery or retry after a submitted prompt loses its reply", async () => {
     const herdr = await fakeHerdr((request, connection) => {
       if (request.method === "agent.list") return { result: agentList([current()]) };

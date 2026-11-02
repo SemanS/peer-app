@@ -56,6 +56,7 @@ export interface HerdrClientShape {
     expected: HerdrAgent,
     text: string,
     socketPath?: string,
+    sessionOf?: (agent: HerdrAgent) => HerdrAgent["session"],
   ) => Promise<HerdrWakeResult>;
   /** Brings an agent's pane forward in herdr. */
   readonly focus: (paneId: string, socketPath?: string) => Promise<void>;
@@ -81,7 +82,8 @@ export class HerdrClient extends Context.Reference<HerdrClientShape>(
       screen: (paneId, socketPath) => readHerdrScreen(paneId, socketPath),
       keys: (target, keys, socketPath) => sendHerdrKeys(target, keys, socketPath),
       prompt: (target, text, socketPath) => promptHerdrAgent(target, text, socketPath),
-      wake: (expected, text, socketPath) => wakeHerdrAgent(expected, text, socketPath),
+      wake: (expected, text, socketPath, sessionOf) =>
+        wakeHerdrAgent(expected, text, socketPath, sessionOf),
       focus: (paneId, socketPath) => focusHerdrAgent(paneId, socketPath),
       notify: (title, body, socketPath) => notifyHerdr(title, body, socketPath),
       start: (input, socketPath) =>
@@ -105,7 +107,8 @@ export function boundHerdrClient(
     screen: (paneId, socket) => client.screen(paneId, socket ?? socketPath()),
     keys: (target, keys, socket) => client.keys(target, keys, socket ?? socketPath()),
     prompt: (target, text, socket) => client.prompt(target, text, socket ?? socketPath()),
-    wake: (expected, text, socket) => client.wake(expected, text, socket ?? socketPath()),
+    wake: (expected, text, socket, sessionOf) =>
+      client.wake(expected, text, socket ?? socketPath(), sessionOf),
     focus: (paneId, socket) => client.focus(paneId, socket ?? socketPath()),
     notify: (title, body, socket) => client.notify(title, body, socket ?? socketPath()),
     start: (input, socket) => client.start(input, socket ?? socketPath()),

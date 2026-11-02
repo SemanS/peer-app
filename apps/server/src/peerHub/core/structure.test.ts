@@ -36,7 +36,7 @@ const ENTRY_BUDGET = 150;
  */
 const CEILINGS: Readonly<Record<string, number>> = {
   changes: 1603,
-  herdr: 4912,
+  herdr: 4919,
   jujutsu: 2354,
   rooms: 3909,
 };

@@ -416,18 +416,21 @@ export function herdrAgentChange(
 }
 
 /**
- * Re-read identity before waking an idle agent. A lost reply is not retried:
- * herdr may already have typed the marker. Only the receiving hook establishes
- * delivery. herdr has no native-session compare-and-swap on agent.prompt.
+ * Re-read identity before waking an idle agent, by `sessionOf` as `expected` was read: herdr reports
+ * no session for some agents, and Peer's hooks know theirs. A lost reply is not retried: herdr may
+ * already have typed the marker, and only the receiving hook establishes delivery. herdr has no
+ * native-session compare-and-swap on agent.prompt.
  */
 export async function wakeHerdrAgent(
   expected: HerdrAgent,
   text: string,
   socketPath: string = herdrSocketPath(),
+  sessionOf: (agent: HerdrAgent) => HerdrAgent["session"] = (agent) => agent.session,
 ): Promise<HerdrWakeResult> {
-  const fresh = (await listHerdrAgents(socketPath))?.find(
+  const listed = (await listHerdrAgents(socketPath))?.find(
     (agent) => agent.terminalId === expected.terminalId,
   );
+  const fresh = listed === undefined ? undefined : { ...listed, session: sessionOf(listed) };
   if (fresh === undefined || herdrAgentChange(fresh, expected) !== undefined)
     return { status: "unavailable", reason: "Agent identity or idle state changed." };
   try {

@@ -118,11 +118,11 @@ function type(root: ReactTestInstance, text: string) {
   act(() => titleField(root).props.onChange({ currentTarget: { value: text } }));
 }
 
-async function enter(root: ReactTestInstance, withMeta = false) {
+async function enter(root: ReactTestInstance) {
   await act(async () => {
     titleField(root).props.onKeyDown({
       key: "Enter",
-      metaKey: withMeta,
+      metaKey: false,
       ctrlKey: false,
       nativeEvent: { isComposing: false },
       preventDefault: () => {},
@@ -188,7 +188,7 @@ describe("the new task composer", () => {
     expect(words(root)).toContain("KRK-812 is already a task here");
   });
 
-  it("starts a chat on the new task with ⌘ Enter where the project is open here", async () => {
+  it("starts a chat on the new task where the project is open here", async () => {
     mocks.create.mockResolvedValue(
       answer([
         { id: "ord-1", title: "Menu" },
@@ -197,7 +197,10 @@ describe("the new task composer", () => {
     );
     const root = open("t3-project");
     type(root, "Split payments");
-    await enter(root, true);
+    const start = root.findAll(
+      (node) => typeof node.props.onClick === "function" && words(node) === "Create and start chat",
+    )[0];
+    await act(async () => start?.props.onClick());
     expect(mocks.startThread).toHaveBeenCalledWith(
       { workspace: "webinson", projectId: "ordering" },
       "split-payments",

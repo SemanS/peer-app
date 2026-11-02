@@ -104,17 +104,22 @@ export function useRoomDiff(input: {
   readonly run?: string;
   /** One of that run's steps. */
   readonly step?: string;
+  readonly worktree?: string | undefined;
+  readonly enabled?: boolean;
 }) {
-  const { environmentId, place, revision, run, step } = input;
+  const { environmentId, place, revision, run, step, worktree } = input;
   const query = useEnvironmentQuery(
-    serverEnvironment.peerRooms.diff({
-      environmentId,
-      input: {
-        ...place,
-        ...(run === undefined ? {} : { run }),
-        ...(step === undefined ? {} : { step }),
-      },
-    }),
+    input.enabled === false
+      ? null
+      : serverEnvironment.peerRooms.diff({
+          environmentId,
+          input: {
+            ...place,
+            ...(run === undefined ? {} : { run }),
+            ...(step === undefined ? {} : { step }),
+            ...(worktree === undefined ? {} : { worktree }),
+          },
+        }),
   );
   useRefetchOn(revision, query.refresh);
   return { diff: query.data, error: query.error, refresh: query.refresh };

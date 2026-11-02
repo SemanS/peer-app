@@ -61,6 +61,7 @@ import { fetchPins, pinnedRoot, readPin, storeOf } from "./client/snapshots.ts";
 import { isLocalRoom, LOCAL_ROOM, localRoomsOf, type LocalPost } from "./client/local.ts";
 import { hearsWhileWaiting, runQueues, tellable } from "./client/queue.ts";
 import { withheld } from "./client/render.ts";
+import { roomWorktrees, roomWorktreeDiff } from "./client/worktrees.ts";
 import { statusOf } from "./client/status.ts";
 import { projectsText, roomReach, runRootsData } from "../../core/plugin.ts";
 import { checkoutOf, openRuns, rootHere, roomStarts, taskRuns } from "./client/start.ts";
@@ -735,12 +736,46 @@ const make = Effect.gen(function* () {
     diff: ({
       run,
       step,
+      worktree,
       ...place
     }: PeerRoomsDiffInput): Effect.Effect<PeerRoomDiff, PeerHubError> =>
       Effect.gen(function* () {
         const { project, base, checkout, threads } = yield* workOf(place);
         const views = yield* agents.view(place.workspace);
         const here = yield* workHere(place, checkout?.path, run);
+        const listingRoot = here?.root ?? checkout?.path;
+        const rootBase = project.repositories.find((row) => row.id === here?.repository)?.branch;
+        const listing: Pick<PeerRoomDiff, "worktrees" | "worktreesError"> =
+          run !== undefined || step !== undefined || listingRoot === undefined
+            ? {}
+            : yield* Effect.promise(() =>
+                roomWorktrees(listingRoot).then(
+                  (worktrees) => ({ worktrees }),
+                  () => ({
+                    worktreesError:
+                      "Could not list worktrees on this computer. Refresh to try again.",
+                  }),
+                ),
+              );
+        if (worktree !== undefined) {
+          if (!listing.worktrees?.some((entry) => entry.path === worktree)) {
+            return {
+              state: "notHere",
+              reason:
+                "This worktree is no longer available in this project. Choose another worktree or return to Task checkout.",
+              files: [],
+              ...listing,
+            };
+          }
+          const selected = yield* Effect.promise(() =>
+            roomWorktreeDiff(worktree, rootBase ?? base).catch((): PeerRoomDiff => ({
+              state: "notHere",
+              reason: "Could not read this worktree. Refresh or choose another checkout.",
+              files: [],
+            })),
+          );
+          return { ...selected, ...listing };
+        }
         if (step !== undefined && here?.root !== undefined) {
           const root = here.root;
           const shown = yield* Effect.promise(() => stepDiff(root, step).catch(() => null));
@@ -758,7 +793,7 @@ const make = Effect.gen(function* () {
         }
         const diff = yield* roomDiff({
           root: here?.root,
-          rootBase: project.repositories.find((row) => row.id === here?.repository)?.branch,
+          rootBase,
           base,
           checkout,
           threads,
@@ -768,7 +803,7 @@ const make = Effect.gen(function* () {
           nameOf: (email) => state.nameOf(place.workspace, email),
         });
         const folder = here?.root ?? checkout?.path;
-        return folder === undefined ? diff : { ...diff, folder };
+        return { ...diff, ...listing, ...(folder === undefined ? {} : { folder }) };
       }),
     /** The moment `key` pinned, wherever this computer can reach it; never today's state. */
     snapshot: ({ key, run, ...place }: PeerRoomsSnapshotInput) =>

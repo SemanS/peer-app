@@ -121,12 +121,14 @@ export const PeerAgentEntry = Schema.Union([
   Schema.Struct({ id: Schema.String, kind: Schema.Literal("prompt"), text: Schema.String }),
   /** What the agent said. */
   Schema.Struct({ id: Schema.String, kind: Schema.Literal("text"), text: Schema.String }),
-  /** A tool it used, e.g. `Read src/pay.ts` or `$ npm test`, with the start of its result. */
+  /** A tool it used, e.g. `Read src/pay.ts` or `Run the tests`, with its failure if it failed. */
   Schema.Struct({
     id: Schema.String,
     kind: Schema.Literal("tool"),
     name: Schema.String,
     summary: Schema.String,
+    /** The exact command, when `summary` says in words what it did. */
+    detail: Schema.optional(Schema.String),
     result: Schema.optional(Schema.String),
     failed: Schema.Boolean,
   }),

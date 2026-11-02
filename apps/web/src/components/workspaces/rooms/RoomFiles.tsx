@@ -51,7 +51,9 @@ export function RoomFiles({
           {error ??
             (diff === null
               ? "Looking for the project on this computer…"
-              : "This computer has no checkout of the project.")}
+              : diff.state === "notHere"
+                ? diff.reason
+                : "This computer has no checkout of the project.")}
         </p>
         {error === null ? null : (
           <Button size="sm" variant="outline" onClick={onRefresh}>

@@ -289,7 +289,6 @@ import { newChatProject, roomSetOf, scopeOfProject } from "./workspaces/projectS
 import { routeForView } from "./workspaces/sidebarRoutes.logic";
 import { ALL_PROJECTS } from "@t3tools/client-runtime/peer/work";
 import { ActiveOrganization } from "./workspaces/ActiveOrganization";
-import { ProjectSetMembers } from "./workspaces/ProjectSetNav";
 import { WorkScopePicker } from "./workspaces/WorkScopePicker";
 import { SidebarTasks } from "./workspaces/SidebarTasks";
 import { SidebarAttention } from "./workspaces/SidebarAttention";
@@ -4524,9 +4523,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 )}
                 <SidebarTools scope={projectScope.scope} />
               </div>
-              {projectScope.members === undefined ? null : (
-                <ProjectSetMembers scope={projectScope} />
-              )}
               <SidebarViewSwitch
                 view={sidebarView}
                 onChange={switchSidebarView}

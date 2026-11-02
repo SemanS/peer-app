@@ -20,7 +20,7 @@ import {
 } from "../../core/plugin.ts";
 import { isLocalRoom } from "./client/local.ts";
 import type { Rooms } from "./Rooms.ts";
-import { reminderText, roomLinesText, START_LINE, stepText } from "./text.ts";
+import { reminderText, roomLinesText, START_LINE, stepText, TEAM_TEXT } from "./text.ts";
 
 /** An agent still booting is idle too: its typed prompt gets this long to arrive before a wake. */
 const PROMPT_SETTLES_MS = 30_000;
@@ -161,7 +161,13 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
   });
   return {
     startLine: Effect.succeed(START_LINE),
-    sessionStart: (ctx) => offer(ctx.session, false),
+    sessionStart: (ctx) =>
+      Effect.map(offer(ctx.session, false), (offered) => {
+        if (isLocalRoom(ctx.session.workspace)) return offered;
+        return offered === null
+          ? TEAM_TEXT
+          : { ...offered, text: `${TEAM_TEXT}\n\n${offered.text}` };
+      }),
     sessionEnd: left,
     sessionExpired: left,
     notices: [

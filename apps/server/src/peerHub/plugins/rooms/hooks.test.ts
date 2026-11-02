@@ -1,4 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
+import { PEER_LOCAL_WORKSPACE } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
 
@@ -6,7 +7,7 @@ import type { PeerHookContext, PeerSessionView, PeerToolContext } from "../../co
 import { sessionOf } from "./fixtures.test.ts";
 import { localOf, roomHooks } from "./hooks.ts";
 import type { Rooms } from "./Rooms.ts";
-import type { Heard, RoomLine } from "./text.ts";
+import { type Heard, type RoomLine, TEAM_TEXT } from "./text.ts";
 
 const heard = (seq: number, text = "Why?"): Heard => ({
   ref: `vl-7:${seq}`,
@@ -210,7 +211,7 @@ describe("a message a started run's first prompt carried", () => {
       const { hooks } = hooksOf([prompted()]);
       yield* TestClock.setTime(3_600_000);
       assert.isNull(yield* stepOf(hooks, sessionOf()));
-      assert.isNull(yield* hooks.sessionStart(ctxOf(sessionOf())));
+      assert.strictEqual(yield* hooks.sessionStart(ctxOf(sessionOf())), TEAM_TEXT);
     }),
   );
 
@@ -247,6 +248,23 @@ describe("a message a started run's first prompt carried", () => {
       const { hooks } = hooksOf([prompted()]);
       yield* TestClock.setTime(29_000);
       assert.isNull(yield* wake(hooks, sessionOf()));
+    }),
+  );
+});
+
+describe("a session's start", () => {
+  it.effect("sends the agent to its teammates' work", () =>
+    Effect.gen(function* () {
+      const { hooks } = hooksOf([]);
+      assert.strictEqual(yield* hooks.sessionStart(ctxOf(sessionOf())), TEAM_TEXT);
+    }),
+  );
+
+  it.effect("has no teammates to send it to on a computer alone", () =>
+    Effect.gen(function* () {
+      const { hooks } = hooksOf([]);
+      const session = sessionOf({ workspace: PEER_LOCAL_WORKSPACE });
+      assert.isNull(yield* hooks.sessionStart(ctxOf(session)));
     }),
   );
 });
@@ -302,7 +320,7 @@ describe("a message that ended meanwhile", () => {
       const session = sessionOf();
       assert.isNull(yield* read(hooks, session));
       assert.strictEqual(localOf(session).offering.size, 0);
-      assert.isNull(yield* hooks.sessionStart(ctxOf(session)));
+      assert.strictEqual(yield* hooks.sessionStart(ctxOf(session)), TEAM_TEXT);
     }),
   );
 });

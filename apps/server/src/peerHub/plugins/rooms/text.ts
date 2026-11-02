@@ -87,7 +87,7 @@ const opening = (heard: Heard) => {
     case "passed":
       return `${owner} passes on to you a message from ${author} in the room of ${task}:`;
     case "colleague":
-      return `${author} wrote to you in the room of ${task}. ${owner} has not asked you to act on it: answer what your own work already tells you, and leave anything more to ${owner}.`;
+      return `${author} wrote to you in the room of ${task}. ${owner} has not asked you to act on it: answer what your own work already tells you or ${owner}'s card allows, and leave anything more to ${owner}.`;
     case "agent":
       return `${author} wrote to you in the room of ${task}:`;
   }
@@ -188,10 +188,12 @@ export const chatRunPrompt = (heard: Heard) =>
     heardText(heard),
   ].join("\n");
 
-export const START_LINE = [
-  'Your room: peer room reads it, peer room <task> reads another task\'s. peer room say "<text>" [--reply <n>] [--to <person>] [--agent <person>] [--in <task>] [--at <path>:<line>] posts, and the agents at work in a room hear it at their next step. peer ready says your work is done, peer blocked that only a person can go on.',
-  'Before implementing, check what your teammates\' agents work on (peer status) for shared data, behavior or interfaces, and pick what bears on your work even if your person did not mention it: peer ask <task> "<question>" asks the agents on a task, peer room say --in <task> tells them. Tell them before you change what their work builds on. When you hear of such a change, recheck your code against what will land, not only your checkout.',
-].join("\n");
+export const START_LINE =
+  'Your room: peer room reads it, peer room <task> reads another task\'s. peer room say "<text>" [--reply <n>] [--to <person>] [--agent <person>] [--in <task>] [--at <path>:<line>] posts. peer ready says your work is done, peer blocked that only a person can go on.';
+
+/** What sends an agent to its teammates: without it, each works alone on what it was told. */
+export const TEAM_TEXT =
+  'Your teammates\' agents work beside you, and an agent hears what is said in its room at its next step. Before implementing, check what they work on (peer status) for shared data, behavior or interfaces, and pick what bears on your work even if your person did not mention it: peer ask <task> "<question>" asks the agents on a task, peer room say --in <task> tells them. Tell them before you change what their work builds on. When you hear of such a change, recheck your code against what will land, not only your checkout.';
 
 /** What `peer ready` answers: the agent itself says where its person might have chosen otherwise. */
 export const READY_TEXT =

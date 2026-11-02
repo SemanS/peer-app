@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { heardText, reminderText, stepText, STEP_MAX, type Heard } from "./text.ts";
+import {
+  heardText,
+  reminderText,
+  START_LINE,
+  stepText,
+  STEP_MAX,
+  TEAM_TEXT,
+  type Heard,
+} from "./text.ts";
 
 const heard = (over: Partial<Heard> = {}): Heard => ({
   ref: "vl-7:12",
@@ -14,6 +22,13 @@ const heard = (over: Partial<Heard> = {}): Heard => ({
   owner: "Bob",
   text: "Why this total?",
   ...over,
+});
+
+describe("what an agent hears at its start", () => {
+  it("fits what core takes: a longer start line is dropped without a word", () => {
+    expect(START_LINE.length).toBeLessThanOrEqual(300);
+    expect(TEAM_TEXT.length).toBeLessThanOrEqual(2000);
+  });
 });
 
 describe("what an agent hears", () => {

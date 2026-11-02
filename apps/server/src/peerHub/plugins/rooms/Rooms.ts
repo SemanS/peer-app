@@ -10,6 +10,7 @@
 import * as NodePath from "node:path";
 
 import {
+  PEER_LOCAL_WORKSPACE,
   PeerHubError,
   type PeerRoomDiff,
   type PeerRoomInbox,
@@ -57,6 +58,7 @@ import { roomDiff, workRun, worktreeOf } from "./client/diff.ts";
 import { changeDiff, stepDiff, workspaceChange, workspaceSteps } from "./client/steps.ts";
 import { workSharing } from "./client/sharing.ts";
 import { fetchPins, pinnedRoot, readPin, storeOf } from "./client/snapshots.ts";
+import { isLocalRoom, LOCAL_ROOM, localRoomsOf, type LocalPost } from "./client/local.ts";
 import { hearsWhileWaiting, runQueues, tellable } from "./client/queue.ts";
 import { withheld } from "./client/render.ts";
 import { statusOf } from "./client/status.ts";
@@ -104,7 +106,9 @@ const make = Effect.gen(function* () {
   const work = yield* PeerWork.PeerWork;
   const scope = yield* Effect.scope;
   const hub = roomsHub(yield* PeerHubClient.PeerHubClient);
+  const local = localRoomsOf(state);
   const inboxes = yield* Ref.make<ReadonlyMap<string, PeerRoomInbox>>(new Map());
+  const localInbox = yield* Ref.make(yield* local.inbox);
   const jobs = yield* Queue.unbounded<Job>();
   /** Run → its messages not yet confirmed heard, in arrival order. */
   const queues = runQueues();
@@ -459,9 +463,44 @@ const make = Effect.gen(function* () {
 
   const post = (place: Place, body: PostBody) => hub.post(place, body).pipe(after(place.workspace));
 
+  /** What a local room said reaches every other agent of the project at its next step. */
+  const sayLocally = Effect.fn("Rooms.sayLocally")(function* (
+    project: string,
+    words: LocalPost,
+    from?: string,
+  ) {
+    const message = yield* local.post(project, words);
+    const byAgent = words.run !== undefined;
+    const others = (yield* agents.sessions).filter(
+      (session) =>
+        isLocalRoom(session.workspace) && session.project === project && session.id !== from,
+    );
+    for (const other of others)
+      queues.add(other.run ?? other.id, {
+        ref: refOf(LOCAL_ROOM, message.seq),
+        workspace: other.workspace,
+        project,
+        kind: byAgent ? "agent" : "own",
+        seq: message.seq,
+        task: LOCAL_ROOM,
+        taskName: "this project",
+        author: "Your person's other agent",
+        owner: "Your person",
+        text: message.text,
+        anchor: message.anchor,
+        ...(byAgent ? { byAgent: true, quiet: true } : {}),
+      });
+    yield* Ref.set(localInbox, yield* local.inbox);
+    yield* status.publish;
+    if (!byAgent && others.length > 0) yield* agents.wake;
+    return message;
+  });
+
   const roomRead = (input: PeerRoomsReadInput) =>
     Effect.gen(function* () {
       const { after: since, limit, ...place } = input;
+      if (isLocalRoom(place.workspace))
+        return yield* local.read(place.project, { after: since, limit });
       const answer = yield* hub.read(place, {
         ...(since === undefined ? {} : { after: since }),
         ...(limit === undefined ? {} : { limit }),
@@ -499,10 +538,15 @@ const make = Effect.gen(function* () {
 
   return {
     /** The plugin's status slice, read from memory. */
-    status: Effect.zipWith(Ref.get(inboxes), sharing.on, (read, shareWork) => ({
-      ...statusOf(read),
-      shareWork,
-    })),
+    status: Effect.map(
+      Effect.all([Ref.get(inboxes), Ref.get(localInbox), sharing.on]),
+      ([read, here, shareWork]) => ({
+        ...statusOf(
+          (here.rooms?.length ?? 0) === 0 ? read : new Map(read).set(PEER_LOCAL_WORKSPACE, here),
+        ),
+        shareWork,
+      }),
+    ),
     /** Whether this computer's pins go to origin. */
     sharesWork: sharing.on,
     shareWork: ({ share }: PeerRoomsShareWorkInput) =>
@@ -510,7 +554,9 @@ const make = Effect.gen(function* () {
     read: roomRead,
     post: (input: PeerRoomsPostInput) => {
       const { workspace, project, task, ...body } = input;
-      return post({ workspace, project, task }, { ...body, environment: state.environmentId });
+      return isLocalRoom(workspace)
+        ? sayLocally(project, body)
+        : post({ workspace, project, task }, { ...body, environment: state.environmentId });
     },
     /** The session as it is once it has a room: the first thing it says opens a chat. */
     roomOf: (session: PeerSessionView) =>
@@ -525,6 +571,12 @@ const make = Effect.gen(function* () {
       elsewhere?: string,
     ) =>
       Effect.gen(function* () {
+        if (isLocalRoom(session.workspace))
+          return yield* sayLocally(
+            session.project,
+            { ...body, run, agent: session.agent },
+            session.id,
+          );
         const place = {
           workspace: session.workspace,
           project: session.project,
@@ -564,12 +616,15 @@ const make = Effect.gen(function* () {
     unread: Effect.fn("Rooms.unread")(
       function* (session: PeerSessionView, after: number) {
         const me = (yield* state.email) ?? "";
-        const { messages, seq } = yield* hub.read(
-          { workspace: session.workspace, project: session.project, task: session.task ?? "" },
-          { after, limit: 50 },
-        );
+        const { messages, seq } = isLocalRoom(session.workspace)
+          ? yield* local.read(session.project, { after, limit: 50 })
+          : yield* hub.read(
+              { workspace: session.workspace, project: session.project, task: session.task ?? "" },
+              { after, limit: 50 },
+            );
+        const mine = session.run ?? session.id;
         const unread = messages
-          .filter((message) => message.author.run !== session.run && !withheld(message, me))
+          .filter((message) => message.author.run !== mine && !withheld(message, me))
           .map((message) => ({
             ref: refOf(message.task, message.seq),
             seq: message.seq,
@@ -632,7 +687,17 @@ const make = Effect.gen(function* () {
         return { saved: absolute.length };
       }),
     seen: ({ seq, ...place }: PeerRoomsSeenInput) =>
-      hub.seen(place, seq).pipe(after(place.workspace)),
+      isLocalRoom(place.workspace)
+        ? local
+            .seen(place.project, seq)
+            .pipe(
+              Effect.tap(() =>
+                Effect.flatMap(local.inbox, (here) => Ref.set(localInbox, here)).pipe(
+                  Effect.andThen(status.publish),
+                ),
+              ),
+            )
+        : hub.seen(place, seq).pipe(after(place.workspace)),
     pass: (input: PeerRoomsPassInput) =>
       move(input, { move: "pass", environment: state.environmentId, expect: input.expect }),
     decline: (input: PeerRoomsDeclineInput) =>
@@ -741,10 +806,12 @@ const make = Effect.gen(function* () {
       }),
     waiting: queues.of,
     /** What a step may tell now, as the Hub says of each message. */
-    tellable: (run: string | undefined, candidates: ReadonlyArray<Heard>) =>
-      Effect.flatMap(state.email, (me) =>
-        me === null
-          ? Effect.succeed<ReadonlyArray<Heard>>([])
+    tellable: (run: string | undefined, all: ReadonlyArray<Heard>) =>
+      Effect.flatMap(state.email, (me) => {
+        const here = all.filter((heard) => isLocalRoom(heard.workspace));
+        const candidates = all.filter((heard) => !isLocalRoom(heard.workspace));
+        return me === null || candidates.length === 0
+          ? Effect.succeed<ReadonlyArray<Heard>>(here)
           : tellable({
               queues,
               run,
@@ -756,12 +823,13 @@ const make = Effect.gen(function* () {
                   .pipe(
                     Effect.map(({ messages }) => messages.find((message) => message.seq === seq)),
                   ),
-            }),
-      ),
+            }).pipe(Effect.map((sure) => [...here, ...sure]));
+      }),
     /** A heard or answered message leaves its run's queue. */
     settled: queues.settle,
     /** `hooks.delivery` must not do I/O: the plugin's `run` sends the move. */
     queueHeard: (session: PeerSessionView, ref: string) => {
+      if (isLocalRoom(session.workspace)) return Effect.void;
       const [task, seq] = [
         ref.slice(0, ref.lastIndexOf(":")),
         Number(ref.slice(ref.lastIndexOf(":") + 1)),

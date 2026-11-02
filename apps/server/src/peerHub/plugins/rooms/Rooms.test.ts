@@ -9,7 +9,6 @@ import { assert, describe, it } from "@effect/vitest";
 import { PEER_ROOM_START_GRACE_MS, type PeerRoomDiff } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
 
 import {
@@ -69,23 +68,9 @@ describe("the rooms plugin", () => {
   it("is defined as its Settings row says", () => {
     assert.strictEqual(RoomsPlugin.id, "rooms");
     assert.isTrue(RoomsPlugin.defaultEnabled);
-    assert.deepStrictEqual(RoomsPlugin.hubFeature, { id: "rooms", revision: 2 });
+    assert.isUndefined(RoomsPlugin.hubFeature, "a project on this computer has a room with no Hub");
     assert.deepStrictEqual(RoomsPlugin.commandNames, ["room", "ready", "blocked", "ask", "note"]);
   });
-
-  it.effect("is inactive where the Hub does not serve rooms, and refuses saying so", () =>
-    run(
-      Effect.gen(function* () {
-        const peer = yield* roomPeer(roomHubOf({ features: {} }));
-        assert.isFalse(yield* peer.plugins.isActive("rooms"));
-        const refused = yield* peer.plugins.requireActive("rooms").pipe(Effect.result);
-        assert.isTrue(Result.isFailure(refused));
-        if (Result.isFailure(refused))
-          assert.strictEqual(refused.failure.detail, "Task rooms needs a newer Peer Hub.");
-        assert.isUndefined((yield* peer.status.publish).rooms);
-      }),
-    ),
-  );
 
   it.effect("turned off, leaves the status and forgets what it read", () =>
     run(

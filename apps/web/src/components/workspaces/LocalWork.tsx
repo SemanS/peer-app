@@ -1,6 +1,6 @@
 import { localCoordination } from "@t3tools/client-runtime/peer/local";
-import type { PeerHubStatus } from "@t3tools/contracts";
-import { useNavigate } from "@tanstack/react-router";
+import { PEER_LOCAL_WORKSPACE, type PeerHubStatus } from "@t3tools/contracts";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { localThreadStatus } from "@t3tools/client-runtime/peer/work";
@@ -54,8 +54,18 @@ export function LocalWork({
   const settings = useOpenPeerSettings();
   const navigate = useNavigate();
   const [shown, setShown] = useState(20);
+  const room = projectIds?.size === 1 ? [...projectIds][0] : undefined;
   return (
     <section aria-label="Local coordination" className="flex flex-col gap-3 px-2 text-sm">
+      {room === undefined ? null : (
+        <Link
+          to="/room/$workspace/$project/$task"
+          params={{ workspace: PEER_LOCAL_WORKSPACE, project: room, task: "room" }}
+          className="font-medium underline-offset-2 hover:underline"
+        >
+          Open this project's room
+        </Link>
+      )}
       <section aria-label="Project chats" className="flex flex-col gap-2">
         <h2 className="font-semibold">Recent work</h2>
         {visibleThreads.length === 0 ? (

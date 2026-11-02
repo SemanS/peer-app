@@ -5,7 +5,7 @@ import { PeerAgentEntry } from "./base.ts";
 
 /**
  * Peer's rooms plugin: a task's shared conversation between people and their agents (the Hub's
- * `rooms` feature). Rows mirror the Hub's wire contract field for field (camelCase, times as RFC 3339
+ * `rooms` feature), or a project's on a computer with no Hub for it. Rows mirror the Hub's wire contract field for field (camelCase, times as RFC 3339
  * strings). A delivery's state, a target's kind, a reach and a capacity are plain strings in rows, so
  * an app reads a newer Hub's; the values known today are listed beside them.
  *
@@ -16,7 +16,6 @@ export const PEER_ROOMS_PLUGIN = {
   title: "Task rooms",
   summary: "One conversation per task, where everyone brings their own agent.",
   defaultEnabled: true,
-  hubFeature: { id: "rooms", revision: 2 },
 } as const;
 
 /** The states of a delivery, as Hubs name them today. */

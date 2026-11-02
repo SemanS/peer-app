@@ -18,6 +18,7 @@ import {
   type PeerSessionView,
   type PeerToolContext,
 } from "../../core/plugin.ts";
+import { isLocalRoom } from "./client/local.ts";
 import type { Rooms } from "./Rooms.ts";
 import { reminderText, roomLinesText, START_LINE, stepText } from "./text.ts";
 
@@ -63,6 +64,9 @@ export const localOf = (session: PeerSessionView) =>
     landingRead: 0,
   }));
 
+/** Whom a queue belongs to: a run, or the session itself on a computer with no runs. */
+const queueOf = (session: PeerSessionView) => session.run ?? session.id;
+
 const toldOf = (session: PeerSessionView) => session.told?.("rooms") ?? localOf(session).told;
 const reminded = (ref: string) => `r:${ref}`;
 const seqOf = (ref: string) => Number(ref.slice(ref.lastIndexOf(":") + 1));
@@ -82,7 +86,7 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
       own.agentWakes = own.agentWakes.filter((at) => now - at < HOUR_MS);
       const wakesLeft = own.agentWakes.length < AGENT_WAKES;
       const candidates = rooms
-        .waiting(session.run)
+        .waiting(queueOf(session))
         .filter(
           ({ ref, promptedAt, quiet, byAgent }) =>
             !told.has(ref) &&
@@ -93,7 +97,7 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
       if (candidates.length === 0 || own.checking) return null;
       own.checking = true;
       const sure = yield* rooms
-        .tellable(session.run, candidates)
+        .tellable(queueOf(session), candidates)
         .pipe(Effect.ensuring(Effect.sync(() => void (own.checking = false))));
       const step = stepText(sure, session.task);
       if (step === null) return null;
@@ -124,9 +128,10 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
     toldOf(session).add(ref);
     // A colleague's words may go unanswered: only its person's yes would make it answer, so no
     // reminder wakes it for them.
-    const quiet = rooms.waiting(session.run).some((one) => one.ref === ref && one.quiet === true);
+    const queue = queueOf(session);
+    const quiet = rooms.waiting(queue).some((one) => one.ref === ref && one.quiet === true);
     if (!quiet) own.unanswered.add(ref);
-    rooms.settled(session.run, ref);
+    rooms.settled(queue, ref);
   };
   /** Before work lands, what its room says that this session never heard, once. */
   const beforeLanding = Effect.fn("RoomHooks.beforeLanding")(function* (
@@ -134,7 +139,8 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
   ) {
     const { session } = ctx;
     const command = "command" in ctx ? ctx.command : undefined;
-    if (command === undefined || !isLanding(command) || session.task === undefined) return null;
+    if (command === undefined || !isLanding(command)) return null;
+    if (session.task === undefined && !isLocalRoom(session.workspace)) return null;
     const own = localOf(session);
     const told = toldOf(session);
     const { seq, unread } = yield* rooms.unread(session, own.landingRead);

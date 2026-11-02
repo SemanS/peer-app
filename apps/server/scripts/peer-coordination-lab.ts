@@ -55,13 +55,11 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   titles and branches, and both agents start together.
 //   LAB_CONTRACT=hidden (with REAL_SCENARIO=contract) is a dependency nobody names: Ana's task makes
 //   orderTotal() return integer cents under the same name, Bob's adds loyalty points in a new file.
-//   LAB_KERNEL=1 (with REAL_SCENARIO=contract) is the arm with only the kernel on: the Hub starts without
-//   KERNEL_FEATURES_OFF and each computer turns KERNEL_PLUGINS_OFF off before the agents start.
 //   REAL_SCENARIO=memory (peer-lab/ownMemory.ts, REAL_AGENTS=1, kernel only) measures whether an agent picks the right
 //   memory store; LAB_VIKING_URL names the OpenViking server, LAB_MEMORY_ARM=none|tools|hint|card what the agent has, and
 //   LAB_MEMORY=adapter whether an agent opens a store for another agent that cannot.
 //   REAL_SCENARIO=ready (peer-lab/ready.ts, REAL_AGENTS=1, kernel only) measures whether an agent surfaces a person's
-//   decisions when it is asked at the end (LAB_READY=on) and when nothing asks (LAB_READY=off).
+//   decisions, with a card that says not to stop (LAB_READY=card) and without one.
 //   LAB_CONTRACT=deferred is the hidden seed with Bob told to compute his points from orderTotal() and to
 //   keep his branch right with the code it has, so that what he learns of Ana's change belongs to whoever
 //   lands both. LAB_INTEGRATE=1 (implied by deferred; peer-lab/hidden.ts) then adds the integration step:
@@ -86,7 +84,7 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //
 // REAL_SCENARIO=contract (peer-lab/contract.ts): a contract migration. Ana's agent renames
 // Invoice.amount (dollars) to amountCents (integer cents); Bob's adds an invoice total in a new file.
-// Arms run on the same seeds: LAB_PEER=off (no Peer), LAB_KERNEL=1 (only the kernel) and none of them
+// Arms run on the same seeds: LAB_PEER=off (no Peer) and none of them
 // (Peer as it is). The lab merges both branches
 // and runs checks the agents never saw, then reports clean integration, whether Bob's code uses
 // amountCents, and the characters Peer added to each agent's context. With
@@ -155,24 +153,14 @@ import {
   writeKontextEntries,
   writeMemorySeed,
 } from "./peer-lab/ownMemory.ts";
-import {
-  AWAY,
-  READY_ASK,
-  READY_CARD,
-  READY_TASK,
-  READY_TASKS,
-  writeReadySeed,
-} from "./peer-lab/ready.ts";
+import { AWAY, READY_CARD, READY_TASK, READY_TASKS, writeReadySeed } from "./peer-lab/ready.ts";
 import {
   ANA_TASK,
   ARM_LABELS,
   BOB_TASK,
   HARD_TASKS as HARD_CONTRACT_TASKS,
-  KERNEL_FEATURES_OFF,
-  KERNEL_PLUGINS_OFF,
   TASKS as EASY_CONTRACT_TASKS,
   agentReport,
-  armEnv,
   armOf,
   commitWork,
   currentBranch,
@@ -317,12 +305,8 @@ const CONTRACT_BOB_TASK = CONTRACT_DEFERRED
   : CONTRACT_HIDDEN
     ? HIDDEN_BOB_TASK
     : BOB_TASK;
-/** The contract scenario's arm: `LAB_PEER=off`, `LAB_KERNEL=1`, or Peer as it is. */
-const ARM = CONTRACT
-  ? armOf(process.env)
-  : MEMORY || READY
-    ? ("kernel" as const)
-    : ("peer" as const);
+/** The contract scenario's arm: `LAB_PEER=off`, or Peer as it is. */
+const ARM = CONTRACT ? armOf(process.env) : ("peer" as const);
 /** The server the computers run: the bundle in apps/server/dist, or `LAB_SERVER_BIN` (a private build, `vp pack -d <dir>`). */
 const bin = process.env.LAB_SERVER_BIN ?? NodePath.join(repoRoot, "apps/server/dist/bin.mjs");
 /** A stand-in for the Claude Code that judges related work in the background, and what it was asked. */
@@ -366,7 +350,6 @@ const hub = spawnLogged(peerhubBin, ["serve"], {
   PEERHUB_PUBLIC_URL: hubUrl,
   PEERHUB_MAIL: "echo",
   PEERHUB_SECRET_KEY: NodeCrypto.randomBytes(32).toString("hex"),
-  ...(ARM === "kernel" ? { PEERHUB_FEATURES_OFF: KERNEL_FEATURES_OFF.join(",") } : {}),
 });
 
 async function hubCall(path: string, init: { method?: string; session?: string; body?: unknown }) {
@@ -586,7 +569,6 @@ const startComputer = Effect.fn("lab.startComputer")(function* (
     // The lab reads the debug log (texts, paths, answers), with real agents as with simulated ones.
     PEER_COORDINATION_DEBUG: "1",
     // The contract scenario's arm: what this computer has on.
-    ...(CONTRACT || MEMORY || READY ? armEnv(ARM) : {}),
     ...extraEnv,
   };
   const server = yield* serve(name, home, port, env);
@@ -2240,21 +2222,6 @@ async function waitWithPersonAway(
   return asked;
 }
 
-/** Turns off what the Hub's features do not, and checks that only the kernel's plugins are left. */
-const kernelOnly = Effect.fn("lab.kernelOnly")(function* (computer: Computer) {
-  for (const id of KERNEL_PLUGINS_OFF)
-    yield* computer.client[WS_METHODS.peerHubSetPlugin]({ id, enabled: false });
-  const { plugins } = yield* computer.client[WS_METHODS.peerHubSync]({});
-  const on = (plugins ?? []).filter((one) => one.active).map((one) => one.id);
-  say(`${computer.name}'s active plugins`, on.join(", "));
-  check(
-    on.every((id) =>
-      ["ask", "audit", "herdr", "mcp", "observe", "rooms", "settings", "tool-trust"].includes(id),
-    ),
-    `${computer.name}'s Peer has only the kernel's plugins on`,
-  );
-});
-
 /** The lab's agent of `kind` on a computer, with these MCP servers, or none. */
 const startOwnAgent = (
   kind: string | undefined,
@@ -2281,6 +2248,16 @@ const vikingUrl = () => {
   return url;
 };
 
+/** A person's card on their computer, as Settings saves it. */
+const saveCard = Effect.fn("lab.saveCard")(function* (
+  computer: Computer,
+  text: string,
+  teammatesMayWake = false,
+) {
+  yield* computer.client[WS_METHODS.peerCardSave]({ text, teammatesMayWake });
+  say(`${computer.name}'s card`, `${text} (teammates may wake: ${teammatesMayWake})`);
+});
+
 /** REAL_SCENARIO=memory (`peer-lab/ownMemory.ts` has the project, the facts and the checks). */
 const memoryProgram = Effect.gen(function* () {
   if (!REAL) throw new Error("REAL_SCENARIO=memory needs REAL_AGENTS=1");
@@ -2292,23 +2269,22 @@ const memoryProgram = Effect.gen(function* () {
   const [anaKind, bobKind] = (process.env.REAL_KINDS ?? "claude,codex").split(",");
   const anaHerdr = startHerdr("Ana");
   const ana = yield* startComputer("Ana", "ana@acme.test", anaHerdr.socket);
-  yield* kernelOnly(ana);
   say(
     "memory",
     MEMORY_ADAPTER
-      ? `adapter variant, Peer ${peerOff ? "off" : "kernel"}, Ana ${anaKind}, Bob ${bobKind}`
+      ? `adapter variant, Peer ${peerOff ? "off" : "on"}, Ana ${anaKind}, Bob ${bobKind}`
       : `arm ${MEMORY_ARM}, agent ${anaKind}`,
   );
   const servers = memoryServers(vikingUrl(), kontextBin());
   if (!MEMORY_ADAPTER) {
     branchOff(ana.checkout, MEMORY_TASKS[0].branch);
+    if (MEMORY_ARM === "card") yield* saveCard(ana, MEMORY_CARD);
     const pane = yield* Effect.promise(() =>
       startOwnAgent(anaKind, anaHerdr, ana, "ana", MEMORY_ARM === "none" ? {} : servers),
     );
     const live = [{ computer: ana, h: anaHerdr, pane }];
-    const words = `${MEMORY_ARM === "card" ? `${MEMORY_CARD} ` : ""}${MEMORY_TASK}`;
-    herdrJson(anaHerdr, "agent", "prompt", pane, words);
-    say("Ana's agent prompted", words);
+    herdrJson(anaHerdr, "agent", "prompt", pane, MEMORY_TASK);
+    say("Ana's agent prompted", MEMORY_TASK);
     const asked = yield* Effect.promise(() =>
       waitWithPersonAway(live, 8 * 60_000, () =>
         NodeFS.existsSync(NodePath.join(ana.checkout, "src", "loyalty.js")),
@@ -2336,9 +2312,9 @@ const memoryProgram = Effect.gen(function* () {
   }
   const bobHerdr = startHerdr("Bob");
   const bob = yield* startComputer("Bob", "bob@acme.test", bobHerdr.socket);
-  yield* kernelOnly(bob);
   branchOff(ana.checkout, MEMORY_TASKS[1].branch);
   branchOff(bob.checkout, MEMORY_TASKS[0].branch);
+  if (process.env.LAB_ADAPTER_CARD === "1") yield* saveCard(ana, ADAPTER_CARD, true);
   const anaPane = yield* Effect.promise(() =>
     startOwnAgent(anaKind, anaHerdr, ana, "ana", { openviking: servers.openviking }),
   );
@@ -2347,9 +2323,8 @@ const memoryProgram = Effect.gen(function* () {
     { computer: ana, h: anaHerdr, pane: anaPane },
     { computer: bob, h: bobHerdr, pane: bobPane },
   ];
-  const anaWords = `${process.env.LAB_ADAPTER_CARD === "1" ? `${ADAPTER_CARD} ` : ""}${ADAPTER_ANA_TASK}`;
-  herdrJson(anaHerdr, "agent", "prompt", anaPane, anaWords);
-  say("Ana's agent prompted", anaWords);
+  herdrJson(anaHerdr, "agent", "prompt", anaPane, ADAPTER_ANA_TASK);
+  say("Ana's agent prompted", ADAPTER_ANA_TASK);
   herdrJson(bobHerdr, "agent", "prompt", bobPane, ADAPTER_BOB_TASK);
   say("Bob's agent prompted", ADAPTER_BOB_TASK);
   yield* Effect.promise(() => quietUntil(live, 8 * 60_000));
@@ -2389,27 +2364,22 @@ const readyProgram = Effect.gen(function* () {
   const mode = process.env.LAB_READY ?? "off";
   if (!["off", "on", "card"].includes(mode))
     throw new Error(`LAB_READY is off, on or card, not ${mode}`);
-  const asked = mode !== "off";
   const [kind] = (process.env.REAL_KINDS ?? "claude").split(",");
   const herdr = startHerdr("Ana");
   const ana = yield* startComputer("Ana", "ana@acme.test", herdr.socket);
-  yield* kernelOnly(ana);
   branchOff(ana.checkout, READY_TASKS[0].branch);
+  if (mode === "card") yield* saveCard(ana, READY_CARD);
   const pane = yield* Effect.promise(() => startOwnAgent(kind, herdr, ana, "ana"));
   const live = [{ computer: ana, h: herdr, pane }];
-  const words = `${mode === "card" ? `${READY_CARD} ` : ""}${READY_TASK}`;
-  herdrJson(herdr, "agent", "prompt", pane, words);
-  say("Ana's agent prompted", words);
+  herdrJson(herdr, "agent", "prompt", pane, READY_TASK);
+  say("Ana's agent prompted", READY_TASK);
   const refunds = NodePath.join(ana.checkout, "src", "refunds.js");
   const stops = yield* Effect.promise(() =>
     waitWithPersonAway(live, 8 * 60_000, () => NodeFS.existsSync(refunds)),
   );
+  // Peer's start text tells it to say so itself; a turn that ends without it is what this measures.
+  yield* Effect.promise(() => quietUntil(live, 5 * 60_000));
   const lastWords = herdrText(herdr, "pane", "read", pane, "--source", "recent");
-  if (asked) {
-    herdrJson(herdr, "agent", "prompt", pane, READY_ASK);
-    say("Ana's agent asked at the end", READY_ASK);
-    yield* Effect.promise(() => quietUntil(live, 5 * 60_000));
-  }
   const room = yield* Effect.promise(() =>
     hubCall(`/v1/workspaces/acme/projects/lab/tasks/${encodeURIComponent(krk1Id)}/room?limit=100`, {
       session: hubSession,
@@ -2461,7 +2431,9 @@ const contractProgram = Effect.gen(function* () {
   }
   // The arm, as each computer's Peer says it.
   say("arm", ARM_LABELS[ARM]);
-  if (ARM === "kernel") for (const computer of [ana, bob]) yield* kernelOnly(computer);
+  // LAB_WAKE=1: each person's card lets a colleague's words wake their idle agent.
+  if (process.env.LAB_WAKE === "1")
+    for (const computer of [ana, bob]) yield* saveCard(computer, "", true);
   const live: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [];
   /** The fresh session of the integration step, once there is one. */
   const fresh: Array<{ computer: Computer; h: HerdrServer; pane: string }> = [];

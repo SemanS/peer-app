@@ -9,6 +9,7 @@
 import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
+import { PeerRoomMessage } from "@t3tools/contracts";
 import * as Schema from "effect/Schema";
 
 import type * as PeerState from "../state/PeerState.ts";
@@ -24,10 +25,22 @@ export type RunRoot = typeof RunRoot.Type;
 
 const RoomFolder = Schema.Struct({ name: Schema.String, folder: Schema.String });
 
+/** A project's room on a computer with no Hub for it. */
+const LocalRoom = Schema.Struct({
+  seq: Schema.Number,
+  seen: Schema.Number,
+  /** Operation id → the message it posted, while that message is kept. */
+  ops: Schema.Record(Schema.String, Schema.Number),
+  messages: Schema.Array(PeerRoomMessage),
+});
+export type LocalRoom = typeof LocalRoom.Type;
+
 const RunRoots = Schema.Struct({
   runs: Schema.Record(Schema.String, Schema.Array(RunRoot)),
   /** Group → folders of projects no Hub workspace shares, which its room's agent works in too. */
   folders: Schema.optional(Schema.Record(Schema.String, Schema.Array(RoomFolder))),
+  /** Project → its room, for projects only on this computer. */
+  localRooms: Schema.optional(Schema.Record(Schema.String, LocalRoom)),
 });
 
 export const runRootsData = (state: PeerState.PeerState["Service"]) =>

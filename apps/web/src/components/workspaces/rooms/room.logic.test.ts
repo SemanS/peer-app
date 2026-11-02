@@ -1,9 +1,14 @@
 import { targetsFor } from "@t3tools/client-runtime/peer/rooms";
-import type { WorkThreadNode } from "@t3tools/client-runtime/peer/work";
+import type {
+  WorkProjectNode,
+  WorkTaskNode,
+  WorkThreadNode,
+} from "@t3tools/client-runtime/peer/work";
 import type { PeerRoomMessage, PeerRun } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  findTask,
   lastAgentReply,
   snapshotLine,
   authorOf,
@@ -515,5 +520,30 @@ describe("roomAgentGroups", () => {
     expect(shares(yours)).toEqual({ thread: "yours", shared: true });
     expect(shares({ ...yours, stale: true })).toBeUndefined();
     expect(shares(thread("hers", "idle", "ana@acme.test"))).toBeUndefined();
+  });
+});
+
+describe("findTask", () => {
+  const node = (id: string) => ({ id }) as WorkTaskNode;
+  const tree = [
+    {
+      workspace: "acme",
+      projectId: "web",
+      areas: [{ name: null, tasks: [node("task")] }],
+      chats: [node("chat")],
+    } as unknown as WorkProjectNode,
+  ];
+  const place = (task: string) => ({ workspace: "acme", project: "web", task });
+
+  it("finds a task in its area", () => {
+    expect(findTask(tree, place("task"))?.task.id).toBe("task");
+  });
+
+  it("finds a chat, which is in no area", () => {
+    expect(findTask(tree, place("chat"))?.task.id).toBe("chat");
+  });
+
+  it("finds nothing once it is gone", () => {
+    expect(findTask(tree, place("gone"))).toBeUndefined();
   });
 });

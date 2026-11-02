@@ -1505,27 +1505,8 @@ const program = Effect.gen(function* () {
   );
   check(tookMs < 4400, "its hook answers before its script gives up on it");
   check(
-    slowStart?.includes("still connecting") === true &&
-      slowStart.includes(`${bob.scripts.peer} status`),
-    "the bounded fallback says where to look meanwhile",
-  );
-  yield* Effect.promise(() => sleep(5000));
-  const slowNext = context(
-    slowAgent.hook("UserPromptSubmit", { prompt: "Add a receipts export for the console please" }),
-  );
-  told(`${slowAgent.name} (its next step)`, slowNext);
-  check(
-    slowNext?.includes("run `peer` as is, with no names or IDs") === true,
-    "the complete startup guidance arrives at its next step",
-  );
-  check(
-    events(bob).some(
-      (entry) =>
-        entry.event === "hook.late" &&
-        entry.session === "claude:lab-bob-slow" &&
-        entry.queued === true,
-    ),
-    "and the log says it was late and queued",
+    slowStart?.includes("run `peer` as is, with no names or IDs") === true,
+    "and it is told all of it, since nothing of it waits for the hub",
   );
   slowAgent.hook("SessionEnd", { reason: "exit" });
 

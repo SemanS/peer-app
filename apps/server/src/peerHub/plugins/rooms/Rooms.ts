@@ -363,6 +363,9 @@ const make = Effect.gen(function* () {
     if (teammatesMayWake) yield* agents.wake;
   });
 
+  /** Messages an open agent was told after a restart, so a silent one still ends as lost. */
+  const revived = new Set<string>();
+
   const followDeps = (workspace: string, me: string): FollowDeps => ({
     me,
     runsHere: (item, delivery) => runsHere(workspace, item, delivery),
@@ -399,6 +402,25 @@ const make = Effect.gen(function* () {
         queues.add(run, { ...(yield* heardOf(workspace, item, kind, me)), promptedAt });
       }),
     told: (item, run) => queues.wasTold(run, refOf(item.task, item.message.seq)),
+    revive: Effect.fn("Rooms.revive")(function* (item, run) {
+      const ref = `${run}:${refOf(item.task, item.message.seq)}`;
+      if (revived.has(ref)) return false;
+      const { persisted } = yield* state.read;
+      const known = persisted.runs?.[run];
+      const launcher = yield* plugins
+        .require("taskLauncher")
+        .pipe(Effect.orElseSucceed(() => undefined));
+      if (known === undefined || launcher?.continueOpen === undefined) return false;
+      const open = yield* launcher.continueOpen({
+        keys: runKeys(known),
+        pane: known.pane,
+        prompt:
+          "Peer: your person wrote to you while Peer restarted. Read your room and answer there.",
+      });
+      if (!open.open || open.refused !== undefined) return false;
+      revived.add(ref);
+      return true;
+    }),
     startedAt,
     later: (ms) => {
       if (rereads.has(workspace)) return Effect.void;

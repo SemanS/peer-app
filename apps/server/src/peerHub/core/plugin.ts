@@ -467,6 +467,16 @@ export interface PeerTaskLauncher {
    * session, so that no hook has said a word of it yet.
    */
   readonly waiting?: (threads: ReadonlyArray<string>) => boolean;
+  /**
+   * Tells a run's agent that still runs, which Peer lost track of when it restarted: an idle agent
+   * has no next hook to come back with. `open` is false when none runs here, and `refused` why one
+   * that runs could not be told; either way no second agent may start while one is open.
+   */
+  readonly continueOpen?: (input: {
+    readonly keys: ReadonlyArray<string>;
+    readonly pane: string | undefined;
+    readonly prompt: string;
+  }) => Effect.Effect<{ readonly open: boolean; readonly refused?: string }>;
   readonly launch: (input: {
     readonly checkout: string;
     readonly baseBranch: string;

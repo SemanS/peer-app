@@ -28,7 +28,7 @@ import * as Schema from "effect/Schema";
 import * as PeerAgents from "../coordination/PeerAgents.ts";
 import * as PeerPlugins from "../plugins/PeerPlugins.ts";
 import * as PeerState from "../state/PeerState.ts";
-import type { PersistedRun } from "../state/PeerState.ts";
+import { runKeys, type PersistedRun } from "../state/PeerState.ts";
 import { holdsWork } from "../vcs.ts";
 import * as PeerWork from "./PeerWork.ts";
 import { runRootsData } from "./runRoots.ts";
@@ -135,6 +135,15 @@ const continueInHerdr = (
     const launcher = yield* (yield* PeerPlugins.PeerPlugins).require("taskLauncher");
     const unavailable = yield* launcher.unavailable;
     if (unavailable !== null) return notStarted(unavailable);
+    if (!handedOver && launcher.continueOpen !== undefined) {
+      const open = yield* launcher.continueOpen({
+        keys: runKeys(run),
+        pane: run.pane,
+        prompt: `Peer: your person continues run ${run.id}. Read your room and pick it up where you left it.`,
+      });
+      if (open.open)
+        return open.refused === undefined ? { started: true } : notStarted(open.refused);
+    }
     const { workspace, project } = yield* peerState.project(run.workspace, run.project);
     const task = (yield* work.tasks(workspace.slug, project.id)).find(
       (candidate) => candidate.id === run.task,

@@ -142,6 +142,8 @@ export interface FollowDeps {
   readonly prompted: (item: PeerRoomInboxItem, run: string, kind: HeardKind) => Effect.Effect<void>;
   /** A session of the run has been told this, as far as this Peer remembers. */
   readonly told: (item: PeerRoomInboxItem, run: string) => boolean;
+  /** Tells the run's agent that still runs here, once per message; false when none could be. */
+  readonly revive: (item: PeerRoomInboxItem, run: string) => Effect.Effect<boolean>;
   /** When this Peer started. */
   readonly startedAt: number;
   /** Reads the work list again in `ms`: nothing else would, on a quiet room. */
@@ -203,6 +205,9 @@ export const act = (deps: FollowDeps, item: PeerRoomInboxItem) =>
       case "wait":
         return yield* deps.later(decision.ms);
       case "lost": {
+        // Told once more: a read after the grace ends it if the agent still says nothing.
+        if (yield* deps.revive(item, decision.run))
+          return yield* deps.later(PEER_ROOM_START_GRACE_MS);
         const told = deps.told(item, decision.run);
         yield* deps.unqueue(item, decision.run);
         return yield* deps.fail(item, told ? SESSION_ENDED : NOT_RUNNING);

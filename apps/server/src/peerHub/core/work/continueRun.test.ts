@@ -90,6 +90,10 @@ const wrap: PeerRpcWrap = {
 const setup = Effect.gen(function* () {
   // What herdr's task launcher was asked to start, through a stand-in for the plugin.
   const launched: Array<Parameters<PeerTaskLauncher["launch"]>[0]> = [];
+  const open: { current: { readonly open: boolean; readonly refused?: string } } = {
+    current: { open: false },
+  };
+  const toldOpen: Array<string> = [];
   const created: Array<PeerLifecycleEvent> = [];
   const herdr = bindPlugin({
     id: "herdr",
@@ -101,6 +105,11 @@ const setup = Effect.gen(function* () {
       taskWorktreeCreated: (event) => Effect.sync(() => void created.push(event)),
       taskLauncher: {
         unavailable: Effect.succeed(null),
+        continueOpen: (asked) =>
+          Effect.sync(() => {
+            if (open.current.open) toldOpen.push(asked.prompt);
+            return open.current;
+          }),
         launch: (asked) =>
           Effect.sync(() => {
             launched.push(asked);
@@ -187,7 +196,7 @@ const setup = Effect.gen(function* () {
     ),
   );
   const client = yield* RpcTest.makeClient(RunsRpcGroup).pipe(Effect.provide(handlers));
-  return { hub, runs, queued, fixture, client, launched, created, desk, core };
+  return { hub, runs, queued, fixture, client, launched, created, desk, core, open, toldOpen };
 });
 
 /** A run of this computer whose one session ended. */
@@ -291,6 +300,33 @@ describe("continuing a herdr run", () => {
       // The new pane is the run's, so the work view and Observe find it.
       assert.strictEqual(runs.book.holderOf("herdr:term-9")?.id, id);
       assert.strictEqual(runs.book.get(id)!.pane, "pane-9");
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("tells the agent still open in its pane and starts no second one", () =>
+    Effect.gen(function* () {
+      const { runs, client, launched, open, toldOpen } = yield* setup;
+      const id = yield* detached(runs, "herdr", "claude:native-4");
+      open.current = { open: true };
+      assert.deepStrictEqual(yield* client["peerHub.continueRun"]({ ...place, runId: id }), {
+        started: true,
+      });
+      assert.strictEqual(launched.length, 0);
+      assert.strictEqual(toldOpen.length, 1);
+      assert.include(toldOpen[0]!, id);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("says why an open agent could not be told, and starts no second one", () =>
+    Effect.gen(function* () {
+      const { runs, client, launched, open } = yield* setup;
+      const id = yield* detached(runs, "herdr", "claude:native-4");
+      open.current = { open: true, refused: "Answer it in herdr first." };
+      assert.deepStrictEqual(yield* client["peerHub.continueRun"]({ ...place, runId: id }), {
+        started: false,
+        reason: "Answer it in herdr first.",
+      });
+      assert.strictEqual(launched.length, 0);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

@@ -233,6 +233,7 @@ const depsOf = (over: Partial<FollowDeps> & { readonly runs?: ReadonlyArray<Here
     queuedRun: () => undefined,
     prompted: (_item, run, kind) => note(`prompted ${run} ${kind}`),
     told: () => false,
+    revive: () => Effect.succeed(false),
     startedAt: 0,
     later: (ms) => note(`later ${ms}`),
     queue: (_item, run, kind) => note(`queue ${run} ${kind}`),
@@ -360,6 +361,19 @@ describe("act", () => {
       Effect.gen(function* () {
         yield* after(3_600_000);
         const { deps, log } = depsOf({ runs: [detached], startedAt: 1_000_000 + 3_600_000 });
+        yield* act(deps, itemOf(lost));
+        assert.deepStrictEqual(log, ["later 120000"]);
+      }),
+    );
+
+    it.effect("past the grace, tells an agent still open in its pane instead of failing", () =>
+      Effect.gen(function* () {
+        yield* after(120_000);
+        const { deps, log } = depsOf({
+          runs: [detached],
+          told: () => true,
+          revive: () => Effect.succeed(true),
+        });
         yield* act(deps, itemOf(lost));
         assert.deepStrictEqual(log, ["later 120000"]);
       }),

@@ -24,6 +24,7 @@ import type { HerdrAgents } from "./follower.ts";
 import { HerdrRuntime } from "./runtime.ts";
 
 type LaunchInput = Parameters<PeerTaskLauncher["launch"]>[0];
+type ContinueOpenInput = Parameters<NonNullable<PeerTaskLauncher["continueOpen"]>>[0];
 
 const hubError = (detail: string) => new PeerHubError({ detail });
 const messageOf = (failure: unknown) => (failure instanceof Error ? failure.message : undefined);
@@ -93,6 +94,32 @@ export const makeLauncher = (agents: HerdrAgents) =>
             (threads.includes(agents.keyOf(agent)) ||
               threads.includes(`herdr:${agent.terminalId}`)),
         ),
+      continueOpen: Effect.fn("Herdr.continueOpen")(function* ({
+        keys,
+        pane,
+        prompt,
+      }: ContinueOpenInput) {
+        const agent = (agents.current() ?? []).find(
+          (candidate) =>
+            keys.includes(agents.keyOf(candidate)) ||
+            keys.includes(`herdr:${candidate.terminalId}`) ||
+            candidate.paneId === pane,
+        );
+        if (agent === undefined) return { open: false };
+        if (agent.status === "blocked" || held.has(agent.terminalId))
+          return {
+            open: true,
+            refused: "It is waiting for an answer in its terminal. Answer it in herdr first.",
+          };
+        // herdr still lists an agent that left; only these two take a prompt.
+        if (agent.status !== "idle" && agent.status !== "done") return { open: false };
+        const sent = yield* Effect.tryPromise(() =>
+          client.prompt(agent.name ?? agent.paneId, prompt),
+        ).pipe(Effect.result);
+        return sent._tag === "Success"
+          ? { open: true }
+          : { open: true, refused: "herdr did not take the message." };
+      }),
       /** The person answered the agent in `terminal`: a yes delivers what the launch held. */
       answered: (terminal: string, trust: boolean) =>
         trust

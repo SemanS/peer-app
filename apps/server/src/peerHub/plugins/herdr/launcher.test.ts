@@ -295,3 +295,68 @@ describe("an agent that asks to trust its folder", () => {
     }).pipe(Effect.scoped),
   );
 });
+
+describe("an agent still open after Peer restarted", () => {
+  const agent = (status: string) =>
+    ({ terminalId: "t7", paneId: "w2:pE", status, agent: "claude" }) as unknown as HerdrAgentState;
+  const of = (listed: ReadonlyArray<HerdrAgentState>) => {
+    const typed: Array<string> = [];
+    const client = {
+      prompt: async (target: string, text: string) => void typed.push(`${target}: ${text}`),
+    } as unknown as HerdrClientShape;
+    const agents = {
+      current: () => listed,
+      keyOf: (one: HerdrAgent) => `herdr:claude:${one.terminalId}-session`,
+      refresh: Effect.void,
+    } as unknown as HerdrAgents;
+    return Effect.map(
+      makeLauncher(agents).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            Layer.succeed(HerdrClient, client),
+            Layer.succeed(HerdrRuntime, {
+              blocker: Effect.succeed(null),
+            } as unknown as HerdrRuntime["Service"]),
+          ),
+        ),
+      ),
+      (launcher) => ({ launcher, typed }),
+    );
+  };
+  const asked = { keys: ["herdr:claude:t7-session"], pane: undefined, prompt: "Go on." };
+
+  it.effect("types into the idle agent of the run", () =>
+    Effect.gen(function* () {
+      const { launcher, typed } = yield* of([agent("idle")]);
+      assert.deepStrictEqual(yield* launcher.continueOpen(asked), { open: true });
+      assert.deepStrictEqual(typed, ["w2:pE: Go on."]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("finds it by its pane when herdr no longer names its session", () =>
+    Effect.gen(function* () {
+      const { launcher, typed } = yield* of([agent("done")]);
+      const found = yield* launcher.continueOpen({ ...asked, keys: [], pane: "w2:pE" });
+      assert.deepStrictEqual(found, { open: true });
+      assert.strictEqual(typed.length, 1);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("types nothing into an agent that waits on its person, and says so", () =>
+    Effect.gen(function* () {
+      const { launcher, typed } = yield* of([agent("blocked")]);
+      const found = yield* launcher.continueOpen(asked);
+      assert.isTrue(found.open);
+      assert.isString(found.refused);
+      assert.deepStrictEqual(typed, []);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("says none is open when the run has no agent here", () =>
+    Effect.gen(function* () {
+      const { launcher } = yield* of([agent("idle")]);
+      const found = yield* launcher.continueOpen({ ...asked, keys: ["herdr:other"] });
+      assert.deepStrictEqual(found, { open: false });
+    }).pipe(Effect.scoped),
+  );
+});

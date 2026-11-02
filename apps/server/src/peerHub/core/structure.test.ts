@@ -38,7 +38,7 @@ const CEILINGS: Readonly<Record<string, number>> = {
   changes: 1603,
   herdr: 4919,
   jujutsu: 2354,
-  rooms: 3909,
+  rooms: 3915,
 };
 
 /**

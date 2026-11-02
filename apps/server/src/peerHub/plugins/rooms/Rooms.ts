@@ -170,7 +170,13 @@ const make = Effect.gen(function* () {
       const sentOn = delivery.state === "passed" && delivery.by !== undefined;
       const base = sentOn ? yield* baseHere(workspace, item.project) : undefined;
       return yield* Effect.forEach(
-        [...new Set([...open.map((run) => run.id), ...live])],
+        [
+          ...new Set([
+            ...open.map((run) => run.id),
+            ...live,
+            ...(delivery.run === undefined ? [] : [delivery.run]),
+          ]),
+        ],
         (id): Effect.Effect<HereRun> =>
           Effect.gen(function* () {
             const run = open.find((candidate) => candidate.id === id);

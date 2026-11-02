@@ -23,6 +23,11 @@ import { headerOf } from "./server.ts";
 import type { LocalSession } from "./sessions.ts";
 
 const WAIT_MS = 25 * 60 * 1000;
+/**
+ * herdr reads an agent's state off its screen, so a session that just stopped can still look busy
+ * to it, and it refuses the wake. The rounds after that try again, this many times.
+ */
+const WAKE_TRIES = 6;
 
 export interface Waiter {
   readonly session: string;
@@ -331,14 +336,17 @@ export async function wakeRuntime(this: CoordinationBroker, plugins: PeerBrokerP
     if (session.adapter === "mcp" && !local.some((agent) => agent.paneId === session.pane))
       continue;
     if ([...this.waiters].some((waiter) => waiter.session === session.id)) continue;
-    const deliveries: PreparedDelivery[] = [];
-    const text = await this.wakingNews(session, plugins, deliveries);
-    if (text === null) continue;
-    session.pending.push(
-      deliveries.length === 0
-        ? text
-        : { text, deliveries, first: deliveries.some((ref) => ref.first) },
-    );
+    const refused = this.wakesRefused.get(session.id);
+    if (refused === undefined || session.pending.length === 0) {
+      const deliveries: PreparedDelivery[] = [];
+      const text = await this.wakingNews(session, plugins, deliveries);
+      if (text === null) continue;
+      session.pending.push(
+        deliveries.length === 0
+          ? text
+          : { text, deliveries, first: deliveries.some((ref) => ref.first) },
+      );
+    }
     this.queueing.add(session.id);
     void this.host
       .run(
@@ -355,7 +363,14 @@ export async function wakeRuntime(this: CoordinationBroker, plugins: PeerBrokerP
             session: session.id,
             reason: outcome.reason,
           });
-          if (outcome.status === "unavailable") this.queueing.delete(session.id);
+          if (outcome.status !== "unavailable") {
+            this.wakesRefused.delete(session.id);
+            return;
+          }
+          this.queueing.delete(session.id);
+          const tries = (refused ?? 0) + 1;
+          if (tries < WAKE_TRIES) this.wakesRefused.set(session.id, tries);
+          else this.wakesRefused.delete(session.id);
         },
         (error: unknown) => {
           this.queueing.delete(session.id);

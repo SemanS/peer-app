@@ -133,6 +133,8 @@ export class CoordinationBroker {
   readonly waiters = new Set<Wake.Waiter>();
   /** Codex sessions Peer is handing a note to through Codex now. */
   readonly queueing = new Set<string>();
+  /** How often a runtime refused to wake a session whose news waits in `pending`. */
+  readonly wakesRefused = new Map<string, number>();
   /** Ends plugins' commands still running when the broker stops. */
   readonly stopping = new AbortController();
   /** Who hears that a workspace's view changed (`PeerAgents.viewChanges`). */

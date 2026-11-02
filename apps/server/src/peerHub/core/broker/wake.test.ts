@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import { describe, expect, it, vi } from "vite-plus/test";
 
+import type { PeerRuntimeProvider, PeerWakeOutcome } from "../plugin.ts";
 import { NO_PLUGINS, type PeerBrokerPlugins } from "./host.ts";
 import { brokerFixture } from "./testkit.ts";
 
@@ -19,6 +20,88 @@ const announcing: PeerBrokerPlugins = {
     },
   ],
 };
+
+describe("a wake the runtime refuses", () => {
+  /** A session herdr runs, a notice it hears once, and a runtime that answers `answers` in turn. */
+  const running = async (answers: ReadonlyArray<PeerWakeOutcome["status"]>) => {
+    const wake = vi.fn((_session: string, _pane: string, _text: string) =>
+      Effect.succeed({ status: answers[wake.mock.calls.length - 1] ?? "unavailable" }),
+    );
+    let told = false;
+    const plugins: PeerBrokerPlugins = {
+      ...NO_PLUGINS,
+      runtime: { prefix: "herdr:", wake } as unknown as PeerRuntimeProvider,
+      active: [
+        {
+          id: "changes",
+          title: "fake",
+          contributions: {
+            hooks: {
+              notices: [
+                {
+                  wakes: true,
+                  read: () =>
+                    Effect.sync(() => {
+                      if (told) return null;
+                      told = true;
+                      return ANNOUNCEMENT;
+                    }),
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+    const fixture = await brokerFixture(() => ({ plugins: async () => plugins }));
+    const session = await fixture.broker.createSession(
+      "codex",
+      { session_id: "one", cwd: fixture.root },
+      undefined,
+    );
+    if (session === null) throw new Error("no session");
+    session.status = "idle";
+    session.pane = "p1";
+    // The wake's answer lands after the round: `runtime.wake` is logged as it does.
+    let answered = () => {};
+    const { record } = fixture.broker;
+    vi.spyOn(fixture.broker, "record").mockImplementation((event, data) => {
+      record.call(fixture.broker, event, data);
+      if (event === "runtime.wake") answered();
+    });
+    const round = async () => {
+      const tried = wake.mock.calls.length;
+      const answer = new Promise<void>((resolve) => (answered = resolve));
+      await fixture.broker.wakeRuntime(plugins);
+      if (wake.mock.calls.length > tried) await answer;
+    };
+    return { fixture, session, round, wake };
+  };
+
+  it("is tried again in the next rounds, with what it already holds", async () => {
+    const { fixture, session, round, wake } = await running(["unavailable", "queued"]);
+    try {
+      await round();
+      await round();
+      await round();
+      expect(wake).toHaveBeenCalledTimes(2);
+      expect(session.pending).toEqual([ANNOUNCEMENT]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
+  it("gives up after a few rounds and leaves the words for its next step", async () => {
+    const { fixture, session, round, wake } = await running([]);
+    try {
+      for (let at = 0; at < 10; at += 1) await round();
+      expect(wake).toHaveBeenCalledTimes(6);
+      expect(session.pending).toEqual([ANNOUNCEMENT]);
+    } finally {
+      await fixture.dispose();
+    }
+  });
+});
 
 describe("advisory tool wake delivery", () => {
   it("preserves a bound agent when the selected runtime is temporarily unknown", async () => {

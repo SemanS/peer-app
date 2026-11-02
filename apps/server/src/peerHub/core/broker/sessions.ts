@@ -384,6 +384,7 @@ export async function paneOf(
 export function touch(this: CoordinationBroker, session: LocalSession) {
   session.lastActivity = Date.now();
   this.queueing.delete(session.id);
+  this.wakesRefused.delete(session.id);
   // An agent at work again is no longer waiting to be woken.
   for (const waiter of this.waiters) {
     if (waiter.session === session.id) {

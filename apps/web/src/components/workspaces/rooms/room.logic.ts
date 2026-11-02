@@ -652,6 +652,16 @@ export function roomAgentGroups(input: {
     .toSorted((a, b) => Number(b.mine) - Number(a.mine) || a.person.localeCompare(b.person));
 }
 
+/** The run the agent tab shows when none was opened: the newest at work, else the one that answered. */
+export function followedRun(
+  runs: ReadonlyArray<PeerRun>,
+  working: (run: PeerRun) => boolean,
+  lastReplied: string | undefined,
+): PeerRun | undefined {
+  const newest = runs.toSorted((a, b) => b.id.localeCompare(a.id));
+  return newest.find(working) ?? runs.find((run) => run.id === lastReplied);
+}
+
 /** The task a room names, with its project and area; undefined once it is gone. */
 export function findTask(
   tree: ReadonlyArray<WorkProjectNode>,

@@ -9,6 +9,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import {
   findTask,
+  followedRun,
   lastAgentReply,
   snapshotLine,
   authorOf,
@@ -545,5 +546,23 @@ describe("findTask", () => {
 
   it("finds nothing once it is gone", () => {
     expect(findTask(tree, place("gone"))).toBeUndefined();
+  });
+});
+
+describe("followedRun", () => {
+  const run = (id: string) => ({ id }) as PeerRun;
+  const runs = [run("run_1"), run("run_3"), run("run_2")];
+
+  it("follows the newest run at work, before any message of it", () => {
+    const working = (candidate: PeerRun) => candidate.id !== "run_3";
+    expect(followedRun(runs, working, "run_1")?.id).toBe("run_2");
+  });
+
+  it("stays on the run that answered once nothing works", () => {
+    expect(followedRun(runs, () => false, "run_1")?.id).toBe("run_1");
+  });
+
+  it("has nothing to show before any run", () => {
+    expect(followedRun([], () => false, undefined)).toBeUndefined();
   });
 });

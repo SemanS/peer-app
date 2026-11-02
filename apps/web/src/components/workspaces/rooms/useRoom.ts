@@ -28,6 +28,8 @@ import {
 const NO_MESSAGES: ReadonlyArray<PeerRoomMessage> = [];
 const NO_STEPS: ReadonlyArray<PeerRoomStep> = [];
 
+const FOLLOW_THREAD_MS = 2_000;
+
 /** Calls `refresh` whenever `revision` moves; the query itself reads on mount. */
 function useRefetchOn(revision: string, refresh: () => void) {
   const seen = useRef(revision);
@@ -132,8 +134,10 @@ export function useRoomThread(input: {
   readonly run: string;
   readonly until: string | undefined;
   readonly revision: string;
+  /** Reads again on a timer: a transcript grows with nothing to announce it. */
+  readonly follow: boolean;
 }) {
-  const { environmentId, place, run, until, revision } = input;
+  const { environmentId, place, run, until, revision, follow } = input;
   const query = useEnvironmentQuery(
     serverEnvironment.peerRooms.thread({
       environmentId,
@@ -141,6 +145,13 @@ export function useRoomThread(input: {
     }),
   );
   useRefetchOn(revision, query.refresh);
+  const { refresh } = query;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- a running agent's transcript is outside React and sends no event here.
+  useEffect(() => {
+    if (!follow) return;
+    const timer = setInterval(refresh, FOLLOW_THREAD_MS);
+    return () => clearInterval(timer);
+  }, [follow, refresh]);
   return { thread: query.data, error: query.error };
 }
 

@@ -39,7 +39,14 @@ import { runThreadWorking, runsRevision } from "../task/runs.logic";
 import { useTaskRuns } from "../task/useTaskRuns";
 import { useWorkData } from "../useWorkData";
 import type { WorkOpen, WorkTaskNode } from "../workTree.logic";
-import { chatIsYours, findTask, lastAgentReply, peopleOf, ROOM_PAGE } from "./room.logic";
+import {
+  chatIsYours,
+  findTask,
+  followedRun,
+  lastAgentReply,
+  peopleOf,
+  ROOM_PAGE,
+} from "./room.logic";
 import { RoomAgentDiff, type RoomAgentChangesProps } from "./RoomAgentDiff";
 import { RoomComposer, type DraftLine, type DraftPaths } from "./RoomComposer";
 import { roomMessageId, RoomConversation } from "./RoomConversation";
@@ -316,7 +323,23 @@ export function RoomBody({
   const threadWorking = (candidate: PeerRun) => runThreadWorking(candidate, threads);
   const allRuns = [...runs.runs, ...otherReads.flatMap((other) => other.runs)];
   const onJujutsu = isOnJujutsu(projectState);
-  const agentLabel = run === null ? null : (harnessName(run.agent) ?? "Agent");
+  const runWorking = (candidate: PeerRun) =>
+    threadWorking(candidate) ?? candidate.sessions.some((session) => session.to === undefined);
+  const lastReply = lastAgentReply(read.messages);
+  const followed =
+    run === null ? followedRun(allRuns, runWorking, lastReply?.author.run) : undefined;
+  // Nothing opened: the tab follows the agent, from its first step and not from its first message.
+  const agentRun =
+    followed === undefined
+      ? run
+      : {
+          id: followed.id,
+          agent: followed.agent,
+          seq: 0,
+          until: undefined,
+          place: { workspace: followed.workspace, project: followed.project, task: followed.task },
+        };
+  const agentLabel = agentRun === null ? null : (harnessName(agentRun.agent) ?? "Agent");
   const commentOn = (anchor: PeerRoomAnchor) => {
     if (canPost) setLine({ anchor, ask: (line?.ask ?? 0) + 1 });
     setPane("conversation");
@@ -346,7 +369,6 @@ export function RoomBody({
           place,
         );
 
-  const lastReply = lastAgentReply(read.messages);
   const picked =
     run ??
     (lastReply?.author.run === undefined
@@ -360,10 +382,7 @@ export function RoomBody({
           id: picked.id,
           seq: picked.seq,
           label: harnessName(pickedRun?.agent ?? picked.agent) ?? "Agent",
-          working:
-            pickedRun !== undefined &&
-            (threadWorking(pickedRun) ??
-              pickedRun.sessions.some((session) => session.to === undefined)),
+          working: pickedRun !== undefined && runWorking(pickedRun),
         };
 
   const homeChanges = {
@@ -659,7 +678,7 @@ export function RoomBody({
               </>
             )}
           </div>
-          {run === null ? null : (
+          {agentRun === null ? null : (
             <div
               className={cn(
                 "min-h-0 min-w-0 flex-1 flex-col",
@@ -671,11 +690,15 @@ export function RoomBody({
             >
               <RoomAgentDiff
                 {...agentChanges}
-                key={`${run.id}:${run.seq}`}
+                key={`${agentRun.id}:${agentRun.seq}`}
                 environmentId={environmentId}
-                threadAt={run.place}
-                run={run.id}
-                until={run.until}
+                threadAt={agentRun.place}
+                run={agentRun.id}
+                until={agentRun.until}
+                working={
+                  side === "agent" &&
+                  allRuns.some((candidate) => candidate.id === agentRun.id && runWorking(candidate))
+                }
               />
             </div>
           )}

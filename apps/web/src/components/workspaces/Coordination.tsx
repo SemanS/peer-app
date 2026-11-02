@@ -179,7 +179,7 @@ export function CoordinationControls({
             <code className="rounded bg-muted px-1 py-px text-2xs select-all">
               {coordination.logPath}
             </code>
-            . Enable detailed logging in Settings → Peer → Plugins.
+            . Set PEER_COORDINATION_DEBUG=1 for detailed logging.
           </p>
         </>
       ) : null}

@@ -501,4 +501,19 @@ describe("roomAgentGroups", () => {
       "Ended · done",
     ]);
   });
+
+  it("lets you share your own live thread, not a colleague's or one no computer reports", () => {
+    const yours = {
+      ...thread("yours", "idle", "me@acme.test"),
+      mine: true,
+      observable: true,
+      open: { kind: "thread" },
+    } as unknown as WorkThreadNode;
+    const shares = (one: WorkThreadNode) =>
+      roomAgentGroups({ runs: [], rows: [], threads: [one], me: "me@acme.test", nameOf })[0]
+        ?.agents[0]?.share;
+    expect(shares(yours)).toEqual({ thread: "yours", shared: true });
+    expect(shares({ ...yours, stale: true })).toBeUndefined();
+    expect(shares(thread("hers", "idle", "ana@acme.test"))).toBeUndefined();
+  });
 });

@@ -3,9 +3,12 @@ import type { WorkThreadNode } from "@t3tools/client-runtime/peer/work";
 import type { EnvironmentId, PeerHubStatus, PeerProjectState, PeerRun } from "@t3tools/contracts";
 
 import { cn } from "../../../lib/utils";
+import { InlineButton } from "../../ui/button";
+import { shareThread } from "../observe/shareThread";
 import { PeerSectionLabel } from "../PeerPageHeader";
 import { useCurrentProjectSets } from "../projectScope";
 import { setOfProject } from "../projectSets.logic";
+import { canWatchThreads } from "../slots.logic";
 import { taskRunRows } from "../task/runs.logic";
 import { useWorkData } from "../useWorkData";
 import { useWorkScope } from "../workScope";
@@ -49,7 +52,7 @@ export function RoomAgents({
   /** A room across projects' other projects: its agent works there, with or without a run. */
   readonly across?: ReadonlyArray<string>;
 }) {
-  const { tree } = useWorkData();
+  const { tree, plugins } = useWorkData();
   const sets = useCurrentProjectSets();
   const [stored] = useWorkScope();
   const here = projectScopeKey({ workspace: place.workspace, projectId: place.project });
@@ -71,7 +74,11 @@ export function RoomAgents({
       {groups.length === 0 ? (
         <p className="py-2 text-sm text-muted-foreground">No agents here yet.</p>
       ) : (
-        <AgentGroups groups={groups} onOpen={onOpen} />
+        <AgentGroups
+          groups={groups}
+          onOpen={onOpen}
+          {...(canWatchThreads(plugins) ? { sharingFrom: environmentId } : {})}
+        />
       )}
       {elsewhere.map((project) => (
         <section
@@ -124,22 +131,45 @@ export function ProjectAgents({
 function AgentGroups({
   groups,
   onOpen,
+  sharingFrom,
 }: {
   readonly groups: ReadonlyArray<RoomAgentGroup>;
   readonly onOpen: (open: WorkOpen) => void;
+  /** This computer, where a person's own threads can be shared from. */
+  readonly sharingFrom?: EnvironmentId;
 }) {
   return groups.map((group) => (
     <section key={group.key} aria-label={group.person} className="flex flex-col gap-1">
       <PeerSectionLabel>{group.person}</PeerSectionLabel>
       <ul className="flex flex-col">
         {group.agents.map((agent) => (
-          <li key={agent.key}>
+          <li key={agent.key} className="flex flex-col items-start">
             <AgentRow agent={agent} onOpen={onOpen} />
+            {sharingFrom === undefined || agent.share === undefined ? null : (
+              <ShareThread environmentId={sharingFrom} share={agent.share} />
+            )}
           </li>
         ))}
       </ul>
     </section>
   ));
+}
+
+function ShareThread({
+  environmentId,
+  share,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly share: NonNullable<RoomAgentRow["share"]>;
+}) {
+  return (
+    <InlineButton
+      className="ml-8"
+      onClick={() => void shareThread(environmentId, share.thread, !share.shared)}
+    >
+      {share.shared ? "Stop letting the team watch" : "Let the team watch"}
+    </InlineButton>
+  );
 }
 
 function AgentRow({

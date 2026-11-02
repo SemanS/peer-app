@@ -116,7 +116,7 @@ export function ClientField({
         </>
       }
       htmlFor={id}
-      hint="Marks client work. Peer warns when it runs on a consumer AI plan."
+      hint="Marks client work."
     >
       <Input
         id={id}

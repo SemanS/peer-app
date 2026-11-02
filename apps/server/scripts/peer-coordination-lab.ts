@@ -55,10 +55,10 @@ import { debugPathOf } from "../src/peerHub/core/metricsLog.ts";
 //   titles and branches, and both agents start together.
 //   LAB_CONTRACT=hidden (with REAL_SCENARIO=contract) is a dependency nobody names: Ana's task makes
 //   orderTotal() return integer cents under the same name, Bob's adds loyalty points in a new file.
-//   REAL_SCENARIO=memory (peer-lab/ownMemory.ts, REAL_AGENTS=1, kernel only) measures whether an agent picks the right
+//   REAL_SCENARIO=memory (peer-lab/ownMemory.ts, REAL_AGENTS=1) measures whether an agent picks the right
 //   memory store; LAB_VIKING_URL names the OpenViking server, LAB_MEMORY_ARM=none|tools|hint|card what the agent has, and
 //   LAB_MEMORY=adapter whether an agent opens a store for another agent that cannot.
-//   REAL_SCENARIO=ready (peer-lab/ready.ts, REAL_AGENTS=1, kernel only) measures whether an agent surfaces a person's
+//   REAL_SCENARIO=ready (peer-lab/ready.ts, REAL_AGENTS=1) measures whether an agent surfaces a person's
 //   decisions, with a card that says not to stop (LAB_READY=card) and without one.
 //   LAB_CONTRACT=deferred is the hidden seed with Bob told to compute his points from orderTotal() and to
 //   keep his branch right with the code it has, so that what he learns of Ana's change belongs to whoever

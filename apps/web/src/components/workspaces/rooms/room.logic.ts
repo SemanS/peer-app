@@ -538,6 +538,8 @@ export interface RoomAgentRow {
   readonly state: string;
   readonly stale: boolean;
   readonly open: WorkOpen | undefined;
+  /** Your live thread here, which you may let the team watch. */
+  readonly share: { readonly thread: string; readonly shared: boolean } | undefined;
 }
 
 export interface RoomAgentGroup {
@@ -568,6 +570,12 @@ const liveStatus = (run: PeerRun, threads: ReadonlyArray<WorkThreadNode>): PeerW
   const [first] = threads.toSorted((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status]);
   if (first !== undefined) return first.status;
   return run.sessions.some((session) => session.to === undefined) ? "working" : "idle";
+};
+
+/** A thread its computer no longer reports has nothing to share. */
+const shareOf = (threads: ReadonlyArray<WorkThreadNode>): RoomAgentRow["share"] => {
+  const thread = threads.find((one) => one.mine && !one.stale && one.open?.kind === "thread");
+  return thread === undefined ? undefined : { thread: thread.key, shared: thread.observable };
 };
 
 /** Every agent on a project's work, tasks and threads on no task alike, under its people. */
@@ -619,6 +627,7 @@ export function roomAgentGroups(input: {
       state: run.state === "running" ? LIVE_LABEL[status] : row.state,
       stale: run.state === "running" && own.length > 0 && own.every((thread) => thread.stale),
       open: row.open,
+      share: shareOf(own),
     });
   }
   for (const thread of threads) {
@@ -631,6 +640,7 @@ export function roomAgentGroups(input: {
       state: LIVE_LABEL[thread.status],
       stale: thread.stale,
       open: thread.open,
+      share: shareOf([thread]),
     });
   }
   return [...groups.entries()]

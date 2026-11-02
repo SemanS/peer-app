@@ -107,8 +107,6 @@ export function standInHerdr(socketPath: string) {
           workspace: { workspace_id: "w90" },
           root_pane: open(params),
         };
-      case "pane.split":
-        return { type: "pane_info", pane: open(params) };
       case "agent.start": {
         const pane = panes.get(String(params.pane_id));
         if (pane === undefined) return undefined;

@@ -865,7 +865,6 @@ describe("startHerdrAgent", () => {
   function startingHerdr(
     knobs: {
       readonly workspaces?: ReadonlyArray<{ workspace_id: string; label: string }>;
-      readonly split?: FakeReply;
       readonly starts?: (attempt: number) => FakeReply;
       readonly initializing?: boolean;
       readonly polls?: ReadonlyArray<Record<string, unknown>>;
@@ -893,6 +892,15 @@ describe("startHerdrAgent", () => {
             },
           };
         case "workspace.create":
+          // The one opened in focus only gives the size.
+          if ((request.params as { label: string }).label === "Peer")
+            return {
+              result: {
+                type: "workspace_created",
+                workspace: { workspace_id: "w9" },
+                root_pane: { pane_id: "w9:p1", terminal_id: "t-w9:p1" },
+              },
+            };
           return {
             result: {
               type: "workspace_created",
@@ -901,10 +909,6 @@ describe("startHerdrAgent", () => {
               root_pane: pane,
             },
           };
-        case "pane.split":
-          if (knobs.split !== undefined) return knobs.split;
-          pane = { pane_id: "w1:p5", terminal_id: "t-w1:p5" };
-          return { result: { type: "pane_info", pane } };
         case "agent.start": {
           attempts += 1;
           const params = request.params as { name: string; kind: string };
@@ -940,7 +944,7 @@ describe("startHerdrAgent", () => {
         }
         case "agent.prompt":
           return knobs.prompt ?? { result: { type: "agent_prompted", agent: {} } };
-        case "pane.close":
+        case "tab.close":
         case "workspace.close":
           return { result: { type: "ok" } };
         default:
@@ -959,17 +963,22 @@ describe("startHerdrAgent", () => {
 
     const methods = herdr.requests.map((request) => request.method);
     assert.deepStrictEqual(methods, [
-      "workspace.list",
       "workspace.create",
+      "workspace.create",
+      "workspace.close",
       "agent.start",
       "agent.get",
       "agent.get",
       "agent.prompt",
     ]);
-    const create = herdr.requests.find((request) => request.method === "workspace.create")!;
-    assert.deepStrictEqual(create.params, {
+    const [sizer, create] = herdr.requests.filter(
+      (request) => request.method === "workspace.create",
+    );
+    assert.deepStrictEqual(sizer!.params, { cwd, label: "Peer", focus: true });
+    assert.deepStrictEqual(herdr.requests[2]!.params, { workspace_id: "w9" });
+    assert.deepStrictEqual(create!.params, {
       cwd,
-      label: "Peer agents",
+      label: `Peer: ${NodePath.basename(cwd)}`,
       focus: false,
       env: { ANTHROPIC_BASE_URL: "https://gw" },
     });
@@ -991,7 +1000,7 @@ describe("startHerdrAgent", () => {
     await herdr.stop();
   });
 
-  it("splits Peer's own workspace when it already has one", async () => {
+  it("gives each agent a workspace of its own, where its terminal has the whole width", async () => {
     const herdr = await startingHerdr({
       workspaces: [
         { workspace_id: "w1", label: "Peer agents" },
@@ -1002,16 +1011,10 @@ describe("startHerdrAgent", () => {
       { cwd, harness: "codex", env: { OPENAI_BASE_URL: "https://gw" } },
       { socketPath: herdr.socketPath, ...fast },
     );
-    assert.deepStrictEqual(started, { paneId: "w1:p5", terminalId: "t-w1:p5" });
-    assert.strictEqual(herdr.count("workspace.create"), 0);
-    const split = herdr.requests.find((request) => request.method === "pane.split")!;
-    assert.deepStrictEqual(split.params, {
-      workspace_id: "w1",
-      direction: "right",
-      cwd,
-      focus: false,
-      env: { OPENAI_BASE_URL: "https://gw" },
-    });
+    assert.deepStrictEqual(started, { paneId: "w2:p1", terminalId: "t-w2:p1" });
+    assert.strictEqual(herdr.count("pane.split"), 0);
+    assert.strictEqual(herdr.count("tab.create"), 0);
+    assert.strictEqual(herdr.count("workspace.create"), 2);
     assert.strictEqual(
       (
         herdr.requests.find((request) => request.method === "agent.start")!.params as {
@@ -1042,25 +1045,6 @@ describe("startHerdrAgent", () => {
       { socketPath: herdr.socketPath, ...fast },
     );
     assert.isUndefined(argsOf());
-    await herdr.stop();
-  });
-
-  it("splits the newest of Peer's workspaces, and makes a new one when it cannot split it", async () => {
-    const herdr = await startingHerdr({
-      workspaces: [
-        { workspace_id: "w1", label: "Peer agents" },
-        { workspace_id: "w3", label: "Peer agents" },
-      ],
-      split: { error: { code: "pane_split_failed", message: "pane is too small to split" } },
-    });
-    const started = await startHerdrAgent(
-      { cwd, harness: "claude" },
-      { socketPath: herdr.socketPath, ...fast },
-    );
-    const split = herdr.requests.find((request) => request.method === "pane.split")!;
-    assert.strictEqual((split.params as { workspace_id: string }).workspace_id, "w3");
-    assert.strictEqual(herdr.count("workspace.create"), 1);
-    assert.strictEqual(started.paneId, "w2:p1");
     await herdr.stop();
   });
 
@@ -1097,7 +1081,7 @@ describe("startHerdrAgent", () => {
     );
     assert.strictEqual((refused as { code?: string }).code, "agent_pane_busy");
     assert.strictEqual(herdr.count("agent.start"), 1);
-    assert.strictEqual(herdr.count("workspace.close"), 1, "its new workspace is closed again");
+    assert.strictEqual(herdr.count("workspace.close"), 2, "its new workspace is closed again");
     await herdr.stop();
   });
 
@@ -1116,8 +1100,13 @@ describe("startHerdrAgent", () => {
       (error: unknown) => error,
     );
     assert.strictEqual((refused as Error).message, "agent name is already used");
-    assert.strictEqual(herdr.count("pane.close"), 1, "the pane it split is closed again");
-    assert.strictEqual(herdr.count("workspace.close"), 0, "the workspace is not Peer's to close");
+    assert.deepStrictEqual(
+      herdr.requests
+        .filter((request) => request.method === "workspace.close")
+        .map((request) => request.params),
+      [{ workspace_id: "w9" }, { workspace_id: "w2" }],
+      "the workspace it opened is closed again",
+    );
     assert.strictEqual(herdr.count("agent.prompt"), 0);
     await herdr.stop();
   });
@@ -1133,7 +1122,12 @@ describe("startHerdrAgent", () => {
     assert.strictEqual(started.paneId, "w2:p1");
     assert.match(started.promptError ?? "", /waits for an answer/);
     assert.strictEqual(herdr.count("agent.prompt"), 0);
-    assert.strictEqual(herdr.count("workspace.close"), 0);
+    assert.notInclude(
+      herdr.requests
+        .filter((request) => request.method === "workspace.close")
+        .map((request) => (request.params as { workspace_id: string }).workspace_id),
+      "w2",
+    );
     await herdr.stop();
   });
 
@@ -1141,14 +1135,16 @@ describe("startHerdrAgent", () => {
     const uncertain = await fakeHerdr((request, connection) => {
       if (request.method === "workspace.list")
         return { result: { type: "workspace_list", workspaces: [] } };
-      if (request.method === "workspace.create")
+      if (request.method === "workspace.create") {
+        const id = (request.params as { label: string }).label === "Peer" ? "w9" : "w2";
         return {
           result: {
             type: "workspace_created",
-            workspace: { workspace_id: "w2" },
-            root_pane: { pane_id: "w2:p1", terminal_id: "t-w2:p1" },
+            workspace: { workspace_id: id },
+            root_pane: { pane_id: `${id}:p1`, terminal_id: `t-${id}:p1` },
           },
         };
+      }
       if (request.method === "agent.start") {
         connection.end();
         return undefined;
@@ -1164,7 +1160,12 @@ describe("startHerdrAgent", () => {
     );
     assert.match((failure as Error).message, /Inspect pane w2:p1/);
     assert.strictEqual(uncertain.count("agent.start"), 1);
-    assert.strictEqual(uncertain.count("workspace.close"), 0);
+    assert.notInclude(
+      uncertain.requests
+        .filter((request) => request.method === "workspace.close")
+        .map((request) => (request.params as { workspace_id: string }).workspace_id),
+      "w2",
+    );
   });
 
   it("keeps the pane of an agent that never became interactive, and names it", async () => {
@@ -1180,7 +1181,13 @@ describe("startHerdrAgent", () => {
     );
     assert.strictEqual((failed as { code?: string }).code, "agent_start_failed");
     assert.match((failed as Error).message, /pane w2:p1/);
-    assert.strictEqual(herdr.count("workspace.close"), 0, "the person can see what happened");
+    assert.notInclude(
+      herdr.requests
+        .filter((request) => request.method === "workspace.close")
+        .map((request) => (request.params as { workspace_id: string }).workspace_id),
+      "w2",
+      "the person can see what happened",
+    );
     await herdr.stop();
   });
 

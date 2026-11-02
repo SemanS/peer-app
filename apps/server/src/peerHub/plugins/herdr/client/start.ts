@@ -28,9 +28,6 @@ const HARNESSES: ReadonlySet<string> = new Set<HerdrHarness>(["claude", "codex"]
 export const resumeArgs = (harness: HerdrHarness, session: string) =>
   harness === "claude" ? ["--resume", session] : ["resume", session];
 
-/** The herdr workspace Peer starts agents in, so they stay out of the person's own. */
-const PEER_WORKSPACE = "Peer agents";
-
 const effortArgs = (harness: HerdrHarness, effort: string) =>
   harness === "claude" ? ["--effort", effort] : ["-c", `model_reasoning_effort="${effort}"`];
 
@@ -84,15 +81,6 @@ export interface StartHerdrAgentOptions {
 }
 
 const PaneIds = Schema.Struct({ pane_id: Schema.String, terminal_id: Schema.String });
-const decodeWorkspaceList = Schema.decodeUnknownOption(
-  Schema.Struct({
-    type: Schema.Literal("workspace_list"),
-    workspaces: Schema.Array(Schema.Struct({ workspace_id: Schema.String, label: Schema.String })),
-  }),
-);
-const decodeSplit = Schema.decodeUnknownOption(
-  Schema.Struct({ type: Schema.Literal("pane_info"), pane: PaneIds }),
-);
 const decodeWorkspaceCreated = Schema.decodeUnknownOption(
   Schema.Struct({
     type: Schema.Literal("workspace_created"),
@@ -152,53 +140,24 @@ const SHELL_NAMES: ReadonlySet<string> = new Set([
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** A new pane for an agent: a split of Peer's own herdr workspace if it has one, else a new workspace. */
+/**
+ * A workspace of the agent's own, with the whole terminal. herdr 0.9.3 sizes a new terminal like the
+ * pane in focus, which splits can leave a column wide: a workspace opened in focus first gives the
+ * size, and is closed again. An agent a column wide cannot show its first question.
+ */
 async function openPane(path: string, input: StartHerdrAgentInput) {
   const env =
     input.env !== undefined && Object.keys(input.env).length > 0 ? { env: input.env } : {};
-  const listed = decodeWorkspaceList(await call(path, "workspace.list", {}));
-  // The newest one: when an older one's panes are too small to split, a new one is made below.
-  const home = Option.isSome(listed)
-    ? listed.value.workspaces.findLast((workspace) => workspace.label === PEER_WORKSPACE)
-    : undefined;
-  if (home !== undefined) {
-    try {
-      const split = decodeSplit(
-        await call(
-          path,
-          "pane.split",
-          {
-            workspace_id: home.workspace_id,
-            direction: "right",
-            cwd: input.cwd,
-            focus: false,
-            ...env,
-          },
-          5000,
-        ),
-      );
-      if (Option.isSome(split)) {
-        const { pane_id, terminal_id } = split.value.pane;
-        return {
-          paneId: pane_id,
-          terminalId: terminal_id,
-          // Only the pane Peer made: the workspace and the agents in it are the person's now.
-          undo: () => call(path, "pane.close", { pane_id }).then(() => undefined),
-        };
-      }
-    } catch (error) {
-      // Closed since the list, or too crowded to split: make a new one.
-      if (!(error instanceof HerdrRefused)) throw error;
-    }
+  const open = async (label: string, focus: boolean, extra: object) =>
+    decodeWorkspaceCreated(
+      await call(path, "workspace.create", { cwd: input.cwd, label, focus, ...extra }, 5000),
+    );
+  const sizer = await open("Peer", true, {}).catch(() => Option.none());
+  const created = await open(`Peer: ${NodePath.basename(input.cwd)}`, false, env);
+  if (Option.isSome(sizer)) {
+    const { workspace_id } = sizer.value.workspace;
+    await call(path, "workspace.close", { workspace_id }).catch(() => undefined);
   }
-  const created = decodeWorkspaceCreated(
-    await call(
-      path,
-      "workspace.create",
-      { cwd: input.cwd, label: PEER_WORKSPACE, focus: false, ...env },
-      5000,
-    ),
-  );
   if (Option.isNone(created)) throw new Error("herdr answered in a way Peer does not know");
   const { workspace, root_pane } = created.value;
   return {

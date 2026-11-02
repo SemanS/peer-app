@@ -2309,6 +2309,13 @@ const memoryProgram = Effect.gen(function* () {
   herdrJson(bobHerdr, "agent", "prompt", bobPane, ADAPTER_BOB_TASK);
   say("Bob's agent prompted", ADAPTER_BOB_TASK);
   yield* Effect.promise(() => quietUntil(live, 8 * 60_000));
+  // Words for Bob's stopped agent wait for him: he reads them and passes them on, as from the Feed.
+  const waiting = (yield* Effect.promise(() => cachedStatus(bob))).rooms?.waiting ?? [];
+  for (const { workspace, project, task, seq } of waiting) {
+    say("Bob passes on", `#${seq} of ${task}`);
+    yield* bob.client[PEER_ROOMS_METHODS.peerRoomsPass]({ workspace, project, task, seq });
+  }
+  if (waiting.length > 0) yield* Effect.promise(() => quietUntil(live, 8 * 60_000));
   const verdict = judgeLoyalty(bob.checkout);
   say(
     "memory result",
@@ -2322,6 +2329,7 @@ const memoryProgram = Effect.gen(function* () {
       checkouts: [ana.checkout, bob.checkout].map((path) => NodeFS.realpathSync(path)),
       verdict,
       right: adapterRight(verdict),
+      passedOn: waiting.length,
       added: {
         ana: peerAdded(events(ana) as ReadonlyArray<LabEvent>),
         bob: peerAdded(events(bob) as ReadonlyArray<LabEvent>),

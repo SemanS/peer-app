@@ -181,6 +181,7 @@ describe("the herdr atoms", () => {
       "peerHerdrRestartRuntime",
       "peerHerdrSetIntegration",
       "peerHerdrSetRuntime",
+      "peerHubAnswerAgentTrust",
       "peerHubFocusAgent",
       "peerHubPromptAgent",
       "peerHubWatchAgent",

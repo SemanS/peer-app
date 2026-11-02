@@ -81,6 +81,7 @@ const PROJECT = {
 const answer = (tasks: ReadonlyArray<{ id: string; title: string }>) => ({
   _tag: "Success",
   value: {
+    createdTask: tasks.at(-1),
     workspaces: [
       { slug: "webinson", projects: [{ project: { id: "ordering" }, work: { tasks } }] },
     ],

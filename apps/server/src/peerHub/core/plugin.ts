@@ -2,6 +2,11 @@
 export { writePreservingLink } from "./adapters/files.ts";
 import type { CliError } from "./broker/cliContract.ts";
 export { CliError, usage, refused, uncertain, hubFailure, render } from "./broker/cliContract.ts";
+// What the rooms plugin keeps and shares through core: a run's checkouts, kept work, a person's card.
+export { foldersBeyond, roomReach, runRootsData } from "./work/runRoots.ts";
+export type { LocalRoom, RunRoot } from "./work/runRoots.ts";
+export { messageKey, pinWork, sealWork, shareWork, snapshotPrefix } from "./workSnapshots.ts";
+export type { RoomPlace } from "./workSnapshots.ts";
 export { isSignedOut, isMissingRoute } from "./hub/hubApi.ts";
 // Whether a shell command is a landing step, and which: a plugin that judges shell commands may need to know.
 export { isLanding, landingKind } from "./broker/landing.ts";

@@ -23,7 +23,7 @@ import type * as PeerState from "../../../core/state/PeerState.ts";
 import type { PersistedRun } from "../../../core/state/PeerState.ts";
 import { holdsWork } from "../../../core/vcs.ts";
 import type * as PeerWork from "../../../core/work/PeerWork.ts";
-import { foldersBeyond, runRootsData, type RunRoot } from "../../../core/work/runRoots.ts";
+import { foldersBeyond, runRootsData, type RunRoot } from "../../../core/plugin.ts";
 import { run } from "../../../core/local.ts";
 import { NO_CHECKOUT } from "../follow.ts";
 import { chatRunPrompt, passedRunPrompt, type Heard } from "../text.ts";

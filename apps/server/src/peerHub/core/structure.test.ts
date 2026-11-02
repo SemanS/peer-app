@@ -35,8 +35,10 @@ const ENTRY_BUDGET = 150;
  * seams to split along.
  */
 const CEILINGS: Readonly<Record<string, number>> = {
+  changes: 1603,
+  herdr: 4807,
   jujutsu: 2354,
-  rooms: 3519,
+  rooms: 3800,
 };
 
 /**

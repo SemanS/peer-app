@@ -15,7 +15,7 @@ import * as Schema from "effect/Schema";
 
 import { run } from "../../../core/local.ts";
 import { checkoutKind } from "../../../core/vcs.ts";
-import { snapshotPrefix, type RoomPlace } from "../../../core/workSnapshots.ts";
+import { snapshotPrefix, type RoomPlace } from "../../../core/plugin.ts";
 import { DIFF, FETCH, readPatch } from "./diff.ts";
 
 const READ_MS = 4_000;

@@ -19,7 +19,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
 import type * as PeerState from "../../../core/state/PeerState.ts";
-import { runRootsData, type LocalRoom } from "../../../core/work/runRoots.ts";
+import { runRootsData, type LocalRoom } from "../../../core/plugin.ts";
 
 /** A local project's one room, in the place a task's id takes. */
 export const LOCAL_ROOM = "room";

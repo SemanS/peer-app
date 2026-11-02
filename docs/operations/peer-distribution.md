@@ -5,9 +5,8 @@ local server and CLI, agent hooks, Git/Jujutsu adapters, local coordination, and
 and wire contracts. Keep the upstream MIT license and attribution intact.
 
 The separate Peer Hub repository is private. Its service implementation, organization and entitlement
-policy, advanced cross-person coordination, ownership decisions, planning, knowledge ranking,
-shared memory and Slack orchestration are not app build inputs. Public contracts describe requests
-and observable answers, not those implementations. Copying an open client is permitted; protecting
+policy, and the rooms people across computers share are not app build inputs. Public contracts
+describe requests and observable answers, not those implementations. Copying an open client is permitted; protecting
 commercial implementation means keeping it server-side, not obfuscating a client or hiding a protocol.
 
 Run `pnpm release:local:check` before preparing a source release. The server bundle also runs this

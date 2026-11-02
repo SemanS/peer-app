@@ -46,8 +46,8 @@ T3 Code uses the Claude configuration on the connected server.
 Open the thread's menu in the chat header and choose **Continue in Claude Code**. Peer closes its
 own Claude process and opens a terminal in the thread's folder, running `claude --resume` on the
 same session with the thread's model and effort. The thread stays parked until you bring it back:
-Peer runs nothing on it meanwhile. Messages from a schedule, Slack or a recipe wait for its return;
-a message you type is refused until then.
+Peer runs nothing on it meanwhile. Messages that Peer or a schedule sends on your behalf, such as a
+wake or a scheduled task, wait for its return; a message you type is refused until then.
 
 Quit Claude Code or close its terminal, and what you did appears in the thread as finished turns,
 marked **Ran in the CLI**. The next message in Peer continues from there. Changes made in the

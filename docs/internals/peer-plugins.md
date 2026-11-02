@@ -185,8 +185,8 @@ manifest, which also names any write it must make together with another domain's
 
 ## Turning things off
 
-- **A plugin, on one environment.** Its owner turns it off in Settings → Peer → Plugins on web and
-  desktop, or in Peer workspaces on mobile, through `peerHub.setPlugin`, which needs
+- **A plugin, on one environment.** Its owner turns it off in Settings → This computer → Plugins on
+  web and desktop, or in Peer workspaces on mobile, through `peerHub.setPlugin`, which needs
   access-write. The choice persists in `peer-hub.json` and applies from the next hook, command and
   request.
 - **While a plugin is inactive**, its commands answer `peer: <name> is turned off on this

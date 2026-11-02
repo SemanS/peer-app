@@ -11,7 +11,7 @@ A colocated repository imports Git refs during jj commands. The default unreacha
 
 ## Checkpoints are raw refs
 
-A checkpoint captures the commit id of `@` and pins it under `refs/t3/` with `git update-ref --create-reflog`. It moves neither the working-copy change nor a bookmark. Bookmarks and tags would appear in ref pickers, `jj commit` would advance `@` every turn, and operation ids stop resolving after operation-log pruning. The ref format stays shared through [`checkpointRefForThreadTurn`](../../apps/server/src/checkpointing/Utils.ts).
+A checkpoint captures the commit id of `@` and pins it under `refs/t3/` with `git update-ref --create-reflog`. It moves neither the working-copy change nor a bookmark. Bookmarks and tags would appear in ref pickers, `jj commit` would advance `@` every turn, and operation ids stop resolving after operation-log pruning.
 
 What it doesn't give you is jj addressability. After an op log prune the object is still pinned in
 Git but jj has forgotten it, so `jj restore --from <id>` fails with `Revision ... doesn't exist`.
@@ -79,8 +79,8 @@ one of those workspaces has edits jj has not snapshotted yet, that change ends w
 the older file is written back to disk (seen on 0.46.0; `jj converge` recovers it). So `postTool`
 snapshots the agent's workspace, converges what ended divergent, and only then fetches what the
 session follows: that fetch moves the session's own working-copy change, so it never runs in the
-background, only while the agent waits for the hook. Plugins that read after it (`forecast`,
-`changes`) pass `--ignore-working-copy` and never snapshot.
+background, only while the agent waits for the hook. Plugins that read after it (`changes`,
+`rooms`) pass `--ignore-working-copy` and never snapshot.
 
 A step that fails is a tool step too, and protection makes one common: jj refuses `jj squash --into`
 a teammate's change with an error. Claude Code reports such a step as `PostToolUseFailure`, never
@@ -91,33 +91,17 @@ snapshot takes what such a patch wrote.
 
 When `jj converge --no-interactive` cannot choose an author (jj gives the late snapshot a new author time, so the versions' author times fall in different seconds), the plugin gives every version the oldest's author time, and the author of the oldest version that has one, with `jj metaedit`, and converges once more; only then does the change keep two versions. The follow fetch gets what the step has left minus 600 ms and is skipped below 1.2 s: a Claude Code hook has 3.3 s in all, so a fixed 3 s fetch never ran there. A skipped or timed-out fetch does not count for the 10-second rule. At the end of a turn (the plugin's Stop handler, while the agent still waits for the hook and edits nothing) the same snapshot, converge and follow fetch run once more whatever that rule says, so a turn never ends on a stale version; the moved notice waits for the next step, except a move that left a conflict in the session's own change, which is told as a waking notice (a `wakes: true` notice the Stop wait gives an idle agent) and marked told. An undo from the app runs `jj op revert` and the converge after it under the person's name, not the agent's or the computer user's.
 
-## Knowledge trailers come from the landing step, not from a hook
-
-kontext's `prepare-commit-msg` git hook writes `Decision: <id>` and the other kinds' trailers into
-a commit that ships a knowledge file; `kontext log` and `git log --format='%(trailers:key=Decision)'`
-read an entry's lineage from them. jj runs no git hook, so a `jj commit`, `jj describe` or
-`jj squash` loses them unless the author adds them by hand (kontext's docs say so, and point at
-`kontext prepare-commit`, which lists them). The knowledge plugin puts them back in two halves
-([`client/trailers.ts`](../../apps/server/src/peerHub/plugins/knowledge/client/trailers.ts)):
-before the command, kontext's `prepare-commit` report of the working copy names the trailers, so
-kontext decides and Peer parses nothing of `.ai`; after it, when the change the command described
-(`@-` after a commit or squash, `@` after a describe) touches the store, the trailers its description
-lacks are appended with `jj describe`, once. A describe or squash that names another revision or picks
-hunks is left alone, as is an undescribed change, a change jj refuses to rewrite (a teammate's,
-immutable) and a step too short for the reads. The jj calls pass `--ignore-working-copy`, since the
-jujutsu plugin owns the snapshot and a describe between its steps must not take one.
-
 ## `refs/peer/*` is Peer's, and jj never imports it
 
-- `refs/peer/forecast/*`: teammates' branches the forecast fetched, and `refs/peer/forecast/wip/*`
-  their shared work in progress.
-- `refs/peer/wip/*` on origin: this computer's agents' work in progress, while the person shares it.
+- `refs/peer/snapshots/<room>/<key>`: the work of an agent as it stood at a room message, pinned by a
+  sealing commit so a rebase, an abandon or the end of the session leaves it readable. On origin
+  while the person shares their agents' work in progress.
 - `refs/peer/reviewed/<id>`: the commit a person marked reviewed, so it stays readable after the
   change is rewritten and the commit is hidden.
+- `refs/peer/rooms/<hash>`: a pushed branch fetched for a room's diff, so no branch moves and
+  `FETCH_HEAD` stays the person's.
 
 jj imports only `refs/heads`, `refs/remotes` and `refs/tags`, so none of these becomes a bookmark.
-A forecast check that needs a teammate's commit jj has never seen gives it a short-lived tag
-`refs/tags/peer-check/<commit>` for the length of one `jj git import`, and removes it afterwards.
 
 ## Workspace cleanup
 

@@ -4,7 +4,7 @@ Peer is a workspace for coding agents. Run providers, review their changes and c
 working in the same repository from desktop, web or mobile.
 
 Peer Local is free and open source. It works without a Peer Hub account. Your providers' account
-and usage terms still apply. Connect an optional Hub to share tasks, coordination and knowledge
+and usage terms still apply. Connect an optional Hub to share tasks, rooms and coordination
 with teammates. The hosted Hub is free for two people with unlimited interactions; larger teams
 need Team capacity.
 

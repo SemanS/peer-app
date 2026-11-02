@@ -25,9 +25,11 @@ as echo. Two brokers with the same environment id would erase each other's repor
 seconds. They share the state dir, the Hub token and `<stateDir>/environment-id`, so exactly one may
 coordinate at a time. `peer-hub.json` is also read once at startup and kept in memory
 ([`PeerState.ts`](../../apps/server/src/peerHub/core/state/PeerState.ts)): a second process holding
-it would overwrite the first one's writes. One-shot commands (`login`, `join`, `logout`, `share`,
-`bind`, `connect`, `hooks`) therefore refuse or forward through the socket while any broker is live;
-`tasks` and `take` only talk to the Hub and write nothing then.
+it would overwrite the first one's writes. The one-shot commands that write it (`login`, `join`,
+`create`, `invite`, `logout`, `unshare`, `bind`) are therefore refused beside the Peer app, while
+Peer Core hands over to them and starts again afterwards. `share`, `connect` and `disconnect`
+forward through the live broker's socket, `hooks` refuse while one runs, and `tasks` and `runs`
+write nothing then.
 
 The broker had no lock: start unlinks and rebinds the socket. The exclusion is the owner record
 `<stateDir>/coord/owner.json` (`{ kind, pid, startedAt }`), written on bind and removed on stop, and
@@ -84,6 +86,6 @@ agent's work on another project's coordination, which is worse than asking.
 The binding is said once: `placeOf` leaves a one-line notice that `pendingBindingNotice()` hands to
 the next hook or `peer mcp` output and clears. Each folder's lookup and notice happen once per
 process, and its remote is read once per process, because hooks call `placeOf` on every event.
-A one-shot command that is not the broker (`peer core status`, `tasks`, `take`) passes
-`bindByRemote: false` while a broker runs: the broker keeps `peer-hub.json` in memory and would
-overwrite the binding with its next write.
+A one-shot command that is not the broker (`peer core status`, `share`, `unshare`, `bind`, and
+`tasks` while a broker runs) passes `bindByRemote: false`: the broker keeps `peer-hub.json` in
+memory and would overwrite the binding with its next write.

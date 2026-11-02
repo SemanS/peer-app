@@ -144,6 +144,8 @@ export const roomCommands = (
     Effect.gen(function* () {
       const place = { workspace: session.workspace, project: session.project, task };
       const head = yield* rooms.read({ ...place, limit: 1 });
+      if (task === session.task || isLocalRoom(session.workspace))
+        localOf(session).roomRead = Math.max(localOf(session).roomRead, head.seq);
       const after = Math.max(0, head.seq - SHOWN);
       const { messages } = yield* rooms.read({ ...place, after, limit: SHOWN });
       const email = yield* state.email;

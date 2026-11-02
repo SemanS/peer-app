@@ -616,6 +616,13 @@ const make = Effect.gen(function* () {
         }
         return message;
       }),
+    /** The last message of the session's room this computer knows of, with no Hub call. */
+    lastSaid: (session: PeerSessionView) =>
+      Effect.map(Effect.all([Ref.get(inboxes), Ref.get(localInbox)]), ([read, here]) =>
+        isLocalRoom(session.workspace)
+          ? (here.seqs[session.project]?.[LOCAL_ROOM] ?? 0)
+          : (read.get(session.workspace)?.seqs[session.project]?.[session.task ?? ""] ?? 0),
+      ),
     /** What the session's room said after `after`, by anyone but this run, as far as it may hear. */
     unread: Effect.fn("Rooms.unread")(
       function* (session: PeerSessionView, after: number) {

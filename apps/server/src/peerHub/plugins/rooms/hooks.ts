@@ -48,8 +48,8 @@ export interface Local {
   readonly overlaps: Set<string>;
   /** Notes on lines since `peer ready`; absent before it. */
   readyNotes?: number;
-  /** How far a landing step of this session has read its room. */
-  landingRead: number;
+  /** How far this session has read its room. */
+  roomRead: number;
 }
 
 export const localOf = (session: PeerSessionView) =>
@@ -61,7 +61,7 @@ export const localOf = (session: PeerSessionView) =>
     told: new Set(),
     agentWakes: [],
     overlaps: new Set(),
-    landingRead: 0,
+    roomRead: 0,
   }));
 
 /** Whom a queue belongs to: a run, or the session itself on a computer with no runs. */
@@ -69,6 +69,7 @@ const queueOf = (session: PeerSessionView) => session.run ?? session.id;
 
 const toldOf = (session: PeerSessionView) => session.told?.("rooms") ?? localOf(session).told;
 const reminded = (ref: string) => `r:${ref}`;
+const roomHeard = (ref: string) => `l:${ref}`;
 const seqOf = (ref: string) => Number(ref.slice(ref.lastIndexOf(":") + 1));
 
 export const roomHooks = (rooms: Rooms["Service"]) => {
@@ -133,19 +134,30 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
     if (!quiet) own.unanswered.add(ref);
     rooms.settled(queue, ref);
   };
-  /** Before work lands, what its room says that this session never heard, once. */
-  const beforeLanding = Effect.fn("RoomHooks.beforeLanding")(function* (
+  /**
+   * What its room said that this session never heard: an agent at work hears the room it is in at
+   * its next step, and work lands only after that read. A quiet room asks the Hub nothing, nothing
+   * here wakes an agent, and what names this agent reaches it through its queue instead.
+   */
+  const roomNews = Effect.fn("RoomHooks.roomNews")(function* (
     ctx: PeerHookContext | PeerToolContext,
   ) {
     const { session } = ctx;
-    const command = "command" in ctx ? ctx.command : undefined;
-    if (command === undefined || !isLanding(command)) return null;
     if (session.task === undefined && !isLocalRoom(session.workspace)) return null;
     const own = localOf(session);
+    const command = "command" in ctx ? ctx.command : undefined;
+    const landing = command !== undefined && isLanding(command);
+    if (!landing && (yield* rooms.lastSaid(session)) <= own.roomRead) return null;
+    const { seq, unread } = yield* rooms.unread(session, own.roomRead);
+    own.roomRead = seq;
     const told = toldOf(session);
-    const { seq, unread } = yield* rooms.unread(session, own.landingRead);
-    own.landingRead = seq;
-    return roomLinesText(unread.filter((line) => !told.has(line.ref)));
+    const queued = new Set(rooms.waiting(queueOf(session)).map(({ ref }) => ref));
+    const news = unread.filter(
+      ({ ref }) =>
+        !told.has(ref) && !told.has(roomHeard(ref)) && !own.offering.has(ref) && !queued.has(ref),
+    );
+    for (const { ref } of news) told.add(roomHeard(ref));
+    return roomLinesText(news);
   });
   return {
     startLine: Effect.succeed(START_LINE),
@@ -154,7 +166,7 @@ export const roomHooks = (rooms: Rooms["Service"]) => {
     sessionExpired: left,
     notices: [
       { wakes: true, landing: true, read: notice },
-      { wakes: false, landing: true, read: beforeLanding },
+      { wakes: false, landing: true, read: roomNews },
     ],
     delivery: ({ session, refs, state }) =>
       Effect.gen(function* () {

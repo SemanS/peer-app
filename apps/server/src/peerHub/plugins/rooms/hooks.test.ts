@@ -30,13 +30,18 @@ const hooksOf = (
 ) => {
   const queued: string[] = [];
   let wakes = 0;
+  let reads = 0;
   const rooms = {
     waiting: () => waiting,
     overlapLines: () => Effect.void,
+    lastSaid: () => Effect.succeed(Math.max(0, ...lines.map(({ seq }) => seq))),
     unread: (_session: PeerSessionView, after: number) =>
-      Effect.succeed({
-        seq: Math.max(after, ...lines.map(({ seq }) => seq)),
-        unread: lines.filter(({ seq }) => seq > after),
+      Effect.sync(() => {
+        reads += 1;
+        return {
+          seq: Math.max(after, ...lines.map(({ seq }) => seq)),
+          unread: lines.filter(({ seq }) => seq > after),
+        };
       }),
     projectsOf: () => Effect.succeed(projects),
     tellable: (_run: string | undefined, candidates: ReadonlyArray<Heard>) =>
@@ -51,7 +56,7 @@ const hooksOf = (
       wakes += 1;
     }),
   } as unknown as Rooms["Service"];
-  return { hooks: roomHooks(rooms), queued, wakes: () => wakes };
+  return { hooks: roomHooks(rooms), queued, wakes: () => wakes, reads: () => reads };
 };
 
 const ctxOf = (session: PeerSessionView): PeerHookContext => ({
@@ -118,12 +123,48 @@ describe("a landing step", () => {
       assert.strictEqual(yield* landing(hooks, session), null);
     }),
   );
+});
 
-  it.effect("says nothing at an ordinary step", () =>
+describe("an agent at work in a room", () => {
+  const line = { ref: "vl-7:4", seq: 4, author: "Eva's agent", text: "Cents, not euros." };
+  const step = (hooks: ReturnType<typeof hooksOf>["hooks"], session: PeerSessionView) =>
+    hooks.notices[1]!.read(ctxOf(session));
+
+  it("is never woken by it", () => {
+    assert.isFalse(hooksOf([]).hooks.notices[1]?.wakes);
+  });
+
+  it.effect("hears at its next step what nobody addressed to it, once", () =>
     Effect.gen(function* () {
-      const line = { ref: "vl-7:4", seq: 4, author: "Eva's agent", text: "Cents." };
       const { hooks } = hooksOf([], undefined, undefined, [line]);
-      assert.strictEqual(yield* hooks.notices[1]!.read(ctxOf(sessionOf())), null);
+      const session = sessionOf();
+      assert.include(String(yield* step(hooks, session)), "#4 Eva's agent: Cents, not euros.");
+      assert.strictEqual(yield* step(hooks, session), null);
+    }),
+  );
+
+  it.effect("asks the Hub nothing while the room is quiet", () =>
+    Effect.gen(function* () {
+      const { hooks, reads } = hooksOf([]);
+      assert.strictEqual(yield* step(hooks, sessionOf()), null);
+      assert.strictEqual(reads(), 0);
+    }),
+  );
+
+  it.effect("leaves what names it to its queue, which brings the words once", () =>
+    Effect.gen(function* () {
+      const { hooks } = hooksOf([{ ...heard(4), ref: line.ref }], undefined, undefined, [line]);
+      assert.strictEqual(yield* step(hooks, sessionOf()), null);
+    }),
+  );
+
+  it.effect("does not repeat what it read with peer room", () =>
+    Effect.gen(function* () {
+      const { hooks, reads } = hooksOf([], undefined, undefined, [line]);
+      const session = sessionOf();
+      localOf(session).roomRead = line.seq;
+      assert.strictEqual(yield* step(hooks, session), null);
+      assert.strictEqual(reads(), 0);
     }),
   );
 });

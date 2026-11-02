@@ -188,8 +188,10 @@ export const chatRunPrompt = (heard: Heard) =>
     heardText(heard),
   ].join("\n");
 
-export const START_LINE =
-  'Your room: peer room reads it, peer room <task> reads another task\'s. peer room say "<text>" [--reply <n>] [--to <person>] [--agent <person>] [--in <task>] [--at <path>:<line>] posts. peer ready says your work is done, peer blocked that only a person can go on.';
+export const START_LINE = [
+  'Your room: peer room reads it, peer room <task> reads another task\'s. peer room say "<text>" [--reply <n>] [--to <person>] [--agent <person>] [--in <task>] [--at <path>:<line>] posts, and the agents at work in a room hear it at their next step. peer ready says your work is done, peer blocked that only a person can go on.',
+  'Before implementing, check what your teammates\' agents work on (peer status) for shared data, behavior or interfaces, and pick what bears on your work even if your person did not mention it: peer ask <task> "<question>" asks the agents on a task, peer room say --in <task> tells them. Tell them before you change what their work builds on. When you hear of such a change, recheck your code against what will land, not only your checkout.',
+].join("\n");
 
 /** What `peer ready` answers: the agent itself says where its person might have chosen otherwise. */
 export const READY_TEXT =

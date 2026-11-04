@@ -52,6 +52,10 @@ describe("a person's card", () => {
       const started = card.hooks!.sessionStart!({} as PeerHookContext);
       assert.strictEqual(yield* read, NO_CARD);
       assert.isNull(yield* started);
+      assert.isTrue(
+        (yield* client["peer.card.read"]({})).teammatesMayWake,
+        "waking is on until they turn it off",
+      );
       yield* client["peer.card.save"]({ text: "  Ask me in Slack.  ", teammatesMayWake: true });
       assert.deepStrictEqual(yield* client["peer.card.read"]({}), {
         text: "Ask me in Slack.",

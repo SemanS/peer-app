@@ -73,8 +73,9 @@ characters. Your agents read it when they start: where your notes and memory are
 share with teammates' agents, whether to stop and ask. Peer passes it on as written and knows
 nothing of the tools it names. It stays on your computer.
 
-The card holds one switch Peer enforces, off by default: **Teammates may wake my idle agent**. On,
-a colleague's words may wake your idle agent. They still never start one you are not running.
+The card holds one switch Peer enforces, on by default: **Teammates may wake my idle agent**. On,
+a colleague's words may wake your idle agent; off, they wait for your Pass on. They still never start
+one you are not running.
 
 ## Agent commands
 

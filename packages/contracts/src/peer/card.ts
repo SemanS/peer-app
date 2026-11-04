@@ -16,9 +16,11 @@ export const PEER_CARD_MAX = 1_000;
 
 export const PeerCard = Schema.Struct({
   text: Schema.String,
-  /** Their yes in advance: a colleague's words may wake their idle agent. They start none. */
+  /** Their yes in advance, on until they turn it off: a colleague's words may wake their idle agent. They start none. */
   teammatesMayWake: Schema.Boolean,
 });
 export type PeerCard = typeof PeerCard.Type;
 
-export const PEER_EMPTY_CARD: PeerCard = { text: "", teammatesMayWake: false };
+// A person who never saved a card wakes for colleagues, the way agent relays deliver (Hub
+// docs/compliance.md 1a); they turn it off on the card.
+export const PEER_EMPTY_CARD: PeerCard = { text: "", teammatesMayWake: true };

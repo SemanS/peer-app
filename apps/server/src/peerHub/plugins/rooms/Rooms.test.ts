@@ -193,26 +193,33 @@ describe("a colleague's words to a run on this computer", () => {
       (rooms) => (rooms?.revs["acme"]?.["app"]?.["vl-7"] ?? 0) === revs["app"]?.["vl-7"],
     );
 
-  it.effect("reach it at its next step, not while it is idle", () =>
-    run(
-      Effect.gen(function* () {
-        const peer = yield* roomPeer(hub());
-        yield* inboxRead(peer, FIRST);
-        assert.strictEqual(yield* step(peer, true), null);
-        const said = JSON.stringify(yield* step(peer, false));
-        assert.include(said, "Eva wrote to you in the room of");
-        assert.include(said, "has not asked you to act on it");
-      }),
-    ),
+  it.effect(
+    "reach it at its next step, not while it is idle, when its person turned waking off",
+    () =>
+      run(
+        Effect.gen(function* () {
+          const current = hub();
+          const peer = yield* roomPeer(current);
+          yield* inboxRead(peer, FIRST);
+          // The card is read again on the next inbox read, so the switch applies to words already waiting.
+          yield* cardData(peer.state).update(() => ({ text: "", teammatesMayWake: false }));
+          current.inbox = { ...current.inbox, revs: SECOND };
+          yield* rpc(peer, "peer.rooms.seen", { ...place, seq: 12 });
+          yield* inboxRead(peer, SECOND);
+          assert.strictEqual(yield* step(peer, true), null);
+          const said = JSON.stringify(yield* step(peer, false));
+          assert.include(said, "Eva wrote to you in the room of");
+          assert.include(said, "has not asked you to act on it");
+        }),
+      ),
   );
 
-  it.effect("wake it only with its person's yes on their card", () =>
+  it.effect("wake it by default, when its person never saved a card", () =>
     run(
       Effect.gen(function* () {
         const current = hub();
         const peer = yield* roomPeer(current);
         yield* inboxRead(peer, FIRST);
-        yield* cardData(peer.state).update(() => ({ text: "", teammatesMayWake: true }));
         current.inbox = { ...current.inbox, revs: SECOND };
         yield* rpc(peer, "peer.rooms.seen", { ...place, seq: 12 });
         yield* inboxRead(peer, SECOND);
